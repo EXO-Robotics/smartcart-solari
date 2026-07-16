@@ -10,7 +10,7 @@ struct IngredientReviewView: View {
             VStack(alignment: .leading, spacing: 20) {
                 WorkflowHeader(
                     step: 1,
-                    total: 5,
+                    total: 6,
                     eyebrow: "Ingredient review",
                     title: "Check what SmartCart found",
                     message: "Correct names and quantities now. Nothing is matched to a product until you confirm this list."
@@ -38,7 +38,7 @@ struct IngredientReviewView: View {
             .padding(18)
             .padding(.bottom, 96)
         }
-        .background(GatherTheme.canvas)
+        .background(SmartCartTheme.canvas)
         .navigationTitle("Review ingredients")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
@@ -71,22 +71,22 @@ struct IngredientReviewView: View {
                 .font(.title2.bold())
                 .foregroundStyle(.white)
                 .frame(width: 56, height: 56)
-                .background(GatherTheme.green)
+                .background(SmartCartTheme.green)
                 .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(appModel.activeRecipe.title)
                     .font(.headline)
-                    .foregroundStyle(GatherTheme.navy)
+                    .foregroundStyle(SmartCartTheme.navy)
                     .lineLimit(2)
                 Text("\(appModel.activeRecipe.source.rawValue) · \(appModel.activeRecipe.ingredients.count) ingredients detected")
                     .font(.caption)
-                    .foregroundStyle(GatherTheme.secondaryInk)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
             }
 
             Spacer(minLength: 0)
         }
-        .gatherCard(padding: 14)
+        .smartCartCard(padding: 14)
     }
 
     private var confidenceLegend: some View {
@@ -106,19 +106,19 @@ private struct IngredientReviewRow: View {
             HStack(alignment: .top, spacing: 11) {
                 Toggle("", isOn: $ingredient.includeInList)
                     .labelsHidden()
-                    .tint(GatherTheme.green)
+                    .tint(SmartCartTheme.green)
 
                 Image(systemName: ingredient.category.symbol)
                     .font(.subheadline.bold())
-                    .foregroundStyle(ingredient.includeInList ? GatherTheme.green : GatherTheme.secondaryInk)
+                    .foregroundStyle(ingredient.includeInList ? SmartCartTheme.green : SmartCartTheme.secondaryInk)
                     .frame(width: 37, height: 37)
-                    .background(ingredient.includeInList ? GatherTheme.herbLight : GatherTheme.canvas)
+                    .background(ingredient.includeInList ? SmartCartTheme.herbLight : SmartCartTheme.canvas)
                     .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 6) {
                     TextField("Ingredient name", text: $ingredient.name)
                         .font(.subheadline.weight(.bold))
-                        .foregroundStyle(GatherTheme.navy)
+                        .foregroundStyle(SmartCartTheme.navy)
                         .textInputAutocapitalization(.words)
 
                     Menu {
@@ -163,7 +163,7 @@ private struct IngredientReviewRow: View {
                 } label: {
                     Label(ingredient.category.rawValue, systemImage: "square.grid.2x2.fill")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(GatherTheme.secondaryInk)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
                 }
 
                 Spacer()
@@ -176,16 +176,16 @@ private struct IngredientReviewRow: View {
                         systemImage: ingredient.pantryState == .haveEnough ? "checkmark.seal.fill" : "cart.badge.plus"
                     )
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(ingredient.pantryState == .haveEnough ? GatherTheme.green : GatherTheme.walmartBlue)
+                    .foregroundStyle(ingredient.pantryState == .haveEnough ? SmartCartTheme.green : SmartCartTheme.walmartBlue)
                 }
             }
         }
         .padding(13)
-        .background(ingredient.includeInList ? GatherTheme.paper : GatherTheme.canvas.opacity(0.72))
+        .background(ingredient.includeInList ? SmartCartTheme.paper : SmartCartTheme.canvas.opacity(0.72))
         .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 17, style: .continuous)
-                .stroke(GatherTheme.border, lineWidth: 1)
+                .stroke(SmartCartTheme.border, lineWidth: 1)
         }
         .opacity(ingredient.includeInList ? 1 : 0.62)
     }
@@ -200,7 +200,7 @@ struct ServingAdjustmentView: View {
             VStack(alignment: .leading, spacing: 20) {
                 WorkflowHeader(
                     step: 2,
-                    total: 5,
+                    total: 6,
                     eyebrow: "Adjust servings",
                     title: "How many people are eating?",
                     message: "SmartCart scales the recipe first, then estimates the packages you may need to buy."
@@ -214,7 +214,7 @@ struct ServingAdjustmentView: View {
             .padding(18)
             .padding(.bottom, 96)
         }
-        .background(GatherTheme.canvas)
+        .background(SmartCartTheme.canvas)
         .navigationTitle("Adjust servings")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
@@ -239,10 +239,10 @@ struct ServingAdjustmentView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Desired servings")
                         .font(.subheadline.weight(.bold))
-                        .foregroundStyle(GatherTheme.navy)
+                        .foregroundStyle(SmartCartTheme.navy)
                     Text("Original recipe: \(appModel.activeRecipe.servings)")
                         .font(.caption)
-                        .foregroundStyle(GatherTheme.secondaryInk)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
                 }
 
                 Spacer()
@@ -251,7 +251,7 @@ struct ServingAdjustmentView: View {
                     servingButton(symbol: "minus", delta: -1)
                     Text("\(appModel.desiredServings)")
                         .font(.system(size: 30, weight: .bold, design: .rounded))
-                        .foregroundStyle(GatherTheme.navy)
+                        .foregroundStyle(SmartCartTheme.navy)
                         .frame(minWidth: 42)
                     servingButton(symbol: "plus", delta: 1)
                 }
@@ -259,15 +259,15 @@ struct ServingAdjustmentView: View {
 
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(GatherTheme.border)
+                    Capsule().fill(SmartCartTheme.border)
                     Capsule()
-                        .fill(GatherTheme.green)
+                        .fill(SmartCartTheme.green)
                         .frame(width: proxy.size.width * min(CGFloat(appModel.desiredServings) / 12, 1))
                 }
             }
             .frame(height: 6)
         }
-        .gatherCard()
+        .smartCartCard()
     }
 
     private func servingButton(symbol: String, delta: Int) -> some View {
@@ -276,9 +276,9 @@ struct ServingAdjustmentView: View {
         } label: {
             Image(systemName: symbol)
                 .font(.headline.bold())
-                .foregroundStyle(GatherTheme.green)
+                .foregroundStyle(SmartCartTheme.green)
                 .frame(width: 42, height: 42)
-                .background(GatherTheme.herbLight)
+                .background(SmartCartTheme.herbLight)
                 .clipShape(Circle())
         }
         .buttonStyle(PressableButtonStyle())
@@ -290,7 +290,7 @@ struct ServingAdjustmentView: View {
             symbol: "shippingbox.fill",
             title: "Recipe amount ≠ package amount",
             message: "If the recipe needs 1.5 lb of chicken and the best product is a 3 lb pack, SmartCart shows the extra so you can choose.",
-            color: GatherTheme.walmartBlue
+            color: SmartCartTheme.walmartBlue
         )
     }
 
@@ -305,23 +305,23 @@ struct ServingAdjustmentView: View {
                     .frame(width: 62, alignment: .trailing)
             }
             .font(.caption2.weight(.heavy))
-            .foregroundStyle(GatherTheme.secondaryInk)
+            .foregroundStyle(SmartCartTheme.secondaryInk)
             .padding(.bottom, 10)
 
             ForEach(appModel.activeRecipe.ingredients.filter(\.includeInList).prefix(7)) { ingredient in
                 HStack(spacing: 8) {
                     Text(ingredient.name)
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(GatherTheme.navy)
+                        .foregroundStyle(SmartCartTheme.navy)
                         .lineLimit(1)
                     Spacer()
                     Text(appModel.scaledQuantityText(for: ingredient))
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(GatherTheme.secondaryInk)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
                         .frame(width: 74, alignment: .trailing)
                     Text("1 pkg")
                         .font(.caption.weight(.bold))
-                        .foregroundStyle(GatherTheme.green)
+                        .foregroundStyle(SmartCartTheme.green)
                         .frame(width: 62, alignment: .trailing)
                 }
                 .padding(.vertical, 10)
@@ -331,7 +331,7 @@ struct ServingAdjustmentView: View {
                 }
             }
         }
-        .gatherCard()
+        .smartCartCard()
     }
 
     private var leftoversToggle: some View {
@@ -339,14 +339,14 @@ struct ServingAdjustmentView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Prefer useful leftovers")
                     .font(.subheadline.weight(.bold))
-                    .foregroundStyle(GatherTheme.navy)
+                    .foregroundStyle(SmartCartTheme.navy)
                 Text("Favor the next package size up when the price difference is small.")
                     .font(.caption)
-                    .foregroundStyle(GatherTheme.secondaryInk)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
             }
         }
-        .tint(GatherTheme.green)
-        .gatherCard()
+        .tint(SmartCartTheme.green)
+        .smartCartCard()
     }
 }
 
@@ -360,10 +360,10 @@ struct ListsView: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("Shopping lists")
                             .font(.system(size: 29, weight: .bold, design: .rounded))
-                            .foregroundStyle(GatherTheme.navy)
+                            .foregroundStyle(SmartCartTheme.navy)
                         Text("Ready to share, open, or shop")
                             .font(.subheadline)
-                            .foregroundStyle(GatherTheme.secondaryInk)
+                            .foregroundStyle(SmartCartTheme.secondaryInk)
                     }
                     Spacer()
                     SmartCartLogo(compact: true)
@@ -391,7 +391,7 @@ struct ListsView: View {
             .padding(.horizontal, 18)
             .padding(.bottom, 34)
         }
-        .background(GatherTheme.canvas)
+        .background(SmartCartTheme.canvas)
         .toolbar(.hidden, for: .navigationBar)
     }
 
@@ -404,9 +404,14 @@ struct ListsView: View {
                 HStack {
                     StatusPill(title: "Current list", symbol: "checkmark.circle.fill")
                     Spacer()
-                    Text(appModel.estimatedTotal, format: .currency(code: "USD"))
-                        .font(.title3.bold())
-                        .foregroundStyle(GatherTheme.navy)
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(appModel.estimatedTotal, format: .currency(code: "USD"))
+                            .font(.title3.bold())
+                            .foregroundStyle(SmartCartTheme.navy)
+                        Text("Demo subtotal · not live")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(SmartCartTheme.amber)
+                    }
                 }
 
                 HStack(spacing: 14) {
@@ -414,17 +419,17 @@ struct ListsView: View {
                         .font(.title.bold())
                         .foregroundStyle(.white)
                         .frame(width: 62, height: 62)
-                        .background(GatherTheme.green)
+                        .background(SmartCartTheme.green)
                         .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text(appModel.activeRecipe.title)
                             .font(.title3.bold())
-                            .foregroundStyle(GatherTheme.navy)
+                            .foregroundStyle(SmartCartTheme.navy)
                             .lineLimit(2)
                         Text("\(appModel.shoppingItems.count) products · \(appModel.primaryStore.name)")
                             .font(.caption)
-                            .foregroundStyle(GatherTheme.secondaryInk)
+                            .foregroundStyle(SmartCartTheme.secondaryInk)
                             .lineLimit(1)
                     }
                     Spacer(minLength: 0)
@@ -436,10 +441,10 @@ struct ListsView: View {
                     Label("Open list", systemImage: "arrow.right")
                 }
                 .font(.caption.weight(.bold))
-                .foregroundStyle(GatherTheme.green)
+                .foregroundStyle(SmartCartTheme.green)
             }
-            .gatherCard()
-            .gatherShadow()
+            .smartCartCard()
+            .smartCartShadow()
         }
         .buttonStyle(PressableButtonStyle())
     }
@@ -451,34 +456,39 @@ struct ListsView: View {
             if appModel.savedLists.isEmpty {
                 HStack(spacing: 12) {
                     Image(systemName: "bookmark.fill")
-                        .foregroundStyle(GatherTheme.walmartBlue)
+                        .foregroundStyle(SmartCartTheme.walmartBlue)
                         .frame(width: 40, height: 40)
-                        .background(GatherTheme.walmartLight)
+                        .background(SmartCartTheme.walmartLight)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    Text("Save the current list to keep its products, quantities, and estimated total here.")
+                    Text("Save the current manifest to keep its products, quantities, observed-price subtotal, and handoff progress here.")
                         .font(.caption)
-                        .foregroundStyle(GatherTheme.secondaryInk)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
                 }
-                .gatherCard(padding: 14)
+                .smartCartCard(padding: 14)
             } else {
                 ForEach(appModel.savedLists) { list in
                     HStack(spacing: 12) {
                         Image(systemName: "bookmark.fill")
-                            .foregroundStyle(GatherTheme.green)
+                            .foregroundStyle(SmartCartTheme.green)
                         VStack(alignment: .leading, spacing: 3) {
                             Text(list.recipeTitle)
                                 .font(.subheadline.weight(.bold))
-                                .foregroundStyle(GatherTheme.navy)
+                                .foregroundStyle(SmartCartTheme.navy)
                             Text("\(list.itemCount) items · \(list.storeName)")
                                 .font(.caption)
-                                .foregroundStyle(GatherTheme.secondaryInk)
+                                .foregroundStyle(SmartCartTheme.secondaryInk)
                         }
                         Spacer()
-                        Text(list.total, format: .currency(code: "USD"))
-                            .font(.subheadline.weight(.bold))
-                            .foregroundStyle(GatherTheme.navy)
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text(list.total, format: .currency(code: "USD"))
+                                .font(.subheadline.weight(.bold))
+                                .foregroundStyle(SmartCartTheme.navy)
+                            Text("Demo · not live")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(SmartCartTheme.amber)
+                        }
                     }
-                    .gatherCard(padding: 14)
+                    .smartCartCard(padding: 14)
                 }
             }
         }
@@ -489,7 +499,7 @@ struct ListsView: View {
             symbol: "clock.badge.exclamationmark.fill",
             title: "Estimated totals stay transparent",
             message: "Retailer prices and availability can change. Walmart confirms taxes, fees, substitutions, tips, and final variable-weight prices.",
-            color: GatherTheme.amber
+            color: SmartCartTheme.amber
         )
     }
 }

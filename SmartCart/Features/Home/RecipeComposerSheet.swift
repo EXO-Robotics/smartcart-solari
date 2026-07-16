@@ -98,7 +98,7 @@ struct RecipeComposerSheet: View {
                             symbol: "exclamationmark.triangle.fill",
                             title: "Import needs attention",
                             message: errorMessage,
-                            color: GatherTheme.coral
+                            color: SmartCartTheme.coral
                         )
                     }
                 }
@@ -106,7 +106,7 @@ struct RecipeComposerSheet: View {
                 .padding(.bottom, 96)
             }
             .scrollDismissesKeyboard(.interactively)
-            .background(GatherTheme.canvas)
+            .background(SmartCartTheme.canvas)
             .navigationTitle("Import recipe")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -167,7 +167,7 @@ struct RecipeComposerSheet: View {
             Text("IMPORT FROM")
                 .font(.caption2.weight(.heavy))
                 .tracking(0.9)
-                .foregroundStyle(GatherTheme.secondaryInk)
+                .foregroundStyle(SmartCartTheme.secondaryInk)
 
             ScrollView(.horizontal) {
                 HStack(spacing: 8) {
@@ -237,10 +237,10 @@ struct RecipeComposerSheet: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(selectedMethod == .pinterest ? "Import a recipe pin" : "Import from a recipe page")
                             .font(.headline)
-                            .foregroundStyle(GatherTheme.navy)
+                            .foregroundStyle(SmartCartTheme.navy)
                         Text("SmartCart looks for standard recipe ingredients embedded in the page.")
                             .font(.caption)
-                            .foregroundStyle(GatherTheme.secondaryInk)
+                            .foregroundStyle(SmartCartTheme.secondaryInk)
                     }
                 }
 
@@ -255,17 +255,17 @@ struct RecipeComposerSheet: View {
                     symbol: "lock.shield.fill",
                     title: "No account sign-in",
                     message: "SmartCart reads public recipe metadata only. Pinterest may block some pages; photo and text import remain available.",
-                    color: GatherTheme.green
+                    color: SmartCartTheme.green
                 )
             }
-            .gatherCard()
+            .smartCartCard()
 
         case .recipeText:
             InfoBanner(
                 symbol: "doc.on.clipboard.fill",
                 title: "Paste and go",
                 message: "One ingredient per line works best. You can correct names, quantities, and pantry status next.",
-                color: GatherTheme.green
+                color: SmartCartTheme.green
             )
 
         case .sample:
@@ -284,27 +284,27 @@ struct RecipeComposerSheet: View {
                     HStack(spacing: 13) {
                         Image(systemName: recipe.heroSymbol)
                             .font(.title3.bold())
-                            .foregroundStyle(index == selectedSampleIndex ? .white : GatherTheme.green)
+                            .foregroundStyle(index == selectedSampleIndex ? .white : SmartCartTheme.green)
                             .frame(width: 48, height: 48)
-                            .background(index == selectedSampleIndex ? GatherTheme.green : GatherTheme.herbLight)
+                            .background(index == selectedSampleIndex ? SmartCartTheme.green : SmartCartTheme.herbLight)
                             .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
 
                         VStack(alignment: .leading, spacing: 4) {
                             Text(recipe.title)
                                 .font(.headline)
-                                .foregroundStyle(GatherTheme.navy)
+                                .foregroundStyle(SmartCartTheme.navy)
                             Text("\(recipe.ingredients.count) ingredients · \(recipe.servings) servings · \(recipe.totalMinutes)m")
                                 .font(.caption)
-                                .foregroundStyle(GatherTheme.secondaryInk)
+                                .foregroundStyle(SmartCartTheme.secondaryInk)
                         }
 
                         Spacer()
 
                         Image(systemName: index == selectedSampleIndex ? "checkmark.circle.fill" : "circle")
                             .font(.title3)
-                            .foregroundStyle(index == selectedSampleIndex ? GatherTheme.green : GatherTheme.border)
+                            .foregroundStyle(index == selectedSampleIndex ? SmartCartTheme.green : SmartCartTheme.border)
                     }
-                    .gatherCard(padding: 13)
+                    .smartCartCard(padding: 13)
                 }
                 .buttonStyle(PressableButtonStyle())
             }
@@ -324,10 +324,10 @@ struct RecipeComposerSheet: View {
             VStack(spacing: 5) {
                 Text(title)
                     .font(.headline)
-                    .foregroundStyle(GatherTheme.navy)
+                    .foregroundStyle(SmartCartTheme.navy)
                 Text(message)
                     .font(.caption)
-                    .foregroundStyle(GatherTheme.secondaryInk)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
                     .multilineTextAlignment(.center)
             }
 
@@ -337,7 +337,7 @@ struct RecipeComposerSheet: View {
             }
             .buttonStyle(SecondaryButtonStyle())
         }
-        .gatherCard()
+        .smartCartCard()
     }
 
     @ViewBuilder
@@ -356,7 +356,7 @@ struct RecipeComposerSheet: View {
                             .foregroundStyle(.white)
                             .padding(.horizontal, 11)
                             .padding(.vertical, 8)
-                            .background(GatherTheme.navy.opacity(0.86))
+                            .background(SmartCartTheme.navy.opacity(0.86))
                             .clipShape(Capsule())
                             .padding(10)
                     }
@@ -366,14 +366,14 @@ struct RecipeComposerSheet: View {
             VStack(spacing: 12) {
                 Image(systemName: "text.viewfinder")
                     .font(.system(size: 36, weight: .medium))
-                    .foregroundStyle(GatherTheme.green)
+                    .foregroundStyle(SmartCartTheme.green)
                 Text("Recipe image preview")
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(GatherTheme.secondaryInk)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
             }
             .frame(maxWidth: .infinity)
             .frame(height: 150)
-            .background(GatherTheme.herbLight.opacity(0.55))
+            .background(SmartCartTheme.herbLight.opacity(0.55))
             .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
         }
     }
@@ -384,7 +384,7 @@ struct RecipeComposerSheet: View {
                 Text("RECIPE NAME")
                     .font(.caption2.weight(.heavy))
                     .tracking(0.8)
-                    .foregroundStyle(GatherTheme.secondaryInk)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
                 TextField("Recipe name", text: $title)
                     .font(.headline)
                     .focused($focusedField, equals: .title)
@@ -396,11 +396,11 @@ struct RecipeComposerSheet: View {
                     Text("INGREDIENT TEXT")
                         .font(.caption2.weight(.heavy))
                         .tracking(0.8)
-                        .foregroundStyle(GatherTheme.secondaryInk)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
                     Spacer()
                     Text("\(draftRecipe.ingredients.count) found")
                         .font(.caption.weight(.bold))
-                        .foregroundStyle(GatherTheme.green)
+                        .foregroundStyle(SmartCartTheme.green)
                 }
 
                 TextEditor(text: $recipeText)
@@ -409,11 +409,11 @@ struct RecipeComposerSheet: View {
                     .scrollContentBackground(.hidden)
                     .frame(minHeight: 170)
                     .padding(10)
-                    .background(GatherTheme.paper)
+                    .background(SmartCartTheme.paper)
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                     .overlay {
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(GatherTheme.border, lineWidth: 1)
+                            .stroke(SmartCartTheme.border, lineWidth: 1)
                     }
             }
         }
@@ -427,40 +427,40 @@ struct RecipeComposerSheet: View {
                 HStack(spacing: 11) {
                     Image(systemName: ingredient.category.symbol)
                         .font(.subheadline.bold())
-                        .foregroundStyle(GatherTheme.green)
+                        .foregroundStyle(SmartCartTheme.green)
                         .frame(width: 37, height: 37)
-                        .background(GatherTheme.herbLight)
+                        .background(SmartCartTheme.herbLight)
                         .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(ingredient.name)
                             .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(GatherTheme.navy)
+                            .foregroundStyle(SmartCartTheme.navy)
                             .lineLimit(1)
                         Text(ingredient.category.rawValue)
                             .font(.caption2)
-                            .foregroundStyle(GatherTheme.secondaryInk)
+                            .foregroundStyle(SmartCartTheme.secondaryInk)
                     }
 
                     Spacer()
 
                     Text(ingredient.displayQuantity)
                         .font(.subheadline.weight(.bold))
-                        .foregroundStyle(GatherTheme.secondaryInk)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
                 }
                 .padding(12)
-                .background(GatherTheme.paper)
+                .background(SmartCartTheme.paper)
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(GatherTheme.border, lineWidth: 1)
+                        .stroke(SmartCartTheme.border, lineWidth: 1)
                 }
             }
 
             if draftRecipe.ingredients.count > 6 {
                 Text("+ \(draftRecipe.ingredients.count - 6) more ingredients")
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(GatherTheme.green)
+                    .foregroundStyle(SmartCartTheme.green)
                     .padding(.leading, 4)
             }
         }

@@ -9,33 +9,81 @@ final class AppModel {
     var homePath: [SmartRoute] = []
     var presentedSheet: SheetDestination?
 
-    var activeRecipe: Recipe
-    var recipes: [Recipe]
-    var desiredServings: Int
+    var activeRecipe: Recipe {
+        didSet { persistState() }
+    }
+    var recipes: [Recipe] {
+        didSet { persistState() }
+    }
+    var desiredServings: Int {
+        didSet { persistState() }
+    }
+    var preferences: ShoppingPreferences {
+        didSet { persistState() }
+    }
+    var featureFlags: AppFeatureFlags {
+        didSet { persistState() }
+    }
 
-    var storeStrategy: StoreStrategy = .oneStore
-    var fulfillmentMode: FulfillmentMode = .pickup
-    var selectedStoreIDs: Set<UUID>
-    var zipCode = "90210"
-    var pickupDay = "Today"
-    var pickupTime = "4:30–5:30 PM"
+    var storeStrategy: StoreStrategy {
+        didSet { persistState() }
+    }
+    var fulfillmentMode: FulfillmentMode {
+        didSet { persistState() }
+    }
+    var selectedStoreIDs: Set<UUID> {
+        didSet { persistState() }
+    }
+    var zipCode: String {
+        didSet { persistState() }
+    }
+    var pickupDay: String {
+        didSet { persistState() }
+    }
+    var pickupTime: String {
+        didSet { persistState() }
+    }
 
-    var shoppingItems: [ShoppingListItem] = []
+    var shoppingItems: [ShoppingListItem] {
+        didSet { persistState() }
+    }
     var matchProgress = 0.0
     var matchStage = "Ready to match"
     var isMatching = false
-    var guidedIndex = 0
+    var guidedIndex: Int {
+        didSet { persistState() }
+    }
 
-    var savedLists: [SavedShoppingList] = []
-    var linkedDeliveryPartnerName: String?
+    var savedLists: [SavedShoppingList] {
+        didSet { persistState() }
+    }
+    var preferredDeliveryPartnerName: String? {
+        didSet { persistState() }
+    }
     var toastMessage: String?
+    private(set) var persistenceIssue: String?
 
     let stores: [RetailerStore]
     let deliveryPartners: [DeliveryPartner]
 
-    init() {
+    @ObservationIgnored
+    private let stateStore: any SmartCartStateStoring
+    @ObservationIgnored
+    private let retailerService: any RetailerCatalogService
+    @ObservationIgnored
+    private var persistenceReady = false
+
+    init(
+        stateStore: any SmartCartStateStoring = JSONSmartCartStateStore(),
+        retailerService: any RetailerCatalogService = DemoWalmartCatalogService()
+    ) {
+        self.stateStore = stateStore
+        self.retailerService = retailerService
+
         let availableStores = [
             RetailerStore(
+                id: UUID(uuidString: "00000000-0000-0000-0000-000000000101")!,
+                retailerStoreID: "walmart-5206",
                 name: "Walmart Supercenter A",
                 format: "Supercenter",
                 address: "6433 Fallbrook Ave, West Hills",
@@ -43,6 +91,8 @@ final class AppModel {
                 pickupWindow: "Today, 4:30–5:30 PM"
             ),
             RetailerStore(
+                id: UUID(uuidString: "00000000-0000-0000-0000-000000000102")!,
+                retailerStoreID: "walmart-2526",
                 name: "Walmart Supercenter B",
                 format: "Supercenter",
                 address: "19821 Rinaldi St, Porter Ranch",
@@ -51,6 +101,8 @@ final class AppModel {
                 supportsDelivery: false
             ),
             RetailerStore(
+                id: UUID(uuidString: "00000000-0000-0000-0000-000000000103")!,
+                retailerStoreID: "walmart-5601",
                 name: "Walmart Neighborhood Market",
                 format: "Neighborhood Market",
                 address: "14441 Inglewood Ave, Hawthorne",
@@ -59,7 +111,6 @@ final class AppModel {
             )
         ]
         stores = availableStores
-        selectedStoreIDs = [availableStores[0].id]
 
         deliveryPartners = [
             DeliveryPartner(
@@ -83,16 +134,53 @@ final class AppModel {
         ]
 
         let sampleRecipes = SampleData.recipes
-        recipes = sampleRecipes
-        activeRecipe = sampleRecipes[0]
-        desiredServings = sampleRecipes[0].servings
+        let restoredState = try? stateStore.load()
+        let initialRecipes = restoredState?.recipes ?? sampleRecipes
+        let initialRecipe = restoredState?.activeRecipe ?? sampleRecipes[0]
+        let initialServings = restoredState?.desiredServings ?? sampleRecipes[0].servings
+        let initialPreferences = restoredState?.preferences ?? ShoppingPreferences()
+        let initialFeatureFlags = restoredState?.featureFlags ?? AppFeatureFlags()
+        let initialStoreStrategy = restoredState?.storeStrategy ?? StoreStrategy.oneStore
+        let initialFulfillment = restoredState?.fulfillmentMode ?? FulfillmentMode.pickup
 
-        // Give the simulator a complete, useful first-run surface.
-        shoppingItems = Self.makeShoppingItems(
-            recipe: sampleRecipes[0],
-            desiredServings: sampleRecipes[0].servings,
-            stores: [availableStores[0]]
-        )
+        recipes = initialRecipes
+        activeRecipe = initialRecipe
+        desiredServings = initialServings
+        preferences = initialPreferences
+        featureFlags = initialFeatureFlags
+        storeStrategy = initialStoreStrategy
+        fulfillmentMode = initialFulfillment
+        zipCode = restoredState?.zipCode ?? "90210"
+        pickupDay = restoredState?.pickupDay ?? "Today"
+        pickupTime = restoredState?.pickupTime ?? "4:30–5:30 PM"
+        guidedIndex = restoredState?.guidedIndex ?? 0
+        savedLists = restoredState?.savedLists ?? []
+        preferredDeliveryPartnerName = restoredState?.preferredDeliveryPartnerName
+
+        let validStoreIDs = Set(availableStores.map(\.id))
+        let restoredStoreIDs = restoredState?.selectedStoreIDs.intersection(validStoreIDs) ?? []
+        selectedStoreIDs = restoredStoreIDs.isEmpty ? [availableStores[0].id] : restoredStoreIDs
+
+        if let restoredItems = restoredState?.shoppingItems, !restoredItems.isEmpty {
+            shoppingItems = restoredItems
+        } else {
+            shoppingItems = Self.makeShoppingItems(
+                recipe: initialRecipe,
+                desiredServings: initialServings,
+                store: availableStores[0],
+                fulfillmentMode: initialFulfillment,
+                preferences: initialPreferences
+            )
+        }
+
+        if !featureFlags.advancedToolsEnabled {
+            storeStrategy = .oneStore
+            fulfillmentMode = .pickup
+            selectedStoreIDs = [selectedStoreIDs.first ?? availableStores[0].id]
+        }
+        guidedIndex = min(max(0, guidedIndex), max(0, shoppingItems.count - 1))
+        persistenceReady = true
+        persistState()
 
         #if DEBUG
         let arguments = ProcessInfo.processInfo.arguments
@@ -108,6 +196,9 @@ final class AppModel {
             case "pantry":
                 shoppingItems = []
                 homePath = [.pantryCheck]
+            case "preferences":
+                shoppingItems = []
+                homePath = [.preferences]
             case "store":
                 shoppingItems = []
                 homePath = [.storeSelection]
@@ -128,7 +219,11 @@ final class AppModel {
     }
 
     var selectedStores: [RetailerStore] {
-        stores.filter { selectedStoreIDs.contains($0.id) }
+        let selected = stores.filter { selectedStoreIDs.contains($0.id) }
+        if featureFlags.advancedToolsEnabled, storeStrategy == .multipleStops {
+            return selected
+        }
+        return Array(selected.prefix(1))
     }
 
     var primaryStore: RetailerStore {
@@ -158,11 +253,19 @@ final class AppModel {
     }
 
     var matchedItemCount: Int {
-        shoppingItems.filter { $0.product.confidence == .high }.count
+        shoppingItems.filter(\.product.isExactProductLink).count
     }
 
     var lowConfidenceItemCount: Int {
-        shoppingItems.filter { $0.product.confidence != .high }.count
+        shoppingItems.filter { !$0.product.isExactProductLink || $0.product.confidence != .high }.count
+    }
+
+    var searchFallbackCount: Int {
+        shoppingItems.filter { $0.product.linkKind == .searchResults }.count
+    }
+
+    var pricedItemCount: Int {
+        shoppingItems.filter(\.product.hasObservedPrice).count
     }
 
     var guidedCompletedCount: Int {
@@ -178,21 +281,33 @@ final class AppModel {
         "\(pickupDay), \(pickupTime)"
     }
 
+    var linkedDeliveryPartnerName: String? {
+        preferredDeliveryPartnerName
+    }
+
+    var retailerCapabilities: RetailerCapabilities {
+        retailerService.capabilities
+    }
+
     var shareText: String {
         var lines = [
             "SmartCart · \(activeRecipe.title)",
             "\(shoppingItems.count) products at \(primaryStore.name)",
-            "Estimated product total: \(estimatedTotal.formatted(.currency(code: "USD")))",
+            "\(matchedItemCount) exact product links · \(searchFallbackCount) retailer searches",
+            "Observed-price subtotal: \(estimatedTotal.formatted(.currency(code: "USD"))) (\(pricedItemCount)/\(shoppingItems.count) items priced)",
             ""
         ]
 
         lines += shoppingItems.map {
-            "• \($0.product.brand) \($0.product.name), \($0.product.package) — \($0.lineTotal.formatted(.currency(code: "USD")))"
+            let price = $0.product.hasObservedPrice
+                ? $0.lineTotal.formatted(.currency(code: "USD"))
+                : "price unavailable"
+            return "• \($0.product.brand) \($0.product.name), \($0.product.package) — \(price) [\($0.product.linkKind.label)]"
         }
 
         lines += [
             "",
-            "Prices and availability may change. Tax, fees, tips, substitutions, and variable-weight adjustments are finalized by Walmart."
+            "SmartCart does not create or submit a retailer cart. Prices and availability may change; tax, fees, tips, substitutions, pickup reservations, and variable-weight adjustments are finalized by the retailer."
         ]
         return lines.joined(separator: "\n")
     }
@@ -203,6 +318,11 @@ final class AppModel {
 
     func beginRecipe(_ recipe: Recipe) {
         activeRecipe = recipe
+        if let index = recipes.firstIndex(where: { $0.id == recipe.id }) {
+            recipes[index] = recipe
+        } else {
+            recipes.insert(recipe, at: 0)
+        }
         desiredServings = recipe.servings
         shoppingItems = []
         matchProgress = 0
@@ -232,8 +352,14 @@ final class AppModel {
     }
 
     func setStoreStrategy(_ strategy: StoreStrategy) {
+        guard featureFlags.advancedToolsEnabled || strategy == .oneStore else {
+            storeStrategy = .oneStore
+            showToast("Multiple-stop planning is an experimental advanced tool")
+            return
+        }
+
         storeStrategy = strategy
-        if strategy == .oneStore {
+        if storeStrategy == .oneStore {
             selectedStoreIDs = [primaryStore.id]
         } else if selectedStoreIDs.count == 1, let second = stores.first(where: { !selectedStoreIDs.contains($0.id) }) {
             selectedStoreIDs.insert(second.id)
@@ -241,7 +367,7 @@ final class AppModel {
     }
 
     func selectStore(_ store: RetailerStore) {
-        if storeStrategy == .oneStore {
+        if storeStrategy == .oneStore || !featureFlags.advancedToolsEnabled {
             selectedStoreIDs = [store.id]
         } else if selectedStoreIDs.contains(store.id) {
             guard selectedStoreIDs.count > 1 else {
@@ -252,6 +378,14 @@ final class AppModel {
         } else {
             selectedStoreIDs.insert(store.id)
         }
+    }
+
+    func setAdvancedToolsEnabled(_ enabled: Bool) {
+        featureFlags.advancedToolsEnabled = enabled
+        guard !enabled else { return }
+        storeStrategy = .oneStore
+        fulfillmentMode = .pickup
+        selectedStoreIDs = [primaryStore.id]
     }
 
     func startMatching(force: Bool = false) async {
@@ -266,11 +400,12 @@ final class AppModel {
         shoppingItems = []
 
         let stages = [
-            ("Searching selected Walmart stores", 0.18),
+            ("Reading saved shopping preferences", 0.12),
+            ("Searching \(primaryStore.name)", 0.28),
             ("Checking package sizes", 0.38),
-            ("Comparing prices", 0.58),
-            ("Applying pantry and brand preferences", 0.78),
-            ("Building your shopping list", 0.94)
+            ("Applying dietary and organic rules", 0.55),
+            ("Ranking eligible products", 0.74),
+            ("Building a retailer handoff manifest", 0.94)
         ]
 
         for (stage, progress) in stages {
@@ -281,15 +416,11 @@ final class AppModel {
             try? await Task.sleep(for: .milliseconds(330))
         }
 
-        shoppingItems = Self.makeShoppingItems(
-            recipe: activeRecipe,
-            desiredServings: desiredServings,
-            stores: selectedStores.isEmpty ? [stores[0]] : selectedStores
-        )
+        shoppingItems = await buildShoppingItems()
         withAnimation(.easeOut(duration: 0.35)) {
             matchProgress = 1
         }
-        matchStage = "\(shoppingItems.count) products ready"
+        matchStage = "\(matchedItemCount) exact products · \(searchFallbackCount) searches"
         isMatching = false
     }
 
@@ -314,6 +445,7 @@ final class AppModel {
     func markCurrentGuidedItem(_ status: GuidedItemStatus) {
         guard shoppingItems.indices.contains(guidedIndex) else { return }
         shoppingItems[guidedIndex].status = status
+        persistCurrentManifest(progress: .inProgress)
     }
 
     func advanceGuidedItem() {
@@ -321,6 +453,7 @@ final class AppModel {
         if guidedIndex < shoppingItems.count - 1 {
             guidedIndex += 1
         } else {
+            persistCurrentManifest(progress: .completed)
             showToast("Guided shopping complete")
         }
     }
@@ -331,20 +464,22 @@ final class AppModel {
     }
 
     func saveCurrentList() {
-        let saved = SavedShoppingList(
-            recipeTitle: activeRecipe.title,
-            storeName: storeStrategy == .oneStore ? primaryStore.name : "\(selectedStores.count) Walmart stops",
-            itemCount: shoppingItems.count,
-            total: estimatedTotal
-        )
-        savedLists.insert(saved, at: 0)
-        showToast("Shopping list saved")
+        persistCurrentManifest(progress: .notStarted)
+        showToast("Shopping manifest saved")
+    }
+
+    func beginGuidedShopping() {
+        guidedIndex = 0
+        persistCurrentManifest(progress: .inProgress)
+        continueTo(.guidedShopping)
     }
 
     func linkDeliveryPartner(_ partner: DeliveryPartner) {
-        linkedDeliveryPartnerName = partner.name
-        fulfillmentMode = .delivery
-        showToast("\(partner.name) selected for handoff")
+        preferredDeliveryPartnerName = partner.name
+        if featureFlags.advancedToolsEnabled {
+            fulfillmentMode = .delivery
+        }
+        showToast("\(partner.name) saved as a preferred provider")
     }
 
     func store(for id: UUID) -> RetailerStore {
@@ -352,14 +487,30 @@ final class AppModel {
     }
 
     func productURL(for item: ShoppingListItem) -> URL {
-        let query = "\(item.product.brand) \(item.product.name) \(item.product.package)"
-        var components = URLComponents(string: "https://www.walmart.com/search")!
-        components.queryItems = [URLQueryItem(name: "q", value: query)]
-        return components.url!
+        item.product.exactURL
+    }
+
+    func productHandoffLabel(for item: ShoppingListItem) -> String {
+        item.product.isExactProductLink ? "Open exact product" : "Search at Walmart"
     }
 
     func retailerURL() -> URL {
         URL(string: "https://www.walmart.com/cp/grocery-pickup-and-delivery/9524000")!
+    }
+
+    func prepareRetailerHandoff() async -> RetailerHandoff? {
+        persistCurrentManifest(progress: .inProgress)
+        guard let manifest = currentSavedManifest else { return nil }
+        do {
+            return try await retailerService.createHandoff(manifest: manifest)
+        } catch {
+            showToast(error.localizedDescription)
+            return nil
+        }
+    }
+
+    func completeRetailerHandoff() {
+        persistCurrentManifest(progress: .completed)
     }
 
     func resetFlow() {
@@ -377,10 +528,117 @@ final class AppModel {
         }
     }
 
+    func persistNow() {
+        persistState()
+    }
+
+    private var currentSavedManifest: ShoppingManifest? {
+        savedLists.first {
+            $0.manifest.recipeID == activeRecipe.id &&
+            $0.manifest.storeID == primaryStore.retailerStoreID
+        }?.manifest
+    }
+
+    private func persistCurrentManifest(progress: ManifestHandoffProgress) {
+        let existingIndex = savedLists.firstIndex {
+            $0.manifest.recipeID == activeRecipe.id &&
+            $0.manifest.storeID == primaryStore.retailerStoreID
+        }
+        let existing = existingIndex.map { savedLists[$0].manifest }
+        let manifest = ShoppingManifest(
+            id: existing?.id ?? UUID(),
+            recipeID: activeRecipe.id,
+            recipeTitle: activeRecipe.title,
+            retailerID: primaryStore.retailerID,
+            storeID: primaryStore.retailerStoreID,
+            storeName: primaryStore.name,
+            desiredServings: desiredServings,
+            fulfillmentMode: fulfillmentMode,
+            items: shoppingItems.map {
+                ManifestLineItem(
+                    ingredientID: $0.ingredient.id,
+                    ingredientName: $0.ingredient.name,
+                    requestedQuantity: $0.requestedQuantity,
+                    purchaseQuantity: $0.purchaseQuantity,
+                    product: $0.product,
+                    status: $0.status
+                )
+            },
+            createdAt: existing?.createdAt ?? .now,
+            updatedAt: .now,
+            handoffProgress: progress
+        )
+
+        if let existingIndex {
+            savedLists.remove(at: existingIndex)
+        }
+        savedLists.insert(SavedShoppingList(manifest: manifest), at: 0)
+    }
+
+    private func buildShoppingItems() async -> [ShoppingListItem] {
+        let multiplier = Double(desiredServings) / Double(max(1, activeRecipe.servings))
+        let method: FulfillmentMethod = fulfillmentMode == .pickup ? .pickup : .delivery
+        let store = primaryStore
+        var results: [ShoppingListItem] = []
+
+        for ingredient in ingredientsToBuy {
+            let requestedQuantity = ingredient.quantity * multiplier
+            let request = RetailerProductSearchRequest(
+                ingredient: ingredient,
+                requestedQuantity: requestedQuantity,
+                requestedUnit: ingredient.unit,
+                storeID: store.retailerStoreID,
+                fulfillmentMethod: method
+            )
+            let candidates = (try? await retailerService.searchProducts(for: request)) ?? []
+            var ranked = RetailerProductMatcher.rank(
+                candidates,
+                for: request,
+                preferences: preferences
+            )
+            if ranked.isEmpty {
+                let fallback = DemoWalmartCatalogService.searchFallback(
+                    for: ingredient,
+                    storeID: store.retailerStoreID,
+                    preferences: preferences
+                )
+                ranked = RetailerProductMatcher.rank(
+                    [fallback],
+                    for: request,
+                    preferences: preferences
+                )
+            }
+            guard let selected = ranked.first else { continue }
+
+            results.append(
+                ShoppingListItem(
+                    ingredient: ingredient,
+                    requestedQuantity: Ingredient.quantityText(
+                        requestedQuantity,
+                        unit: ingredient.unit
+                    ),
+                    purchaseQuantity: PackageMath.packageCount(
+                        product: selected.product,
+                        requestedQuantity: requestedQuantity,
+                        requestedUnit: ingredient.unit
+                    ),
+                    product: selected.product,
+                    alternatives: Array(ranked.dropFirst().map(\.product)),
+                    storeID: store.id,
+                    matchScore: selected.score,
+                    selectionReasons: selected.reasons
+                )
+            )
+        }
+        return results
+    }
+
     private static func makeShoppingItems(
         recipe: Recipe,
         desiredServings: Int,
-        stores: [RetailerStore]
+        store: RetailerStore,
+        fulfillmentMode: FulfillmentMode,
+        preferences: ShoppingPreferences
     ) -> [ShoppingListItem] {
         let multiplier = Double(desiredServings) / Double(max(1, recipe.servings))
         let eligible = recipe.ingredients.filter {
@@ -389,26 +647,83 @@ final class AppModel {
             $0.pantryState != .exclude
         }
 
-        return eligible.enumerated().map { index, ingredient in
-            let candidates = ProductCatalog.candidates(for: ingredient)
-            let requestedQuantity = Ingredient.quantityText(
-                ingredient.quantity * multiplier,
-                unit: ingredient.unit
+        return eligible.compactMap { ingredient in
+            let requestedQuantity = ingredient.quantity * multiplier
+            let request = RetailerProductSearchRequest(
+                ingredient: ingredient,
+                requestedQuantity: requestedQuantity,
+                requestedUnit: ingredient.unit,
+                storeID: store.retailerStoreID,
+                fulfillmentMethod: fulfillmentMode == .pickup ? .pickup : .delivery
             )
-            let purchaseQuantity = ProductCatalog.packageCount(
-                for: ingredient,
-                scaledQuantity: ingredient.quantity * multiplier
+            var ranked = RetailerProductMatcher.rank(
+                DemoWalmartCatalogService.seededProducts(
+                    for: ingredient,
+                    storeID: store.retailerStoreID
+                ),
+                for: request,
+                preferences: preferences
             )
-            let store = stores[index % max(stores.count, 1)]
+            if ranked.isEmpty {
+                ranked = RetailerProductMatcher.rank(
+                    [
+                        DemoWalmartCatalogService.searchFallback(
+                            for: ingredient,
+                            storeID: store.retailerStoreID,
+                            preferences: preferences
+                        )
+                    ],
+                    for: request,
+                    preferences: preferences
+                )
+            }
+            guard let selected = ranked.first else { return nil }
 
             return ShoppingListItem(
                 ingredient: ingredient,
-                requestedQuantity: requestedQuantity,
-                purchaseQuantity: purchaseQuantity,
-                product: candidates[0],
-                alternatives: Array(candidates.dropFirst()),
-                storeID: store.id
+                requestedQuantity: Ingredient.quantityText(
+                    requestedQuantity,
+                    unit: ingredient.unit
+                ),
+                purchaseQuantity: PackageMath.packageCount(
+                    product: selected.product,
+                    requestedQuantity: requestedQuantity,
+                    requestedUnit: ingredient.unit
+                ),
+                product: selected.product,
+                alternatives: Array(ranked.dropFirst().map(\.product)),
+                storeID: store.id,
+                matchScore: selected.score,
+                selectionReasons: selected.reasons
             )
+        }
+    }
+
+    private func persistState() {
+        guard persistenceReady else { return }
+        do {
+            try stateStore.save(
+                SmartCartPersistedState(
+                    recipes: recipes,
+                    activeRecipe: activeRecipe,
+                    desiredServings: desiredServings,
+                    preferences: preferences,
+                    featureFlags: featureFlags,
+                    storeStrategy: storeStrategy,
+                    fulfillmentMode: fulfillmentMode,
+                    selectedStoreIDs: selectedStoreIDs,
+                    zipCode: zipCode,
+                    pickupDay: pickupDay,
+                    pickupTime: pickupTime,
+                    shoppingItems: shoppingItems,
+                    guidedIndex: guidedIndex,
+                    savedLists: savedLists,
+                    preferredDeliveryPartnerName: preferredDeliveryPartnerName
+                )
+            )
+            persistenceIssue = nil
+        } catch {
+            persistenceIssue = error.localizedDescription
         }
     }
 }
@@ -463,6 +778,10 @@ enum RecipeParser {
     }
 
     private static func parseIngredient(_ line: String) -> Ingredient {
+        let isOptional = line.range(
+            of: #"\boptional\b"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
         var cleaned = line
             .replacingOccurrences(of: #"^[-•*☐✓]\s*"#, with: "", options: .regularExpression)
             .replacingOccurrences(of: "½", with: "1/2")
@@ -532,6 +851,7 @@ enum RecipeParser {
             preparation: preparation,
             category: category,
             confidence: foundQuantity && !normalizedName.isEmpty ? .high : .review,
+            includeInList: !isOptional,
             pantryState: pantryState
         )
     }
@@ -765,117 +1085,6 @@ enum RecipeImportError: LocalizedError {
         case .invalidURL:
             "Enter a complete recipe link beginning with https://."
         }
-    }
-}
-
-private enum ProductCatalog {
-    static func candidates(for ingredient: Ingredient) -> [ProductCandidate] {
-        let value = ingredient.name.lowercased()
-
-        if value.contains("chicken") {
-            return [
-                candidate("Great Value", "Boneless Skinless Chicken Breasts", "3 lb", 10.94, "$3.65/lb", "fork.knife", variable: true),
-                candidate("Perdue", "Fresh Chicken Breast Tenderloins", "1.5 lb", 8.47, "$5.65/lb", "fork.knife", variable: true),
-                candidate("Tyson", "All Natural Chicken Breasts", "2.5 lb", 11.82, "$4.73/lb", "fork.knife", variable: true)
-            ]
-        }
-        if value.contains("pasta") || value.contains("rigatoni") || value.contains("penne") || value.contains("spaghetti") {
-            return [
-                candidate("Great Value", "Penne Pasta", "16 oz", 1.28, "8¢/oz", "takeoutbag.and.cup.and.straw.fill"),
-                candidate("Barilla", "Penne Pasta", "16 oz", 1.84, "12¢/oz", "takeoutbag.and.cup.and.straw.fill"),
-                candidate("Rao's", "Penne Rigate", "16 oz", 2.98, "19¢/oz", "takeoutbag.and.cup.and.straw.fill")
-            ]
-        }
-        if value.contains("olive oil") {
-            return [
-                candidate("Great Value", "Extra Virgin Olive Oil", "17 fl oz", 6.97, "41¢/fl oz", "waterbottle.fill"),
-                candidate("Bertolli", "Extra Virgin Olive Oil", "16.9 fl oz", 9.48, "56¢/fl oz", "waterbottle.fill"),
-                candidate("Pompeian", "Smooth Extra Virgin Olive Oil", "16 fl oz", 8.96, "56¢/fl oz", "waterbottle.fill")
-            ]
-        }
-        if value.contains("parmesan") {
-            return [
-                candidate("Great Value", "Shredded Parmesan Cheese", "6 oz", 2.22, "37¢/oz", "waterbottle.fill"),
-                candidate("Kraft", "Shredded Parmesan Cheese", "7 oz", 3.48, "50¢/oz", "waterbottle.fill"),
-                candidate("BelGioioso", "Freshly Shredded Parmesan", "5 oz", 4.12, "82¢/oz", "waterbottle.fill")
-            ]
-        }
-        if value.contains("cream") {
-            return [
-                candidate("Great Value", "Heavy Whipping Cream", "16 fl oz", 2.87, "18¢/fl oz", "waterbottle.fill"),
-                candidate("Horizon Organic", "Heavy Whipping Cream", "16 fl oz", 5.44, "34¢/fl oz", "waterbottle.fill"),
-                candidate("Land O Lakes", "Heavy Whipping Cream", "16 fl oz", 4.38, "27¢/fl oz", "waterbottle.fill")
-            ]
-        }
-        if value.contains("garlic") {
-            return [
-                candidate("Fresh", "Garlic Bulbs", "3 count", 0.78, "26¢/ea", "leaf.fill"),
-                candidate("Spice World", "Fresh Peeled Garlic", "6 oz", 3.97, "66¢/oz", "leaf.fill"),
-                candidate("Great Value", "Minced Garlic", "8 oz", 2.48, "31¢/oz", "leaf.fill")
-            ]
-        }
-        if value.contains("lemon") || value.contains("lime") {
-            return [
-                candidate("Fresh", value.contains("lime") ? "Limes" : "Lemons", "2 lb bag", 3.97, "$1.99/lb", "leaf.fill", variable: true),
-                candidate("Fresh", value.contains("lime") ? "Lime" : "Lemon", "each", 0.68, "68¢/ea", "leaf.fill", variable: true),
-                candidate("ReaLemon", "100% Lemon Juice", "15 fl oz", 2.14, "14¢/fl oz", "waterbottle.fill", confidence: .review)
-            ]
-        }
-        if value.contains("parsley") || value.contains("cilantro") {
-            return [
-                candidate("Fresh", ingredient.name, "1 bunch", 0.98, "98¢/ea", "leaf.fill", variable: true),
-                candidate("Organic", ingredient.name, "1 bunch", 1.78, "$1.78/ea", "leaf.fill", variable: true),
-                candidate("Litehouse", "Freeze Dried Herbs", "0.35 oz", 4.98, "$14.23/oz", "leaf.fill", confidence: .review)
-            ]
-        }
-
-        let basePrice: Double = switch ingredient.category {
-        case .produce: 2.48
-        case .dairy: 3.87
-        case .meat: 8.96
-        case .bakery: 3.24
-        case .pantry: 2.72
-        case .frozen: 4.98
-        }
-        let symbol = ingredient.category.symbol
-        return [
-            candidate("Great Value", ingredient.name, "standard size", basePrice, "Best value", symbol, confidence: ingredient.confidence),
-            candidate("Marketside", ingredient.name, "family size", basePrice + 1.26, "Family size", symbol, confidence: .review),
-            candidate("Organic", ingredient.name, "standard size", basePrice + 2.11, "Organic option", symbol, confidence: .review)
-        ]
-    }
-
-    static func packageCount(for ingredient: Ingredient, scaledQuantity: Double) -> Int {
-        let value = ingredient.name.lowercased()
-        if value.contains("chicken"), ingredient.unit == "lb" {
-            return max(1, Int(ceil(scaledQuantity / 3)))
-        }
-        if value.contains("pasta") && (ingredient.unit == "oz") {
-            return max(1, Int(ceil(scaledQuantity / 16)))
-        }
-        return 1
-    }
-
-    private static func candidate(
-        _ brand: String,
-        _ name: String,
-        _ package: String,
-        _ price: Double,
-        _ unitPrice: String,
-        _ symbol: String,
-        confidence: IngredientConfidence = .high,
-        variable: Bool = false
-    ) -> ProductCandidate {
-        ProductCandidate(
-            brand: brand,
-            name: name,
-            package: package,
-            price: price,
-            unitPrice: unitPrice,
-            symbol: symbol,
-            confidence: confidence,
-            variableWeight: variable
-        )
     }
 }
 

@@ -8,14 +8,14 @@ struct SmartCartLogo: View {
             ZStack {
                 Image(systemName: "cart.fill.badge.plus")
                     .font(.system(size: compact ? 22 : 29, weight: .bold))
-                    .foregroundStyle(GatherTheme.green)
+                    .foregroundStyle(SmartCartTheme.green)
             }
             .frame(width: compact ? 29 : 38, height: compact ? 29 : 38)
 
             Text("Smart")
-                .foregroundStyle(GatherTheme.navy)
+                .foregroundStyle(SmartCartTheme.navy)
             + Text("Cart")
-                .foregroundStyle(GatherTheme.green)
+                .foregroundStyle(SmartCartTheme.green)
         }
         .font(.system(size: compact ? 22 : 31, weight: .heavy, design: .rounded))
         .accessibilityElement(children: .ignore)
@@ -34,11 +34,11 @@ struct SectionHeader: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.system(size: 21, weight: .bold, design: .rounded))
-                    .foregroundStyle(GatherTheme.ink)
+                    .foregroundStyle(SmartCartTheme.ink)
                 if let subtitle {
                     Text(subtitle)
                         .font(.caption)
-                        .foregroundStyle(GatherTheme.secondaryInk)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
                 }
             }
 
@@ -47,7 +47,7 @@ struct SectionHeader: View {
             if let actionTitle, let action {
                 Button(actionTitle, action: action)
                     .font(.subheadline.weight(.bold))
-                    .foregroundStyle(GatherTheme.green)
+                    .foregroundStyle(SmartCartTheme.green)
             }
         }
     }
@@ -70,13 +70,13 @@ struct ImportActionTile: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(homeTitle)
                         .font(.subheadline.weight(.bold))
-                        .foregroundStyle(GatherTheme.navy)
+                        .foregroundStyle(SmartCartTheme.navy)
                         .lineLimit(1)
                         .minimumScaleFactor(0.78)
                         .allowsTightening(true)
                     Text(method.subtitle)
                         .font(.caption2)
-                        .foregroundStyle(GatherTheme.secondaryInk)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
                         .lineLimit(2)
                 }
 
@@ -84,11 +84,11 @@ struct ImportActionTile: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)
-            .background(GatherTheme.paper)
+            .background(SmartCartTheme.paper)
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(GatherTheme.border, lineWidth: 1)
+                    .stroke(SmartCartTheme.border, lineWidth: 1)
             }
         }
         .buttonStyle(PressableButtonStyle())
@@ -139,14 +139,14 @@ struct RecipeHeroCard: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(recipe.title)
                         .font(.system(size: 21, weight: .bold, design: .rounded))
-                        .foregroundStyle(GatherTheme.navy)
+                        .foregroundStyle(SmartCartTheme.navy)
                         .lineLimit(2)
                     HStack(spacing: 14) {
                         Label("\(recipe.servings) servings", systemImage: "person.2.fill")
                         Label("\(recipe.totalMinutes)m", systemImage: "clock.fill")
                     }
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(GatherTheme.secondaryInk)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
                 }
 
                 if let action {
@@ -161,14 +161,14 @@ struct RecipeHeroCard: View {
                 }
             }
             .padding(16)
-            .background(GatherTheme.paper)
+            .background(SmartCartTheme.paper)
         }
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(GatherTheme.border, lineWidth: 1)
+                .stroke(SmartCartTheme.border, lineWidth: 1)
         }
-        .gatherShadow()
+        .smartCartShadow()
     }
 }
 
@@ -185,19 +185,19 @@ struct WorkflowHeader: View {
                 Text(eyebrow.uppercased())
                     .font(.caption2.weight(.heavy))
                     .tracking(0.9)
-                    .foregroundStyle(GatherTheme.green)
+                    .foregroundStyle(SmartCartTheme.green)
                 Spacer()
                 Text("Step \(step) of \(total)")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(GatherTheme.secondaryInk)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
             }
 
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
                     Capsule()
-                        .fill(GatherTheme.border)
+                        .fill(SmartCartTheme.border)
                     Capsule()
-                        .fill(GatherTheme.green)
+                        .fill(SmartCartTheme.green)
                         .frame(width: proxy.size.width * CGFloat(step) / CGFloat(total))
                 }
             }
@@ -205,12 +205,12 @@ struct WorkflowHeader: View {
 
             Text(title)
                 .font(.system(size: 29, weight: .bold, design: .rounded))
-                .foregroundStyle(GatherTheme.navy)
+                .foregroundStyle(SmartCartTheme.navy)
                 .fixedSize(horizontal: false, vertical: true)
 
             Text(message)
                 .font(.subheadline)
-                .foregroundStyle(GatherTheme.secondaryInk)
+                .foregroundStyle(SmartCartTheme.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -227,28 +227,28 @@ struct JourneyStepCard: View {
         VStack(spacing: 8) {
             Image(systemName: symbol)
                 .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(isActive ? .white : GatherTheme.green)
+                .foregroundStyle(isActive ? .white : SmartCartTheme.green)
                 .frame(width: 40, height: 40)
-                .background(isActive ? GatherTheme.green : GatherTheme.herbLight)
+                .background(isActive ? SmartCartTheme.green : SmartCartTheme.herbLight)
                 .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
 
             Text(title)
                 .font(.caption.weight(.bold))
-                .foregroundStyle(GatherTheme.navy)
+                .foregroundStyle(SmartCartTheme.navy)
                 .lineLimit(1)
             Text(subtitle)
                 .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(GatherTheme.secondaryInk)
+                .foregroundStyle(SmartCartTheme.secondaryInk)
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
         }
         .frame(width: 88)
         .padding(.vertical, 12)
-        .background(GatherTheme.paper)
+        .background(SmartCartTheme.paper)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(isActive ? GatherTheme.green.opacity(0.55) : GatherTheme.border, lineWidth: 1)
+                .stroke(isActive ? SmartCartTheme.green.opacity(0.55) : SmartCartTheme.border, lineWidth: 1)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Step \(number), \(title), \(subtitle)")
@@ -272,7 +272,7 @@ struct IngredientConfidenceBadge: View {
 struct StatusPill: View {
     let title: String
     let symbol: String
-    var color: Color = GatherTheme.green
+    var color: Color = SmartCartTheme.green
 
     var body: some View {
         Label(title, systemImage: symbol)
@@ -291,10 +291,10 @@ struct StoreMark: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
-                .fill(GatherTheme.walmartBlue)
+                .fill(SmartCartTheme.walmartBlue)
             Image(systemName: "sparkles")
                 .font(.system(size: size * 0.38, weight: .bold))
-                .foregroundStyle(GatherTheme.yellow)
+                .foregroundStyle(SmartCartTheme.yellow)
         }
         .frame(width: size, height: size)
         .accessibilityHidden(true)
@@ -302,19 +302,19 @@ struct StoreMark: View {
 }
 
 struct ProductIcon: View {
-    let product: ProductCandidate
+    let product: RetailerProductRecord
     var size: CGFloat = 64
 
     var body: some View {
         Image(systemName: product.symbol)
             .font(.system(size: size * 0.37, weight: .semibold))
-            .foregroundStyle(GatherTheme.walmartBlue)
+            .foregroundStyle(SmartCartTheme.walmartBlue)
             .frame(width: size, height: size)
-            .background(GatherTheme.walmartLight)
+            .background(SmartCartTheme.walmartLight)
             .clipShape(RoundedRectangle(cornerRadius: size * 0.25, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: size * 0.25, style: .continuous)
-                    .stroke(GatherTheme.walmartBlue.opacity(0.12), lineWidth: 1)
+                    .stroke(SmartCartTheme.walmartBlue.opacity(0.12), lineWidth: 1)
             }
     }
 }
@@ -323,7 +323,7 @@ struct InfoBanner: View {
     let symbol: String
     let title: String
     let message: String
-    var color: Color = GatherTheme.walmartBlue
+    var color: Color = SmartCartTheme.walmartBlue
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -337,10 +337,10 @@ struct InfoBanner: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.subheadline.weight(.bold))
-                    .foregroundStyle(GatherTheme.navy)
+                    .foregroundStyle(SmartCartTheme.navy)
                 Text(message)
                     .font(.caption)
-                    .foregroundStyle(GatherTheme.secondaryInk)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -361,7 +361,7 @@ struct ToastView: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(GatherTheme.yellow)
+                .foregroundStyle(SmartCartTheme.yellow)
             Text(message)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.white)
@@ -370,7 +370,7 @@ struct ToastView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 13)
-        .background(GatherTheme.navy.opacity(0.97))
+        .background(SmartCartTheme.navy.opacity(0.97))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .shadow(color: Color.black.opacity(0.18), radius: 16, y: 8)
     }
@@ -387,16 +387,16 @@ struct EmptyStateView: View {
         VStack(spacing: 14) {
             Image(systemName: symbol)
                 .font(.system(size: 29, weight: .semibold))
-                .foregroundStyle(GatherTheme.green)
+                .foregroundStyle(SmartCartTheme.green)
                 .frame(width: 66, height: 66)
-                .background(GatherTheme.herbLight)
+                .background(SmartCartTheme.herbLight)
                 .clipShape(Circle())
             Text(title)
                 .font(.title3.bold())
-                .foregroundStyle(GatherTheme.navy)
+                .foregroundStyle(SmartCartTheme.navy)
             Text(message)
                 .font(.subheadline)
-                .foregroundStyle(GatherTheme.secondaryInk)
+                .foregroundStyle(SmartCartTheme.secondaryInk)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
             if let actionTitle, let action {
@@ -408,11 +408,11 @@ struct EmptyStateView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 32)
         .padding(.horizontal, 20)
-        .background(GatherTheme.paper)
-        .clipShape(RoundedRectangle(cornerRadius: GatherTheme.cardRadius, style: .continuous))
+        .background(SmartCartTheme.paper)
+        .clipShape(RoundedRectangle(cornerRadius: SmartCartTheme.cardRadius, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: GatherTheme.cardRadius, style: .continuous)
-                .stroke(GatherTheme.border, lineWidth: 1)
+            RoundedRectangle(cornerRadius: SmartCartTheme.cardRadius, style: .continuous)
+                .stroke(SmartCartTheme.border, lineWidth: 1)
         }
     }
 }

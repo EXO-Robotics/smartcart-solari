@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-enum AppTab: String, CaseIterable, Identifiable {
+enum AppTab: String, CaseIterable, Identifiable, Codable, Hashable {
     case home
     case lists
     case pantry
@@ -35,13 +35,14 @@ enum SmartRoute: Hashable {
     case ingredientReview
     case servingAdjustment
     case pantryCheck
+    case preferences
     case storeSelection
     case matching
     case shoppingList
     case guidedShopping
 }
 
-enum ImportMethod: String, CaseIterable, Identifiable, Hashable {
+enum ImportMethod: String, CaseIterable, Identifiable, Hashable, Codable {
     case camera
     case photoLibrary
     case recipeLink
@@ -97,12 +98,12 @@ enum ImportMethod: String, CaseIterable, Identifiable, Hashable {
 
     var tint: Color {
         switch self {
-        case .camera: GatherTheme.walmartBlue
+        case .camera: SmartCartTheme.walmartBlue
         case .photoLibrary: Color(red: 0.37, green: 0.36, blue: 0.82)
-        case .recipeLink: GatherTheme.navy
+        case .recipeLink: SmartCartTheme.navy
         case .pinterest: Color(red: 0.83, green: 0.08, blue: 0.17)
-        case .recipeText: GatherTheme.green
-        case .sample: GatherTheme.amber
+        case .recipeText: SmartCartTheme.green
+        case .sample: SmartCartTheme.amber
         }
     }
 }
@@ -117,7 +118,7 @@ enum SheetDestination: Identifiable {
     }
 }
 
-enum RecipeSource: String, CaseIterable, Hashable {
+enum RecipeSource: String, CaseIterable, Hashable, Codable {
     case photo = "Recipe photo"
     case link = "Recipe link"
     case pinterest = "Pinterest"
@@ -125,7 +126,7 @@ enum RecipeSource: String, CaseIterable, Hashable {
     case sample = "SmartCart sample"
 }
 
-struct Recipe: Identifiable, Hashable {
+struct Recipe: Identifiable, Hashable, Codable {
     let id: UUID
     var title: String
     var source: RecipeSource
@@ -161,7 +162,7 @@ struct Recipe: Identifiable, Hashable {
     var totalMinutes: Int { prepMinutes + cookMinutes }
 }
 
-struct Ingredient: Identifiable, Hashable {
+struct Ingredient: Identifiable, Hashable, Codable {
     let id: UUID
     var rawText: String
     var name: String
@@ -217,7 +218,7 @@ struct Ingredient: Identifiable, Hashable {
     }
 }
 
-enum IngredientConfidence: String, CaseIterable, Identifiable, Hashable {
+enum IngredientConfidence: String, CaseIterable, Identifiable, Hashable, Codable {
     case high = "High confidence"
     case review = "Review suggested"
     case unknown = "Could not identify"
@@ -242,14 +243,14 @@ enum IngredientConfidence: String, CaseIterable, Identifiable, Hashable {
 
     var color: Color {
         switch self {
-        case .high: GatherTheme.green
-        case .review: GatherTheme.amber
-        case .unknown: GatherTheme.coral
+        case .high: SmartCartTheme.green
+        case .review: SmartCartTheme.amber
+        case .unknown: SmartCartTheme.coral
         }
     }
 }
 
-enum PantryState: String, CaseIterable, Identifiable, Hashable {
+enum PantryState: String, CaseIterable, Identifiable, Hashable, Codable {
     case haveEnough = "Have enough"
     case runningLow = "Running low"
     case needToBuy = "Need to buy"
@@ -280,16 +281,16 @@ enum PantryState: String, CaseIterable, Identifiable, Hashable {
 
     var color: Color {
         switch self {
-        case .haveEnough: GatherTheme.green
-        case .runningLow: GatherTheme.amber
-        case .needToBuy: GatherTheme.walmartBlue
-        case .alwaysAsk: GatherTheme.purple
-        case .exclude: GatherTheme.secondaryInk
+        case .haveEnough: SmartCartTheme.green
+        case .runningLow: SmartCartTheme.amber
+        case .needToBuy: SmartCartTheme.walmartBlue
+        case .alwaysAsk: SmartCartTheme.purple
+        case .exclude: SmartCartTheme.secondaryInk
         }
     }
 }
 
-enum GroceryCategory: String, CaseIterable, Hashable {
+enum GroceryCategory: String, CaseIterable, Hashable, Codable {
     case produce = "Produce"
     case dairy = "Dairy"
     case meat = "Meat & Seafood"
@@ -309,22 +310,24 @@ enum GroceryCategory: String, CaseIterable, Hashable {
     }
 }
 
-enum StoreStrategy: String, CaseIterable, Identifiable, Hashable {
+enum StoreStrategy: String, CaseIterable, Identifiable, Hashable, Codable {
     case oneStore = "One store"
     case multipleStops = "Multiple stops"
 
     var id: String { rawValue }
 }
 
-enum FulfillmentMode: String, CaseIterable, Identifiable, Hashable {
+enum FulfillmentMode: String, CaseIterable, Identifiable, Hashable, Codable {
     case pickup = "Pickup"
     case delivery = "Delivery"
 
     var id: String { rawValue }
 }
 
-struct RetailerStore: Identifiable, Hashable {
+struct RetailerStore: Identifiable, Hashable, Codable {
     let id: UUID
+    var retailerID: String
+    var retailerStoreID: String
     var name: String
     var format: String
     var address: String
@@ -335,6 +338,8 @@ struct RetailerStore: Identifiable, Hashable {
 
     init(
         id: UUID = UUID(),
+        retailerID: String = "walmart",
+        retailerStoreID: String,
         name: String,
         format: String,
         address: String,
@@ -344,6 +349,8 @@ struct RetailerStore: Identifiable, Hashable {
         supportsDelivery: Bool = true
     ) {
         self.id = id
+        self.retailerID = retailerID
+        self.retailerStoreID = retailerStoreID
         self.name = name
         self.format = format
         self.address = address
@@ -354,65 +361,35 @@ struct RetailerStore: Identifiable, Hashable {
     }
 }
 
-struct ProductCandidate: Identifiable, Hashable {
-    let id: UUID
-    var brand: String
-    var name: String
-    var package: String
-    var price: Double
-    var unitPrice: String
-    var symbol: String
-    var confidence: IngredientConfidence
-    var variableWeight: Bool
-
-    init(
-        id: UUID = UUID(),
-        brand: String,
-        name: String,
-        package: String,
-        price: Double,
-        unitPrice: String,
-        symbol: String,
-        confidence: IngredientConfidence = .high,
-        variableWeight: Bool = false
-    ) {
-        self.id = id
-        self.brand = brand
-        self.name = name
-        self.package = package
-        self.price = price
-        self.unitPrice = unitPrice
-        self.symbol = symbol
-        self.confidence = confidence
-        self.variableWeight = variableWeight
-    }
-}
-
-enum GuidedItemStatus: String, Hashable {
+enum GuidedItemStatus: String, Hashable, Codable {
     case waiting
     case added
     case skipped
 }
 
-struct ShoppingListItem: Identifiable, Hashable {
+struct ShoppingListItem: Identifiable, Hashable, Codable {
     let id: UUID
     var ingredient: Ingredient
     var requestedQuantity: String
     var purchaseQuantity: Int
-    var product: ProductCandidate
-    var alternatives: [ProductCandidate]
+    var product: RetailerProductRecord
+    var alternatives: [RetailerProductRecord]
     var storeID: UUID
     var status: GuidedItemStatus
+    var matchScore: Double
+    var selectionReasons: [String]
 
     init(
         id: UUID = UUID(),
         ingredient: Ingredient,
         requestedQuantity: String,
         purchaseQuantity: Int = 1,
-        product: ProductCandidate,
-        alternatives: [ProductCandidate],
+        product: RetailerProductRecord,
+        alternatives: [RetailerProductRecord],
         storeID: UUID,
-        status: GuidedItemStatus = .waiting
+        status: GuidedItemStatus = .waiting,
+        matchScore: Double = 0,
+        selectionReasons: [String] = []
     ) {
         self.id = id
         self.ingredient = ingredient
@@ -422,6 +399,8 @@ struct ShoppingListItem: Identifiable, Hashable {
         self.alternatives = alternatives
         self.storeID = storeID
         self.status = status
+        self.matchScore = matchScore
+        self.selectionReasons = selectionReasons
     }
 
     var lineTotal: Double {
@@ -429,29 +408,23 @@ struct ShoppingListItem: Identifiable, Hashable {
     }
 }
 
-struct SavedShoppingList: Identifiable, Hashable {
+struct SavedShoppingList: Identifiable, Hashable, Codable {
     let id: UUID
-    var recipeTitle: String
-    var storeName: String
-    var itemCount: Int
-    var total: Double
-    var savedAt: Date
+    var manifest: ShoppingManifest
 
     init(
         id: UUID = UUID(),
-        recipeTitle: String,
-        storeName: String,
-        itemCount: Int,
-        total: Double,
-        savedAt: Date = .now
+        manifest: ShoppingManifest
     ) {
         self.id = id
-        self.recipeTitle = recipeTitle
-        self.storeName = storeName
-        self.itemCount = itemCount
-        self.total = total
-        self.savedAt = savedAt
+        self.manifest = manifest
     }
+
+    var recipeTitle: String { manifest.recipeTitle }
+    var storeName: String { manifest.storeName }
+    var itemCount: Int { manifest.items.count }
+    var total: Double { manifest.total }
+    var savedAt: Date { manifest.updatedAt }
 }
 
 struct DeliveryPartner: Identifiable, Hashable {
@@ -460,12 +433,21 @@ struct DeliveryPartner: Identifiable, Hashable {
     var symbol: String
     var color: Color
     var url: URL
+    var capabilities: RetailerCapabilities
 
-    init(id: UUID = UUID(), name: String, symbol: String, color: Color, url: URL) {
+    init(
+        id: UUID = UUID(),
+        name: String,
+        symbol: String,
+        color: Color,
+        url: URL,
+        capabilities: RetailerCapabilities = []
+    ) {
         self.id = id
         self.name = name
         self.symbol = symbol
         self.color = color
         self.url = url
+        self.capabilities = capabilities
     }
 }

@@ -10,7 +10,7 @@ struct PantryCheckView: View {
             VStack(alignment: .leading, spacing: 20) {
                 WorkflowHeader(
                     step: 3,
-                    total: 5,
+                    total: 6,
                     eyebrow: "Pantry check",
                     title: "What do you already have?",
                     message: "Skip items you have, flag low staples, or keep SmartCart asking every time."
@@ -31,22 +31,22 @@ struct PantryCheckView: View {
                     symbol: "brain.head.profile.fill",
                     title: "Pantry memory",
                     message: "This prototype keeps choices on this device for the active recipe. A production version can learn recurring staples without sharing them with a retailer.",
-                    color: GatherTheme.purple
+                    color: SmartCartTheme.purple
                 )
             }
             .padding(18)
             .padding(.bottom, 96)
         }
-        .background(GatherTheme.canvas)
+        .background(SmartCartTheme.canvas)
         .navigationTitle("Pantry check")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
             BottomActionBar {
                 Button {
-                    appModel.continueTo(.storeSelection)
+                    appModel.continueTo(.preferences)
                 } label: {
                     HStack {
-                        Text("Choose Walmart store")
+                        Text("Set shopping preferences")
                         Spacer()
                         Text("\(appModel.ingredientsToBuy.count) to buy")
                             .font(.caption.weight(.bold))
@@ -65,19 +65,19 @@ struct PantryCheckView: View {
                 value: "\(appModel.ingredientsToBuy.count)",
                 label: "To buy",
                 symbol: "cart.badge.plus",
-                color: GatherTheme.walmartBlue
+                color: SmartCartTheme.walmartBlue
             )
             summaryMetric(
                 value: "\(appModel.pantrySkipCount)",
                 label: "Skipped",
                 symbol: "checkmark.seal.fill",
-                color: GatherTheme.green
+                color: SmartCartTheme.green
             )
             summaryMetric(
                 value: "\(appModel.activeRecipe.ingredients.filter { $0.pantryState == .runningLow }.count)",
                 label: "Running low",
                 symbol: "clock.fill",
-                color: GatherTheme.amber
+                color: SmartCartTheme.amber
             )
         }
     }
@@ -88,19 +88,19 @@ struct PantryCheckView: View {
                 .foregroundStyle(color)
             Text(value)
                 .font(.title3.bold())
-                .foregroundStyle(GatherTheme.navy)
+                .foregroundStyle(SmartCartTheme.navy)
             Text(label)
                 .font(.caption2.weight(.semibold))
-                .foregroundStyle(GatherTheme.secondaryInk)
+                .foregroundStyle(SmartCartTheme.secondaryInk)
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 14)
-        .background(GatherTheme.paper)
+        .background(SmartCartTheme.paper)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(GatherTheme.border, lineWidth: 1)
+                .stroke(SmartCartTheme.border, lineWidth: 1)
         }
     }
 
@@ -162,11 +162,11 @@ private struct PantryIngredientRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(ingredient.name)
                     .font(.subheadline.weight(.bold))
-                    .foregroundStyle(GatherTheme.navy)
+                    .foregroundStyle(SmartCartTheme.navy)
                     .lineLimit(1)
                 Text(ingredient.displayQuantity)
                     .font(.caption)
-                    .foregroundStyle(GatherTheme.secondaryInk)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
             }
 
             Spacer(minLength: 6)
@@ -195,11 +195,11 @@ private struct PantryIngredientRow: View {
             }
         }
         .padding(13)
-        .background(GatherTheme.paper)
+        .background(SmartCartTheme.paper)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(GatherTheme.border, lineWidth: 1)
+                .stroke(SmartCartTheme.border, lineWidth: 1)
         }
     }
 }
@@ -216,15 +216,25 @@ struct StoreSelectionView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 WorkflowHeader(
-                    step: 4,
-                    total: 5,
+                    step: 5,
+                    total: 6,
                     eyebrow: "Select store",
                     title: "Where do you want to shop?",
-                    message: "Choose one Walmart stop or split the prototype list across multiple nearby Walmart locations."
+                    message: appModel.featureFlags.advancedToolsEnabled
+                        ? "Choose a Walmart store. Multiple-stop planning is visible only as an experimental tool."
+                        : "Choose one Walmart store for this public-beta shopping manifest."
                 )
 
                 locationField
-                strategyPicker
+                if appModel.featureFlags.advancedToolsEnabled {
+                    strategyPicker
+                } else {
+                    StatusPill(
+                        title: "Single-store beta",
+                        symbol: "storefront.fill",
+                        color: SmartCartTheme.walmartBlue
+                    )
+                }
                 storeCards
                 fulfillmentSection
 
@@ -232,13 +242,13 @@ struct StoreSelectionView: View {
                     symbol: "info.circle.fill",
                     title: "Pickup is pre-planned, not secretly booked",
                     message: "SmartCart remembers your preferred window and hands you to Walmart to confirm inventory, substitutions, payment, and the actual reservation.",
-                    color: GatherTheme.walmartBlue
+                    color: SmartCartTheme.walmartBlue
                 )
             }
             .padding(18)
             .padding(.bottom, 96)
         }
-        .background(GatherTheme.canvas)
+        .background(SmartCartTheme.canvas)
         .navigationTitle("Select store")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
@@ -249,7 +259,7 @@ struct StoreSelectionView: View {
                     HStack {
                         Text("Match products")
                         Spacer()
-                        Text(appModel.storeStrategy == .oneStore ? "1 stop" : "\(appModel.selectedStores.count) stops")
+                        Text(appModel.storeStrategy == .oneStore ? "1 store" : "\(appModel.selectedStores.count) stores")
                             .font(.caption.weight(.bold))
                             .opacity(0.82)
                         Image(systemName: "arrow.right")
@@ -267,14 +277,14 @@ struct StoreSelectionView: View {
     private var locationField: some View {
         HStack(spacing: 11) {
             Image(systemName: "location.fill")
-                .foregroundStyle(GatherTheme.walmartBlue)
+                .foregroundStyle(SmartCartTheme.walmartBlue)
             TextField("ZIP code", text: Bindable(appModel).zipCode)
                 .keyboardType(.numberPad)
             Button("Use location") {
                 appModel.showToast("Using nearby demo stores for \(appModel.zipCode)")
             }
             .font(.caption.weight(.bold))
-            .foregroundStyle(GatherTheme.walmartBlue)
+            .foregroundStyle(SmartCartTheme.walmartBlue)
         }
         .smartField()
     }
@@ -286,7 +296,7 @@ struct StoreSelectionView: View {
             Text("SHOPPING PLAN")
                 .font(.caption2.weight(.heavy))
                 .tracking(0.8)
-                .foregroundStyle(GatherTheme.secondaryInk)
+                .foregroundStyle(SmartCartTheme.secondaryInk)
             Picker("Shopping plan", selection: $appModel.storeStrategy) {
                 ForEach(StoreStrategy.allCases) { strategy in
                     Text(strategy.rawValue).tag(strategy)
@@ -310,35 +320,35 @@ struct StoreSelectionView: View {
                             HStack {
                                 Text(store.name)
                                     .font(.subheadline.weight(.bold))
-                                    .foregroundStyle(GatherTheme.navy)
+                                    .foregroundStyle(SmartCartTheme.navy)
                                     .lineLimit(1)
                                 Spacer()
                                 Image(systemName: selected ? "checkmark.circle.fill" : "circle")
                                     .font(.title3)
-                                    .foregroundStyle(selected ? GatherTheme.green : GatherTheme.border)
+                                    .foregroundStyle(selected ? SmartCartTheme.green : SmartCartTheme.border)
                             }
                             Text("\(store.distance, specifier: "%.1f") mi · \(store.address)")
                                 .font(.caption)
-                                .foregroundStyle(GatherTheme.secondaryInk)
+                                .foregroundStyle(SmartCartTheme.secondaryInk)
                                 .lineLimit(2)
 
                             HStack(spacing: 8) {
                                 if store.supportsPickup {
-                                    StatusPill(title: "Pickup", symbol: "car.fill", color: GatherTheme.green)
+                                    StatusPill(title: "Pickup", symbol: "car.fill", color: SmartCartTheme.green)
                                 }
-                                if store.supportsDelivery {
-                                    StatusPill(title: "Delivery", symbol: "house.fill", color: GatherTheme.walmartBlue)
+                                if appModel.featureFlags.advancedToolsEnabled, store.supportsDelivery {
+                                    StatusPill(title: "Delivery", symbol: "house.fill", color: SmartCartTheme.walmartBlue)
                                 }
                             }
                             .padding(.top, 3)
                         }
                     }
                     .padding(13)
-                    .background(GatherTheme.paper)
+                    .background(SmartCartTheme.paper)
                     .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                     .overlay {
                         RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .stroke(selected ? GatherTheme.walmartBlue : GatherTheme.border, lineWidth: selected ? 1.6 : 1)
+                            .stroke(selected ? SmartCartTheme.walmartBlue : SmartCartTheme.border, lineWidth: selected ? 1.6 : 1)
                     }
                 }
                 .buttonStyle(PressableButtonStyle())
@@ -352,12 +362,24 @@ struct StoreSelectionView: View {
         return VStack(alignment: .leading, spacing: 13) {
             SectionHeader(title: "Fulfillment", subtitle: "Pre-pick a plan before retailer checkout")
 
-            Picker("Fulfillment", selection: $appModel.fulfillmentMode) {
-                ForEach(FulfillmentMode.allCases) { mode in
-                    Text(mode.rawValue).tag(mode)
+            if appModel.featureFlags.advancedToolsEnabled {
+                Picker("Fulfillment", selection: $appModel.fulfillmentMode) {
+                    ForEach(FulfillmentMode.allCases) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+            } else {
+                HStack {
+                    Label("Pickup preference", systemImage: "car.fill")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(SmartCartTheme.navy)
+                    Spacer()
+                    Text("Retailer confirms")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(SmartCartTheme.walmartBlue)
                 }
             }
-            .pickerStyle(.segmented)
 
             if appModel.fulfillmentMode == .pickup {
                 VStack(alignment: .leading, spacing: 11) {
@@ -383,14 +405,14 @@ struct StoreSelectionView: View {
             } else {
                 Text("Choose or link a delivery partner from the Store tab. SmartCart prepares the list; the partner confirms availability and checkout.")
                     .font(.caption)
-                    .foregroundStyle(GatherTheme.secondaryInk)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
                     .padding(14)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(GatherTheme.canvas)
+                    .background(SmartCartTheme.canvas)
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
         }
-        .gatherCard()
+        .smartCartCard()
     }
 }
 
@@ -403,15 +425,15 @@ private struct ChoiceChip: View {
         Button(action: action) {
             Text(title)
                 .font(.caption.weight(.bold))
-                .foregroundStyle(selected ? .white : GatherTheme.navy)
+                .foregroundStyle(selected ? .white : SmartCartTheme.navy)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
-                .background(selected ? GatherTheme.green : GatherTheme.paper)
+                .background(selected ? SmartCartTheme.green : SmartCartTheme.paper)
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(selected ? Color.clear : GatherTheme.border, lineWidth: 1)
+                        .stroke(selected ? Color.clear : SmartCartTheme.border, lineWidth: 1)
                 }
         }
         .buttonStyle(PressableButtonStyle())
@@ -429,17 +451,17 @@ struct PantryDashboardView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Pantry")
                         .font(.system(size: 29, weight: .bold, design: .rounded))
-                        .foregroundStyle(GatherTheme.navy)
+                        .foregroundStyle(SmartCartTheme.navy)
                     Text("What SmartCart will skip or ask about")
                         .font(.subheadline)
-                        .foregroundStyle(GatherTheme.secondaryInk)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
                 }
                 .padding(.top, 8)
 
                 HStack(spacing: 10) {
-                    pantryMetric("Have", count: appModel.activeRecipe.ingredients.filter { $0.pantryState == .haveEnough }.count, color: GatherTheme.green)
-                    pantryMetric("Low", count: appModel.activeRecipe.ingredients.filter { $0.pantryState == .runningLow }.count, color: GatherTheme.amber)
-                    pantryMetric("Buy", count: appModel.ingredientsToBuy.count, color: GatherTheme.walmartBlue)
+                    pantryMetric("Have", count: appModel.activeRecipe.ingredients.filter { $0.pantryState == .haveEnough }.count, color: SmartCartTheme.green)
+                    pantryMetric("Low", count: appModel.activeRecipe.ingredients.filter { $0.pantryState == .runningLow }.count, color: SmartCartTheme.amber)
+                    pantryMetric("Buy", count: appModel.ingredientsToBuy.count, color: SmartCartTheme.walmartBlue)
                 }
 
                 SectionHeader(title: appModel.activeRecipe.title, subtitle: "Current recipe pantry decisions")
@@ -452,13 +474,13 @@ struct PantryDashboardView: View {
                     symbol: "lock.fill",
                     title: "Private by default",
                     message: "Pantry choices stay inside this prototype and are never sent to Walmart.",
-                    color: GatherTheme.green
+                    color: SmartCartTheme.green
                 )
             }
             .padding(.horizontal, 18)
             .padding(.bottom, 34)
         }
-        .background(GatherTheme.canvas)
+        .background(SmartCartTheme.canvas)
         .toolbar(.hidden, for: .navigationBar)
     }
 
@@ -469,15 +491,15 @@ struct PantryDashboardView: View {
                 .foregroundStyle(color)
             Text(title)
                 .font(.caption.weight(.bold))
-                .foregroundStyle(GatherTheme.secondaryInk)
+                .foregroundStyle(SmartCartTheme.secondaryInk)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 14)
-        .background(GatherTheme.paper)
+        .background(SmartCartTheme.paper)
         .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .stroke(GatherTheme.border, lineWidth: 1)
+                .stroke(SmartCartTheme.border, lineWidth: 1)
         }
     }
 }
@@ -494,10 +516,10 @@ struct StoreDashboardView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Store & handoff")
                         .font(.system(size: 29, weight: .bold, design: .rounded))
-                        .foregroundStyle(GatherTheme.navy)
+                        .foregroundStyle(SmartCartTheme.navy)
                     Text("Choose stops, pickup, or a delivery partner")
                         .font(.subheadline)
-                        .foregroundStyle(GatherTheme.secondaryInk)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
                 }
                 .padding(.top, 8)
 
@@ -507,26 +529,28 @@ struct StoreDashboardView: View {
                         VStack(alignment: .leading, spacing: 3) {
                             Text("Preferred Walmart")
                                 .font(.caption.weight(.bold))
-                                .foregroundStyle(GatherTheme.green)
+                                .foregroundStyle(SmartCartTheme.green)
                                 .textCase(.uppercase)
                             Text(appModel.primaryStore.name)
                                 .font(.headline)
-                                .foregroundStyle(GatherTheme.navy)
+                                .foregroundStyle(SmartCartTheme.navy)
                             Text("\(appModel.primaryStore.distance, specifier: "%.1f") mi · \(appModel.selectedPickupSummary)")
                                 .font(.caption)
-                                .foregroundStyle(GatherTheme.secondaryInk)
+                                .foregroundStyle(SmartCartTheme.secondaryInk)
                                 .lineLimit(1)
                         }
                     }
 
-                    Picker("Shopping plan", selection: $appModel.storeStrategy) {
-                        ForEach(StoreStrategy.allCases) { strategy in
-                            Text(strategy.rawValue).tag(strategy)
+                    if appModel.featureFlags.advancedToolsEnabled {
+                        Picker("Shopping plan", selection: $appModel.storeStrategy) {
+                            ForEach(StoreStrategy.allCases) { strategy in
+                                Text(strategy.rawValue).tag(strategy)
+                            }
                         }
-                    }
-                    .pickerStyle(.segmented)
-                    .onChange(of: appModel.storeStrategy) { _, newValue in
-                        appModel.setStoreStrategy(newValue)
+                        .pickerStyle(.segmented)
+                        .onChange(of: appModel.storeStrategy) { _, newValue in
+                            appModel.setStoreStrategy(newValue)
+                        }
                     }
 
                     ForEach(appModel.stores) { store in
@@ -535,14 +559,14 @@ struct StoreDashboardView: View {
                         } label: {
                             HStack {
                                 Image(systemName: appModel.selectedStoreIDs.contains(store.id) ? "checkmark.circle.fill" : "circle")
-                                    .foregroundStyle(appModel.selectedStoreIDs.contains(store.id) ? GatherTheme.green : GatherTheme.border)
+                                    .foregroundStyle(appModel.selectedStoreIDs.contains(store.id) ? SmartCartTheme.green : SmartCartTheme.border)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(store.name)
                                         .font(.subheadline.weight(.bold))
-                                        .foregroundStyle(GatherTheme.navy)
+                                        .foregroundStyle(SmartCartTheme.navy)
                                     Text("\(store.distance, specifier: "%.1f") mi · \(store.format)")
                                         .font(.caption)
-                                        .foregroundStyle(GatherTheme.secondaryInk)
+                                        .foregroundStyle(SmartCartTheme.secondaryInk)
                                 }
                                 Spacer()
                             }
@@ -551,52 +575,62 @@ struct StoreDashboardView: View {
                         .buttonStyle(.plain)
                     }
                 }
-                .gatherCard()
+                .smartCartCard()
 
-                VStack(alignment: .leading, spacing: 13) {
-                    SectionHeader(title: "Delivery apps", subtitle: "Open an approved partner to finish there")
+                if appModel.featureFlags.advancedToolsEnabled {
+                    VStack(alignment: .leading, spacing: 13) {
+                        SectionHeader(title: "Delivery providers", subtitle: "Experimental links; no basket is transferred")
 
-                    ForEach(appModel.deliveryPartners) { partner in
-                        Button {
-                            appModel.linkDeliveryPartner(partner)
-                            openURL(partner.url)
-                        } label: {
-                            HStack(spacing: 13) {
-                                Image(systemName: partner.symbol)
-                                    .font(.headline.bold())
-                                    .foregroundStyle(.white)
-                                    .frame(width: 44, height: 44)
-                                    .background(partner.color)
-                                    .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(partner.name)
-                                        .font(.headline)
-                                        .foregroundStyle(GatherTheme.navy)
-                                    Text(appModel.linkedDeliveryPartnerName == partner.name ? "Selected for handoff" : "Link or open app")
+                        ForEach(appModel.deliveryPartners) { partner in
+                            Button {
+                                appModel.linkDeliveryPartner(partner)
+                                openURL(partner.url)
+                            } label: {
+                                HStack(spacing: 13) {
+                                    Image(systemName: partner.symbol)
+                                        .font(.headline.bold())
+                                        .foregroundStyle(.white)
+                                        .frame(width: 44, height: 44)
+                                        .background(partner.color)
+                                        .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(partner.name)
+                                            .font(.headline)
+                                            .foregroundStyle(SmartCartTheme.navy)
+                                        Text(
+                                            appModel.linkedDeliveryPartnerName == partner.name
+                                                ? "Preferred provider"
+                                                : "Visit delivery provider"
+                                        )
                                         .font(.caption)
-                                        .foregroundStyle(appModel.linkedDeliveryPartnerName == partner.name ? GatherTheme.green : GatherTheme.secondaryInk)
+                                        .foregroundStyle(
+                                            appModel.linkedDeliveryPartnerName == partner.name
+                                                ? SmartCartTheme.green
+                                                : SmartCartTheme.secondaryInk
+                                        )
+                                    }
+                                    Spacer()
+                                    Image(systemName: "arrow.up.right")
+                                        .foregroundStyle(SmartCartTheme.secondaryInk)
                                 }
-                                Spacer()
-                                Image(systemName: appModel.linkedDeliveryPartnerName == partner.name ? "checkmark.circle.fill" : "arrow.up.right")
-                                    .foregroundStyle(appModel.linkedDeliveryPartnerName == partner.name ? GatherTheme.green : GatherTheme.secondaryInk)
+                                .smartCartCard(padding: 13)
                             }
-                            .gatherCard(padding: 13)
+                            .buttonStyle(PressableButtonStyle())
                         }
-                        .buttonStyle(PressableButtonStyle())
                     }
                 }
 
                 InfoBanner(
                     symbol: "building.columns.fill",
                     title: "Retailer adapter boundary",
-                    message: "Walmart product links work today. Other retailer matching and true multi-retailer optimization require approved catalog and checkout integrations.",
-                    color: GatherTheme.walmartBlue
+                    message: "This build supports exact Walmart product links and guided handoff. It does not create carts, save wishlists, transfer delivery baskets, or reserve pickup.",
+                    color: SmartCartTheme.walmartBlue
                 )
             }
             .padding(.horizontal, 18)
             .padding(.bottom, 34)
         }
-        .background(GatherTheme.canvas)
+        .background(SmartCartTheme.canvas)
         .toolbar(.hidden, for: .navigationBar)
     }
 }

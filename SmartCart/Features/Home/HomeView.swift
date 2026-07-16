@@ -23,7 +23,7 @@ struct HomeView: View {
             .padding(.bottom, 34)
         }
         .scrollIndicators(.hidden)
-        .background(GatherTheme.canvas)
+        .background(SmartCartTheme.canvas)
         .toolbar(.hidden, for: .navigationBar)
     }
 
@@ -39,11 +39,11 @@ struct HomeView: View {
                 ZStack(alignment: .bottomTrailing) {
                     Image(systemName: "person.crop.circle.fill")
                         .font(.system(size: 40))
-                        .foregroundStyle(GatherTheme.navy)
+                        .foregroundStyle(SmartCartTheme.navy)
                     Circle()
-                        .fill(GatherTheme.green)
+                        .fill(SmartCartTheme.green)
                         .frame(width: 12, height: 12)
-                        .overlay(Circle().stroke(GatherTheme.canvas, lineWidth: 2))
+                        .overlay(Circle().stroke(SmartCartTheme.canvas, lineWidth: 2))
                 }
             }
             .accessibilityLabel("Open account")
@@ -62,7 +62,7 @@ struct HomeView: View {
 
                     Text("Capture. Confirm. Shop smarter.")
                         .font(.subheadline.weight(.bold))
-                        .foregroundStyle(GatherTheme.yellow)
+                        .foregroundStyle(SmartCartTheme.yellow)
                 }
 
                 Spacer(minLength: 0)
@@ -84,7 +84,7 @@ struct HomeView: View {
         .padding(20)
         .background {
             LinearGradient(
-                colors: [GatherTheme.navy, Color(red: 0.02, green: 0.22, blue: 0.26)],
+                colors: [SmartCartTheme.navy, Color(red: 0.02, green: 0.22, blue: 0.26)],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
@@ -94,7 +94,7 @@ struct HomeView: View {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .stroke(Color.white.opacity(0.10), lineWidth: 1)
         }
-        .gatherShadow()
+        .smartCartShadow()
     }
 
     private func promisePill(_ title: String, symbol: String) -> some View {
@@ -137,11 +137,13 @@ struct HomeView: View {
                     journeyArrow
                     JourneyStepCard(number: 2, symbol: "checklist", title: "Review", subtitle: "Confirm items")
                     journeyArrow
-                    JourneyStepCard(number: 3, symbol: "storefront.fill", title: "Store", subtitle: "Choose location")
+                    JourneyStepCard(number: 3, symbol: "slider.horizontal.3", title: "Rules", subtitle: "Apply preferences")
                     journeyArrow
-                    JourneyStepCard(number: 4, symbol: "tag.fill", title: "Match", subtitle: "Find products")
+                    JourneyStepCard(number: 4, symbol: "storefront.fill", title: "Store", subtitle: "Choose location")
                     journeyArrow
-                    JourneyStepCard(number: 5, symbol: "cart.fill", title: "Shop", subtitle: "Open or share")
+                    JourneyStepCard(number: 5, symbol: "tag.fill", title: "Match", subtitle: "Resolve products")
+                    journeyArrow
+                    JourneyStepCard(number: 6, symbol: "cart.fill", title: "Handoff", subtitle: "Open or share")
                 }
                 .padding(.vertical, 2)
             }
@@ -153,7 +155,7 @@ struct HomeView: View {
     private var journeyArrow: some View {
         Image(systemName: "arrow.right")
             .font(.caption.bold())
-            .foregroundStyle(GatherTheme.green)
+            .foregroundStyle(SmartCartTheme.green)
     }
 
     private var sampleSection: some View {
@@ -181,14 +183,14 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Your preferred store")
                         .font(.caption.weight(.bold))
-                        .foregroundStyle(GatherTheme.green)
+                        .foregroundStyle(SmartCartTheme.green)
                         .textCase(.uppercase)
                     Text(appModel.primaryStore.name)
                         .font(.headline)
-                        .foregroundStyle(GatherTheme.navy)
+                        .foregroundStyle(SmartCartTheme.navy)
                     Text("\(appModel.primaryStore.distance, specifier: "%.1f") mi · \(appModel.fulfillmentMode.rawValue) · \(appModel.pickupTime)")
                         .font(.caption)
-                        .foregroundStyle(GatherTheme.secondaryInk)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
                         .lineLimit(1)
                 }
 
@@ -199,14 +201,14 @@ struct HomeView: View {
                         .font(.caption.bold())
                         .foregroundStyle(.white)
                         .frame(width: 29, height: 29)
-                        .background(GatherTheme.green)
+                        .background(SmartCartTheme.green)
                         .clipShape(Circle())
                 } else {
                     Image(systemName: "chevron.right")
-                        .foregroundStyle(GatherTheme.secondaryInk.opacity(0.6))
+                        .foregroundStyle(SmartCartTheme.secondaryInk.opacity(0.6))
                 }
             }
-            .gatherCard(padding: 14)
+            .smartCartCard(padding: 14)
         }
         .buttonStyle(PressableButtonStyle())
     }
@@ -215,20 +217,20 @@ struct HomeView: View {
         HStack(spacing: 12) {
             Image(systemName: "lock.shield.fill")
                 .font(.title2)
-                .foregroundStyle(GatherTheme.green)
+                .foregroundStyle(SmartCartTheme.green)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text("Your checkout stays with the retailer")
                     .font(.subheadline.weight(.bold))
-                    .foregroundStyle(GatherTheme.navy)
+                    .foregroundStyle(SmartCartTheme.navy)
                 Text("SmartCart never asks for Walmart credentials or payment.")
                     .font(.caption)
-                    .foregroundStyle(GatherTheme.secondaryInk)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .background(GatherTheme.herbLight.opacity(0.65))
+        .background(SmartCartTheme.herbLight.opacity(0.65))
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }

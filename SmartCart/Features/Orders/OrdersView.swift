@@ -4,22 +4,23 @@ struct ProductMatchingView: View {
     @Environment(AppModel.self) private var appModel
 
     private let stages = [
-        ("Searching selected Walmart stores", "magnifyingglass"),
+        ("Reading saved shopping preferences", "slider.horizontal.3"),
+        ("Searching the selected Walmart store", "magnifyingglass"),
         ("Checking package sizes", "shippingbox.fill"),
-        ("Comparing prices", "dollarsign.circle.fill"),
-        ("Applying pantry preferences", "slider.horizontal.3"),
-        ("Building your shopping list", "checklist")
+        ("Applying dietary and organic rules", "checkmark.shield.fill"),
+        ("Ranking eligible products", "arrow.up.arrow.down"),
+        ("Building the shopping manifest", "checklist")
     ]
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 WorkflowHeader(
-                    step: 5,
-                    total: 5,
+                    step: 6,
+                    total: 6,
                     eyebrow: "Product matching",
                     title: appModel.matchProgress == 1 ? "Your products are ready" : "Finding the best matches",
-                    message: "SmartCart compares product type, package size, price, availability signals, and your pantry choices."
+                    message: "SmartCart applies \(appModel.preferences.summary), then resolves exact retailer products or clearly labeled searches."
                 )
 
                 matchingCard
@@ -32,15 +33,15 @@ struct ProductMatchingView: View {
 
                 InfoBanner(
                     symbol: "waveform.path.ecg",
-                    title: "Local prototype matching",
-                    message: "Matches and prices in this build use a realistic on-device demo catalog. Live inventory requires an approved retailer catalog integration.",
-                    color: GatherTheme.amber
+                    title: "Seeded retailer records",
+                    message: "Exact Walmart item IDs and observed demo prices are stored on-device. Availability is not live, and search fallbacks are never presented as exact products.",
+                    color: SmartCartTheme.amber
                 )
             }
             .padding(18)
             .padding(.bottom, 96)
         }
-        .background(GatherTheme.canvas)
+        .background(SmartCartTheme.canvas)
         .navigationTitle("Match products")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
@@ -72,11 +73,11 @@ struct ProductMatchingView: View {
         VStack(spacing: 18) {
             ZStack {
                 Circle()
-                    .stroke(GatherTheme.border, lineWidth: 10)
+                    .stroke(SmartCartTheme.border, lineWidth: 10)
                 Circle()
                     .trim(from: 0, to: appModel.matchProgress)
                     .stroke(
-                        GatherTheme.green,
+                        SmartCartTheme.green,
                         style: StrokeStyle(lineWidth: 10, lineCap: .round)
                     )
                     .rotationEffect(.degrees(-90))
@@ -85,10 +86,10 @@ struct ProductMatchingView: View {
                 VStack(spacing: 2) {
                     Text("\(Int(appModel.matchProgress * 100))%")
                         .font(.system(size: 28, weight: .bold, design: .rounded))
-                        .foregroundStyle(GatherTheme.navy)
+                        .foregroundStyle(SmartCartTheme.navy)
                     Text("matched")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(GatherTheme.secondaryInk)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
                 }
             }
             .frame(width: 122, height: 122)
@@ -96,35 +97,35 @@ struct ProductMatchingView: View {
             VStack(spacing: 4) {
                 Text(appModel.matchStage)
                     .font(.headline)
-                    .foregroundStyle(GatherTheme.navy)
+                    .foregroundStyle(SmartCartTheme.navy)
                     .multilineTextAlignment(.center)
                 Text("\(appModel.ingredientsToBuy.count) ingredients · \(appModel.selectedStores.count) selected \(appModel.selectedStores.count == 1 ? "store" : "stores")")
                     .font(.caption)
-                    .foregroundStyle(GatherTheme.secondaryInk)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
             }
         }
         .frame(maxWidth: .infinity)
-        .gatherCard()
-        .gatherShadow()
+        .smartCartCard()
+        .smartCartShadow()
     }
 
     private var stageList: some View {
         VStack(spacing: 12) {
             ForEach(Array(stages.enumerated()), id: \.offset) { index, stage in
-                let threshold = Double(index + 1) * 0.18
+                let threshold = Double(index + 1) / Double(stages.count)
                 let complete = appModel.matchProgress >= threshold
 
                 HStack(spacing: 12) {
                     Image(systemName: complete ? "checkmark.circle.fill" : stage.1)
                         .font(.subheadline.bold())
-                        .foregroundStyle(complete ? GatherTheme.green : GatherTheme.secondaryInk)
+                        .foregroundStyle(complete ? SmartCartTheme.green : SmartCartTheme.secondaryInk)
                         .frame(width: 32, height: 32)
-                        .background(complete ? GatherTheme.herbLight : GatherTheme.canvas)
+                        .background(complete ? SmartCartTheme.herbLight : SmartCartTheme.canvas)
                         .clipShape(Circle())
 
                     Text(stage.0)
                         .font(.subheadline.weight(complete ? .semibold : .regular))
-                        .foregroundStyle(complete ? GatherTheme.navy : GatherTheme.secondaryInk)
+                        .foregroundStyle(complete ? SmartCartTheme.navy : SmartCartTheme.secondaryInk)
 
                     Spacer()
 
@@ -135,18 +136,21 @@ struct ProductMatchingView: View {
                 }
             }
         }
-        .gatherCard()
+        .smartCartCard()
     }
 
     private var currentStageIndex: Int {
-        min(stages.count - 1, max(0, Int(appModel.matchProgress / 0.2)))
+        min(
+            stages.count - 1,
+            max(0, Int(appModel.matchProgress * Double(stages.count)))
+        )
     }
 
     private var resultsSummary: some View {
         HStack(spacing: 10) {
-            resultMetric("\(appModel.matchedItemCount)", "Best matches", "checkmark.seal.fill", GatherTheme.green)
-            resultMetric("\(appModel.lowConfidenceItemCount)", "Review", "exclamationmark.circle.fill", GatherTheme.amber)
-            resultMetric(appModel.estimatedTotal.formatted(.currency(code: "USD")), "Est. total", "cart.fill", GatherTheme.walmartBlue)
+            resultMetric("\(appModel.matchedItemCount)", "Exact links", "checkmark.seal.fill", SmartCartTheme.green)
+            resultMetric("\(appModel.searchFallbackCount)", "Searches", "magnifyingglass.circle.fill", SmartCartTheme.amber)
+            resultMetric(appModel.estimatedTotal.formatted(.currency(code: "USD")), "Observed", "cart.fill", SmartCartTheme.walmartBlue)
         }
     }
 
@@ -156,21 +160,21 @@ struct ProductMatchingView: View {
                 .foregroundStyle(color)
             Text(value)
                 .font(.subheadline.bold())
-                .foregroundStyle(GatherTheme.navy)
+                .foregroundStyle(SmartCartTheme.navy)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
             Text(label)
                 .font(.caption2)
-                .foregroundStyle(GatherTheme.secondaryInk)
+                .foregroundStyle(SmartCartTheme.secondaryInk)
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 13)
-        .background(GatherTheme.paper)
+        .background(SmartCartTheme.paper)
         .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .stroke(GatherTheme.border, lineWidth: 1)
+                .stroke(SmartCartTheme.border, lineWidth: 1)
         }
     }
 
@@ -183,14 +187,14 @@ struct ProductMatchingView: View {
                         ProductIcon(product: item.product, size: 54)
                         Text(item.ingredient.name)
                             .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(GatherTheme.navy)
+                            .foregroundStyle(SmartCartTheme.navy)
                             .lineLimit(1)
                     }
                     .frame(maxWidth: .infinity)
                 }
             }
         }
-        .gatherCard()
+        .smartCartCard()
     }
 }
 
@@ -222,7 +226,7 @@ struct ShoppingListReviewView: View {
             .padding(18)
             .padding(.bottom, 138)
         }
-        .background(GatherTheme.canvas)
+        .background(SmartCartTheme.canvas)
         .navigationTitle("Review shopping list")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
@@ -230,34 +234,40 @@ struct ShoppingListReviewView: View {
                 ViewThatFits {
                     HStack(spacing: 9) {
                         Button {
-                            appModel.guidedIndex = 0
-                            appModel.continueTo(.guidedShopping)
+                            appModel.beginGuidedShopping()
                         } label: {
                             Label("Guided shopping", systemImage: "list.number")
                         }
                         .buttonStyle(PrimaryButtonStyle())
 
                         Button {
-                            openURL(appModel.retailerURL())
+                            Task {
+                                if let handoff = await appModel.prepareRetailerHandoff() {
+                                    openURL(handoff.url)
+                                }
+                            }
                         } label: {
-                            Label("Open Walmart", systemImage: "arrow.up.right")
+                            Label("Visit Walmart", systemImage: "arrow.up.right")
                         }
                         .buttonStyle(BlueButtonStyle())
                     }
 
                     VStack(spacing: 9) {
                         Button {
-                            appModel.guidedIndex = 0
-                            appModel.continueTo(.guidedShopping)
+                            appModel.beginGuidedShopping()
                         } label: {
                             Label("Start guided shopping", systemImage: "list.number")
                         }
                         .buttonStyle(PrimaryButtonStyle())
 
                         Button {
-                            openURL(appModel.retailerURL())
+                            Task {
+                                if let handoff = await appModel.prepareRetailerHandoff() {
+                                    openURL(handoff.url)
+                                }
+                            }
                         } label: {
-                            Label("Open Walmart", systemImage: "arrow.up.right")
+                            Label("Visit Walmart", systemImage: "arrow.up.right")
                         }
                         .buttonStyle(BlueButtonStyle())
                     }
@@ -273,83 +283,96 @@ struct ShoppingListReviewView: View {
                     .font(.title.bold())
                     .foregroundStyle(.white)
                     .frame(width: 62, height: 62)
-                    .background(GatherTheme.green)
+                    .background(SmartCartTheme.green)
                     .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(appModel.activeRecipe.title)
                         .font(.system(size: 24, weight: .bold, design: .rounded))
-                        .foregroundStyle(GatherTheme.navy)
+                        .foregroundStyle(SmartCartTheme.navy)
                     Text("\(appModel.desiredServings) servings · \(appModel.primaryStore.name)")
                         .font(.caption)
-                        .foregroundStyle(GatherTheme.secondaryInk)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
                 }
 
                 Spacer(minLength: 0)
             }
 
             HStack {
-                StatusPill(title: "\(appModel.matchedItemCount) matched", symbol: "checkmark.seal.fill")
-                if appModel.lowConfidenceItemCount > 0 {
-                    StatusPill(title: "\(appModel.lowConfidenceItemCount) review", symbol: "exclamationmark.circle.fill", color: GatherTheme.amber)
+                StatusPill(title: "\(appModel.matchedItemCount) exact", symbol: "checkmark.seal.fill")
+                if appModel.searchFallbackCount > 0 {
+                    StatusPill(title: "\(appModel.searchFallbackCount) searches", symbol: "magnifyingglass.circle.fill", color: SmartCartTheme.amber)
                 }
                 Spacer()
-                Text(appModel.estimatedTotal, format: .currency(code: "USD"))
-                    .font(.title2.bold())
-                    .foregroundStyle(GatherTheme.navy)
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(appModel.estimatedTotal, format: .currency(code: "USD"))
+                        .font(.title2.bold())
+                        .foregroundStyle(SmartCartTheme.navy)
+                    Text("Demo subtotal · not live")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(SmartCartTheme.amber)
+                }
             }
         }
-        .gatherCard()
-        .gatherShadow()
+        .smartCartCard()
+        .smartCartShadow()
     }
 
     private var fulfillmentCard: some View {
         HStack(spacing: 13) {
             Image(systemName: appModel.fulfillmentMode == .pickup ? "car.fill" : "house.fill")
                 .font(.headline)
-                .foregroundStyle(GatherTheme.walmartBlue)
+                .foregroundStyle(SmartCartTheme.walmartBlue)
                 .frame(width: 43, height: 43)
-                .background(GatherTheme.walmartLight)
+                .background(SmartCartTheme.walmartLight)
                 .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(appModel.fulfillmentMode == .pickup ? "Preferred pickup" : "Delivery handoff")
+                Text(appModel.fulfillmentMode == .pickup ? "Preferred pickup window" : "Experimental delivery preference")
                     .font(.subheadline.weight(.bold))
-                    .foregroundStyle(GatherTheme.navy)
+                    .foregroundStyle(SmartCartTheme.navy)
                 Text(
                     appModel.fulfillmentMode == .pickup
                         ? "\(appModel.primaryStore.name) · \(appModel.selectedPickupSummary)"
                         : (appModel.linkedDeliveryPartnerName ?? "Choose a partner from the Store tab")
                 )
                 .font(.caption)
-                .foregroundStyle(GatherTheme.secondaryInk)
+                .foregroundStyle(SmartCartTheme.secondaryInk)
                 .lineLimit(2)
             }
 
             Spacer()
         }
-        .gatherCard(padding: 14)
+        .smartCartCard(padding: 14)
     }
 
     private var totalsCard: some View {
         VStack(spacing: 11) {
-            totalRow("Product subtotal", value: appModel.estimatedTotal.formatted(.currency(code: "USD")), emphasized: true)
+            totalRow(
+                "Demo subtotal · not live",
+                value: appModel.estimatedTotal.formatted(.currency(code: "USD")),
+                emphasized: true
+            )
+            totalRow(
+                "Items with a price",
+                value: "\(appModel.pricedItemCount) of \(appModel.shoppingItems.count)"
+            )
             totalRow("Estimated tax", value: "Calculated by Walmart")
             totalRow("Pickup / delivery fees", value: "Calculated by Walmart")
             totalRow("Variable-weight changes", value: "Finalized at fulfillment")
         }
-        .gatherCard()
+        .smartCartCard()
     }
 
     private func totalRow(_ label: String, value: String, emphasized: Bool = false) -> some View {
         HStack {
             Text(label)
                 .font(emphasized ? .subheadline.weight(.bold) : .caption)
-                .foregroundStyle(emphasized ? GatherTheme.navy : GatherTheme.secondaryInk)
+                .foregroundStyle(emphasized ? SmartCartTheme.navy : SmartCartTheme.secondaryInk)
             Spacer()
             Text(value)
                 .font(emphasized ? .headline : .caption.weight(.semibold))
-                .foregroundStyle(emphasized ? GatherTheme.navy : GatherTheme.secondaryInk)
+                .foregroundStyle(emphasized ? SmartCartTheme.navy : SmartCartTheme.secondaryInk)
                 .multilineTextAlignment(.trailing)
         }
     }
@@ -389,9 +412,9 @@ struct ShoppingListReviewView: View {
     private var transparencyDisclosure: some View {
         InfoBanner(
             symbol: "checkmark.shield.fill",
-            title: "You shop and pay at Walmart",
-            message: "SmartCart does not hold payment details, sign in to your Walmart account, or claim an item was added unless you mark it in guided shopping.",
-            color: GatherTheme.green
+            title: "This is a manifest, not a retailer cart",
+            message: "SmartCart saves your selected product records and progress. You open exact items or labeled searches, then add, reserve pickup, and pay at Walmart.",
+            color: SmartCartTheme.green
         )
     }
 }
@@ -408,19 +431,19 @@ private struct ShoppingProductRow: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(item.product.brand)
                         .font(.caption2.weight(.bold))
-                        .foregroundStyle(GatherTheme.secondaryInk)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
                         .textCase(.uppercase)
                     Text(item.product.name)
                         .font(.subheadline.weight(.bold))
-                        .foregroundStyle(GatherTheme.navy)
+                        .foregroundStyle(SmartCartTheme.navy)
                         .lineLimit(2)
                     Text("\(item.product.package) · \(item.product.unitPrice)")
                         .font(.caption)
-                        .foregroundStyle(GatherTheme.secondaryInk)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
                     if appModel.storeStrategy == .multipleStops {
                         Text(appModel.store(for: item.storeID).name)
                             .font(.caption2.weight(.semibold))
-                            .foregroundStyle(GatherTheme.walmartBlue)
+                            .foregroundStyle(SmartCartTheme.walmartBlue)
                             .lineLimit(1)
                     }
                 }
@@ -428,14 +451,33 @@ private struct ShoppingProductRow: View {
                 Spacer(minLength: 4)
 
                 VStack(alignment: .trailing, spacing: 4) {
-                    Text(item.lineTotal, format: .currency(code: "USD"))
-                        .font(.headline)
-                        .foregroundStyle(GatherTheme.navy)
-                    if item.product.confidence == .high {
-                        StatusPill(title: "Best match", symbol: "checkmark.circle.fill")
+                    if item.product.hasObservedPrice {
+                        Text(item.lineTotal, format: .currency(code: "USD"))
+                            .font(.headline)
+                            .foregroundStyle(SmartCartTheme.navy)
                     } else {
-                        IngredientConfidenceBadge(confidence: item.product.confidence)
+                        Text("Price unavailable")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(SmartCartTheme.amber)
                     }
+                    if item.product.isExactProductLink {
+                        StatusPill(title: "Exact item", symbol: "checkmark.circle.fill")
+                    } else {
+                        StatusPill(
+                            title: "Retailer search",
+                            symbol: "magnifyingglass.circle.fill",
+                            color: SmartCartTheme.amber
+                        )
+                    }
+                    Text(item.product.priceDisclosure)
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(
+                            item.product.hasObservedPrice
+                                ? SmartCartTheme.amber
+                                : SmartCartTheme.secondaryInk
+                        )
+                        .multilineTextAlignment(.trailing)
+                        .frame(maxWidth: 112, alignment: .trailing)
                 }
             }
 
@@ -445,11 +487,11 @@ private struct ShoppingProductRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Recipe needs \(item.requestedQuantity)")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(GatherTheme.secondaryInk)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
                     if item.product.variableWeight {
                         Text("Final weight may vary")
                             .font(.caption2)
-                            .foregroundStyle(GatherTheme.amber)
+                            .foregroundStyle(SmartCartTheme.amber)
                     }
                 }
 
@@ -460,16 +502,16 @@ private struct ShoppingProductRow: View {
                         Button {
                             appModel.selectAlternative(itemID: item.id, candidateID: candidate.id)
                         } label: {
-                            Text("\(candidate.brand) \(candidate.name) · \(candidate.price.formatted(.currency(code: "USD")))")
+                            Text(alternativeLabel(candidate))
                         }
                     }
                 } label: {
                     Text("Change")
                         .font(.caption.weight(.bold))
-                        .foregroundStyle(GatherTheme.walmartBlue)
+                        .foregroundStyle(SmartCartTheme.walmartBlue)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 7)
-                        .background(GatherTheme.walmartLight)
+                        .background(SmartCartTheme.walmartLight)
                         .clipShape(Capsule())
                 }
 
@@ -483,12 +525,22 @@ private struct ShoppingProductRow: View {
             }
         }
         .padding(13)
-        .background(GatherTheme.paper)
+        .background(SmartCartTheme.paper)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(item.product.confidence == .high ? GatherTheme.border : GatherTheme.amber.opacity(0.55), lineWidth: 1)
+                .stroke(
+                    item.product.isExactProductLink ? SmartCartTheme.border : SmartCartTheme.amber.opacity(0.55),
+                    lineWidth: 1
+                )
         }
+    }
+
+    private func alternativeLabel(_ candidate: RetailerProductRecord) -> String {
+        let price = candidate.hasObservedPrice
+            ? candidate.price.formatted(.currency(code: "USD"))
+            : "price unavailable"
+        return "\(candidate.brand) \(candidate.name) · \(price)"
     }
 
     private func quantityButton(_ symbol: String, delta: Int) -> some View {
@@ -497,9 +549,9 @@ private struct ShoppingProductRow: View {
         } label: {
             Image(systemName: symbol)
                 .font(.caption2.bold())
-                .foregroundStyle(GatherTheme.navy)
+                .foregroundStyle(SmartCartTheme.navy)
                 .frame(width: 25, height: 25)
-                .background(GatherTheme.canvas)
+                .background(SmartCartTheme.canvas)
                 .clipShape(Circle())
         }
     }
@@ -530,7 +582,7 @@ struct GuidedShoppingView: View {
             .padding(18)
             .padding(.bottom, 30)
         }
-        .background(GatherTheme.canvas)
+        .background(SmartCartTheme.canvas)
         .navigationTitle("Guided shopping")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -540,18 +592,18 @@ struct GuidedShoppingView: View {
             HStack {
                 Text("Item \(appModel.guidedIndex + 1) of \(appModel.shoppingItems.count)")
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(GatherTheme.green)
+                    .foregroundStyle(SmartCartTheme.green)
                 Spacer()
                 Text("\(appModel.guidedCompletedCount) completed")
                     .font(.caption)
-                    .foregroundStyle(GatherTheme.secondaryInk)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
             }
 
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(GatherTheme.border)
+                    Capsule().fill(SmartCartTheme.border)
                     Capsule()
-                        .fill(GatherTheme.green)
+                        .fill(SmartCartTheme.green)
                         .frame(width: proxy.size.width * CGFloat(appModel.guidedCompletedCount) / CGFloat(max(1, appModel.shoppingItems.count)))
                 }
             }
@@ -566,43 +618,63 @@ struct GuidedShoppingView: View {
             VStack(spacing: 5) {
                 Text(item.ingredient.name)
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(GatherTheme.green)
+                    .foregroundStyle(SmartCartTheme.green)
                     .textCase(.uppercase)
                 Text(item.product.brand)
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(GatherTheme.secondaryInk)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
                 Text(item.product.name)
                     .font(.system(size: 25, weight: .bold, design: .rounded))
-                    .foregroundStyle(GatherTheme.navy)
+                    .foregroundStyle(SmartCartTheme.navy)
                     .multilineTextAlignment(.center)
                 Text("\(item.product.package) · \(item.product.unitPrice)")
                     .font(.subheadline)
-                    .foregroundStyle(GatherTheme.secondaryInk)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
             }
 
-            Text(item.product.price, format: .currency(code: "USD"))
-                .font(.system(size: 32, weight: .bold, design: .rounded))
-                .foregroundStyle(GatherTheme.navy)
+            if item.product.hasObservedPrice {
+                VStack(spacing: 4) {
+                    Text(item.product.price, format: .currency(code: "USD"))
+                        .font(.system(size: 32, weight: .bold, design: .rounded))
+                        .foregroundStyle(SmartCartTheme.navy)
+                    Text(item.product.priceDisclosure)
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(SmartCartTheme.amber)
+                }
+            } else {
+                VStack(spacing: 4) {
+                    Text("Price unavailable")
+                        .font(.headline)
+                        .foregroundStyle(SmartCartTheme.amber)
+                    Text(item.product.priceDisclosure)
+                        .font(.caption2)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
+                }
+            }
 
             Button {
                 openURL(appModel.productURL(for: item))
             } label: {
                 HStack {
-                    Text("Open product at Walmart")
+                    Text(appModel.productHandoffLabel(for: item))
                     Spacer()
                     Image(systemName: "arrow.up.right")
                 }
             }
             .buttonStyle(BlueButtonStyle())
 
-            Text("Walmart opens outside SmartCart. Return here after adding or reviewing the product.")
+            Text(
+                item.product.isExactProductLink
+                    ? "This opens the selected item. Return after you add or review it yourself."
+                    : "No exact eligible record was available. This opens a labeled retailer search."
+            )
                 .font(.caption)
-                .foregroundStyle(GatherTheme.secondaryInk)
+                .foregroundStyle(SmartCartTheme.secondaryInk)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .gatherCard()
-        .gatherShadow()
+        .smartCartCard()
+        .smartCartShadow()
     }
 
     private var actionSteps: some View {
@@ -659,14 +731,14 @@ struct GuidedShoppingView: View {
         } label: {
             Label("Choose replacement", systemImage: "arrow.triangle.2.circlepath")
                 .font(.system(size: 15, weight: .bold, design: .rounded))
-                .foregroundStyle(GatherTheme.navy)
+                .foregroundStyle(SmartCartTheme.navy)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
-                .background(GatherTheme.paper)
+                .background(SmartCartTheme.paper)
                 .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 15, style: .continuous)
-                        .stroke(GatherTheme.border, lineWidth: 1)
+                        .stroke(SmartCartTheme.border, lineWidth: 1)
                 }
         }
     }
@@ -691,7 +763,7 @@ struct GuidedShoppingView: View {
             .disabled(appModel.guidedIndex == appModel.shoppingItems.count - 1)
         }
         .font(.subheadline.weight(.bold))
-        .foregroundStyle(GatherTheme.green)
+        .foregroundStyle(SmartCartTheme.green)
         .padding(.horizontal, 4)
     }
 
@@ -699,19 +771,19 @@ struct GuidedShoppingView: View {
         VStack(spacing: 18) {
             Image(systemName: "checkmark.seal.fill")
                 .font(.system(size: 58))
-                .foregroundStyle(GatherTheme.green)
+                .foregroundStyle(SmartCartTheme.green)
             Text("Shopping guide complete")
                 .font(.system(size: 27, weight: .bold, design: .rounded))
-                .foregroundStyle(GatherTheme.navy)
+                .foregroundStyle(SmartCartTheme.navy)
                 .multilineTextAlignment(.center)
             Text("\(appModel.shoppingItems.filter { $0.status == .added }.count) products marked added · \(appModel.shoppingItems.filter { $0.status == .skipped }.count) skipped")
                 .font(.subheadline)
-                .foregroundStyle(GatherTheme.secondaryInk)
+                .foregroundStyle(SmartCartTheme.secondaryInk)
 
             Button {
                 openURL(appModel.retailerURL())
             } label: {
-                Label("Finish checkout at Walmart", systemImage: "arrow.up.right")
+                Label("Visit Walmart to continue", systemImage: "arrow.up.right")
             }
             .buttonStyle(BlueButtonStyle())
 
@@ -725,15 +797,13 @@ struct GuidedShoppingView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 28)
-        .gatherCard()
-        .gatherShadow()
+        .smartCartCard()
+        .smartCartShadow()
     }
 }
 
 struct AccountView: View {
     @Environment(AppModel.self) private var appModel
-    @State private var rememberPantry = true
-    @State private var priceAlerts = true
     @State private var creatorMode = false
 
     var body: some View {
@@ -741,14 +811,25 @@ struct AccountView: View {
             VStack(alignment: .leading, spacing: 21) {
                 accountHeader
                 preferenceCard
-                creatorCard
+                advancedToolsCard
+                if appModel.featureFlags.advancedToolsEnabled {
+                    creatorCard
+                }
+                if let issue = appModel.persistenceIssue {
+                    InfoBanner(
+                        symbol: "externaldrive.badge.exclamationmark",
+                        title: "Could not save local state",
+                        message: issue,
+                        color: SmartCartTheme.coral
+                    )
+                }
                 privacyCard
                 aboutCard
             }
             .padding(.horizontal, 18)
             .padding(.bottom, 34)
         }
-        .background(GatherTheme.canvas)
+        .background(SmartCartTheme.canvas)
         .toolbar(.hidden, for: .navigationBar)
     }
 
@@ -756,15 +837,15 @@ struct AccountView: View {
         HStack(spacing: 15) {
             Image(systemName: "person.crop.circle.fill")
                 .font(.system(size: 64))
-                .foregroundStyle(GatherTheme.navy)
+                .foregroundStyle(SmartCartTheme.navy)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("SmartCart shopper")
                     .font(.title2.bold())
-                    .foregroundStyle(GatherTheme.navy)
+                    .foregroundStyle(SmartCartTheme.navy)
                 Text("Local prototype profile")
                     .font(.subheadline)
-                    .foregroundStyle(GatherTheme.secondaryInk)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
                 StatusPill(title: "Private on device", symbol: "lock.fill")
             }
         }
@@ -773,25 +854,32 @@ struct AccountView: View {
 
     private var preferenceCard: some View {
         VStack(alignment: .leading, spacing: 15) {
-            SectionHeader(title: "Preferences")
+            SectionHeader(
+                title: "Executable preferences",
+                subtitle: appModel.preferences.summary
+            )
+            ShoppingPreferenceControls()
+        }
+    }
 
-            Toggle("Remember pantry choices", isOn: $rememberPantry)
-            Divider()
-            Toggle("Price-change alerts", isOn: $priceAlerts)
-            Divider()
-
-            HStack {
-                Text("Preferred retailer")
-                Spacer()
-                Text("Walmart")
-                    .fontWeight(.bold)
-                    .foregroundStyle(GatherTheme.walmartBlue)
+    private var advancedToolsCard: some View {
+        Toggle(
+            isOn: Binding(
+                get: { appModel.featureFlags.advancedToolsEnabled },
+                set: { appModel.setAdvancedToolsEnabled($0) }
+            )
+        ) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Advanced testing tools")
+                    .font(.headline)
+                    .foregroundStyle(SmartCartTheme.navy)
+                Text("Reveal experimental multi-stop, delivery-provider, and creator surfaces.")
+                    .font(.caption)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
             }
         }
-        .font(.subheadline.weight(.semibold))
-        .tint(GatherTheme.green)
-        .foregroundStyle(GatherTheme.navy)
-        .gatherCard()
+        .tint(SmartCartTheme.green)
+        .smartCartCard()
     }
 
     private var creatorCard: some View {
@@ -800,24 +888,24 @@ struct AccountView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Creator mode")
                         .font(.headline)
-                        .foregroundStyle(GatherTheme.navy)
-                    Text("Add a profile and share recipe-to-list pages with followers.")
+                        .foregroundStyle(SmartCartTheme.navy)
+                    Text("Experimental preview; not part of the public-beta shopping path.")
                         .font(.caption)
-                        .foregroundStyle(GatherTheme.secondaryInk)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
                 }
             }
-            .tint(GatherTheme.green)
+            .tint(SmartCartTheme.green)
 
             if creatorMode {
                 InfoBanner(
                     symbol: "person.2.fill",
                     title: "Creator tools preview",
                     message: "Shared pages can include recipe attribution, product links, and clear affiliate disclosures.",
-                    color: GatherTheme.purple
+                    color: SmartCartTheme.purple
                 )
             }
         }
-        .gatherCard()
+        .smartCartCard()
     }
 
     private var privacyCard: some View {
@@ -828,17 +916,17 @@ struct AccountView: View {
             trustRow("On-device photo text recognition", "text.viewfinder")
             trustRow("Retailer confirms final checkout", "checkmark.shield.fill")
         }
-        .gatherCard()
+        .smartCartCard()
     }
 
     private func trustRow(_ title: String, _ symbol: String) -> some View {
         HStack(spacing: 11) {
             Image(systemName: symbol)
-                .foregroundStyle(GatherTheme.green)
+                .foregroundStyle(SmartCartTheme.green)
                 .frame(width: 26)
             Text(title)
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(GatherTheme.navy)
+                .foregroundStyle(SmartCartTheme.navy)
         }
     }
 
@@ -847,14 +935,14 @@ struct AccountView: View {
             SmartCartLogo(compact: true)
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
-                Text("Prototype 1.0")
+                Text("SmartCart Beta 2")
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(GatherTheme.navy)
-                Text("Upload. Confirm. Match. Shop.")
+                    .foregroundStyle(SmartCartTheme.navy)
+                Text("Beta 2 foundation · local state schema 1")
                     .font(.caption2)
-                    .foregroundStyle(GatherTheme.secondaryInk)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
             }
         }
-        .gatherCard(padding: 14)
+        .smartCartCard(padding: 14)
     }
 }

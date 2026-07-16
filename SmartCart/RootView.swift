@@ -7,7 +7,7 @@ struct RootView: View {
         @Bindable var appModel = appModel
 
         ZStack(alignment: .top) {
-            GatherTheme.canvas
+            SmartCartTheme.canvas
                 .ignoresSafeArea()
 
             TabView(selection: $appModel.selectedTab) {
@@ -54,8 +54,8 @@ struct RootView: View {
                     Label(AppTab.account.title, systemImage: AppTab.account.symbol)
                 }
             }
-            .tint(GatherTheme.green)
-            .toolbarBackground(GatherTheme.paper, for: .tabBar)
+            .tint(SmartCartTheme.green)
+            .toolbarBackground(SmartCartTheme.paper, for: .tabBar)
             .toolbarBackground(.visible, for: .tabBar)
 
             if let message = appModel.toastMessage {
@@ -84,6 +84,8 @@ struct RootView: View {
             ServingAdjustmentView()
         case .pantryCheck:
             PantryCheckView()
+        case .preferences:
+            ShoppingPreferencesView()
         case .storeSelection:
             StoreSelectionView()
         case .matching:

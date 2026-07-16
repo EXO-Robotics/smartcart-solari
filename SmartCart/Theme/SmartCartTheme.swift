@@ -1,6 +1,6 @@
 import SwiftUI
 
-enum GatherTheme {
+enum SmartCartTheme {
     static let canvas = Color(red: 0.968, green: 0.976, blue: 0.982)
     static let paper = Color.white
     static let navy = Color(red: 0.035, green: 0.105, blue: 0.225)
@@ -28,30 +28,30 @@ enum GatherTheme {
 }
 
 extension View {
-    func gatherCard(padding: CGFloat = 18) -> some View {
+    func smartCartCard(padding: CGFloat = 18) -> some View {
         self
             .padding(padding)
-            .background(GatherTheme.paper)
-            .clipShape(RoundedRectangle(cornerRadius: GatherTheme.cardRadius, style: .continuous))
+            .background(SmartCartTheme.paper)
+            .clipShape(RoundedRectangle(cornerRadius: SmartCartTheme.cardRadius, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: GatherTheme.cardRadius, style: .continuous)
-                    .stroke(GatherTheme.border, lineWidth: 1)
+                RoundedRectangle(cornerRadius: SmartCartTheme.cardRadius, style: .continuous)
+                    .stroke(SmartCartTheme.border, lineWidth: 1)
             }
     }
 
-    func gatherShadow() -> some View {
-        shadow(color: GatherTheme.softShadow, radius: 18, x: 0, y: 8)
+    func smartCartShadow() -> some View {
+        shadow(color: SmartCartTheme.softShadow, radius: 18, x: 0, y: 8)
     }
 
     func smartField() -> some View {
         self
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
-            .background(GatherTheme.canvas)
+            .background(SmartCartTheme.canvas)
             .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 13, style: .continuous)
-                    .stroke(GatherTheme.border, lineWidth: 1)
+                    .stroke(SmartCartTheme.border, lineWidth: 1)
             }
     }
 }
@@ -77,8 +77,8 @@ struct PrimaryButtonStyle: ButtonStyle {
             .padding(.vertical, 15)
             .background(
                 isEnabled
-                    ? (configuration.isPressed ? GatherTheme.greenPressed : GatherTheme.green)
-                    : GatherTheme.secondaryInk.opacity(0.35)
+                    ? (configuration.isPressed ? SmartCartTheme.greenPressed : SmartCartTheme.green)
+                    : SmartCartTheme.secondaryInk.opacity(0.35)
             )
             .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
             .scaleEffect(configuration.isPressed ? 0.985 : 1)
@@ -89,15 +89,15 @@ struct SecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 15, weight: .bold, design: .rounded))
-            .foregroundStyle(GatherTheme.navy)
+            .foregroundStyle(SmartCartTheme.navy)
             .padding(.horizontal, 14)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
-            .background(configuration.isPressed ? GatherTheme.canvas : GatherTheme.paper)
+            .background(configuration.isPressed ? SmartCartTheme.canvas : SmartCartTheme.paper)
             .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 15, style: .continuous)
-                    .stroke(GatherTheme.border, lineWidth: 1)
+                    .stroke(SmartCartTheme.border, lineWidth: 1)
             }
     }
 }
@@ -110,7 +110,7 @@ struct BlueButtonStyle: ButtonStyle {
             .padding(.horizontal, 16)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 15)
-            .background(configuration.isPressed ? GatherTheme.walmartBlue.opacity(0.82) : GatherTheme.walmartBlue)
+            .background(configuration.isPressed ? SmartCartTheme.walmartBlue.opacity(0.82) : SmartCartTheme.walmartBlue)
             .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
     }
 }
