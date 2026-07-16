@@ -1,342 +1,495 @@
 import SwiftUI
 
-struct CartView: View {
+struct IngredientReviewView: View {
     @Environment(AppModel.self) private var appModel
 
     var body: some View {
         @Bindable var appModel = appModel
 
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 22) {
-                cartHeader
-                strategyPicker
-                selectedStoresRow
+            VStack(alignment: .leading, spacing: 20) {
+                WorkflowHeader(
+                    step: 1,
+                    total: 5,
+                    eyebrow: "Ingredient review",
+                    title: "Check what SmartCart found",
+                    message: "Correct names and quantities now. Nothing is matched to a product until you confirm this list."
+                )
 
-                if appModel.cartItems.isEmpty {
-                    EmptyStateView(
-                        symbol: "basket",
-                        title: "Your cart is waiting",
-                        message: "Add a recipe and Gather will turn its ingredients into a shopping plan."
-                    )
-                } else {
-                    storeGroups
-                    checkoutSummary
+                recipeSummary
+                confidenceLegend
+
+                VStack(spacing: 11) {
+                    ForEach($appModel.activeRecipe.ingredients) { $ingredient in
+                        IngredientReviewRow(ingredient: $ingredient)
+                    }
                 }
+
+                Button {
+                    appModel.activeRecipe.ingredients.append(
+                        Ingredient(name: "New ingredient", confidence: .review)
+                    )
+                } label: {
+                    Label("Add an ingredient", systemImage: "plus.circle.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(SecondaryButtonStyle())
             }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 130)
+            .padding(18)
+            .padding(.bottom, 96)
         }
         .background(GatherTheme.canvas)
+        .navigationTitle("Review ingredients")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                Text("Smart cart")
-                    .font(.headline)
-                    .foregroundStyle(GatherTheme.ink)
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    appModel.presentedSheet = .storePicker
-                } label: {
-                    Image(systemName: "slider.horizontal.3")
-                }
-                .accessibilityLabel("Cart settings")
-            }
-        }
         .safeAreaInset(edge: .bottom) {
-            if !appModel.cartItems.isEmpty {
-                checkoutBar
+            BottomActionBar {
+                Button {
+                    appModel.continueTo(.servingAdjustment)
+                } label: {
+                    ViewThatFits {
+                        HStack {
+                            Text("Continue with \(appModel.includedIngredientCount) ingredients")
+                            Spacer()
+                            Image(systemName: "arrow.right")
+                        }
+                        HStack {
+                            Text("Continue")
+                            Spacer()
+                            Image(systemName: "arrow.right")
+                        }
+                    }
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .disabled(appModel.includedIngredientCount == 0)
             }
-        }
-        .onChange(of: appModel.storeStrategy) {
-            appModel.applyStoreStrategy()
         }
     }
 
-    private var cartHeader: some View {
-        HStack(alignment: .bottom) {
+    private var recipeSummary: some View {
+        HStack(spacing: 14) {
+            Image(systemName: appModel.activeRecipe.heroSymbol)
+                .font(.title2.bold())
+                .foregroundStyle(.white)
+                .frame(width: 56, height: 56)
+                .background(GatherTheme.green)
+                .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+
             VStack(alignment: .leading, spacing: 4) {
-                Text("\(appModel.activeCartItemCount) ingredients")
-                    .font(.system(size: 31, weight: .bold, design: .rounded))
-                    .foregroundStyle(GatherTheme.ink)
-                Text("For \(Set(appModel.cartItems.map(\.recipeName)).count) delicious meals")
-                    .font(.subheadline)
+                Text(appModel.activeRecipe.title)
+                    .font(.headline)
+                    .foregroundStyle(GatherTheme.navy)
+                    .lineLimit(2)
+                Text("\(appModel.activeRecipe.source.rawValue) · \(appModel.activeRecipe.ingredients.count) ingredients detected")
+                    .font(.caption)
                     .foregroundStyle(GatherTheme.secondaryInk)
             }
 
-            Spacer()
-
-            if appModel.storeStrategy == .smartSplit {
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text("You save")
-                        .font(.caption)
-                        .foregroundStyle(GatherTheme.secondaryInk)
-                    Text("$\(appModel.estimatedSavings, specifier: "%.2f")")
-                        .font(.title3.bold())
-                        .foregroundStyle(GatherTheme.herb)
-                }
-            }
+            Spacer(minLength: 0)
         }
-        .padding(.top, 8)
+        .gatherCard(padding: 14)
     }
 
-    private var strategyPicker: some View {
-        @Bindable var appModel = appModel
-
-        return Picker("Store strategy", selection: $appModel.storeStrategy) {
-            ForEach(StoreStrategy.allCases) { strategy in
-                Text(strategy.rawValue).tag(strategy)
-            }
+    private var confidenceLegend: some View {
+        HStack(spacing: 8) {
+            IngredientConfidenceBadge(confidence: .high)
+            IngredientConfidenceBadge(confidence: .review)
+            Spacer(minLength: 0)
         }
-        .pickerStyle(.segmented)
-        .accessibilityLabel("Store strategy")
     }
+}
 
-    private var selectedStoresRow: some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: 9) {
-                ForEach(appModel.stores) { store in
-                    let selected = appModel.selectedStoreIDs.contains(store.id)
-                    Button {
-                        if appModel.storeStrategy == .oneStore {
-                            appModel.useOnlyStore(store)
-                        } else {
-                            appModel.toggleStore(store)
-                        }
-                    } label: {
-                        HStack(spacing: 8) {
-                            Circle()
-                                .fill(store.color)
-                                .frame(width: 9, height: 9)
-                            Text(store.shortName)
-                            if selected {
-                                Image(systemName: "checkmark")
-                                    .font(.caption2.bold())
+private struct IngredientReviewRow: View {
+    @Binding var ingredient: Ingredient
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 11) {
+                Toggle("", isOn: $ingredient.includeInList)
+                    .labelsHidden()
+                    .tint(GatherTheme.green)
+
+                Image(systemName: ingredient.category.symbol)
+                    .font(.subheadline.bold())
+                    .foregroundStyle(ingredient.includeInList ? GatherTheme.green : GatherTheme.secondaryInk)
+                    .frame(width: 37, height: 37)
+                    .background(ingredient.includeInList ? GatherTheme.herbLight : GatherTheme.canvas)
+                    .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 6) {
+                    TextField("Ingredient name", text: $ingredient.name)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(GatherTheme.navy)
+                        .textInputAutocapitalization(.words)
+
+                    Menu {
+                        ForEach(IngredientConfidence.allCases) { confidence in
+                            Button {
+                                ingredient.confidence = confidence
+                            } label: {
+                                Label(confidence.rawValue, systemImage: confidence.symbol)
                             }
                         }
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(selected ? .white : GatherTheme.secondaryInk)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .background(selected ? GatherTheme.ink : GatherTheme.paper)
-                        .clipShape(Capsule())
+                    } label: {
+                        IngredientConfidenceBadge(confidence: ingredient.confidence)
                     }
-                    .buttonStyle(PressableButtonStyle())
                 }
 
-                Button {
-                    appModel.presentedSheet = .storePicker
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.subheadline.bold())
-                        .foregroundStyle(GatherTheme.herb)
-                        .frame(width: 39, height: 39)
-                        .background(GatherTheme.paper)
-                        .clipShape(Circle())
-                }
-            }
-        }
-        .scrollIndicators(.hidden)
-    }
-
-    private var storeGroups: some View {
-        VStack(spacing: 20) {
-            ForEach(appModel.selectedStores) { store in
-                let items = appModel.cartItems.filter { $0.storeID == store.id }
-                if !items.isEmpty {
-                    StoreCartSection(store: store, items: items)
-                }
-            }
-        }
-    }
-
-    private var checkoutSummary: some View {
-        VStack(spacing: 12) {
-            summaryRow("Items", value: appModel.cartSubtotal.formatted(.currency(code: "USD")))
-            summaryRow("Pickup fees", value: appModel.selectedStores.allSatisfy { $0.pickupFee == 0 } ? "Free" : "$1.99")
-            if appModel.storeStrategy == .smartSplit {
-                summaryRow(
-                    "Smart Split savings",
-                    value: "−\(appModel.estimatedSavings.formatted(.currency(code: "USD")))",
-                    valueColor: GatherTheme.herb
-                )
+                Spacer(minLength: 0)
             }
 
-            Divider()
+            HStack(spacing: 8) {
+                TextField("Qty", value: $ingredient.quantity, format: .number.precision(.fractionLength(0...2)))
+                    .keyboardType(.decimalPad)
+                    .frame(width: 66)
+                    .smartField()
+
+                TextField("Unit", text: $ingredient.unit)
+                    .textInputAutocapitalization(.never)
+                    .frame(width: 88)
+                    .smartField()
+
+                TextField("Preparation (optional)", text: $ingredient.preparation)
+                    .smartField()
+            }
+            .font(.caption)
 
             HStack {
-                Text("Estimated total")
-                    .font(.headline)
+                Menu {
+                    ForEach(GroceryCategory.allCases, id: \.self) { category in
+                        Button(category.rawValue) {
+                            ingredient.category = category
+                        }
+                    }
+                } label: {
+                    Label(ingredient.category.rawValue, systemImage: "square.grid.2x2.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(GatherTheme.secondaryInk)
+                }
+
                 Spacer()
-                Text("$\(max(0, appModel.cartSubtotal - appModel.estimatedSavings), specifier: "%.2f")")
-                    .font(.title3.bold())
+
+                Button {
+                    ingredient.pantryState = ingredient.pantryState == .haveEnough ? .needToBuy : .haveEnough
+                } label: {
+                    Label(
+                        ingredient.pantryState == .haveEnough ? "Already have" : "Need this",
+                        systemImage: ingredient.pantryState == .haveEnough ? "checkmark.seal.fill" : "cart.badge.plus"
+                    )
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(ingredient.pantryState == .haveEnough ? GatherTheme.green : GatherTheme.walmartBlue)
+                }
             }
-            .foregroundStyle(GatherTheme.ink)
+        }
+        .padding(13)
+        .background(ingredient.includeInList ? GatherTheme.paper : GatherTheme.canvas.opacity(0.72))
+        .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 17, style: .continuous)
+                .stroke(GatherTheme.border, lineWidth: 1)
+        }
+        .opacity(ingredient.includeInList ? 1 : 0.62)
+    }
+}
+
+struct ServingAdjustmentView: View {
+    @Environment(AppModel.self) private var appModel
+    @State private var preferLeftovers = false
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                WorkflowHeader(
+                    step: 2,
+                    total: 5,
+                    eyebrow: "Adjust servings",
+                    title: "How many people are eating?",
+                    message: "SmartCart scales the recipe first, then estimates the packages you may need to buy."
+                )
+
+                servingControl
+                packageExplanation
+                quantityPreview
+                leftoversToggle
+            }
+            .padding(18)
+            .padding(.bottom, 96)
+        }
+        .background(GatherTheme.canvas)
+        .navigationTitle("Adjust servings")
+        .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .bottom) {
+            BottomActionBar {
+                Button {
+                    appModel.continueTo(.pantryCheck)
+                } label: {
+                    HStack {
+                        Text("Check my pantry")
+                        Spacer()
+                        Image(systemName: "arrow.right")
+                    }
+                }
+                .buttonStyle(PrimaryButtonStyle())
+            }
+        }
+    }
+
+    private var servingControl: some View {
+        VStack(spacing: 16) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Desired servings")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(GatherTheme.navy)
+                    Text("Original recipe: \(appModel.activeRecipe.servings)")
+                        .font(.caption)
+                        .foregroundStyle(GatherTheme.secondaryInk)
+                }
+
+                Spacer()
+
+                HStack(spacing: 16) {
+                    servingButton(symbol: "minus", delta: -1)
+                    Text("\(appModel.desiredServings)")
+                        .font(.system(size: 30, weight: .bold, design: .rounded))
+                        .foregroundStyle(GatherTheme.navy)
+                        .frame(minWidth: 42)
+                    servingButton(symbol: "plus", delta: 1)
+                }
+            }
+
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(GatherTheme.border)
+                    Capsule()
+                        .fill(GatherTheme.green)
+                        .frame(width: proxy.size.width * min(CGFloat(appModel.desiredServings) / 12, 1))
+                }
+            }
+            .frame(height: 6)
         }
         .gatherCard()
     }
 
-    private func summaryRow(_ label: String, value: String, valueColor: Color = GatherTheme.secondaryInk) -> some View {
-        HStack {
-            Text(label)
-                .foregroundStyle(GatherTheme.secondaryInk)
-            Spacer()
-            Text(value)
-                .fontWeight(.semibold)
-                .foregroundStyle(valueColor)
+    private func servingButton(symbol: String, delta: Int) -> some View {
+        Button {
+            appModel.updateServings(by: delta)
+        } label: {
+            Image(systemName: symbol)
+                .font(.headline.bold())
+                .foregroundStyle(GatherTheme.green)
+                .frame(width: 42, height: 42)
+                .background(GatherTheme.herbLight)
+                .clipShape(Circle())
         }
-        .font(.subheadline)
+        .buttonStyle(PressableButtonStyle())
+        .accessibilityLabel(delta > 0 ? "Increase servings" : "Decrease servings")
     }
 
-    private var checkoutBar: some View {
-        VStack(spacing: 0) {
-            Divider()
-            Button {
-                appModel.presentedSheet = .pickupScheduler
-            } label: {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Plan checkout")
-                        Text("Pickup or delivery")
-                            .font(.caption.weight(.medium))
-                            .opacity(0.75)
-                    }
+    private var packageExplanation: some View {
+        InfoBanner(
+            symbol: "shippingbox.fill",
+            title: "Recipe amount ≠ package amount",
+            message: "If the recipe needs 1.5 lb of chicken and the best product is a 3 lb pack, SmartCart shows the extra so you can choose.",
+            color: GatherTheme.walmartBlue
+        )
+    }
+
+    private var quantityPreview: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Ingredient")
+                Spacer()
+                Text("Recipe")
+                    .frame(width: 74, alignment: .trailing)
+                Text("Buy")
+                    .frame(width: 62, alignment: .trailing)
+            }
+            .font(.caption2.weight(.heavy))
+            .foregroundStyle(GatherTheme.secondaryInk)
+            .padding(.bottom, 10)
+
+            ForEach(appModel.activeRecipe.ingredients.filter(\.includeInList).prefix(7)) { ingredient in
+                HStack(spacing: 8) {
+                    Text(ingredient.name)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(GatherTheme.navy)
+                        .lineLimit(1)
                     Spacer()
-                    Text("$\(max(0, appModel.cartSubtotal - appModel.estimatedSavings), specifier: "%.2f")")
-                    Image(systemName: "arrow.right")
+                    Text(appModel.scaledQuantityText(for: ingredient))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(GatherTheme.secondaryInk)
+                        .frame(width: 74, alignment: .trailing)
+                    Text("1 pkg")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(GatherTheme.green)
+                        .frame(width: 62, alignment: .trailing)
+                }
+                .padding(.vertical, 10)
+
+                if ingredient.id != appModel.activeRecipe.ingredients.filter(\.includeInList).prefix(7).last?.id {
+                    Divider()
                 }
             }
-            .buttonStyle(PrimaryButtonStyle())
-            .padding(16)
-            .background(.ultraThinMaterial)
         }
+        .gatherCard()
+    }
+
+    private var leftoversToggle: some View {
+        Toggle(isOn: $preferLeftovers) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Prefer useful leftovers")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(GatherTheme.navy)
+                Text("Favor the next package size up when the price difference is small.")
+                    .font(.caption)
+                    .foregroundStyle(GatherTheme.secondaryInk)
+            }
+        }
+        .tint(GatherTheme.green)
+        .gatherCard()
     }
 }
 
-private struct StoreCartSection: View {
+struct ListsView: View {
     @Environment(AppModel.self) private var appModel
-    let store: GroceryStore
-    let items: [CartItem]
-
-    private var subtotal: Double {
-        items.reduce(0) { $0 + $1.lineTotal }
-    }
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                StoreMark(store: store, size: 45)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Shopping lists")
+                            .font(.system(size: 29, weight: .bold, design: .rounded))
+                            .foregroundStyle(GatherTheme.navy)
+                        Text("Ready to share, open, or shop")
+                            .font(.subheadline)
+                            .foregroundStyle(GatherTheme.secondaryInk)
+                    }
+                    Spacer()
+                    SmartCartLogo(compact: true)
+                        .accessibilityHidden(true)
+                }
+                .padding(.top, 8)
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(store.name)
-                        .font(.headline)
-                        .foregroundStyle(GatherTheme.ink)
-                    Text("\(items.count) items • \(store.distance, specifier: "%.1f") mi away")
+                if appModel.shoppingItems.isEmpty {
+                    EmptyStateView(
+                        symbol: "checklist",
+                        title: "No list yet",
+                        message: "Import a recipe and SmartCart will build your first product-matched list.",
+                        actionTitle: "Import recipe"
+                    ) {
+                        appModel.selectedTab = .home
+                        appModel.openImporter(.sample)
+                    }
+                } else {
+                    currentListCard
+                }
+
+                savedSection
+                transparencyCard
+            }
+            .padding(.horizontal, 18)
+            .padding(.bottom, 34)
+        }
+        .background(GatherTheme.canvas)
+        .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private var currentListCard: some View {
+        Button {
+            appModel.selectedTab = .home
+            appModel.homePath = [.shoppingList]
+        } label: {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    StatusPill(title: "Current list", symbol: "checkmark.circle.fill")
+                    Spacer()
+                    Text(appModel.estimatedTotal, format: .currency(code: "USD"))
+                        .font(.title3.bold())
+                        .foregroundStyle(GatherTheme.navy)
+                }
+
+                HStack(spacing: 14) {
+                    Image(systemName: appModel.activeRecipe.heroSymbol)
+                        .font(.title.bold())
+                        .foregroundStyle(.white)
+                        .frame(width: 62, height: 62)
+                        .background(GatherTheme.green)
+                        .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(appModel.activeRecipe.title)
+                            .font(.title3.bold())
+                            .foregroundStyle(GatherTheme.navy)
+                            .lineLimit(2)
+                        Text("\(appModel.shoppingItems.count) products · \(appModel.primaryStore.name)")
+                            .font(.caption)
+                            .foregroundStyle(GatherTheme.secondaryInk)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+
+                HStack {
+                    Label("\(appModel.matchedItemCount) best matches", systemImage: "tag.fill")
+                    Spacer()
+                    Label("Open list", systemImage: "arrow.right")
+                }
+                .font(.caption.weight(.bold))
+                .foregroundStyle(GatherTheme.green)
+            }
+            .gatherCard()
+            .gatherShadow()
+        }
+        .buttonStyle(PressableButtonStyle())
+    }
+
+    private var savedSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(title: "Saved lists", subtitle: "Lists you can revisit")
+
+            if appModel.savedLists.isEmpty {
+                HStack(spacing: 12) {
+                    Image(systemName: "bookmark.fill")
+                        .foregroundStyle(GatherTheme.walmartBlue)
+                        .frame(width: 40, height: 40)
+                        .background(GatherTheme.walmartLight)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    Text("Save the current list to keep its products, quantities, and estimated total here.")
                         .font(.caption)
                         .foregroundStyle(GatherTheme.secondaryInk)
                 }
-
-                Spacer()
-
-                Text("$\(subtotal, specifier: "%.2f")")
-                    .font(.headline)
-                    .foregroundStyle(GatherTheme.ink)
-            }
-            .padding(16)
-
-            Divider()
-                .padding(.leading, 16)
-
-            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                CartItemRow(item: item)
-                if index < items.count - 1 {
-                    Divider()
-                        .padding(.leading, 70)
-                }
-            }
-        }
-        .background(GatherTheme.paper)
-        .clipShape(RoundedRectangle(cornerRadius: GatherTheme.cardRadius, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: GatherTheme.cardRadius, style: .continuous)
-                .stroke(GatherTheme.border, lineWidth: 1)
-        }
-    }
-}
-
-private struct CartItemRow: View {
-    @Environment(AppModel.self) private var appModel
-    let item: CartItem
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Button {
-                appModel.toggleChecked(item.id)
-            } label: {
-                Image(systemName: item.isChecked ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
-                    .foregroundStyle(item.isChecked ? GatherTheme.herb : Color.gray.opacity(0.45))
-            }
-            .accessibilityLabel(item.isChecked ? "Mark \(item.ingredient.name) needed" : "Mark \(item.ingredient.name) complete")
-
-            Image(systemName: item.ingredient.category.symbol)
-                .font(.subheadline.bold())
-                .foregroundStyle(GatherTheme.herb)
-                .frame(width: 38, height: 38)
-                .background(GatherTheme.herbLight.opacity(0.8))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(item.ingredient.name)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(GatherTheme.ink)
-                    .strikethrough(item.isChecked)
-                    .opacity(item.isChecked ? 0.5 : 1)
-                Text("\(item.ingredient.displayQuantity) • \(item.recipeName)")
-                    .font(.caption)
-                    .foregroundStyle(GatherTheme.secondaryInk)
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 4)
-
-            VStack(alignment: .trailing, spacing: 7) {
-                Text("$\(item.lineTotal, specifier: "%.2f")")
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(GatherTheme.ink)
-
-                HStack(spacing: 8) {
-                    quantityButton(symbol: "minus", delta: -1)
-                    Text("\(item.quantity)")
-                        .font(.caption.bold())
-                        .frame(minWidth: 12)
-                    quantityButton(symbol: "plus", delta: 1)
-                }
-            }
-        }
-        .padding(14)
-        .contextMenu {
-            ForEach(appModel.stores) { store in
-                Button {
-                    appModel.moveItem(item.id, to: store)
-                } label: {
-                    Label("Move to \(store.name)", systemImage: store.symbol)
+                .gatherCard(padding: 14)
+            } else {
+                ForEach(appModel.savedLists) { list in
+                    HStack(spacing: 12) {
+                        Image(systemName: "bookmark.fill")
+                            .foregroundStyle(GatherTheme.green)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(list.recipeTitle)
+                                .font(.subheadline.weight(.bold))
+                                .foregroundStyle(GatherTheme.navy)
+                            Text("\(list.itemCount) items · \(list.storeName)")
+                                .font(.caption)
+                                .foregroundStyle(GatherTheme.secondaryInk)
+                        }
+                        Spacer()
+                        Text(list.total, format: .currency(code: "USD"))
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(GatherTheme.navy)
+                    }
+                    .gatherCard(padding: 14)
                 }
             }
         }
     }
 
-    private func quantityButton(symbol: String, delta: Int) -> some View {
-        Button {
-            appModel.updateQuantity(for: item.id, delta: delta)
-        } label: {
-            Image(systemName: symbol)
-                .font(.caption2.bold())
-                .foregroundStyle(GatherTheme.ink)
-                .frame(width: 24, height: 24)
-                .background(GatherTheme.canvas)
-                .clipShape(Circle())
-        }
-        .accessibilityLabel(delta > 0 ? "Increase quantity" : "Decrease quantity")
+    private var transparencyCard: some View {
+        InfoBanner(
+            symbol: "clock.badge.exclamationmark.fill",
+            title: "Estimated totals stay transparent",
+            message: "Retailer prices and availability can change. Walmart confirms taxes, fees, substitutions, tips, and final variable-weight prices.",
+            color: GatherTheme.amber
+        )
     }
 }

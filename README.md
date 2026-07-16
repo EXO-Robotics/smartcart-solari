@@ -1,17 +1,27 @@
-# Gather
+# SmartCart for iOS
 
-Gather is a SwiftUI grocery-planning prototype that turns recipe text into an organized shopping cart.
+SmartCart turns a recipe into a ready-to-shop Walmart grocery list with product links and an estimated total.
 
-## Prototype flow
+## What works in this prototype
 
-- Paste or type a recipe and review the detected ingredients.
-- Add recipe ingredients to a deduplicated smart cart.
-- Shop at one preferred store or use Smart Split across selected stores.
-- Adjust quantities, mark pantry items complete, and compare estimated totals.
-- Reserve a local pickup window or hand the cart off to Instacart, DoorDash, or Uber Eats.
+- Import a recipe from pasted text, a sample, a camera capture, or a photo-library image.
+- Run on-device Vision text recognition on recipe images.
+- Import public recipe pages that expose standard schema.org Recipe metadata.
+- Review and edit detected ingredient names, quantities, units, confidence, and inclusion.
+- Scale recipe quantities for a new serving count.
+- Mark pantry items as available, running low, needed, always ask, or excluded.
+- Choose one Walmart location or plan multiple Walmart stops.
+- Preselect pickup or delivery preferences and a preferred pickup window.
+- Match ingredients to a realistic local demo product catalog with alternatives.
+- Review package quantities, estimated prices, variable-weight disclosures, and totals.
+- Share or save a shopping list.
+- Open Walmart product searches in a guided open / mark added / next flow.
+- Link out to supported delivery-app websites for final handoff.
 
-Retail prices, inventory, checkout, and pickup reservations use local prototype data. Production retailer integrations require each provider's approved API, authentication, and checkout policies.
+## Integration boundary
+
+The prototype does not store retailer credentials, process payment, claim live inventory, silently modify a Walmart cart, or book a pickup reservation. Product data and prices are local demo data. Walmart or a delivery partner performs final availability checks, substitutions, fees, payment, and checkout.
 
 ## Run
 
-Open `Grocrygetter.xcodeproj`, select the `Gather` scheme, and run on an iOS 17 or newer simulator.
+Open `Grocrygetter.xcodeproj`, select the `Gather` scheme, choose an iOS 17 or newer simulator, and run. The installed app name is **SmartCart**.

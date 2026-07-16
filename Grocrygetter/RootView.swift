@@ -11,109 +11,87 @@ struct RootView: View {
                 .ignoresSafeArea()
 
             TabView(selection: $appModel.selectedTab) {
-                NavigationStack {
+                NavigationStack(path: $appModel.homePath) {
                     HomeView()
+                        .navigationDestination(for: SmartRoute.self) { route in
+                            destination(for: route)
+                        }
                 }
-                .tag(AppTab.plan)
+                .tag(AppTab.home)
                 .tabItem {
-                    Label(AppTab.plan.title, systemImage: AppTab.plan.symbol)
+                    Label(AppTab.home.title, systemImage: AppTab.home.symbol)
                 }
 
                 NavigationStack {
-                    CartView()
+                    ListsView()
                 }
-                .tag(AppTab.cart)
+                .tag(AppTab.lists)
                 .tabItem {
-                    Label(AppTab.cart.title, systemImage: AppTab.cart.symbol)
+                    Label(AppTab.lists.title, systemImage: AppTab.lists.symbol)
                 }
-                .badge(appModel.activeCartItemCount)
 
                 NavigationStack {
-                    OrdersView()
+                    PantryDashboardView()
                 }
-                .tag(AppTab.orders)
+                .tag(AppTab.pantry)
                 .tabItem {
-                    Label(AppTab.orders.title, systemImage: AppTab.orders.symbol)
+                    Label(AppTab.pantry.title, systemImage: AppTab.pantry.symbol)
+                }
+
+                NavigationStack {
+                    StoreDashboardView()
+                }
+                .tag(AppTab.store)
+                .tabItem {
+                    Label(AppTab.store.title, systemImage: AppTab.store.symbol)
+                }
+
+                NavigationStack {
+                    AccountView()
+                }
+                .tag(AppTab.account)
+                .tabItem {
+                    Label(AppTab.account.title, systemImage: AppTab.account.symbol)
                 }
             }
-            .tint(GatherTheme.herb)
+            .tint(GatherTheme.green)
             .toolbarBackground(GatherTheme.paper, for: .tabBar)
             .toolbarBackground(.visible, for: .tabBar)
 
             if let message = appModel.toastMessage {
                 ToastView(message: message)
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, 18)
                     .padding(.top, 8)
                     .transition(.move(edge: .top).combined(with: .opacity))
                     .zIndex(10)
             }
         }
-        .animation(.spring(response: 0.42, dampingFraction: 0.82), value: appModel.toastMessage)
+        .animation(.spring(response: 0.4, dampingFraction: 0.84), value: appModel.toastMessage)
         .sheet(item: $appModel.presentedSheet) { destination in
             switch destination {
-            case .recipeComposer:
-                RecipeComposerSheet()
-            case .pickupScheduler:
-                PickupSchedulerSheet()
-            case .storePicker:
-                StorePickerSheet()
+            case .importer(let method):
+                RecipeComposerSheet(initialMethod: method)
             }
         }
     }
-}
 
-struct StorePickerSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @Environment(AppModel.self) private var appModel
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("Choose the stores you’re happy to visit. Smart Split will compare your selected options.")
-                        .font(.subheadline)
-                        .foregroundStyle(GatherTheme.secondaryInk)
-                        .padding(.bottom, 4)
-
-                    ForEach(appModel.stores) { store in
-                        Button {
-                            appModel.toggleStore(store)
-                        } label: {
-                            HStack(spacing: 14) {
-                                StoreMark(store: store, size: 52)
-
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(store.name)
-                                        .font(.headline)
-                                        .foregroundStyle(GatherTheme.ink)
-                                    Text("\(store.distance, specifier: "%.1f") mi • \(store.nextPickup)")
-                                        .font(.caption)
-                                        .foregroundStyle(GatherTheme.secondaryInk)
-                                }
-
-                                Spacer()
-
-                                Image(systemName: appModel.selectedStoreIDs.contains(store.id) ? "checkmark.circle.fill" : "circle")
-                                    .font(.title2)
-                                    .foregroundStyle(appModel.selectedStoreIDs.contains(store.id) ? GatherTheme.herb : Color.gray.opacity(0.45))
-                            }
-                            .gatherCard(padding: 14)
-                        }
-                        .buttonStyle(PressableButtonStyle())
-                    }
-                }
-                .padding(20)
-            }
-            .background(GatherTheme.canvas)
-            .navigationTitle("Your stores")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                        .fontWeight(.semibold)
-                }
-            }
+    @ViewBuilder
+    private func destination(for route: SmartRoute) -> some View {
+        switch route {
+        case .ingredientReview:
+            IngredientReviewView()
+        case .servingAdjustment:
+            ServingAdjustmentView()
+        case .pantryCheck:
+            PantryCheckView()
+        case .storeSelection:
+            StoreSelectionView()
+        case .matching:
+            ProductMatchingView()
+        case .shoppingList:
+            ShoppingListReviewView()
+        case .guidedShopping:
+            GuidedShoppingView()
         }
-        .presentationDetents([.medium, .large])
     }
 }

@@ -1,18 +1,30 @@
 import SwiftUI
 
 enum GatherTheme {
-    static let canvas = Color(red: 0.969, green: 0.957, blue: 0.925)
-    static let paper = Color(red: 1.0, green: 0.995, blue: 0.976)
-    static let ink = Color(red: 0.105, green: 0.125, blue: 0.105)
-    static let secondaryInk = Color(red: 0.36, green: 0.38, blue: 0.33)
-    static let herb = Color(red: 0.18, green: 0.38, blue: 0.25)
-    static let herbLight = Color(red: 0.84, green: 0.90, blue: 0.81)
-    static let tomato = Color(red: 0.89, green: 0.30, blue: 0.18)
-    static let peach = Color(red: 0.98, green: 0.76, blue: 0.57)
-    static let butter = Color(red: 0.97, green: 0.89, blue: 0.59)
-    static let border = Color.black.opacity(0.07)
+    static let canvas = Color(red: 0.968, green: 0.976, blue: 0.982)
+    static let paper = Color.white
+    static let navy = Color(red: 0.035, green: 0.105, blue: 0.225)
+    static let ink = navy
+    static let secondaryInk = Color(red: 0.31, green: 0.36, blue: 0.43)
+    static let green = Color(red: 0.0, green: 0.57, blue: 0.27)
+    static let herb = green
+    static let greenPressed = Color(red: 0.0, green: 0.46, blue: 0.22)
+    static let herbLight = Color(red: 0.89, green: 0.97, blue: 0.92)
+    static let walmartBlue = Color(red: 0.0, green: 0.44, blue: 0.80)
+    static let walmartLight = Color(red: 0.89, green: 0.95, blue: 1.0)
+    static let amber = Color(red: 0.95, green: 0.62, blue: 0.04)
+    static let yellow = Color(red: 1.0, green: 0.75, blue: 0.05)
+    static let coral = Color(red: 0.88, green: 0.25, blue: 0.25)
+    static let purple = Color(red: 0.43, green: 0.34, blue: 0.80)
+    static let border = Color(red: 0.86, green: 0.89, blue: 0.92)
+    static let softShadow = Color(red: 0.03, green: 0.10, blue: 0.22).opacity(0.08)
 
-    static let cardRadius: CGFloat = 24
+    // Compatibility aliases for the original prototype components.
+    static let tomato = coral
+    static let peach = Color(red: 1.0, green: 0.91, blue: 0.83)
+    static let butter = Color(red: 1.0, green: 0.88, blue: 0.42)
+
+    static let cardRadius: CGFloat = 20
 }
 
 extension View {
@@ -28,28 +40,77 @@ extension View {
     }
 
     func gatherShadow() -> some View {
-        shadow(color: Color.black.opacity(0.07), radius: 18, x: 0, y: 8)
+        shadow(color: GatherTheme.softShadow, radius: 18, x: 0, y: 8)
+    }
+
+    func smartField() -> some View {
+        self
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(GatherTheme.canvas)
+            .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .stroke(GatherTheme.border, lineWidth: 1)
+            }
     }
 }
 
 struct PressableButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .scaleEffect(configuration.isPressed ? 0.975 : 1)
             .opacity(configuration.isPressed ? 0.88 : 1)
-            .animation(.spring(response: 0.25, dampingFraction: 0.75), value: configuration.isPressed)
+            .animation(.spring(response: 0.24, dampingFraction: 0.78), value: configuration.isPressed)
     }
 }
 
 struct PrimaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 17, weight: .bold, design: .rounded))
+            .font(.system(size: 16, weight: .bold, design: .rounded))
             .foregroundStyle(.white)
+            .padding(.horizontal, 16)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .background(configuration.isPressed ? GatherTheme.herb.opacity(0.8) : GatherTheme.herb)
-            .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .padding(.vertical, 15)
+            .background(
+                isEnabled
+                    ? (configuration.isPressed ? GatherTheme.greenPressed : GatherTheme.green)
+                    : GatherTheme.secondaryInk.opacity(0.35)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+    }
+}
+
+struct SecondaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 15, weight: .bold, design: .rounded))
+            .foregroundStyle(GatherTheme.navy)
+            .padding(.horizontal, 14)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(configuration.isPressed ? GatherTheme.canvas : GatherTheme.paper)
+            .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .stroke(GatherTheme.border, lineWidth: 1)
+            }
+    }
+}
+
+struct BlueButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 16, weight: .bold, design: .rounded))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 15)
+            .background(configuration.isPressed ? GatherTheme.walmartBlue.opacity(0.82) : GatherTheme.walmartBlue)
+            .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
     }
 }
