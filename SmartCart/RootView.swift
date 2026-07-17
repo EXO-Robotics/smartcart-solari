@@ -73,6 +73,8 @@ struct RootView: View {
             switch destination {
             case .importer(let method):
                 RecipeComposerSheet(initialMethod: method)
+            case .walmartSetup:
+                WalmartSetupView()
             }
         }
         .onAppear {
@@ -108,7 +110,13 @@ struct RootView: View {
         case .shoppingList:
             ShoppingListReviewView()
         case .guidedShopping:
-            GuidedShoppingView()
+            if appModel.shoppingRoute == .walmartDirect {
+                WalmartWishlistGuideView()
+            } else {
+                GuidedShoppingView()
+            }
+        case .shoppingReconciliation(let sessionID):
+            ShoppingReconciliationView(sessionID: sessionID)
         }
     }
 }

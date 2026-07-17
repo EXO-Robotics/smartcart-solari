@@ -277,6 +277,7 @@ struct CommerceRouteSelectionView: View {
                 case .walmartDirect:
                     walmartStoreCards
                     walmartFulfillment
+                    WalmartWishlistSetupCard()
                 case .otherRetailerLinks:
                     InfoBanner(
                         symbol: "link.circle.fill",
@@ -424,8 +425,8 @@ struct CommerceRouteSelectionView: View {
     private var walmartFulfillment: some View {
         InfoBanner(
             symbol: "car.fill",
-            title: "Pickup preference",
-            message: "SmartCart remembers the preference. Walmart confirms inventory, substitutions, payment, and the actual pickup reservation.",
+            title: "Pickup stays with Walmart",
+            message: "SmartCart remembers your preferred store. Walmart confirms inventory, quantities, substitutions, payment, and any actual pickup reservation.",
             color: SmartCartTheme.walmartBlue
         )
     }
@@ -773,9 +774,10 @@ struct PantryDashboardView: View {
                 .overlay(SmartCartTheme.border)
 
             if scannerExpanded {
-                BarcodeScannerSheet(embedded: true) {
-                    scannerExpanded = false
-                }
+                BarcodeScannerSheet(
+                    embedded: true,
+                    onComplete: { scannerExpanded = false }
+                )
                 .transition(.opacity)
             } else {
                 Color.clear
@@ -1017,7 +1019,7 @@ private struct PantryInlineRow: View {
         self.onDelete = onDelete
         self.onDetails = onDetails
         _name = State(initialValue: item.name)
-        _quantityText = State(initialValue: item.quantity.formatted())
+        _quantityText = State(initialValue: item.packageCount.formatted())
     }
 
     var body: some View {
@@ -1049,7 +1051,7 @@ private struct PantryInlineRow: View {
             HStack(spacing: 7) {
                 quantityButton("minus") {
                     var edited = item
-                    edited.quantity = max(0, edited.quantity - 1)
+                    edited.setPackageCount(max(0, edited.packageCount - 1))
                     onUpdate(edited)
                 }
                 VStack(spacing: 0) {
@@ -1063,14 +1065,14 @@ private struct PantryInlineRow: View {
                         .onChange(of: quantityFocused) { _, focused in
                             if !focused { commitQuantity() }
                         }
-                    Text(item.unit)
+                    Text("pkg")
                         .font(.system(size: 8, weight: .semibold))
                         .foregroundStyle(SmartCartTheme.secondaryInk)
                 }
                 .frame(minWidth: 34)
                 quantityButton("plus") {
                     var edited = item
-                    edited.quantity += 1
+                    edited.addPackages(1)
                     onUpdate(edited)
                 }
             }
@@ -1084,10 +1086,10 @@ private struct PantryInlineRow: View {
         .onChange(of: item.name) { _, newValue in
             if !nameFocused { name = newValue }
         }
-        .onChange(of: item.quantity) { _, newValue in
+        .onChange(of: item.packageCount) { _, newValue in
             if !quantityFocused { quantityText = newValue.formatted() }
         }
-        .animation(.spring(response: 0.28, dampingFraction: 0.85), value: item.quantity)
+        .animation(.spring(response: 0.28, dampingFraction: 0.85), value: item.packageCount)
     }
 
     private func commitName() {
@@ -1105,15 +1107,15 @@ private struct PantryInlineRow: View {
     private func commitQuantity() {
         let normalized = quantityText.replacingOccurrences(of: ",", with: "")
         guard let quantity = Double(normalized), quantity >= 0 else {
-            quantityText = item.quantity.formatted()
+            quantityText = item.packageCount.formatted()
             return
         }
-        guard quantity != item.quantity else {
-            quantityText = item.quantity.formatted()
+        guard quantity != item.packageCount else {
+            quantityText = item.packageCount.formatted()
             return
         }
         var edited = item
-        edited.quantity = quantity
+        edited.setPackageCount(quantity)
         onUpdate(edited)
     }
 
@@ -1158,9 +1160,15 @@ private struct PantryInventoryEditor: View {
                 }
 
                 Section("Inventory") {
-                    TextField("Packages on hand", value: $draft.quantity, format: .number)
+                    TextField(
+                        "Packages on hand",
+                        value: Binding(
+                            get: { draft.packageCount },
+                            set: { draft.setPackageCount($0) }
+                        ),
+                        format: .number
+                    )
                         .keyboardType(.decimalPad)
-                    TextField("Package label", text: $draft.unit)
                     TextField(
                         "Amount per package (optional)",
                         value: $draft.packageSize,
@@ -1174,6 +1182,9 @@ private struct PantryInventoryEditor: View {
                             set: { draft.packageUnit = $0.isEmpty ? nil : $0 }
                         )
                     )
+                    TextField("Remaining amount", value: $draft.remainingAmount, format: .number)
+                        .keyboardType(.decimalPad)
+                    TextField("Remaining unit", text: $draft.remainingUnit)
                 }
 
                 Section {
@@ -1275,6 +1286,8 @@ struct StoreDashboardView: View {
                 }
                 .smartCartCard()
 
+                WalmartWishlistSetupCard()
+
                 if appModel.featureFlags.advancedToolsEnabled {
                     VStack(alignment: .leading, spacing: 13) {
                         SectionHeader(title: "Delivery providers", subtitle: "Experimental links; no basket is transferred")
@@ -1321,7 +1334,7 @@ struct StoreDashboardView: View {
                 InfoBanner(
                     symbol: "building.columns.fill",
                     title: "Retailer adapter boundary",
-                    message: "This build supports exact Walmart product links and guided handoff. It does not create carts, save wishlists, transfer delivery baskets, or reserve pickup.",
+                    message: "SmartCart guides you through exact Walmart products and can remember a shared Wishlist URL. It does not link accounts, change a wishlist, create a cart, transfer a basket, or reserve pickup.",
                     color: SmartCartTheme.walmartBlue
                 )
             }

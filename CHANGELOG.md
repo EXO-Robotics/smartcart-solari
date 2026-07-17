@@ -2,8 +2,15 @@
 
 ## 0.3.0 — Human-validation candidate (unreleased)
 
+- Adds a truthful guided Walmart Wishlist lane: Walmart-owned sign-in and list creation, optional validated shared-list reference, exact-product in-app Safari, self-reported saved/cart/unavailable/skipped outcomes, persistent resume, final Wishlist opening, and privacy-limited local events.
+- Adds a one-question post-shopping check-in with `everything`, `most`, `few`, and `did not shop` defaults, exception-only selection, substitution scanning/search, explicit replacement preference, and atomic idempotent pantry updates.
+- Adds schema-v5 durable shopping sessions, schema-v4 migration, and forward-schema preservation so an older build cannot quarantine or overwrite newer state.
+- Separates pantry package count/size/unit from remaining amount/unit, migrates legacy items during decode, and bases recipe coverage on actual remaining stock rather than unopened package capacity.
+- Makes automatic reconciliation merges conservative: GTIN and retailer IDs remain authoritative, while name fallback requires an exact non-empty brand and compatible package identity.
+- Renames the broad outcome to `Bought all available items`, allows unavailable/skipped items to be recovered as elsewhere or substituted purchases, and fingerprints quantity/product/status state so changed trips cannot reuse an old session.
 - Adds the capability-driven SmartCart → Instacart workflow: shopping-route selection, advisory retailer/fulfillment preferences, normalized manifest review, safe backend handoff preparation and fingerprint caching, full-height in-app Safari, external-open fallback, and self-reported shopping outcomes.
 - Removes invented fallback groceries from failed imports, preserves per-line OCR geometry and credible quantity alternatives through ingredient review, adds local source crops, applies page-level spanning instruction boundaries, bounds Vision recipe vocabulary, and replaces the fast retry with an accurate orientation-normalized contrast pass.
+- Cancels overlapping OCR imports, rejects stale results, downscales oversized photos, retries low-quality-but-readable pages, preserves conservative ranges and package quantities, and keeps unambiguous user-corrected text attached to its original OCR evidence without guessing between similar lines.
 - Reconstructs multi-column recipe photos from OCR bounding boxes, preserves bullet continuations, stops at instruction boundaries, and reports layout ambiguity separately from text confidence.
 - Adds a permanent 20-ingredient, multi-section recipe fixture plus compound measurements, equivalents, preparation phrases, brand notes, alternatives, and explicit malformed-quantity review.
 - Routes URL import through the local recipe-page backend, which enforces HTTPS/redirect/timeout/size/MIME rules, preserves original/final URL provenance, and uses inert JSON-LD or visible-page extraction.
@@ -28,6 +35,9 @@
 - Backend persistence and authentication are demo/local foundations, not production infrastructure.
 - Website/legal text requires owner and legal review before deployment.
 - Partner approval, credentials, live catalogs, production services, TestFlight, and App Store submission remain human-gated.
+- The Walmart lane does not link accounts or automatically populate, read, or modify a Wishlist; each Walmart action remains user-controlled.
+- Pantry purchases update remaining stock, but automatic recipe-consumption depletion remains a future feature; testers can edit remaining amount and unit directly.
+- The 25-recipe OCR/parser acceptance run and physical-device barcode/reconciliation checks remain required before closed-beta promotion.
 
 ## 0.2.0-beta.1 — Beta 2
 

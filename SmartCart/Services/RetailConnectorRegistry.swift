@@ -28,7 +28,7 @@ enum RetailConnectorRegistry {
             homepage: URL(string: "https://www.walmart.com")!,
             state: .demoReady,
             capabilities: [.catalogSearch, .exactProductLinks, .pickup, .delivery, .guidedProductHandoff],
-            integrationNote: "Seeded catalog and exact public product links. No live price, inventory, cart, or pickup reservation."
+            integrationNote: "Seeded catalog, exact public product links, user-guided Wishlist saves, and an optional local shared-link reference. No account link, Wishlist API, live inventory, cart creation, or pickup reservation."
         ),
         RetailConnectorProfile(
             id: "instacart",

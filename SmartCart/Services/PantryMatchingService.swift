@@ -16,8 +16,8 @@ enum PantryMatchingService {
             guard score >= 0.62 else { return nil }
 
             let requested = max(0, requiredQuantity ?? ingredient.quantity)
-            let stockQuantity = max(0, item.quantity) * max(0, item.packageSize ?? 1)
-            let stockUnit = item.packageUnit ?? item.unit
+            let stockQuantity = max(0, item.remainingAmount)
+            let stockUnit = item.remainingUnit
             let converted = convert(stockQuantity, from: stockUnit, to: ingredient.unit)
             let coverage: PantryCoverage
             let available: Double

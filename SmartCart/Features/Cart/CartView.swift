@@ -20,7 +20,7 @@ struct IngredientReviewView: View {
                 recipeSummary
                 confidenceLegend
 
-                VStack(spacing: 11) {
+                LazyVStack(spacing: 11) {
                     ForEach($appModel.activeRecipe.ingredients) { $ingredient in
                         IngredientReviewRow(ingredient: $ingredient)
                     }
@@ -45,7 +45,7 @@ struct IngredientReviewView: View {
         .safeAreaInset(edge: .bottom) {
             BottomActionBar {
                 Button {
-                    appModel.continueTo(.servingAdjustment)
+                    appModel.commitIngredientReview()
                 } label: {
                     ViewThatFits {
                         HStack {
@@ -107,9 +107,11 @@ private struct IngredientReviewRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 11) {
-                Toggle("", isOn: $ingredient.includeInList)
+                Toggle("Include \(ingredient.name)", isOn: $ingredient.includeInList)
                     .labelsHidden()
                     .tint(SmartCartTheme.green)
+                    .accessibilityLabel("Include \(ingredient.name) in this shopping trip")
+                    .accessibilityValue(ingredient.includeInList ? "Included" : "Excluded")
 
                 Image(systemName: ingredient.category.symbol)
                     .font(.subheadline.bold())

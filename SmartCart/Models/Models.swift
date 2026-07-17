@@ -40,6 +40,7 @@ enum SmartRoute: Hashable {
     case matching
     case shoppingList
     case guidedShopping
+    case shoppingReconciliation(UUID)
 }
 
 enum ImportMethod: String, CaseIterable, Identifiable, Hashable, Codable {
@@ -110,10 +111,12 @@ enum ImportMethod: String, CaseIterable, Identifiable, Hashable, Codable {
 
 enum SheetDestination: Identifiable {
     case importer(ImportMethod)
+    case walmartSetup
 
     var id: String {
         switch self {
         case .importer(let method): "importer-\(method.rawValue)"
+        case .walmartSetup: "walmart-setup"
         }
     }
 }
@@ -167,6 +170,10 @@ struct Ingredient: Identifiable, Hashable, Codable {
     var rawText: String
     var name: String
     var quantity: Double
+    /// Lower end of an explicit recipe range. `quantity` remains the upper
+    /// end so package math stays conservative (for example, 2–3 lemons buys
+    /// for 3), while review UI can preserve what the recipe actually said.
+    var quantityLowerBound: Double?
     var unit: String
     var preparation: String
     var category: GroceryCategory
@@ -189,6 +196,7 @@ struct Ingredient: Identifiable, Hashable, Codable {
         rawText: String = "",
         name: String,
         quantity: Double = 1,
+        quantityLowerBound: Double? = nil,
         unit: String = "",
         preparation: String = "",
         category: GroceryCategory = .pantry,
@@ -210,6 +218,7 @@ struct Ingredient: Identifiable, Hashable, Codable {
         self.rawText = rawText.isEmpty ? "\(quantity) \(unit) \(name)" : rawText
         self.name = name
         self.quantity = quantity
+        self.quantityLowerBound = quantityLowerBound
         self.unit = unit
         self.preparation = preparation
         self.category = category
@@ -229,7 +238,14 @@ struct Ingredient: Identifiable, Hashable, Codable {
     }
 
     var displayQuantity: String {
-        Self.quantityText(quantity, unit: unit)
+        if let quantityLowerBound,
+           quantityLowerBound >= 0,
+           quantityLowerBound < quantity {
+            let lower = Self.quantityText(quantityLowerBound, unit: "")
+            let upper = Self.quantityText(quantity, unit: unit)
+            return "\(lower)–\(upper)"
+        }
+        return Self.quantityText(quantity, unit: unit)
     }
 
     static func quantityText(_ quantity: Double, unit: String) -> String {
@@ -326,6 +342,8 @@ struct RecipeImportReport: Hashable {
     var ignoredInstructionLineCount: Int = 0
     var sourceEvidenceCount: Int = 0
     var quantityAlternativeReviewCount: Int = 0
+    var omittedCandidateLineCount: Int = 0
+    var requiredConfirmationCount: Int = 0
 
     var confidenceScore: Double {
         guard ingredientLineCount > 0 else { return 0 }
@@ -334,7 +352,10 @@ struct RecipeImportReport: Hashable {
     }
 
     var confidenceLabel: String {
-        switch confidenceScore {
+        if omittedCandidateLineCount > 0 || requiredConfirmationCount > 0 {
+            return "Needs review"
+        }
+        return switch confidenceScore {
         case 0.82...: "High confidence"
         case 0.55...: "Review suggested"
         default: "Needs review"
@@ -504,13 +525,18 @@ struct PantryInventoryItem: Identifiable, Hashable, Codable {
     var upc: String?
     var name: String
     var brand: String
+    /// Legacy package-count mirrors retained for schema-v1...v4 state and old
+    /// call sites. New pantry math uses `packageCount` and remaining quantity.
     var quantity: Double
     var unit: String
     var preferredRetailerProductID: String?
     var source: PantryItemSource
     var updatedAt: Date
+    var packageCount: Double
     var packageSize: Double?
     var packageUnit: String?
+    var remainingAmount: Double
+    var remainingUnit: String
     var requiresUserNaming: Bool?
     var rawBarcode: String?
     var barcodeSymbology: String?
@@ -530,8 +556,11 @@ struct PantryInventoryItem: Identifiable, Hashable, Codable {
         preferredRetailerProductID: String? = nil,
         source: PantryItemSource = .manual,
         updatedAt: Date = .now,
+        packageCount: Double? = nil,
         packageSize: Double? = nil,
         packageUnit: String? = nil,
+        remainingAmount: Double? = nil,
+        remainingUnit: String? = nil,
         requiresUserNaming: Bool? = nil,
         rawBarcode: String? = nil,
         barcodeSymbology: String? = nil,
@@ -547,8 +576,15 @@ struct PantryInventoryItem: Identifiable, Hashable, Codable {
         self.preferredRetailerProductID = preferredRetailerProductID
         self.source = source
         self.updatedAt = updatedAt
+        let resolvedPackageCount = max(0, packageCount ?? quantity)
+        self.packageCount = resolvedPackageCount
         self.packageSize = packageSize
         self.packageUnit = packageUnit
+        self.remainingAmount = max(
+            0,
+            remainingAmount ?? packageSize.map { resolvedPackageCount * $0 } ?? resolvedPackageCount
+        )
+        self.remainingUnit = remainingUnit ?? packageUnit ?? unit
         self.requiresUserNaming = requiresUserNaming
         self.rawBarcode = rawBarcode
         self.barcodeSymbology = barcodeSymbology
@@ -559,6 +595,96 @@ struct PantryInventoryItem: Identifiable, Hashable, Codable {
             self.barcodeGTINs = [gtin14]
         } else {
             self.barcodeGTINs = nil
+        }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, upc, name, brand, quantity, unit, preferredRetailerProductID
+        case source, updatedAt, packageCount, packageSize, packageUnit
+        case remainingAmount, remainingUnit, requiresUserNaming, rawBarcode
+        case barcodeSymbology, gtin14, barcodeGTINs
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(UUID.self, forKey: .id)
+        upc = try values.decodeIfPresent(String.self, forKey: .upc)
+        name = try values.decode(String.self, forKey: .name)
+        brand = try values.decode(String.self, forKey: .brand)
+        quantity = try values.decode(Double.self, forKey: .quantity)
+        unit = try values.decode(String.self, forKey: .unit)
+        preferredRetailerProductID = try values.decodeIfPresent(String.self, forKey: .preferredRetailerProductID)
+        source = try values.decode(PantryItemSource.self, forKey: .source)
+        updatedAt = try values.decode(Date.self, forKey: .updatedAt)
+        packageSize = try values.decodeIfPresent(Double.self, forKey: .packageSize)
+        packageUnit = try values.decodeIfPresent(String.self, forKey: .packageUnit)
+
+        let decodedPackageCount = try values.decodeIfPresent(Double.self, forKey: .packageCount)
+        let resolvedPackageCount = max(0, decodedPackageCount ?? quantity)
+        packageCount = resolvedPackageCount
+        let decodedRemainingAmount = try values.decodeIfPresent(Double.self, forKey: .remainingAmount)
+        let resolvedRemainingAmount = if let decodedRemainingAmount {
+            decodedRemainingAmount
+        } else if let packageSize {
+            resolvedPackageCount * packageSize
+        } else {
+            resolvedPackageCount
+        }
+        remainingAmount = max(
+            0,
+            resolvedRemainingAmount
+        )
+        remainingUnit = try values.decodeIfPresent(String.self, forKey: .remainingUnit)
+            ?? packageUnit
+            ?? unit
+
+        requiresUserNaming = try values.decodeIfPresent(Bool.self, forKey: .requiresUserNaming)
+        rawBarcode = try values.decodeIfPresent(String.self, forKey: .rawBarcode)
+        barcodeSymbology = try values.decodeIfPresent(String.self, forKey: .barcodeSymbology)
+        gtin14 = try values.decodeIfPresent(String.self, forKey: .gtin14)
+        barcodeGTINs = try values.decodeIfPresent([String].self, forKey: .barcodeGTINs)
+    }
+
+    mutating func setPackageCount(_ value: Double) {
+        addPackages(max(0, value) - packageCount)
+    }
+
+    mutating func addPackages(
+        _ amount: Double,
+        packageSize incomingPackageSize: Double? = nil,
+        packageUnit incomingPackageUnit: String? = nil
+    ) {
+        let previousCount = packageCount
+        let updatedCount = max(0, previousCount + amount)
+        let appliedDelta = updatedCount - previousCount
+        packageCount = updatedCount
+        quantity = updatedCount
+
+        if packageSize == nil, let incomingPackageSize {
+            packageSize = incomingPackageSize
+        }
+        if packageUnit == nil, let incomingPackageUnit, !incomingPackageUnit.isEmpty {
+            packageUnit = incomingPackageUnit
+        }
+
+        if let resolvedSize = packageSize,
+           let resolvedUnit = packageUnit,
+           !resolvedUnit.isEmpty {
+            let unitChanged = remainingUnit.compare(
+                resolvedUnit,
+                options: [.caseInsensitive, .diacriticInsensitive]
+            ) != .orderedSame
+            if unitChanged {
+                // Legacy package counts had no content unit. Once exact package
+                // metadata arrives, derive a coherent remaining amount.
+                remainingAmount = updatedCount * resolvedSize
+                remainingUnit = resolvedUnit
+            } else {
+                remainingAmount = max(0, remainingAmount + (appliedDelta * resolvedSize))
+            }
+        } else {
+            remainingAmount = max(0, remainingAmount + appliedDelta)
+            remainingUnit = unit
         }
     }
 
@@ -601,6 +727,16 @@ enum AnalyticsEventName: String, CaseIterable, Codable, Hashable {
     case guidedShoppingCompleted = "guided_shopping_completed"
     case barcodeScanned = "barcode_scanned"
     case pantryItemAdded = "pantry_item_added"
+    case walmartSetupStarted = "walmart_setup_started"
+    case walmartWishlistURLSaved = "walmart_wishlist_url_saved"
+    case walmartProductOpened = "walmart_product_opened"
+    case walmartProductSelfReportedSaved = "walmart_product_self_reported_saved"
+    case walmartGuidedFlowCompleted = "walmart_guided_flow_completed"
+    case walmartWishlistOpened = "walmart_wishlist_opened"
+    case shoppingReconciliationStarted = "shopping_reconciliation_started"
+    case shoppingOutcomeRecorded = "shopping_outcome_recorded"
+    case pantryReconciliationCommitted = "pantry_reconciliation_committed"
+    case substitutionRecorded = "substitution_recorded"
 }
 
 struct AnalyticsEvent: Identifiable, Hashable, Codable {
@@ -624,8 +760,15 @@ struct AnalyticsEvent: Identifiable, Hashable, Codable {
 
 enum GuidedItemStatus: String, Hashable, Codable {
     case waiting
+    /// Retained so schema-v3 state remains decodable. New Walmart flows use
+    /// the explicit self-reported outcomes below.
     case added
+    case savedToWishlist = "saved_to_wishlist"
+    case addedToCart = "added_to_cart"
+    case unavailable
     case skipped
+
+    var isCompleted: Bool { self != .waiting }
 }
 
 struct ShoppingListItem: Identifiable, Hashable, Codable {
@@ -667,6 +810,126 @@ struct ShoppingListItem: Identifiable, Hashable, Codable {
     var lineTotal: Double {
         product.price * Double(purchaseQuantity)
     }
+}
+
+enum ShoppingTripOutcome: String, CaseIterable, Identifiable, Codable, Hashable {
+    case boughtEverything = "bought_everything"
+    case boughtMost = "bought_most"
+    case boughtFew = "bought_few"
+    case didNotShop = "did_not_shop"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .boughtEverything: "Bought all available items"
+        case .boughtMost: "Bought most items"
+        case .boughtFew: "Bought only a few items"
+        case .didNotShop: "Didn’t shop"
+        }
+    }
+
+    var guidance: String {
+        switch self {
+        case .boughtEverything: "Available items start selected; you can add anything bought elsewhere or substituted."
+        case .boughtMost: "Tap only the items you did not buy."
+        case .boughtFew: "Tap the few items you did buy."
+        case .didNotShop: "Nothing in your pantry will change."
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .boughtEverything: "checkmark.circle.fill"
+        case .boughtMost: "checklist.checked"
+        case .boughtFew: "hand.tap.fill"
+        case .didNotShop: "xmark.circle"
+        }
+    }
+}
+
+struct ShoppingSubstitutionFeedback: Identifiable, Codable, Hashable {
+    let id: UUID
+    var originalItemID: UUID
+    var replacementName: String
+    var replacementBrand: String
+    var replacementRetailerProductID: String?
+    var replacementGTIN14: String?
+    var packageQuantity: Double?
+    var packageUnit: String?
+    var replacementAmount: Double?
+    var preferNextTime: Bool
+    var recordedAt: Date
+
+    init(
+        id: UUID = UUID(),
+        originalItemID: UUID,
+        replacementName: String,
+        replacementBrand: String = "",
+        replacementRetailerProductID: String? = nil,
+        replacementGTIN14: String? = nil,
+        packageQuantity: Double? = nil,
+        packageUnit: String? = nil,
+        replacementAmount: Double? = nil,
+        preferNextTime: Bool = false,
+        recordedAt: Date = .now
+    ) {
+        self.id = id
+        self.originalItemID = originalItemID
+        self.replacementName = replacementName
+        self.replacementBrand = replacementBrand
+        self.replacementRetailerProductID = replacementRetailerProductID
+        self.replacementGTIN14 = replacementGTIN14
+        self.packageQuantity = packageQuantity
+        self.packageUnit = packageUnit
+        self.replacementAmount = replacementAmount
+        self.preferNextTime = preferNextTime
+        self.recordedAt = recordedAt
+    }
+}
+
+struct ShoppingReconciliationRecord: Codable, Hashable {
+    var outcome: ShoppingTripOutcome
+    var purchasedItemIDs: Set<UUID>
+    var substitutions: [ShoppingSubstitutionFeedback]
+    var pantryItemIDs: Set<UUID>
+    var committedAt: Date
+}
+
+struct ShoppingSession: Identifiable, Codable, Hashable {
+    let id: UUID
+    var recipeID: UUID
+    var recipeTitle: String
+    var manifestID: UUID?
+    var storeID: String
+    var startedAt: Date
+    var items: [ShoppingListItem]
+    var stateFingerprint: String?
+    var reconciliation: ShoppingReconciliationRecord?
+
+    init(
+        id: UUID = UUID(),
+        recipeID: UUID,
+        recipeTitle: String,
+        manifestID: UUID? = nil,
+        storeID: String,
+        startedAt: Date = .now,
+        items: [ShoppingListItem],
+        stateFingerprint: String? = nil,
+        reconciliation: ShoppingReconciliationRecord? = nil
+    ) {
+        self.id = id
+        self.recipeID = recipeID
+        self.recipeTitle = recipeTitle
+        self.manifestID = manifestID
+        self.storeID = storeID
+        self.startedAt = startedAt
+        self.items = items
+        self.stateFingerprint = stateFingerprint
+        self.reconciliation = reconciliation
+    }
+
+    var isCommitted: Bool { reconciliation != nil }
 }
 
 struct SavedShoppingList: Identifiable, Hashable, Codable {

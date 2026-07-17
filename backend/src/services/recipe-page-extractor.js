@@ -173,7 +173,6 @@ function normalizeSections(sections) {
 
 function sectionedIngredients(nodes, { startIndex = 0, stopAtBoundary = false, headingLevel = 2 } = {}) {
   const sections = [];
-  const seen = new Set();
   let current = { name: null, ingredients: [] };
   const flush = () => {
     if (current.ingredients.length) sections.push(current);
@@ -196,8 +195,10 @@ function sectionedIngredients(nodes, { startIndex = 0, stopAtBoundary = false, h
     if (node.tag !== 'li') continue;
     if (node.parent?.tag === 'li') continue;
     const text = nodeText(node);
-    if (!text || seen.has(text)) continue;
-    seen.add(text);
+    // Repeated text can be intentional: cakes, fillings, and frostings often
+    // each use the same amount of salt, sugar, or vanilla. Preserve every
+    // top-level list item and let the recipe parser retain section identity.
+    if (!text) continue;
     current.ingredients.push(text);
   }
   flush();

@@ -130,6 +130,21 @@ describe('RecipePageExtractor', () => {
     assert.deepEqual(result.ingredientSections, [{ name: 'Soup base', ingredients: ['2 cups stock', '1 onion'] }]);
   });
 
+  test('visible fallback preserves legitimate repeated ingredients across sections', () => {
+    const result = extractor.extract(`
+      <h1>Layer Cake</h1><h2>Ingredients</h2>
+      <h3>Cake</h3><ul><li>1 teaspoon vanilla</li><li>1 pinch salt</li></ul>
+      <h3>Frosting</h3><ul><li>1 teaspoon vanilla</li><li>1 pinch salt</li></ul>
+      <h2>Directions</h2><p>Mix each component.</p>`);
+
+    assert.deepEqual(result.ingredientSections, [
+      { name: 'Cake', ingredients: ['1 teaspoon vanilla', '1 pinch salt'] },
+      { name: 'Frosting', ingredients: ['1 teaspoon vanilla', '1 pinch salt'] }
+    ]);
+    assert.equal(result.ingredients.filter((item) => item === '1 teaspoon vanilla').length, 2);
+    assert.equal(result.ingredients.filter((item) => item === '1 pinch salt').length, 2);
+  });
+
   test('malformed JSON-LD is ignored in favor of fallback markup', () => {
     const result = extractor.extract(`
       <script type="application/ld+json">{"@type":"Recipe", broken}</script>

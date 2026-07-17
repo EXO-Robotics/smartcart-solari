@@ -1,9 +1,56 @@
 import Foundation
 
 struct SmartCartPersistedState: Codable, Hashable {
-    static let currentSchemaVersion = 3
+    static let currentSchemaVersion = 5
 
     var schemaVersion: Int = currentSchemaVersion
+    var recipes: [Recipe]
+    var activeRecipe: Recipe
+    var desiredServings: Int
+    var preferences: ShoppingPreferences
+    var featureFlags: AppFeatureFlags
+    var storeStrategy: StoreStrategy
+    var fulfillmentMode: FulfillmentMode
+    var selectedStoreIDs: Set<UUID>
+    var zipCode: String
+    var pickupDay: String
+    var pickupTime: String
+    var shoppingItems: [ShoppingListItem]
+    var guidedIndex: Int
+    var savedLists: [SavedShoppingList]
+    var preferredDeliveryPartnerName: String?
+    var pantryInventory: [PantryInventoryItem]
+    var preferredProductIDsByIngredient: [String: String]
+    var analyticsEvents: [AnalyticsEvent]
+    var walmartWishlistReference: WalmartWishlistReference? = nil
+    var shoppingSessions: [ShoppingSession] = []
+}
+
+struct LegacySmartCartPersistedStateV4: Codable, Hashable {
+    var schemaVersion = 4
+    var recipes: [Recipe]
+    var activeRecipe: Recipe
+    var desiredServings: Int
+    var preferences: ShoppingPreferences
+    var featureFlags: AppFeatureFlags
+    var storeStrategy: StoreStrategy
+    var fulfillmentMode: FulfillmentMode
+    var selectedStoreIDs: Set<UUID>
+    var zipCode: String
+    var pickupDay: String
+    var pickupTime: String
+    var shoppingItems: [ShoppingListItem]
+    var guidedIndex: Int
+    var savedLists: [SavedShoppingList]
+    var preferredDeliveryPartnerName: String?
+    var pantryInventory: [PantryInventoryItem]
+    var preferredProductIDsByIngredient: [String: String]
+    var analyticsEvents: [AnalyticsEvent]
+    var walmartWishlistReference: WalmartWishlistReference?
+}
+
+struct LegacySmartCartPersistedStateV3: Codable, Hashable {
+    var schemaVersion = 3
     var recipes: [Recipe]
     var activeRecipe: Recipe
     var desiredServings: Int
@@ -86,7 +133,7 @@ protocol SmartCartStateStoring {
     func save(_ state: SmartCartPersistedState) throws
 }
 
-enum SmartCartStateStoreError: LocalizedError {
+enum SmartCartStateStoreError: LocalizedError, Equatable {
     case unsupportedSchema(Int)
 
     var errorDescription: String? {
@@ -127,6 +174,16 @@ final class JSONSmartCartStateStore: SmartCartStateStoring {
             switch version {
             case SmartCartPersistedState.currentSchemaVersion:
                 return try decoder().decode(SmartCartPersistedState.self, from: data)
+            case 4:
+                let legacy = try decoder().decode(LegacySmartCartPersistedStateV4.self, from: data)
+                let migrated = migrate(legacy)
+                try save(migrated)
+                return migrated
+            case 3:
+                let legacy = try decoder().decode(LegacySmartCartPersistedStateV3.self, from: data)
+                let migrated = migrate(legacy)
+                try save(migrated)
+                return migrated
             case 2:
                 let legacy = try decoder().decode(LegacySmartCartPersistedStateV2.self, from: data)
                 let migrated = migrate(legacy)
@@ -145,10 +202,67 @@ final class JSONSmartCartStateStore: SmartCartStateStoring {
             default:
                 throw SmartCartStateStoreError.unsupportedSchema(version)
             }
+        } catch let error as SmartCartStateStoreError {
+            // A newer app may have written this state. Keep the file intact so
+            // an older build can never quarantine or overwrite valid data.
+            throw error
         } catch {
             try? quarantineUnreadableState()
             return nil
         }
+    }
+
+    private func migrate(
+        _ legacy: LegacySmartCartPersistedStateV4
+    ) -> SmartCartPersistedState {
+        SmartCartPersistedState(
+            recipes: legacy.recipes,
+            activeRecipe: legacy.activeRecipe,
+            desiredServings: legacy.desiredServings,
+            preferences: legacy.preferences,
+            featureFlags: legacy.featureFlags,
+            storeStrategy: legacy.storeStrategy,
+            fulfillmentMode: legacy.fulfillmentMode,
+            selectedStoreIDs: legacy.selectedStoreIDs,
+            zipCode: legacy.zipCode,
+            pickupDay: legacy.pickupDay,
+            pickupTime: legacy.pickupTime,
+            shoppingItems: legacy.shoppingItems,
+            guidedIndex: legacy.guidedIndex,
+            savedLists: legacy.savedLists,
+            preferredDeliveryPartnerName: legacy.preferredDeliveryPartnerName,
+            pantryInventory: legacy.pantryInventory,
+            preferredProductIDsByIngredient: legacy.preferredProductIDsByIngredient,
+            analyticsEvents: legacy.analyticsEvents,
+            walmartWishlistReference: legacy.walmartWishlistReference,
+            shoppingSessions: []
+        )
+    }
+
+    private func migrate(
+        _ legacy: LegacySmartCartPersistedStateV3
+    ) -> SmartCartPersistedState {
+        SmartCartPersistedState(
+            recipes: legacy.recipes,
+            activeRecipe: legacy.activeRecipe,
+            desiredServings: legacy.desiredServings,
+            preferences: legacy.preferences,
+            featureFlags: legacy.featureFlags,
+            storeStrategy: legacy.storeStrategy,
+            fulfillmentMode: legacy.fulfillmentMode,
+            selectedStoreIDs: legacy.selectedStoreIDs,
+            zipCode: legacy.zipCode,
+            pickupDay: legacy.pickupDay,
+            pickupTime: legacy.pickupTime,
+            shoppingItems: legacy.shoppingItems,
+            guidedIndex: legacy.guidedIndex,
+            savedLists: legacy.savedLists,
+            preferredDeliveryPartnerName: legacy.preferredDeliveryPartnerName,
+            pantryInventory: legacy.pantryInventory,
+            preferredProductIDsByIngredient: legacy.preferredProductIDsByIngredient,
+            analyticsEvents: legacy.analyticsEvents,
+            walmartWishlistReference: nil
+        )
     }
 
     func save(_ state: SmartCartPersistedState) throws {
@@ -190,7 +304,8 @@ final class JSONSmartCartStateStore: SmartCartStateStoring {
             preferredDeliveryPartnerName: legacy.preferredDeliveryPartnerName,
             pantryInventory: normalizedPantry,
             preferredProductIDsByIngredient: legacy.preferredProductIDsByIngredient,
-            analyticsEvents: legacy.analyticsEvents
+            analyticsEvents: legacy.analyticsEvents,
+            walmartWishlistReference: nil
         )
     }
 
@@ -215,7 +330,8 @@ final class JSONSmartCartStateStore: SmartCartStateStoring {
             preferredDeliveryPartnerName: nil,
             pantryInventory: [],
             preferredProductIDsByIngredient: [:],
-            analyticsEvents: []
+            analyticsEvents: [],
+            walmartWishlistReference: nil
         )
     }
 
@@ -240,7 +356,8 @@ final class JSONSmartCartStateStore: SmartCartStateStoring {
             preferredDeliveryPartnerName: legacy.preferredDeliveryPartnerName,
             pantryInventory: [],
             preferredProductIDsByIngredient: [:],
-            analyticsEvents: []
+            analyticsEvents: [],
+            walmartWishlistReference: nil
         )
     }
 

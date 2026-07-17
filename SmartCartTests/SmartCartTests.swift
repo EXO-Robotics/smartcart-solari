@@ -37,6 +37,78 @@ final class SmartCartTests: XCTestCase {
         }
     }
 
+    func testParserPreservesMixedFractionsAndConservativeRanges() throws {
+        let recipe = RecipeParser.parse(
+            title: "Fraction Matrix",
+            text: """
+            2½ cups flour
+            1-1/2 cups milk
+            ⅜ cup olive oil
+            2 to 3 lemons
+            """
+        )
+
+        XCTAssertEqual(recipe.ingredients.count, 4)
+        XCTAssertEqual(recipe.ingredients[0].quantity, 2.5, accuracy: 0.001)
+        XCTAssertEqual(recipe.ingredients[1].quantity, 1.5, accuracy: 0.001)
+        XCTAssertEqual(recipe.ingredients[2].quantity, 0.375, accuracy: 0.001)
+        XCTAssertEqual(recipe.ingredients[3].quantityLowerBound, 2)
+        XCTAssertEqual(recipe.ingredients[3].quantity, 3, accuracy: 0.001)
+        XCTAssertEqual(recipe.ingredients[3].displayQuantity, "2–3")
+        XCTAssertEqual(recipe.ingredients[3].confidence, .review)
+        XCTAssertFalse(recipe.ingredients[3].quantityReviewRequired ?? false)
+    }
+
+    func testParserKeepsCommaNamesAndPackageMeasurements() throws {
+        let recipe = RecipeParser.parse(
+            title: "Weeknight Dinner",
+            text: """
+            1 lb boneless, skinless chicken breasts
+            2 (14 oz) cans diced tomatoes, drained
+            """
+        )
+
+        XCTAssertEqual(recipe.ingredients.count, 2)
+        XCTAssertEqual(recipe.ingredients[0].name, "Boneless, Skinless Chicken Breasts")
+        let tomatoes = recipe.ingredients[1]
+        XCTAssertEqual(tomatoes.quantity, 2, accuracy: 0.001)
+        XCTAssertEqual(tomatoes.unit, "cans")
+        XCTAssertEqual(tomatoes.name, "Diced Tomatoes")
+        XCTAssertEqual(tomatoes.preparation, "drained")
+        let packages = try tomatoes.equivalentMeasurements.firstUnwrapped()
+        let package = try packages.firstUnwrapped()
+        XCTAssertEqual(package.quantity, 14, accuracy: 0.001)
+        XCTAssertEqual(package.unit, "oz")
+    }
+
+    func testIngredientSectionAllowsQuantitylessItemsAndRejectsDirections() {
+        let recipe = RecipeParser.parse(
+            title: "Sauce",
+            text: """
+            Ingredients
+            Cooking spray
+            Hot sauce, to taste
+            Eggs as needed
+            Instructions (continued)
+            Add 2 eggs and whisk until smooth.
+            """
+        )
+
+        XCTAssertEqual(recipe.ingredients.map(\.name), ["Cooking Spray", "Hot Sauce", "Eggs"])
+        XCTAssertTrue(recipe.ingredients.allSatisfy { !$0.name.localizedCaseInsensitiveContains("add") })
+        XCTAssertTrue(recipe.ingredients.allSatisfy { $0.confidence == .review })
+    }
+
+    func testImportReportSurfacesDroppedCandidatesAndRequiredConfirmation() {
+        let text = "Ingredients\n1/? cup flour\n2 eggs\nDirections\nBake for 20 minutes"
+        let recipe = RecipeParser.parse(title: "Review", text: text)
+        let report = RecipeParser.importReport(for: recipe, recognizedText: text)
+
+        XCTAssertEqual(report.requiredConfirmationCount, 1)
+        XCTAssertEqual(report.confidenceLabel, "Needs review")
+        XCTAssertGreaterThanOrEqual(report.omittedCandidateLineCount, 0)
+    }
+
     func testImportReportProducesBoundedConfidenceAndPageMetrics() {
         let text = "1 cup rice\nSalt to taste\n2 tbsp olive oil"
         let recipe = RecipeParser.parse(title: "Rice", text: text)
@@ -277,6 +349,16 @@ final class SmartCartTests: XCTestCase {
         XCTAssertEqual(restored.shoppingItems.first?.product.storeID, "walmart-5206")
     }
 
+    @MainActor
+    func testFreshInstallDoesNotManufactureShoppingProgress() {
+        let model = AppModel(stateStore: InMemorySmartCartStateStore())
+
+        XCTAssertTrue(model.shoppingItems.isEmpty)
+        XCTAssertTrue(model.savedLists.isEmpty)
+        XCTAssertTrue(model.shoppingSessions.isEmpty)
+        XCTAssertFalse(model.walmartGuideIsComplete)
+    }
+
     func testLegacyStateMigratesWithDefaultPreferences() throws {
         let directory = temporaryDirectory()
         let fileURL = directory.appendingPathComponent("state.json")
@@ -341,6 +423,109 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(migrated.pantryInventory.isEmpty)
         XCTAssertTrue(migrated.analyticsEvents.isEmpty)
         XCTAssertTrue(migrated.preferredProductIDsByIngredient.isEmpty)
+    }
+
+    func testSchema3MigratesWithNoInventedWalmartWishlistReference() throws {
+        let directory = temporaryDirectory()
+        let fileURL = directory.appendingPathComponent("state.json")
+        let store = JSONSmartCartStateStore(fileURL: fileURL)
+        let state = try makeState()
+        let legacy = LegacySmartCartPersistedStateV3(
+            recipes: state.recipes,
+            activeRecipe: state.activeRecipe,
+            desiredServings: state.desiredServings,
+            preferences: state.preferences,
+            featureFlags: state.featureFlags,
+            storeStrategy: state.storeStrategy,
+            fulfillmentMode: state.fulfillmentMode,
+            selectedStoreIDs: state.selectedStoreIDs,
+            zipCode: state.zipCode,
+            pickupDay: state.pickupDay,
+            pickupTime: state.pickupTime,
+            shoppingItems: state.shoppingItems,
+            guidedIndex: state.guidedIndex,
+            savedLists: state.savedLists,
+            preferredDeliveryPartnerName: state.preferredDeliveryPartnerName,
+            pantryInventory: state.pantryInventory,
+            preferredProductIDsByIngredient: state.preferredProductIDsByIngredient,
+            analyticsEvents: state.analyticsEvents
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(legacy).write(to: fileURL, options: .atomic)
+
+        let migrated = try XCTUnwrap(store.load())
+
+        XCTAssertEqual(migrated.schemaVersion, SmartCartPersistedState.currentSchemaVersion)
+        XCTAssertNil(migrated.walmartWishlistReference)
+        XCTAssertEqual(migrated.shoppingItems, state.shoppingItems)
+    }
+
+    func testSchema4MigratesWishlistAndStartsWithNoShoppingSessions() throws {
+        let directory = temporaryDirectory()
+        let fileURL = directory.appendingPathComponent("state.json")
+        let store = JSONSmartCartStateStore(fileURL: fileURL)
+        var state = try makeState()
+        state.walmartWishlistReference = WalmartWishlistReference(
+            displayName: "SmartCart Groceries",
+            sharedURL: URL(string: "https://www.walmart.com/lists/shared/WL/test")!,
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+        let legacy = LegacySmartCartPersistedStateV4(
+            recipes: state.recipes,
+            activeRecipe: state.activeRecipe,
+            desiredServings: state.desiredServings,
+            preferences: state.preferences,
+            featureFlags: state.featureFlags,
+            storeStrategy: state.storeStrategy,
+            fulfillmentMode: state.fulfillmentMode,
+            selectedStoreIDs: state.selectedStoreIDs,
+            zipCode: state.zipCode,
+            pickupDay: state.pickupDay,
+            pickupTime: state.pickupTime,
+            shoppingItems: state.shoppingItems,
+            guidedIndex: state.guidedIndex,
+            savedLists: state.savedLists,
+            preferredDeliveryPartnerName: state.preferredDeliveryPartnerName,
+            pantryInventory: state.pantryInventory,
+            preferredProductIDsByIngredient: state.preferredProductIDsByIngredient,
+            analyticsEvents: state.analyticsEvents,
+            walmartWishlistReference: state.walmartWishlistReference
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(legacy).write(to: fileURL, options: .atomic)
+
+        let migrated = try XCTUnwrap(store.load())
+
+        XCTAssertEqual(migrated.schemaVersion, SmartCartPersistedState.currentSchemaVersion)
+        XCTAssertEqual(migrated.walmartWishlistReference, state.walmartWishlistReference)
+        XCTAssertTrue(migrated.shoppingSessions.isEmpty)
+    }
+
+    @MainActor
+    func testFutureSchemaIsPreservedAndNeverOverwrittenByOlderBuild() throws {
+        let directory = temporaryDirectory()
+        let fileURL = directory.appendingPathComponent("state.json")
+        let original = Data(#"{"schemaVersion":999,"future":"keep-me"}"#.utf8)
+        try original.write(to: fileURL, options: .atomic)
+        let store = JSONSmartCartStateStore(fileURL: fileURL)
+
+        XCTAssertThrowsError(try store.load()) { error in
+            XCTAssertEqual(error as? SmartCartStateStoreError, .unsupportedSchema(999))
+        }
+        XCTAssertEqual(try Data(contentsOf: fileURL), original)
+
+        let model = AppModel(stateStore: store)
+        XCTAssertNotNil(model.persistenceIssue)
+        model.persistNow()
+        XCTAssertEqual(try Data(contentsOf: fileURL), original)
+        XCTAssertTrue(
+            try FileManager.default.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: nil
+            ).allSatisfy { !$0.lastPathComponent.contains("corrupt-") }
+        )
     }
 
     func testCorruptPersistenceIsQuarantined() throws {
@@ -424,7 +609,7 @@ final class SmartCartTests: XCTestCase {
     @MainActor
     func testManualReplacementAndPreferencesSurviveRelaunch() throws {
         let store = InMemorySmartCartStateStore()
-        let model = AppModel(stateStore: store)
+        let model = AppModel(stateStore: store, seedDemoShoppingState: true)
         var updatedPreferences = model.preferences
         updatedPreferences.organicPolicy = .only
         updatedPreferences.dietaryRestrictions = [.glutenFree]
@@ -485,7 +670,7 @@ final class SmartCartTests: XCTestCase {
     @MainActor
     func testCompleteSavedFlowRestoresAcrossRelaunch() throws {
         let store = InMemorySmartCartStateStore()
-        let model = AppModel(stateStore: store)
+        let model = AppModel(stateStore: store, seedDemoShoppingState: true)
         var updatedPreferences = model.preferences
         updatedPreferences.organicPolicy = .only
         updatedPreferences.budgetPriority = .qualityFirst
@@ -634,6 +819,63 @@ final class SmartCartTests: XCTestCase {
         XCTAssertEqual(ingredient.quantityReviewRequired, true)
     }
 
+    func testCorrectedOCRTextRetainsUnambiguousOriginalEvidence() throws {
+        let sourceLine = OCRSourceLine(
+            text: "1O oz flour",
+            pageIndex: 2,
+            boundingBox: .init(x: 0.18, y: 0.62, width: 0.44, height: 0.06),
+            confidence: 0.61,
+            alternateCandidates: []
+        )
+
+        let recipe = RecipeParser.parse(
+            title: "Corrected Evidence",
+            text: "10 oz flour",
+            source: .photo,
+            sourceLines: [sourceLine]
+        )
+        let ingredient = try recipe.ingredients.firstUnwrapped()
+        let evidence = try ingredient.sourceEvidence.firstUnwrapped()
+
+        XCTAssertEqual(ingredient.quantity, 10, accuracy: 0.001)
+        XCTAssertEqual(evidence.rawText, "1O oz flour")
+        XCTAssertEqual(evidence.pageIndex, 2)
+        XCTAssertEqual(evidence.boundingBox?.x, 0.18)
+        XCTAssertEqual(evidence.ocrConfidence, 0.61)
+        XCTAssertEqual(ingredient.confidence, .review)
+    }
+
+    func testCorrectedOCRTextDoesNotGuessBetweenAmbiguousSourceLines() throws {
+        let sourceLines = [
+            OCRSourceLine(
+                text: "1 cup brown sugar",
+                pageIndex: 0,
+                boundingBox: .init(x: 0.1, y: 0.7, width: 0.4, height: 0.05),
+                confidence: 0.9,
+                alternateCandidates: []
+            ),
+            OCRSourceLine(
+                text: "1 cup white sugar",
+                pageIndex: 1,
+                boundingBox: .init(x: 0.1, y: 0.5, width: 0.4, height: 0.05),
+                confidence: 0.9,
+                alternateCandidates: []
+            )
+        ]
+
+        let recipe = RecipeParser.parse(
+            title: "Ambiguous Evidence",
+            text: "1 cup sugar",
+            source: .photo,
+            sourceLines: sourceLines
+        )
+        let evidence = try recipe.ingredients.firstUnwrapped().sourceEvidence.firstUnwrapped()
+
+        XCTAssertEqual(evidence.rawText, "1 cup sugar")
+        XCTAssertNil(evidence.pageIndex)
+        XCTAssertNil(evidence.boundingBox)
+    }
+
     func testOCRVocabularyIsBoundedAndCriticalLinesPreserveAlternatives() {
         let contextual = (0..<150).map { "PantryItem\($0)" }
         let words = RecipeOCRPolicy.boundedCustomWords(contextual)
@@ -644,6 +886,38 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(RecipeOCRPolicy.shouldPreserveAlternatives(in: "1/2 cup cream", confidence: 0.95))
         XCTAssertTrue(RecipeOCRPolicy.shouldPreserveAlternatives(in: "mascarpone", confidence: 0.60))
         XCTAssertFalse(RecipeOCRPolicy.shouldPreserveAlternatives(in: "fresh parsley", confidence: 0.95))
+        XCTAssertEqual(RecipeOCRPolicy.leadingBulletMarker(in: "• 2 cups flour"), "•")
+        XCTAssertNil(RecipeOCRPolicy.leadingBulletMarker(in: "2 cups flour"))
+        XCTAssertTrue(
+            RecipeOCRPolicy.shouldRunEnhancedPass(
+                confidence: 0.70,
+                layoutConfidence: 0.95,
+                ambiguityCount: 0,
+                sourceLineCount: 8
+            )
+        )
+        XCTAssertFalse(
+            RecipeOCRPolicy.shouldRunEnhancedPass(
+                confidence: 0.92,
+                layoutConfidence: 0.94,
+                ambiguityCount: 0,
+                sourceLineCount: 8
+            )
+        )
+        XCTAssertGreaterThan(
+            RecipeOCRPolicy.qualityScore(
+                confidence: 0.92,
+                layoutConfidence: 0.94,
+                ambiguityCount: 0,
+                sourceLineCount: 8
+            ),
+            RecipeOCRPolicy.qualityScore(
+                confidence: 0.65,
+                layoutConfidence: 0.60,
+                ambiguityCount: 2,
+                sourceLineCount: 2
+            )
+        )
     }
 
     func testBarcodeNormalizationPreservesLeadingZerosAndValidatesGTINs() throws {
@@ -692,7 +966,7 @@ final class SmartCartTests: XCTestCase {
         try encoder.encode(legacy).write(to: fileURL)
 
         let migrated = try JSONSmartCartStateStore(fileURL: fileURL).load()
-        XCTAssertEqual(migrated?.schemaVersion, 3)
+        XCTAssertEqual(migrated?.schemaVersion, SmartCartPersistedState.currentSchemaVersion)
         XCTAssertEqual(migrated?.pantryInventory.first?.name, "Unknown Product")
         XCTAssertEqual(migrated?.pantryInventory.first?.upc, "0785357023567")
         XCTAssertEqual(migrated?.pantryInventory.first?.requiresUserNaming, true)
@@ -742,6 +1016,52 @@ final class SmartCartTests: XCTestCase {
         XCTAssertEqual(model.pantryInventory.count, 2)
         let merged = try model.pantryItem(named: "FLOUR").firstUnwrapped()
         XCTAssertEqual(merged.quantity, 3.5, accuracy: 0.001)
+    }
+
+    func testLegacyPantryItemDecodingDerivesExplicitPackageAndRemainingFields() throws {
+        let legacy = PantryInventoryItem(
+            name: "Flour",
+            quantity: 2,
+            unit: "bag",
+            packageSize: 5,
+            packageUnit: "lb"
+        )
+        let encoded = try JSONEncoder().encode(legacy)
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        object.removeValue(forKey: "packageCount")
+        object.removeValue(forKey: "remainingAmount")
+        object.removeValue(forKey: "remainingUnit")
+        let legacyData = try JSONSerialization.data(withJSONObject: object)
+
+        let decoded = try JSONDecoder().decode(PantryInventoryItem.self, from: legacyData)
+
+        XCTAssertEqual(decoded.packageCount, 2, accuracy: 0.001)
+        XCTAssertEqual(decoded.remainingAmount, 10, accuracy: 0.001)
+        XCTAssertEqual(decoded.remainingUnit, "lb")
+        XCTAssertEqual(decoded.quantity, decoded.packageCount)
+    }
+
+    func testPantryMatchingUsesRemainingAmountInsteadOfFullPackageCapacity() throws {
+        let ingredient = Ingredient(name: "Flour", quantity: 8, unit: "oz")
+        let pantry = PantryInventoryItem(
+            name: "Flour",
+            quantity: 2,
+            unit: "bag",
+            packageSize: 16,
+            packageUnit: "oz",
+            remainingAmount: 4,
+            remainingUnit: "oz"
+        )
+
+        let suggestion = try PantryMatchingService.bestSuggestion(
+            for: ingredient,
+            inventory: [pantry]
+        ).firstUnwrapped()
+
+        XCTAssertEqual(suggestion.coverage, .partial)
+        XCTAssertEqual(suggestion.availableQuantity, 4, accuracy: 0.001)
     }
 
     @MainActor
@@ -940,6 +1260,289 @@ final class SmartCartTests: XCTestCase {
         XCTAssertEqual(model.unresolvedAlternativeCount, 1)
         XCTAssertTrue(model.commerceBlockingIssues.contains { $0.contains("uncertain quantity") })
         XCTAssertTrue(model.commerceBlockingIssues.contains { $0.contains("unresolved alternative") })
+    }
+
+    func testWalmartWishlistURLValidatorAcceptsOnlyOfficialSharedListLinks() throws {
+        let accepted = try WalmartWishlistURLValidator.validate(
+            "  https://www.walmart.com/lists/shared/WL/32828e97-d743-4b80-922a-0099b56c83bf#items  "
+        )
+        XCTAssertEqual(accepted.host, "www.walmart.com")
+        XCTAssertEqual(accepted.path, "/lists/shared/WL/32828e97-d743-4b80-922a-0099b56c83bf")
+        XCTAssertNil(accepted.fragment)
+
+        XCTAssertThrowsError(try WalmartWishlistURLValidator.validate("http://www.walmart.com/lists/shared/WL/test")) {
+            XCTAssertEqual($0 as? WalmartWishlistURLValidationError, .insecureURL)
+        }
+        XCTAssertThrowsError(try WalmartWishlistURLValidator.validate("https://walmart.com.evil.example/lists/shared/WL/test")) {
+            XCTAssertEqual($0 as? WalmartWishlistURLValidationError, .unsupportedHost)
+        }
+        XCTAssertThrowsError(try WalmartWishlistURLValidator.validate("https://www.walmart.com/ip/10414680")) {
+            XCTAssertEqual($0 as? WalmartWishlistURLValidationError, .notSharedWishlist)
+        }
+    }
+
+    @MainActor
+    func testWalmartWishlistReferenceAndGuidedOutcomesSurviveRelaunch() throws {
+        let store = InMemorySmartCartStateStore()
+        let defaults = isolatedCommerceDefaults()
+        let model = AppModel(
+            stateStore: store,
+            commerceDefaults: defaults,
+            seedDemoShoppingState: true
+        )
+        model.shoppingRoute = .walmartDirect
+        try model.saveWalmartWishlistReference(
+            displayName: "SmartCart Groceries",
+            rawURL: "https://www.walmart.com/lists/shared/WL/32828e97-d743-4b80-922a-0099b56c83bf"
+        )
+
+        let itemIDs = model.shoppingItems.map(\.id)
+        for (index, itemID) in itemIDs.enumerated() {
+            let outcome: GuidedItemStatus = switch index % 4 {
+            case 0: .savedToWishlist
+            case 1: .addedToCart
+            case 2: .unavailable
+            default: .skipped
+            }
+            model.recordWalmartOutcome(outcome, for: itemID)
+        }
+        model.saveCurrentList()
+        XCTAssertEqual(model.savedLists.first?.manifest.handoffProgress, .completed)
+        let openedURL = model.openSavedWalmartWishlist()
+
+        let restored = AppModel(stateStore: store, commerceDefaults: defaults)
+
+        XCTAssertEqual(openedURL, restored.walmartWishlistReference?.sharedURL)
+        XCTAssertEqual(restored.walmartWishlistReference?.displayName, "SmartCart Groceries")
+        XCTAssertNotNil(restored.walmartWishlistReference?.lastOpenedAt)
+        XCTAssertTrue(restored.walmartGuideIsComplete)
+        XCTAssertEqual(restored.guidedCompletedCount, restored.shoppingItems.count)
+        XCTAssertTrue(restored.analyticsEvents.contains { $0.name == .walmartWishlistURLSaved })
+        XCTAssertTrue(restored.analyticsEvents.contains { $0.name == .walmartProductSelfReportedSaved })
+        XCTAssertEqual(
+            restored.analyticsEvents.filter { $0.name == .walmartGuidedFlowCompleted }.count,
+            1
+        )
+        XCTAssertTrue(restored.analyticsEvents.contains { $0.name == .walmartWishlistOpened })
+        XCTAssertFalse(restored.analyticsEvents.contains { event in
+            event.properties.keys.contains { $0.localizedCaseInsensitiveContains("url") }
+        })
+    }
+
+    @MainActor
+    func testShoppingOutcomeDefaultsExcludeUnavailableItems() throws {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            seedDemoShoppingState: true
+        )
+        let unavailableID = try model.shoppingItems.firstUnwrapped().id
+        model.shoppingItems[0].status = .unavailable
+        let sessionID = try model.ensureCurrentShoppingSession().firstUnwrapped()
+
+        let everything = model.defaultPurchasedItemIDs(
+            for: .boughtEverything,
+            sessionID: sessionID
+        )
+        let most = model.defaultPurchasedItemIDs(for: .boughtMost, sessionID: sessionID)
+
+        XCTAssertFalse(everything.contains(unavailableID))
+        XCTAssertEqual(everything, most)
+        XCTAssertTrue(model.defaultPurchasedItemIDs(for: .boughtFew, sessionID: sessionID).isEmpty)
+        XCTAssertTrue(model.defaultPurchasedItemIDs(for: .didNotShop, sessionID: sessionID).isEmpty)
+    }
+
+    @MainActor
+    func testPantryReconciliationIsAtomicIdempotentAndPersists() throws {
+        let store = InMemorySmartCartStateStore()
+        let model = AppModel(stateStore: store, seedDemoShoppingState: true)
+        let item = try model.shoppingItems.firstUnwrapped()
+        model.pantryInventory = [
+            PantryInventoryItem(
+                name: item.product.name,
+                brand: item.product.brand,
+                quantity: 2,
+                unit: "item",
+                preferredRetailerProductID: item.product.retailerProductID,
+                packageSize: item.product.packageQuantity,
+                packageUnit: item.product.packageUnit
+            )
+        ]
+        let existingID = try model.pantryInventory.firstUnwrapped().id
+        let sessionID = try model.ensureCurrentShoppingSession().firstUnwrapped()
+
+        try model.commitShoppingReconciliation(
+            sessionID: sessionID,
+            outcome: .boughtFew,
+            purchasedItemIDs: [item.id],
+            substitutions: []
+        )
+        let expectedQuantity = 2 + Double(item.purchaseQuantity)
+        XCTAssertEqual(model.pantryInventory.count, 1)
+        XCTAssertEqual(model.pantryInventory[0].id, existingID)
+        XCTAssertEqual(model.pantryInventory[0].quantity, expectedQuantity, accuracy: 0.001)
+        XCTAssertEqual(model.pantryInventory[0].packageCount, expectedQuantity, accuracy: 0.001)
+        if let packageSize = item.product.packageQuantity {
+            XCTAssertEqual(
+                model.pantryInventory[0].remainingAmount,
+                expectedQuantity * packageSize,
+                accuracy: 0.001
+            )
+            XCTAssertEqual(model.pantryInventory[0].remainingUnit, item.product.packageUnit)
+        }
+
+        try model.commitShoppingReconciliation(
+            sessionID: sessionID,
+            outcome: .boughtFew,
+            purchasedItemIDs: [item.id],
+            substitutions: []
+        )
+        XCTAssertEqual(model.pantryInventory[0].quantity, expectedQuantity, accuracy: 0.001)
+
+        let restored = AppModel(stateStore: store)
+        XCTAssertEqual(restored.pantryInventory[0].quantity, expectedQuantity, accuracy: 0.001)
+        let restoredSession = try restored.shoppingSession(id: sessionID).firstUnwrapped()
+        let restoredRecord = try restoredSession.reconciliation.firstUnwrapped()
+        XCTAssertEqual(restoredRecord.purchasedItemIDs, Set([item.id]))
+    }
+
+    @MainActor
+    func testSubstitutionUpdatesPantryAndPreferenceOnlyWithExplicitOptIn() throws {
+        let store = InMemorySmartCartStateStore()
+        let model = AppModel(stateStore: store, seedDemoShoppingState: true)
+        let item = try model.shoppingItems.first(where: { !$0.alternatives.isEmpty }).firstUnwrapped()
+        let replacement = try item.alternatives.firstUnwrapped()
+        let sessionID = try model.ensureCurrentShoppingSession().firstUnwrapped()
+        let feedback = ShoppingSubstitutionFeedback(
+            originalItemID: item.id,
+            replacementName: replacement.name,
+            replacementBrand: replacement.brand,
+            replacementRetailerProductID: replacement.retailerProductID,
+            replacementGTIN14: replacement.gtin,
+            packageQuantity: replacement.packageQuantity,
+            packageUnit: replacement.packageUnit,
+            replacementAmount: 3,
+            preferNextTime: true
+        )
+
+        try model.commitShoppingReconciliation(
+            sessionID: sessionID,
+            outcome: .boughtFew,
+            purchasedItemIDs: [item.id],
+            substitutions: [feedback]
+        )
+
+        XCTAssertEqual(model.pantryInventory.first?.name, replacement.name)
+        XCTAssertEqual(model.pantryInventory.first?.quantity, 3)
+        XCTAssertEqual(model.pantryInventory.first?.packageCount, 3)
+        if let packageSize = replacement.packageQuantity {
+            XCTAssertEqual(model.pantryInventory.first?.remainingAmount, 3 * packageSize)
+            XCTAssertEqual(model.pantryInventory.first?.remainingUnit, replacement.packageUnit)
+        }
+        XCTAssertEqual(model.pantryInventory.first?.preferredRetailerProductID, replacement.retailerProductID)
+        XCTAssertTrue(model.preferredProductIDsByIngredient.values.contains(replacement.retailerProductID))
+        XCTAssertEqual(
+            model.shoppingSession(id: sessionID)?.reconciliation?.substitutions.first?.replacementName,
+            replacement.name
+        )
+    }
+
+    @MainActor
+    func testDidNotShopLeavesPantryAndPreferencesUnchanged() throws {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            seedDemoShoppingState: true
+        )
+        model.pantryInventory = [PantryInventoryItem(name: "Flour", quantity: 1, unit: "bag")]
+        let originalPantry = model.pantryInventory
+        let originalPreferences = model.preferredProductIDsByIngredient
+        let sessionID = try model.ensureCurrentShoppingSession().firstUnwrapped()
+
+        try model.commitShoppingReconciliation(
+            sessionID: sessionID,
+            outcome: .didNotShop,
+            purchasedItemIDs: Set(model.shoppingItems.map(\.id)),
+            substitutions: []
+        )
+
+        XCTAssertEqual(model.pantryInventory, originalPantry)
+        XCTAssertEqual(model.preferredProductIDsByIngredient, originalPreferences)
+        XCTAssertTrue(
+            model.shoppingSession(id: sessionID)?.reconciliation?.purchasedItemIDs.isEmpty == true
+        )
+    }
+
+    @MainActor
+    func testReconciliationDoesNotMergeGenericOrVariantNameFallbacks() throws {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            seedDemoShoppingState: true
+        )
+        let item = try model.shoppingItems.firstUnwrapped()
+        model.pantryInventory = [
+            PantryInventoryItem(
+                name: item.product.name,
+                brand: "",
+                quantity: 1,
+                unit: "package",
+                packageSize: item.product.packageQuantity,
+                packageUnit: item.product.packageUnit
+            ),
+            PantryInventoryItem(
+                name: "Low Fat \(item.product.name)",
+                brand: item.product.brand,
+                quantity: 1,
+                unit: "package",
+                packageSize: item.product.packageQuantity,
+                packageUnit: item.product.packageUnit
+            )
+        ]
+        let originalIDs = Set(model.pantryInventory.map(\.id))
+        let sessionID = try model.ensureCurrentShoppingSession().firstUnwrapped()
+
+        try model.commitShoppingReconciliation(
+            sessionID: sessionID,
+            outcome: .boughtFew,
+            purchasedItemIDs: [item.id],
+            substitutions: []
+        )
+
+        XCTAssertEqual(model.pantryInventory.count, 3)
+        XCTAssertTrue(originalIDs.isSubset(of: Set(model.pantryInventory.map(\.id))))
+    }
+
+    @MainActor
+    func testShoppingSessionFingerprintReusesExactCommitButForksChangedState() throws {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            seedDemoShoppingState: true
+        )
+        let originalItemIDs = model.shoppingItems.map(\.id)
+        let firstSessionID = try model.ensureCurrentShoppingSession().firstUnwrapped()
+        try model.commitShoppingReconciliation(
+            sessionID: firstSessionID,
+            outcome: .didNotShop,
+            purchasedItemIDs: [],
+            substitutions: []
+        )
+
+        XCTAssertEqual(model.ensureCurrentShoppingSession(), firstSessionID)
+
+        model.shoppingItems[0].purchaseQuantity += 1
+        let quantitySessionID = try model.ensureCurrentShoppingSession().firstUnwrapped()
+        XCTAssertNotEqual(quantitySessionID, firstSessionID)
+        XCTAssertEqual(model.shoppingItems.map(\.id), originalItemIDs)
+
+        let replaceableItem = try model.shoppingItems
+            .first(where: { !$0.alternatives.isEmpty })
+            .firstUnwrapped()
+        let alternative = try replaceableItem.alternatives.firstUnwrapped()
+        model.selectAlternative(
+            itemID: replaceableItem.id,
+            candidateID: alternative.id
+        )
+        let productSessionID = try model.ensureCurrentShoppingSession().firstUnwrapped()
+        XCTAssertNotEqual(productSessionID, quantitySessionID)
+        XCTAssertEqual(model.shoppingItems.map(\.id), originalItemIDs)
     }
 
     private func searchRequest(

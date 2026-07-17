@@ -30,6 +30,8 @@
 		A10000000000000000000015 /* OCRLayoutReconstructor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000016 /* OCRLayoutReconstructor.swift */; };
 		A10000000000000000000016 /* RecipePageClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000017 /* RecipePageClient.swift */; };
 		A10000000000000000000017 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000018 /* Assets.xcassets */; };
+		A10000000000000000000018 /* WalmartWishlistViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000019 /* WalmartWishlistViews.swift */; };
+		A10000000000000000000019 /* ShoppingReconciliationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001A /* ShoppingReconciliationView.swift */; };
 		A20000000000000000000001 /* SmartCartTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000001 /* SmartCartTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -68,6 +70,8 @@
 		B10000000000000000000016 /* OCRLayoutReconstructor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRLayoutReconstructor.swift; sourceTree = "<group>"; };
 		B10000000000000000000017 /* RecipePageClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipePageClient.swift; sourceTree = "<group>"; };
 		B10000000000000000000018 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B10000000000000000000019 /* WalmartWishlistViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalmartWishlistViews.swift; sourceTree = "<group>"; };
+		B1000000000000000000001A /* ShoppingReconciliationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingReconciliationView.swift; sourceTree = "<group>"; };
 		B20000000000000000000001 /* SmartCartTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartCartTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000002 /* SmartCartTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SmartCartTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -167,6 +171,8 @@
 			isa = PBXGroup;
 			children = (
 				B1000000000000000000000B /* OrdersView.swift */,
+				B10000000000000000000019 /* WalmartWishlistViews.swift */,
+				B1000000000000000000001A /* ShoppingReconciliationView.swift */,
 			);
 			path = Features/Orders;
 			sourceTree = "<group>";
@@ -344,6 +350,8 @@
 				A10000000000000000000014 /* BarcodeResolutionService.swift in Sources */,
 				A10000000000000000000015 /* OCRLayoutReconstructor.swift in Sources */,
 				A10000000000000000000016 /* RecipePageClient.swift in Sources */,
+				A10000000000000000000018 /* WalmartWishlistViews.swift in Sources */,
+				A10000000000000000000019 /* ShoppingReconciliationView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

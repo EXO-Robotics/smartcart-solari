@@ -6,7 +6,9 @@ struct BarcodeScannerSheet: View {
     @Environment(AppModel.self) private var appModel
 
     let embedded: Bool
+    let title: String
     let onComplete: (() -> Void)?
+    let onSubmission: ((String, Double, PantryBarcodeSubmission) -> Void)?
 
     @State private var manualCode = ""
     @State private var capturedSymbology: String?
@@ -18,9 +20,16 @@ struct BarcodeScannerSheet: View {
 
     private let resolver = BarcodeResolutionService()
 
-    init(embedded: Bool = false, onComplete: (() -> Void)? = nil) {
+    init(
+        embedded: Bool = false,
+        title: String = "Scan pantry item",
+        onSubmission: ((String, Double, PantryBarcodeSubmission) -> Void)? = nil,
+        onComplete: (() -> Void)? = nil
+    ) {
         self.embedded = embedded
+        self.title = title
         self.onComplete = onComplete
+        self.onSubmission = onSubmission
     }
 
     private var scannerAvailable: Bool {
@@ -38,7 +47,7 @@ struct BarcodeScannerSheet: View {
             } else {
                 NavigationStack {
                     scannerContent
-                        .navigationTitle("Scan pantry item")
+                        .navigationTitle(title)
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
                             ToolbarItem(placement: .cancellationAction) {
@@ -215,8 +224,10 @@ struct BarcodeScannerSheet: View {
         submission: PantryBarcodeSubmission
     ) -> some View {
         let trimmedName = stockName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let mergeTarget = appModel.pantryMergeTarget(named: trimmedName, submission: submission)
-        let suggestions = appModel.pantryNameSuggestions(for: stockName)
+        let mergeTarget = onSubmission == nil
+            ? appModel.pantryMergeTarget(named: trimmedName, submission: submission)
+            : nil
+        let suggestions = onSubmission == nil ? appModel.pantryNameSuggestions(for: stockName) : []
         let displayHeading = mergeTarget?.name ?? heading
 
         return VStack(alignment: .leading, spacing: 12) {
@@ -241,7 +252,7 @@ struct BarcodeScannerSheet: View {
                 InfoBanner(
                     symbol: "rectangle.stack.badge.plus",
                     title: "Already in your pantry",
-                    message: "\(mergeTarget.name) has \(mergeTarget.quantity.formatted()) on hand (\(mergeTarget.unit)). Adding \(stockAmount.formatted()) will stack it to \((mergeTarget.quantity + stockAmount).formatted()), and this barcode stays linked to the same item.",
+                    message: "\(mergeTarget.name) has \(mergeTarget.packageCount.formatted()) package(s) on hand. Adding \(stockAmount.formatted()) will stack it to \((mergeTarget.packageCount + stockAmount).formatted()), and this barcode stays linked to the same item.",
                     color: SmartCartTheme.green
                 )
             }
@@ -267,7 +278,7 @@ struct BarcodeScannerSheet: View {
                                         Image(systemName: "arrow.turn.down.right")
                                             .font(.system(size: 9, weight: .bold))
                                         Text(suggestion.name)
-                                        Text(suggestion.quantity.formatted())
+                                        Text(suggestion.packageCount.formatted())
                                             .foregroundStyle(SmartCartTheme.secondaryInk)
                                     }
                                     .font(.caption.weight(.bold))
@@ -308,12 +319,20 @@ struct BarcodeScannerSheet: View {
             barcodeProvenance(barcode, raw: raw)
 
             Button {
-                appModel.addPantryStock(name: trimmedName, amount: stockAmount, submission: submission)
+                if let onSubmission {
+                    onSubmission(trimmedName, stockAmount, submission)
+                } else {
+                    appModel.addPantryStock(name: trimmedName, amount: stockAmount, submission: submission)
+                }
                 finish()
             } label: {
                 Label(
-                    mergeTarget.map { "Add \(stockAmount.formatted()) to \($0.name)" } ?? "Add new pantry item",
-                    systemImage: mergeTarget == nil ? "plus.circle.fill" : "tray.and.arrow.down.fill"
+                    onSubmission == nil
+                        ? (mergeTarget.map { "Add \(stockAmount.formatted()) to \($0.name)" } ?? "Add new pantry item")
+                        : "Use as substituted product",
+                    systemImage: onSubmission == nil
+                        ? (mergeTarget == nil ? "plus.circle.fill" : "tray.and.arrow.down.fill")
+                        : "arrow.triangle.2.circlepath"
                 )
                 .frame(maxWidth: .infinity)
             }

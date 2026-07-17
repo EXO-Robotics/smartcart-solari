@@ -250,6 +250,7 @@ struct ShoppingListReviewView: View {
             VStack(alignment: .leading, spacing: 20) {
                 listHeader
                 fulfillmentCard
+                WalmartWishlistSetupCard()
 
                 VStack(alignment: .leading, spacing: 11) {
                     SectionHeader(
@@ -279,44 +280,46 @@ struct ShoppingListReviewView: View {
                         Button {
                             appModel.beginGuidedShopping()
                         } label: {
-                            Label("Guided shopping", systemImage: "list.number")
+                            Label(walmartGuideButtonTitle, systemImage: "bookmark.fill")
                         }
                         .buttonStyle(PrimaryButtonStyle())
 
                         Button {
-                            Task {
-                                if let handoff = await appModel.prepareRetailerHandoff() {
-                                    openURL(handoff.url)
-                                }
-                            }
+                            appModel.presentedSheet = .walmartSetup
                         } label: {
-                            Label("Visit Walmart", systemImage: "arrow.up.right")
+                            Label("Walmart setup", systemImage: "gearshape.fill")
                         }
-                        .buttonStyle(BlueButtonStyle())
+                        .buttonStyle(SecondaryButtonStyle())
                     }
 
                     VStack(spacing: 9) {
                         Button {
                             appModel.beginGuidedShopping()
                         } label: {
-                            Label("Start guided shopping", systemImage: "list.number")
+                            Label(walmartGuideButtonTitle, systemImage: "bookmark.fill")
                         }
                         .buttonStyle(PrimaryButtonStyle())
 
                         Button {
-                            Task {
-                                if let handoff = await appModel.prepareRetailerHandoff() {
-                                    openURL(handoff.url)
-                                }
-                            }
+                            appModel.presentedSheet = .walmartSetup
                         } label: {
-                            Label("Visit Walmart", systemImage: "arrow.up.right")
+                            Label("Walmart setup", systemImage: "gearshape.fill")
                         }
-                        .buttonStyle(BlueButtonStyle())
+                        .buttonStyle(SecondaryButtonStyle())
                     }
                 }
             }
         }
+    }
+
+    private var walmartGuideButtonTitle: String {
+        if appModel.walmartGuideIsComplete {
+            return "Review shopping results"
+        }
+        if appModel.guidedCompletedCount > 0 {
+            return "Resume Walmart guide"
+        }
+        return "Start guided shopping"
     }
 
     private var instacartReview: some View {
@@ -660,8 +663,8 @@ struct ShoppingListReviewView: View {
     private var transparencyDisclosure: some View {
         InfoBanner(
             symbol: "checkmark.shield.fill",
-            title: "This is a manifest, not a retailer cart",
-            message: "SmartCart saves your selected product records and progress. You open exact items or labeled searches, then add, reserve pickup, and pay at Walmart.",
+            title: "Guided shopping, not account linking",
+            message: "SmartCart opens selected products and remembers your self-reported progress. You sign in, choose the Wishlist, save items, set quantities, reserve pickup, and pay at Walmart.",
             color: SmartCartTheme.green
         )
     }

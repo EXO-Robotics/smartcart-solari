@@ -284,7 +284,7 @@ enum ShoppingRoutePreference: String, CaseIterable, Identifiable, Codable, Hasha
     var title: String {
         switch self {
         case .instacart: "Shop through Instacart"
-        case .walmartDirect: "Shop directly at Walmart"
+        case .walmartDirect: "Guided Walmart shopping"
         case .otherRetailerLinks: "Other retailer links"
         }
     }
@@ -292,7 +292,7 @@ enum ShoppingRoutePreference: String, CaseIterable, Identifiable, Codable, Hasha
     var subtitle: String {
         switch self {
         case .instacart: "SmartCart prepares the list; Instacart confirms products and checkout."
-        case .walmartDirect: "Use exact Walmart links and guided product-by-product shopping."
+        case .walmartDirect: "Open exact products one at a time, then finish the trip in Walmart."
         case .otherRetailerLinks: "Open clearly labeled retailer destinations without a list transfer."
         }
     }
@@ -357,6 +357,86 @@ enum CommerceHandoffFeedback: String, CaseIterable, Identifiable, Codable, Hasha
         case .changedProducts: "I changed products"
         case .didNotFinish: "I did not finish"
         }
+    }
+}
+
+struct WalmartWishlistReference: Codable, Identifiable, Hashable {
+    let id: UUID
+    var displayName: String
+    var sharedURL: URL
+    var createdAt: Date
+    var lastOpenedAt: Date?
+
+    init(
+        id: UUID = UUID(),
+        displayName: String,
+        sharedURL: URL,
+        createdAt: Date = .now,
+        lastOpenedAt: Date? = nil
+    ) {
+        self.id = id
+        self.displayName = displayName
+        self.sharedURL = sharedURL
+        self.createdAt = createdAt
+        self.lastOpenedAt = lastOpenedAt
+    }
+}
+
+enum WalmartWishlistURLValidationError: LocalizedError, Equatable {
+    case empty
+    case invalidURL
+    case insecureURL
+    case unsupportedHost
+    case notSharedWishlist
+
+    var errorDescription: String? {
+        switch self {
+        case .empty:
+            "Paste the shared Walmart Wishlist URL."
+        case .invalidURL:
+            "That does not look like a complete web address."
+        case .insecureURL:
+            "Use the secure https:// Walmart Wishlist link."
+        case .unsupportedHost:
+            "Only links from walmart.com can be saved."
+        case .notSharedWishlist:
+            "Paste the link from Wishlist > Share > Copy URL."
+        }
+    }
+}
+
+enum WalmartWishlistURLValidator {
+    static func validate(_ rawValue: String) throws -> URL {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw WalmartWishlistURLValidationError.empty
+        }
+        guard var components = URLComponents(string: trimmed), components.url != nil else {
+            throw WalmartWishlistURLValidationError.invalidURL
+        }
+        guard components.scheme?.lowercased() == "https" else {
+            throw WalmartWishlistURLValidationError.insecureURL
+        }
+        guard let host = components.host?.lowercased(), host == "walmart.com" || host == "www.walmart.com" else {
+            throw WalmartWishlistURLValidationError.unsupportedHost
+        }
+
+        let path = components.path.split(separator: "/").map(String.init)
+        guard
+            path.count >= 4,
+            path[0].lowercased() == "lists",
+            path[1].lowercased() == "shared",
+            path[2].uppercased() == "WL",
+            !path[3].isEmpty
+        else {
+            throw WalmartWishlistURLValidationError.notSharedWishlist
+        }
+
+        components.fragment = nil
+        guard let normalizedURL = components.url else {
+            throw WalmartWishlistURLValidationError.invalidURL
+        }
+        return normalizedURL
     }
 }
 

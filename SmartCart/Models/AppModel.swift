@@ -69,6 +69,12 @@ final class AppModel {
     var analyticsEvents: [AnalyticsEvent] {
         didSet { persistState() }
     }
+    var walmartWishlistReference: WalmartWishlistReference? {
+        didSet { persistState() }
+    }
+    var shoppingSessions: [ShoppingSession] {
+        didSet { persistState() }
+    }
     var shoppingRoute: ShoppingRoutePreference {
         didSet { commerceDefaults.set(shoppingRoute.rawValue, forKey: Self.shoppingRouteKey) }
     }
@@ -123,12 +129,15 @@ final class AppModel {
     private let commerceDefaults: UserDefaults
     @ObservationIgnored
     private var persistenceReady = false
+    @ObservationIgnored
+    private var suppressPersistence = false
 
     init(
         stateStore: any SmartCartStateStoring = JSONSmartCartStateStore(),
         retailerService: any RetailerCatalogService = DemoWalmartCatalogService(),
         instacartHandoffService: any InstacartHandoffServicing = InstacartHandoffClient(),
-        commerceDefaults: UserDefaults = .standard
+        commerceDefaults: UserDefaults = .standard,
+        seedDemoShoppingState: Bool = false
     ) {
         self.stateStore = stateStore
         self.retailerService = retailerService
@@ -198,7 +207,15 @@ final class AppModel {
         ]
 
         let sampleRecipes = SampleData.recipes
-        let restoredState = try? stateStore.load()
+        let restoredState: SmartCartPersistedState?
+        let stateLoadError: Error?
+        do {
+            restoredState = try stateStore.load()
+            stateLoadError = nil
+        } catch {
+            restoredState = nil
+            stateLoadError = error
+        }
         let initialRecipes = restoredState?.recipes ?? sampleRecipes
         let initialRecipe = restoredState?.activeRecipe ?? sampleRecipes[0]
         let initialServings = restoredState?.desiredServings ?? sampleRecipes[0].servings
@@ -223,14 +240,16 @@ final class AppModel {
         pantryInventory = restoredState?.pantryInventory ?? []
         preferredProductIDsByIngredient = restoredState?.preferredProductIDsByIngredient ?? [:]
         analyticsEvents = restoredState?.analyticsEvents ?? []
+        walmartWishlistReference = restoredState?.walmartWishlistReference
+        shoppingSessions = restoredState?.shoppingSessions ?? []
 
         let validStoreIDs = Set(availableStores.map(\.id))
         let restoredStoreIDs = restoredState?.selectedStoreIDs.intersection(validStoreIDs) ?? []
         selectedStoreIDs = restoredStoreIDs.isEmpty ? [availableStores[0].id] : restoredStoreIDs
 
-        if let restoredItems = restoredState?.shoppingItems, !restoredItems.isEmpty {
+        if let restoredItems = restoredState?.shoppingItems {
             shoppingItems = restoredItems
-        } else {
+        } else if seedDemoShoppingState {
             shoppingItems = Self.makeShoppingItems(
                 recipe: initialRecipe,
                 desiredServings: initialServings,
@@ -238,6 +257,10 @@ final class AppModel {
                 fulfillmentMode: initialFulfillment,
                 preferences: initialPreferences
             )
+        } else {
+            // Recipes may be available as samples, but a fresh install must
+            // never imply the user already created a shopping trip.
+            shoppingItems = []
         }
 
         if !featureFlags.advancedToolsEnabled {
@@ -248,8 +271,13 @@ final class AppModel {
         guidedIndex = min(max(0, guidedIndex), max(0, shoppingItems.count - 1))
         recentRecipeIDs = (UserDefaults.standard.stringArray(forKey: Self.recentRecipesKey) ?? [])
             .compactMap(UUID.init(uuidString:))
-        persistenceReady = true
-        persistState()
+        if let stateLoadError {
+            persistenceIssue = stateLoadError.localizedDescription
+            persistenceReady = false
+        } else {
+            persistenceReady = true
+            persistState()
+        }
 
         #if DEBUG
         let arguments = ProcessInfo.processInfo.arguments
@@ -295,6 +323,12 @@ final class AppModel {
             case "shopping":
                 homePath = [.shoppingList]
             case "guided":
+                homePath = [.guidedShopping]
+            case "walmart-setup":
+                shoppingRoute = .walmartDirect
+                presentedSheet = .walmartSetup
+            case "walmart-guide":
+                shoppingRoute = .walmartDirect
                 homePath = [.guidedShopping]
             case "import":
                 presentedSheet = .importer(.sample)
@@ -438,7 +472,27 @@ final class AppModel {
     }
 
     var guidedCompletedCount: Int {
-        shoppingItems.filter { $0.status != .waiting }.count
+        shoppingItems.filter { $0.status.isCompleted }.count
+    }
+
+    var walmartWishlistSavedCount: Int {
+        shoppingItems.filter { $0.status == .savedToWishlist || $0.status == .added }.count
+    }
+
+    var walmartCartAddedCount: Int {
+        shoppingItems.filter { $0.status == .addedToCart }.count
+    }
+
+    var walmartUnavailableCount: Int {
+        shoppingItems.filter { $0.status == .unavailable }.count
+    }
+
+    var walmartSkippedCount: Int {
+        shoppingItems.filter { $0.status == .skipped }.count
+    }
+
+    var walmartGuideIsComplete: Bool {
+        !shoppingItems.isEmpty && shoppingItems.allSatisfy { $0.status.isCompleted }
     }
 
     var currentGuidedItem: ShoppingListItem? {
@@ -537,6 +591,7 @@ final class AppModel {
     func updateServings(by delta: Int) {
         desiredServings = min(24, max(1, desiredServings + delta))
         refreshPantrySuggestions()
+        invalidateShoppingPlan()
     }
 
     func setPantryDecision(_ decision: PantryDecision, for ingredientID: UUID) {
@@ -550,6 +605,7 @@ final class AppModel {
         case .review:
             activeRecipe.ingredients[index].pantryState = .alwaysAsk
         }
+        invalidateShoppingPlan()
     }
 
     func refreshPantrySuggestions() {
@@ -579,7 +635,43 @@ final class AppModel {
     }
 
     func continueTo(_ route: SmartRoute) {
+        if route == .matching {
+            // Preferences, pantry decisions, servings, or store selection may
+            // have changed while navigating back. Rebuild from the confirmed
+            // recipe instead of reusing product matches from an older plan.
+            synchronizeActiveRecipeRecord()
+            invalidateShoppingPlan()
+        }
         homePath.append(route)
+    }
+
+    func commitIngredientReview() {
+        synchronizeActiveRecipeRecord()
+        invalidateShoppingPlan()
+        track(
+            .ingredientsCorrected,
+            properties: [
+                "included": String(includedIngredientCount),
+                "review_required": String(unresolvedQuantityReviewCount)
+            ]
+        )
+        continueTo(.servingAdjustment)
+    }
+
+    private func synchronizeActiveRecipeRecord() {
+        if let index = recipes.firstIndex(where: { $0.id == activeRecipe.id }) {
+            recipes[index] = activeRecipe
+        } else {
+            recipes.insert(activeRecipe, at: 0)
+        }
+    }
+
+    private func invalidateShoppingPlan() {
+        shoppingItems = []
+        matchProgress = 0
+        matchStage = "Ready to match"
+        isMatching = false
+        guidedIndex = 0
     }
 
     func setStoreStrategy(_ strategy: StoreStrategy) {
@@ -595,6 +687,7 @@ final class AppModel {
         } else if selectedStoreIDs.count == 1, let second = stores.first(where: { !selectedStoreIDs.contains($0.id) }) {
             selectedStoreIDs.insert(second.id)
         }
+        invalidateShoppingPlan()
     }
 
     func selectStore(_ store: RetailerStore) {
@@ -609,6 +702,7 @@ final class AppModel {
         } else {
             selectedStoreIDs.insert(store.id)
         }
+        invalidateShoppingPlan()
     }
 
     func setAdvancedToolsEnabled(_ enabled: Bool) {
@@ -732,14 +826,415 @@ final class AppModel {
     }
 
     func saveCurrentList() {
-        persistCurrentManifest(progress: .notStarted)
+        persistCurrentManifest(progress: currentSavedManifest?.handoffProgress ?? .notStarted)
         showToast("Shopping manifest saved")
     }
 
     func beginGuidedShopping() {
-        guidedIndex = 0
+        if shoppingRoute == .walmartDirect,
+           let firstWaiting = shoppingItems.firstIndex(where: { $0.status == .waiting }) {
+            guidedIndex = firstWaiting
+        } else {
+            guidedIndex = 0
+        }
         persistCurrentManifest(progress: .inProgress)
         continueTo(.guidedShopping)
+    }
+
+    func recordWalmartSetupStarted() {
+        track(.walmartSetupStarted)
+    }
+
+    func saveWalmartWishlistReference(displayName: String, rawURL: String) throws {
+        let url = try WalmartWishlistURLValidator.validate(rawURL)
+        let cleanName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let existing = walmartWishlistReference
+        walmartWishlistReference = WalmartWishlistReference(
+            id: existing?.id ?? UUID(),
+            displayName: cleanName.isEmpty ? "SmartCart Groceries" : cleanName,
+            sharedURL: url,
+            createdAt: existing?.createdAt ?? .now,
+            lastOpenedAt: existing?.lastOpenedAt
+        )
+        track(.walmartWishlistURLSaved, properties: ["reference_saved": "true"])
+        showToast("Walmart Wishlist reference saved")
+    }
+
+    func removeWalmartWishlistReference() {
+        walmartWishlistReference = nil
+        showToast("Walmart Wishlist reference removed")
+    }
+
+    func recordWalmartProductOpened(itemID: UUID) {
+        guard let item = shoppingItems.first(where: { $0.id == itemID }) else { return }
+        let properties = [
+            "retailer": "walmart",
+            "link_kind": item.product.linkKind.rawValue
+        ]
+        track(.walmartProductOpened, properties: properties)
+        track(.retailerLinkOpened, properties: properties)
+    }
+
+    func recordWalmartOutcome(_ outcome: GuidedItemStatus, for itemID: UUID) {
+        guard outcome != .waiting,
+              let itemIndex = shoppingItems.firstIndex(where: { $0.id == itemID })
+        else { return }
+
+        let wasComplete = walmartGuideIsComplete
+        shoppingItems[itemIndex].status = outcome
+        track(.guidedItemCompleted, properties: ["status": outcome.rawValue, "retailer": "walmart"])
+        if outcome == .savedToWishlist {
+            track(.walmartProductSelfReportedSaved)
+        }
+
+        if let nextIndex = nextWaitingWalmartItem(after: itemIndex) {
+            guidedIndex = nextIndex
+            persistCurrentManifest(progress: .inProgress)
+        } else {
+            persistCurrentManifest(progress: .completed)
+            if !wasComplete {
+                track(
+                    .walmartGuidedFlowCompleted,
+                    properties: [
+                        "saved": String(walmartWishlistSavedCount),
+                        "cart": String(walmartCartAddedCount),
+                        "unavailable": String(walmartUnavailableCount),
+                        "skipped": String(walmartSkippedCount)
+                    ]
+                )
+                track(.guidedShoppingCompleted, properties: ["items": String(shoppingItems.count)])
+                showToast("Walmart shopping guide complete")
+            }
+        }
+    }
+
+    func openSavedWalmartWishlist() -> URL? {
+        guard var reference = walmartWishlistReference else { return nil }
+        reference.lastOpenedAt = .now
+        walmartWishlistReference = reference
+        track(.walmartWishlistOpened)
+        return reference.sharedURL
+    }
+
+    func walmartListsURL() -> URL {
+        URL(string: "https://www.walmart.com/lists")!
+    }
+
+    func shoppingSession(id: UUID) -> ShoppingSession? {
+        shoppingSessions.first { $0.id == id }
+    }
+
+    func defaultPurchasedItemIDs(
+        for outcome: ShoppingTripOutcome,
+        sessionID: UUID
+    ) -> Set<UUID> {
+        guard let session = shoppingSession(id: sessionID) else { return [] }
+        switch outcome {
+        case .boughtEverything, .boughtMost:
+            return Set(session.items.compactMap { item in
+                item.status == .unavailable || item.status == .skipped ? nil : item.id
+            })
+        case .boughtFew, .didNotShop:
+            return []
+        }
+    }
+
+    @discardableResult
+    func ensureCurrentShoppingSession() -> UUID? {
+        do {
+            return try createOrReuseCurrentShoppingSession()
+        } catch {
+            persistenceIssue = error.localizedDescription
+            showToast("Shopping progress could not be saved")
+            return nil
+        }
+    }
+
+    func startShoppingReconciliation() {
+        guard let sessionID = ensureCurrentShoppingSession() else { return }
+        track(.shoppingReconciliationStarted)
+        continueTo(.shoppingReconciliation(sessionID))
+    }
+
+    func commitShoppingReconciliation(
+        sessionID: UUID,
+        outcome: ShoppingTripOutcome,
+        purchasedItemIDs: Set<UUID>,
+        substitutions: [ShoppingSubstitutionFeedback]
+    ) throws {
+        guard persistenceReady else {
+            throw ShoppingReconciliationError.persistenceUnavailable(
+                persistenceIssue ?? "SmartCart storage is unavailable."
+            )
+        }
+        guard let sessionIndex = shoppingSessions.firstIndex(where: { $0.id == sessionID }) else {
+            throw ShoppingReconciliationError.sessionNotFound
+        }
+        if shoppingSessions[sessionIndex].isCommitted {
+            return
+        }
+
+        let session = shoppingSessions[sessionIndex]
+        let validItemIDs = Set(session.items.map(\.id))
+        let confirmedPurchasedIDs: Set<UUID> = outcome == .didNotShop
+            ? []
+            : purchasedItemIDs.intersection(validItemIDs)
+        let validSubstitutions = substitutions.filter {
+            confirmedPurchasedIDs.contains($0.originalItemID)
+        }
+
+        var updatedPantry = pantryInventory
+        var updatedPreferences = preferredProductIDsByIngredient
+        var touchedPantryIDs = Set<UUID>()
+        for item in session.items where confirmedPurchasedIDs.contains(item.id) {
+            let substitution = validSubstitutions.first { $0.originalItemID == item.id }
+            let pantryID = mergePurchasedItem(
+                item,
+                substitution: substitution,
+                into: &updatedPantry
+            )
+            touchedPantryIDs.insert(pantryID)
+
+            if let substitution,
+               substitution.preferNextTime,
+               let retailerProductID = substitution.replacementRetailerProductID,
+               !retailerProductID.isEmpty {
+                updatedPreferences[preferenceKey(for: item.ingredient.name)] = retailerProductID
+            }
+        }
+
+        var updatedSessions = shoppingSessions
+        updatedSessions[sessionIndex].reconciliation = ShoppingReconciliationRecord(
+            outcome: outcome,
+            purchasedItemIDs: confirmedPurchasedIDs,
+            substitutions: validSubstitutions,
+            pantryItemIDs: touchedPantryIDs,
+            committedAt: .now
+        )
+
+        // Persist the complete transaction before changing observable state.
+        // A retry therefore cannot add the same purchase twice.
+        try stateStore.save(
+            stateSnapshot(
+                pantryInventory: updatedPantry,
+                preferredProductIDs: updatedPreferences,
+                shoppingSessions: updatedSessions
+            )
+        )
+
+        suppressPersistence = true
+        pantryInventory = updatedPantry
+        preferredProductIDsByIngredient = updatedPreferences
+        shoppingSessions = updatedSessions
+        suppressPersistence = false
+        persistenceIssue = nil
+
+        track(
+            .shoppingOutcomeRecorded,
+            properties: [
+                "outcome": outcome.rawValue,
+                "purchased": String(confirmedPurchasedIDs.count)
+            ]
+        )
+        track(
+            .pantryReconciliationCommitted,
+            properties: ["items": String(touchedPantryIDs.count)]
+        )
+        if !validSubstitutions.isEmpty {
+            track(
+                .substitutionRecorded,
+                properties: ["count": String(validSubstitutions.count)]
+            )
+        }
+        showToast(outcome == .didNotShop ? "Pantry left unchanged" : "Pantry updated")
+    }
+
+    private func createOrReuseCurrentShoppingSession() throws -> UUID {
+        guard persistenceReady else {
+            throw ShoppingReconciliationError.persistenceUnavailable(
+                persistenceIssue ?? "SmartCart storage is unavailable."
+            )
+        }
+        guard !shoppingItems.isEmpty else { throw ShoppingReconciliationError.emptyShoppingList }
+
+        let currentFingerprint = shoppingSessionFingerprint(
+            recipeID: activeRecipe.id,
+            storeID: primaryStore.retailerStoreID,
+            items: shoppingItems
+        )
+        if let existing = shoppingSessions.first(where: {
+            guard $0.recipeID == activeRecipe.id else { return false }
+            let existingFingerprint = $0.stateFingerprint ?? shoppingSessionFingerprint(
+                recipeID: $0.recipeID,
+                storeID: $0.storeID,
+                items: $0.items
+            )
+            return existingFingerprint == currentFingerprint
+        }) {
+            return existing.id
+        }
+
+        let session = ShoppingSession(
+            recipeID: activeRecipe.id,
+            recipeTitle: activeRecipe.title,
+            manifestID: currentSavedManifest?.id,
+            storeID: primaryStore.retailerStoreID,
+            items: shoppingItems,
+            stateFingerprint: currentFingerprint
+        )
+        var updatedSessions = shoppingSessions
+        updatedSessions.insert(session, at: 0)
+        try stateStore.save(stateSnapshot(shoppingSessions: updatedSessions))
+        suppressPersistence = true
+        shoppingSessions = updatedSessions
+        suppressPersistence = false
+        persistenceIssue = nil
+        return session.id
+    }
+
+    private func mergePurchasedItem(
+        _ item: ShoppingListItem,
+        substitution: ShoppingSubstitutionFeedback?,
+        into inventory: inout [PantryInventoryItem]
+    ) -> UUID {
+        let product = item.product
+        let replacementName = substitution?.replacementName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = replacementName?.isEmpty == false
+            ? replacementName!
+            : (product.linkKind == .exactProduct ? product.name : item.ingredient.name)
+        let brand = substitution?.replacementBrand ?? (product.linkKind == .exactProduct ? product.brand : "")
+        let retailerProductID = substitution?.replacementRetailerProductID
+            ?? (product.linkKind == .exactProduct ? product.retailerProductID : nil)
+        let gtin14 = normalizedGTIN14(substitution?.replacementGTIN14 ?? product.gtin)
+        let packageQuantity = substitution?.packageQuantity ?? product.packageQuantity
+        let packageUnit = substitution?.packageUnit ?? product.packageUnit
+        let amount = max(0.01, substitution?.replacementAmount ?? Double(max(1, item.purchaseQuantity)))
+
+        let matchIndex = inventory.firstIndex { existing in
+            if let gtin14 {
+                let identities = Set((existing.barcodeGTINs ?? []) + [existing.gtin14].compactMap { $0 })
+                if identities.contains(gtin14) { return true }
+            }
+            if let retailerProductID,
+               existing.preferredRetailerProductID == retailerProductID {
+                return true
+            }
+            let existingBrand = preferenceKey(for: existing.brand)
+            let incomingBrand = preferenceKey(for: brand)
+            return !existingBrand.isEmpty
+                && existingBrand == incomingBrand
+                && preferenceKey(for: existing.name) == preferenceKey(for: name)
+                && packagesAreCompatible(
+                    existingSize: existing.packageSize,
+                    existingUnit: existing.packageUnit,
+                    incomingSize: packageQuantity,
+                    incomingUnit: packageUnit
+                )
+        }
+
+        if let matchIndex {
+            inventory[matchIndex].addPackages(
+                amount,
+                packageSize: packageQuantity,
+                packageUnit: packageUnit
+            )
+            inventory[matchIndex].updatedAt = .now
+            inventory[matchIndex].preferredRetailerProductID =
+                inventory[matchIndex].preferredRetailerProductID ?? retailerProductID
+            inventory[matchIndex].packageSize = inventory[matchIndex].packageSize ?? packageQuantity
+            inventory[matchIndex].packageUnit = inventory[matchIndex].packageUnit ?? packageUnit
+            if let gtin14 {
+                inventory[matchIndex].gtin14 = inventory[matchIndex].gtin14 ?? gtin14
+                var identities = inventory[matchIndex].barcodeGTINs ?? []
+                if !identities.contains(gtin14) { identities.append(gtin14) }
+                inventory[matchIndex].barcodeGTINs = identities.sorted()
+            }
+            return inventory[matchIndex].id
+        }
+
+        let pantryItem = PantryInventoryItem(
+            name: name,
+            brand: brand,
+            quantity: amount,
+            unit: "package",
+            preferredRetailerProductID: retailerProductID,
+            source: .recipe,
+            packageCount: amount,
+            packageSize: packageQuantity,
+            packageUnit: packageUnit,
+            requiresUserNaming: false,
+            gtin14: gtin14,
+            barcodeGTINs: gtin14.map { [$0] }
+        )
+        inventory.insert(pantryItem, at: 0)
+        return pantryItem.id
+    }
+
+    private func shoppingSessionFingerprint(
+        recipeID: UUID,
+        storeID: String,
+        items: [ShoppingListItem]
+    ) -> String {
+        let itemState = items
+            .sorted { $0.id.uuidString < $1.id.uuidString }
+            .map { item in
+                [
+                    item.id.uuidString,
+                    item.requestedQuantity,
+                    String(item.purchaseQuantity),
+                    item.product.retailerProductID,
+                    item.product.gtin ?? "",
+                    item.product.packageQuantity?.formatted() ?? "",
+                    item.product.packageUnit ?? "",
+                    item.status.rawValue
+                ].joined(separator: "|")
+            }
+            .joined(separator: "\n")
+        let canonical = "\(recipeID.uuidString)|\(storeID)\n\(itemState)"
+
+        // Swift's Hasher is intentionally randomized between launches. FNV-1a
+        // keeps this local identity stable without introducing account data.
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in canonical.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+        return String(format: "%016llx", hash)
+    }
+
+    private func normalizedGTIN14(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let digits = value.filter(\.isNumber)
+        guard (8...14).contains(digits.count) else { return nil }
+        return String(repeating: "0", count: 14 - digits.count) + digits
+    }
+
+    private func packagesAreCompatible(
+        existingSize: Double?,
+        existingUnit: String?,
+        incomingSize: Double?,
+        incomingUnit: String?
+    ) -> Bool {
+        if existingSize == nil, incomingSize == nil,
+           existingUnit == nil, incomingUnit == nil {
+            return true
+        }
+        guard let existingSize,
+              let incomingSize,
+              let existingUnit,
+              let incomingUnit,
+              preferenceKey(for: existingUnit) == preferenceKey(for: incomingUnit)
+        else { return false }
+        return abs(existingSize - incomingSize) < 0.001
+    }
+
+    private func nextWaitingWalmartItem(after index: Int) -> Int? {
+        let later = shoppingItems.indices.first {
+            $0 > index && shoppingItems[$0].status == .waiting
+        }
+        return later ?? shoppingItems.indices.first {
+            shoppingItems[$0].status == .waiting
+        }
     }
 
     func linkDeliveryPartner(_ partner: DeliveryPartner) {
@@ -888,7 +1383,7 @@ final class AppModel {
             }
             return item.upc == normalizedUPC
         }) {
-            pantryInventory[index].quantity += 1
+            pantryInventory[index].addPackages(1)
             pantryInventory[index].updatedAt = .now
             if let normalizedBarcode {
                 pantryInventory[index].register(
@@ -925,7 +1420,7 @@ final class AppModel {
         if let index = pantryInventory.firstIndex(where: { $0.matches(barcode: submission.barcode) }) {
             switch duplicateAction {
             case .increment:
-                pantryInventory[index].quantity += 1
+                pantryInventory[index].addPackages(1)
                 pantryInventory[index].updatedAt = .now
                 pantryInventory[index].register(
                     barcode: submission.barcode,
@@ -933,7 +1428,7 @@ final class AppModel {
                     symbology: submission.scan.rawSymbology
                 )
             case .replace:
-                let existingQuantity = pantryInventory[index].quantity
+                let existingQuantity = pantryInventory[index].packageCount
                 let knownBarcodes = pantryInventory[index].barcodeGTINs ?? []
                 pantryInventory[index] = pantryItem(from: submission, quantity: existingQuantity)
                 pantryInventory[index].barcodeGTINs = Array(
@@ -1037,7 +1532,7 @@ final class AppModel {
 
         if let existing = pantryMergeTarget(named: trimmed, submission: submission),
            let index = pantryInventory.firstIndex(where: { $0.id == existing.id }) {
-            pantryInventory[index].quantity += amount
+            pantryInventory[index].addPackages(amount)
             pantryInventory[index].updatedAt = .now
             if let submission {
                 pantryInventory[index].register(
@@ -1266,34 +1761,42 @@ final class AppModel {
     }
 
     private func persistState() {
-        guard persistenceReady else { return }
+        guard persistenceReady, !suppressPersistence else { return }
         do {
-            try stateStore.save(
-                SmartCartPersistedState(
-                    recipes: recipes,
-                    activeRecipe: activeRecipe,
-                    desiredServings: desiredServings,
-                    preferences: preferences,
-                    featureFlags: featureFlags,
-                    storeStrategy: storeStrategy,
-                    fulfillmentMode: fulfillmentMode,
-                    selectedStoreIDs: selectedStoreIDs,
-                    zipCode: zipCode,
-                    pickupDay: pickupDay,
-                    pickupTime: pickupTime,
-                    shoppingItems: shoppingItems,
-                    guidedIndex: guidedIndex,
-                    savedLists: savedLists,
-                    preferredDeliveryPartnerName: preferredDeliveryPartnerName,
-                    pantryInventory: pantryInventory,
-                    preferredProductIDsByIngredient: preferredProductIDsByIngredient,
-                    analyticsEvents: analyticsEvents
-                )
-            )
+            try stateStore.save(stateSnapshot())
             persistenceIssue = nil
         } catch {
             persistenceIssue = error.localizedDescription
         }
+    }
+
+    private func stateSnapshot(
+        pantryInventory pantryOverride: [PantryInventoryItem]? = nil,
+        preferredProductIDs preferenceOverride: [String: String]? = nil,
+        shoppingSessions sessionOverride: [ShoppingSession]? = nil
+    ) -> SmartCartPersistedState {
+        SmartCartPersistedState(
+            recipes: recipes,
+            activeRecipe: activeRecipe,
+            desiredServings: desiredServings,
+            preferences: preferences,
+            featureFlags: featureFlags,
+            storeStrategy: storeStrategy,
+            fulfillmentMode: fulfillmentMode,
+            selectedStoreIDs: selectedStoreIDs,
+            zipCode: zipCode,
+            pickupDay: pickupDay,
+            pickupTime: pickupTime,
+            shoppingItems: shoppingItems,
+            guidedIndex: guidedIndex,
+            savedLists: savedLists,
+            preferredDeliveryPartnerName: preferredDeliveryPartnerName,
+            pantryInventory: pantryOverride ?? pantryInventory,
+            preferredProductIDsByIngredient: preferenceOverride ?? preferredProductIDsByIngredient,
+            analyticsEvents: analyticsEvents,
+            walmartWishlistReference: walmartWishlistReference,
+            shoppingSessions: sessionOverride ?? shoppingSessions
+        )
     }
 
     private func preferenceKey(for ingredientName: String) -> String {
@@ -1302,6 +1805,23 @@ final class AppModel {
             .components(separatedBy: CharacterSet.alphanumerics.inverted)
             .filter { !$0.isEmpty }
             .joined(separator: " ")
+    }
+}
+
+enum ShoppingReconciliationError: LocalizedError, Equatable {
+    case sessionNotFound
+    case emptyShoppingList
+    case persistenceUnavailable(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .sessionNotFound:
+            "That shopping session is no longer available. Start from the current shopping guide."
+        case .emptyShoppingList:
+            "There are no shopping items to reconcile."
+        case .persistenceUnavailable(let message):
+            "SmartCart cannot safely update the pantry: \(message)"
+        }
     }
 }
 
@@ -1319,19 +1839,42 @@ enum RecipeParser {
             .filter { !$0.isEmpty }
 
         var sectionName: String?
+        var isInsideIngredientSection = false
         var ingredients: [Ingredient] = []
         var remainingSourceLines = sourceLines
         for line in lines.prefix(120) {
             if isInstructionHeading(line) { break }
-            if isSectionHeading(line) {
-                sectionName = line.trimmingCharacters(in: CharacterSet(charactersIn: ":- "))
+            if isIngredientHeading(line) {
+                isInsideIngredientSection = true
+                sectionName = nil
                 continue
             }
-            guard isLikelyIngredient(line), ingredients.count < 60 else { continue }
-            var ingredient = parseIngredient(line, source: source)
-            if let sourceIndex = remainingSourceLines.firstIndex(where: {
+            if isSectionHeading(line) {
+                sectionName = line.trimmingCharacters(in: CharacterSet(charactersIn: ":- "))
+                isInsideIngredientSection = true
+                continue
+            }
+
+            let exactSourceIndex = remainingSourceLines.firstIndex(where: {
                 normalizedSourceText($0.text) == normalizedSourceText(line)
-            }) {
+            })
+            let sourceIndex = exactSourceIndex
+                ?? bestSourceLineIndex(matching: line, in: remainingSourceLines)
+            let hasStructuredIngredientContext = source == .link || source == .pinterest
+            let hasOCRIngredientEvidence = sourceIndex != nil
+            let contextAllowsQuantitylessLine = isInsideIngredientSection
+                || hasStructuredIngredientContext
+                || hasOCRIngredientEvidence
+
+            if isLikelyInstruction(line) {
+                if !ingredients.isEmpty { break }
+                continue
+            }
+            guard isLikelyIngredient(line, contextAllowsQuantitylessLine: contextAllowsQuantitylessLine),
+                  ingredients.count < 60
+            else { continue }
+            var ingredient = parseIngredient(line, source: source)
+            if let sourceIndex {
                 let sourceLine = remainingSourceLines.remove(at: sourceIndex)
                 apply(sourceLine: sourceLine, to: &ingredient, source: source)
             }
@@ -1361,6 +1904,7 @@ enum RecipeParser {
         let nonemptyLines = recognizedText
             .components(separatedBy: .newlines)
             .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        let candidateLineCount = candidateIngredientLineCount(in: nonemptyLines)
         return RecipeImportReport(
             sourcePageCount: max(1, sourcePageCount),
             recognizedLineCount: nonemptyLines.count,
@@ -1369,91 +1913,176 @@ enum RecipeParser {
             reviewCount: recipe.ingredients.filter { $0.confidence == .review }.count,
             unknownCount: recipe.ingredients.filter { $0.confidence == .unknown }.count,
             retryCount: max(0, retryCount),
-            duration: max(0, duration)
+            duration: max(0, duration),
+            omittedCandidateLineCount: max(0, candidateLineCount - recipe.ingredients.count),
+            requiredConfirmationCount: recipe.ingredients.filter { $0.quantityReviewRequired == true }.count
         )
     }
 
-    private static func isLikelyIngredient(_ line: String) -> Bool {
+    private static func isLikelyIngredient(
+        _ line: String,
+        contextAllowsQuantitylessLine: Bool = false
+    ) -> Bool {
         let value = line.lowercased()
-        let instructionPrefixes = [
-            "step ", "directions", "instructions", "method", "preheat", "bake ",
-            "cook ", "stir ", "serve ", "heat ", "add the", "mix "
-        ]
-        guard !instructionPrefixes.contains(where: value.hasPrefix) else { return false }
-        if value.contains("minute") && !value.contains("to taste") { return false }
-        if line.range(of: #"\d|[¼½¾⅓⅔⅛]"#, options: .regularExpression) != nil { return true }
-        return ["salt", "pepper", "oil", "parsley", "cilantro", "water"].contains {
+        guard !isLikelyInstruction(line), !isRecipeMetadata(line) else { return false }
+        if line.range(
+            of: #"^\s*[-•*☐✓]?\s*(?:about\s+|approximately\s+|~\s*)?(?:\d|[¼½¾⅓⅔⅛⅜⅝⅞⅙⅚]|a\b|an\b|one\b|two\b|three\b|four\b|five\b|six\b|seven\b|eight\b|nine\b|ten\b|half\b|quarter\b)"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil { return true }
+        if value.range(
+            of: #"\b(cups?|tbsp|tablespoons?|tsp|teaspoons?|oz|ounces?|lbs?|pounds?|grams?|kg|ml|liters?|cloves?|cans?|jars?|packages?|pinch(?:es)?|bunch(?:es)?|to taste|as needed)\b"#,
+            options: .regularExpression
+        ) != nil { return true }
+        if ["salt", "pepper", "oil", "parsley", "cilantro", "water", "basil", "thyme", "rosemary"].contains(where: {
             value.hasPrefix($0) || value.contains(" \($0)")
-        }
+        }) { return true }
+        guard contextAllowsQuantitylessLine else { return false }
+        let wordCount = line.split(whereSeparator: \Character.isWhitespace).count
+        return (1...14).contains(wordCount) && !line.hasSuffix(".")
+    }
+
+    private static func isIngredientHeading(_ line: String) -> Bool {
+        let key = headingKey(line)
+        return ["ingredients", "ingredient", "what you need", "you will need"].contains(key)
     }
 
     private static func isInstructionHeading(_ line: String) -> Bool {
-        let key = line.lowercased().trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(.punctuationCharacters))
-        return ["directions", "instructions", "method", "steps", "preparation", "how to make"].contains(key)
+        let key = headingKey(line)
+        let exact = ["directions", "instructions", "method", "steps", "preparation", "how to make"]
+        return exact.contains(key)
+            || key.hasPrefix("directions ")
+            || key.hasPrefix("instructions ")
     }
 
     private static func isSectionHeading(_ line: String) -> Bool {
-        guard line.range(of: #"\d|[¼½¾⅓⅔⅛]"#, options: .regularExpression) == nil else { return false }
-        let key = line.lowercased().trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(.punctuationCharacters))
-        if ["ingredients", "ingredient"].contains(key) { return true }
+        let key = headingKey(line)
+        if isIngredientHeading(line) { return false }
         let common = ["cake", "frosting", "filling", "syrup", "sauce", "dough", "topping", "garnish", "marinade", "dry ingredients", "wet ingredients"]
-        return line.hasSuffix(":") || common.contains(key)
+        if common.contains(key) { return true }
+        guard line.hasSuffix(":"),
+              line.split(whereSeparator: \Character.isWhitespace).count <= 7,
+              line.range(
+                of: #"\b(cups?|tbsp|tsp|oz|lbs?|grams?|kg|ml|cloves?|cans?|packages?)\b"#,
+                options: [.regularExpression, .caseInsensitive]
+              ) == nil
+        else { return false }
+        return true
+    }
+
+    private static func isLikelyInstruction(_ line: String) -> Bool {
+        if isInstructionHeading(line) { return true }
+        var value = headingKey(line)
+        value = value.replacingOccurrences(
+            of: #"^\d{1,2}[.)]\s*"#,
+            with: "",
+            options: .regularExpression
+        )
+        let actions = [
+            "preheat", "heat", "mix", "stir", "whisk", "combine", "add", "bake",
+            "cook", "simmer", "boil", "roast", "grill", "fold", "beat", "place",
+            "transfer", "spread", "pour", "arrange", "season", "chill", "refrigerate",
+            "freeze", "serve", "let", "set", "line", "grease", "melt", "bring"
+        ]
+        return actions.contains { value == $0 || value.hasPrefix($0 + " ") }
+    }
+
+    private static func isRecipeMetadata(_ line: String) -> Bool {
+        let value = headingKey(line)
+        if value.range(
+            of: #"^(prep|preparation|cook|bake|total)\s+time\b|^(serves|servings|yield|makes|calories)\b"#,
+            options: .regularExpression
+        ) != nil { return true }
+        return value.range(of: #"^\d+\s*°\s*[fc]\b"#, options: .regularExpression) != nil
+    }
+
+    private static func headingKey(_ line: String) -> String {
+        line.lowercased()
+            .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(.punctuationCharacters))
+            .split(whereSeparator: \Character.isWhitespace)
+            .joined(separator: " ")
+    }
+
+    private static func candidateIngredientLineCount(in lines: [String]) -> Int {
+        var isInsideIngredientSection = false
+        var count = 0
+        for rawLine in lines.prefix(120) {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            if isInstructionHeading(line) { break }
+            if isIngredientHeading(line) {
+                isInsideIngredientSection = true
+                continue
+            }
+            if isSectionHeading(line) {
+                isInsideIngredientSection = true
+                continue
+            }
+            if isLikelyInstruction(line) {
+                if count > 0 { break }
+                continue
+            }
+            if isLikelyIngredient(line, contextAllowsQuantitylessLine: isInsideIngredientSection) {
+                count += 1
+            }
+        }
+        return count
     }
 
     private static func parseIngredient(_ line: String, source: RecipeSource) -> Ingredient {
         let isOptional = line.range(
-            of: #"\boptional\b"#,
+            of: #"\b(optional|if desired|as desired)\b"#,
             options: [.regularExpression, .caseInsensitive]
         ) != nil
-        var cleaned = line
-            .replacingOccurrences(of: #"^[-•*☐✓]\s*"#, with: "", options: .regularExpression)
-            .replacingOccurrences(of: "½", with: "1/2")
-            .replacingOccurrences(of: "¼", with: "1/4")
-            .replacingOccurrences(of: "¾", with: "3/4")
-            .replacingOccurrences(of: "⅓", with: "1/3")
-            .replacingOccurrences(of: "⅔", with: "2/3")
-            .replacingOccurrences(of: "⅛", with: "1/8")
-            .replacingOccurrences(of: "⅜", with: "3/8")
-            .replacingOccurrences(of: "⅝", with: "5/8")
-            .replacingOccurrences(of: "⅞", with: "7/8")
-            .replacingOccurrences(of: "⅙", with: "1/6")
-            .replacingOccurrences(of: "⅚", with: "5/6")
-        cleaned = cleaned.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        var cleaned = normalizedIngredientText(line)
+        let isApproximate = cleaned.range(
+            of: #"^(?:about|approximately|approx\.?|~)\s*"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
+        cleaned = cleaned.replacingOccurrences(
+            of: #"^(?:about|approximately|approx\.?|~)\s*"#,
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
 
         let tokens = cleaned.split(separator: " ").map(String.init)
-        var consumed = 0
-        var quantity = 1.0
-        var foundQuantity = false
-
-        if let first = tokens.first, let firstValue = parseQuantity(first) {
-            quantity = firstValue
-            consumed = 1
-            foundQuantity = true
-            if tokens.count > 1, let fraction = parseFraction(tokens[1]), !tokens[1].contains("-") {
-                quantity += fraction
-                consumed = 2
-            }
+        let leadingQuantity = parseLeadingQuantity(tokens)
+        let consumed = leadingQuantity?.consumedTokenCount ?? 0
+        var quantity = leadingQuantity?.upperBound ?? 1
+        let quantityLowerBound = leadingQuantity.flatMap { parsed in
+            parsed.lowerBound < parsed.upperBound ? parsed.lowerBound : nil
         }
+        let foundQuantity = leadingQuantity != nil
 
         let knownUnits = [
-            "cup", "cups", "tbsp", "tablespoon", "tablespoons", "tsp", "teaspoon", "teaspoons",
+            "cup", "cups", "c", "tbsp", "tbs", "tbsps", "tablespoon", "tablespoons",
+            "tsp", "tsps", "teaspoon", "teaspoons",
             "oz", "ounce", "ounces", "lb", "lbs", "pound", "pounds", "g", "gram", "grams",
             "kg", "kilogram", "kilograms", "ml", "milliliter", "milliliters", "l", "liter", "liters",
             "clove", "cloves", "can", "cans", "jar", "jars", "bag", "bags", "bunch",
             "bunches", "package", "packages", "pkg", "pinch", "pinches", "slice", "slices",
-            "stick", "sticks", "head", "heads", "sprig", "sprigs"
+            "stick", "sticks", "head", "heads", "sprig", "sprigs", "ea", "each", "count"
         ]
+        var remainingTokens = Array(tokens.dropFirst(consumed))
+        if remainingTokens.first?.lowercased() == "x" {
+            remainingTokens.removeFirst()
+        }
+        let packageMeasurement = consumeLeadingPackageMeasurement(from: &remainingTokens)
+
         var unit = ""
-        if tokens.indices.contains(consumed) {
-            let candidate = tokens[consumed].lowercased().trimmingCharacters(in: .punctuationCharacters)
+        if remainingTokens.count >= 2,
+           ["fl", "fluid"].contains(remainingTokens[0].lowercased().trimmingCharacters(in: .punctuationCharacters)),
+           ["oz", "ounce", "ounces"].contains(remainingTokens[1].lowercased().trimmingCharacters(in: .punctuationCharacters)) {
+            unit = "fl oz"
+            remainingTokens.removeFirst(2)
+        } else if let firstRemaining = remainingTokens.first {
+            let candidate = firstRemaining.lowercased().trimmingCharacters(in: .punctuationCharacters)
             if knownUnits.contains(candidate) {
                 unit = normalizedUnit(candidate)
-                consumed += 1
+                remainingTokens.removeFirst()
             }
         }
 
-        var remainingTokens = Array(tokens.dropFirst(consumed))
         var compoundMeasurements: [IngredientMeasurement] = []
+        var compoundMeasurementNeedsReview = false
         if foundQuantity {
             compoundMeasurements.append(IngredientMeasurement(quantity: quantity, unit: unit))
         }
@@ -1476,27 +2105,56 @@ enum RecipeParser {
             remainingTokens.removeFirst(min(extraConsumed, remainingTokens.count))
         }
         if compoundMeasurements.count > 1,
-           let primary = compoundMeasurements.first,
-           let total = totalQuantity(compoundMeasurements, in: primary.unit) {
-            quantity = total
+           let primary = compoundMeasurements.first {
+            if let total = totalQuantity(compoundMeasurements, in: primary.unit) {
+                quantity = total
+            } else {
+                compoundMeasurementNeedsReview = true
+            }
         }
 
         let remaining = remainingTokens.joined(separator: " ")
-        let commaParts = remaining.split(separator: ",", maxSplits: 1).map {
+        let commaParts = remaining.split(separator: ",", omittingEmptySubsequences: true).map {
             $0.trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        let rawName = commaParts.first ?? remaining
+        let preparationPattern = #"(?i)\b(optional|if desired|as desired|as needed|divided|softened|melted|sifted|packed|room temperature|at room temperature|chopped|roughly chopped|finely chopped|minced|drained|rinsed|cubed|diced|peeled|seeded|zested|juiced|crushed|grated|shredded|plus more[^,]*|for serving|for garnish|to taste)\b"#
+        var nameParts: [String] = []
+        var commaPreparationParts: [String] = []
+        for (index, part) in commaParts.enumerated() {
+            if index > 0, isPreparationText(part, pattern: preparationPattern) {
+                commaPreparationParts.append(part)
+            } else {
+                nameParts.append(part)
+            }
+        }
+        let rawName = nameParts.isEmpty ? remaining : nameParts.joined(separator: ", ")
         let parentheticals = matches(pattern: #"\(([^)]*)\)"#, in: rawName, capture: 1)
-        let equivalentMeasurements = parentheticals.compactMap(parseMeasurement)
-        let brandNote = parentheticals.first { parseMeasurement($0) == nil }
-        let preparationPattern = #"(?i)\b(optional|divided|softened|melted|sifted|packed|room temperature|at room temperature|chopped|finely chopped|minced|drained|rinsed|cubed|diced|peeled|plus more[^,]*|for serving|for garnish|to taste)\b"#
-        let inlinePreparation = matches(pattern: preparationPattern, in: rawName, capture: 0)
+        var equivalentMeasurements = parentheticals.compactMap(parseMeasurement)
+        if let packageMeasurement,
+           !equivalentMeasurements.contains(packageMeasurement) {
+            equivalentMeasurements.insert(packageMeasurement, at: 0)
+        }
+        let brandNote = parentheticals.first {
+            parseMeasurement($0) == nil
+                && !isPreparationText($0, pattern: preparationPattern)
+                && $0.range(of: #"(?i)\bor\b"#, options: .regularExpression) == nil
+        }
+        // For cans, jars, and other packaged foods, descriptors such as
+        // "diced" or "crushed" identify the product a shopper must match;
+        // they are not merely kitchen instructions. Comma-separated notes
+        // (for example, "drained") were already extracted above.
+        let isPackagedProduct = packageMeasurement != nil
+            || ["can", "cans", "jar", "jars", "bag", "bags", "pkg"].contains(unit)
+        let inlinePreparationPattern = isPackagedProduct
+            ? #"(?i)\b(optional|if desired|as desired|as needed|divided|plus more[^,]*|for serving|for garnish|to taste)\b"#
+            : preparationPattern
+        let inlinePreparation = matches(pattern: inlinePreparationPattern, in: rawName, capture: 0)
         let name = rawName
             .replacingOccurrences(of: #"\([^)]*\)"#, with: "", options: .regularExpression)
-            .replacingOccurrences(of: preparationPattern, with: "", options: .regularExpression)
+            .replacingOccurrences(of: inlinePreparationPattern, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"^of\s+"#, with: "", options: [.regularExpression, .caseInsensitive])
             .trimmingCharacters(in: CharacterSet(charactersIn: " ,.-"))
-        let commaPreparation = commaParts.count > 1 ? commaParts[1] : ""
-        let preparation = ([commaPreparation] + inlinePreparation)
+        let preparation = (commaPreparationParts + inlinePreparation)
             .filter { !$0.isEmpty }
             .joined(separator: ", ")
             .replacingOccurrences(of: "optional", with: "", options: .caseInsensitive)
@@ -1513,15 +2171,34 @@ enum RecipeParser {
             pantryState = .needToBuy
         }
 
-        let malformedQuantity = line.range(of: #"(?<!\d)[?/]|\d\s*/\s*[^\d\s]"#, options: .regularExpression) != nil
+        let malformedFraction = line.range(
+            of: #"(?<!\d)[?/]|\d\s*/\s*[^\d\s]"#,
+            options: .regularExpression
+        ) != nil
+        let suspiciousOCRQuantity = cleaned.range(
+            of: #"^(?:[Il]/\d|\d+[OIl]\b|[Il]\s+(?:cups?|tbsp|tsp|oz|lbs?|grams?|ml)\b)"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
+        let malformedQuantity = malformedFraction
+            || suspiciousOCRQuantity
+            || compoundMeasurementNeedsReview
         let strategy: IngredientExtractionStrategy = switch source {
         case .photo: .visionOCR
         case .link, .pinterest: .structuredData
         case .text: .pastedText
         case .sample: .sample
         }
-        let parserConfidence = foundQuantity && !normalizedName.isEmpty ? 0.94 : 0.58
-        let alternativeGroup = normalizedName.range(of: #"(?i)\s+or\s+"#, options: .regularExpression) == nil
+        let parserConfidence: Double
+        if malformedQuantity || normalizedName.isEmpty {
+            parserConfidence = 0.42
+        } else if isApproximate || quantityLowerBound != nil {
+            parserConfidence = 0.84
+        } else if foundQuantity {
+            parserConfidence = 0.94
+        } else {
+            parserConfidence = 0.66
+        }
+        let alternativeGroup = line.range(of: #"(?i)\bor\b"#, options: .regularExpression) == nil
             ? nil
             : UUID().uuidString
 
@@ -1529,10 +2206,13 @@ enum RecipeParser {
             rawText: line,
             name: normalizedName.capitalized,
             quantity: quantity,
+            quantityLowerBound: quantityLowerBound,
             unit: unit,
             preparation: preparation,
             category: category,
-            confidence: foundQuantity && !normalizedName.isEmpty && !malformedQuantity ? .high : .review,
+            confidence: foundQuantity && !normalizedName.isEmpty && !malformedQuantity && !isApproximate && quantityLowerBound == nil
+                ? .high
+                : .review,
             includeInList: !isOptional,
             pantryState: pantryState,
             brandNote: brandNote,
@@ -1548,7 +2228,9 @@ enum RecipeParser {
                 layoutConfidence: nil,
                 parserConfidence: parserConfidence,
                 normalizationConfidence: normalizedName.isEmpty ? 0.35 : 0.92,
-                alternateQuantityCandidates: malformedQuantity ? [] : [quantity]
+                alternateQuantityCandidates: malformedQuantity
+                    ? []
+                    : [quantityLowerBound, quantity].compactMap { $0 }
             ),
             quantityReviewRequired: malformedQuantity
         )
@@ -1570,8 +2252,12 @@ enum RecipeParser {
         )
         evidence.ocrConfidence = sourceLine.confidence
 
-        let credibleAlternatives = sourceLine.alternateCandidates.filter {
-            $0.confidence >= max(0.35, sourceLine.confidence - 0.12)
+        let credibleAlternatives = sourceLine.alternateCandidates.filter { alternative in
+            let purchasingCritical = containsPurchasingCriticalMeasurement(sourceLine.text)
+                || containsPurchasingCriticalMeasurement(alternative.text)
+            return alternative.confidence >= (
+                purchasingCritical ? 0.35 : max(0.35, sourceLine.confidence - 0.12)
+            )
         }
         evidence.alternateSourceTexts = credibleAlternatives.isEmpty
             ? nil
@@ -1613,6 +2299,168 @@ enum RecipeParser {
             .joined(separator: " ")
     }
 
+    /// Keeps corrected OCR ingredients attached to their original image evidence.
+    /// A fuzzy match is accepted only when it is strong and unambiguous; otherwise
+    /// review evidence is intentionally left unattached instead of guessing.
+    private static func bestSourceLineIndex(
+        matching line: String,
+        in sourceLines: [OCRSourceLine]
+    ) -> Int? {
+        let targetTokens = sourceAlignmentTokens(line)
+        guard !targetTokens.isEmpty else { return nil }
+
+        let ranked = sourceLines.enumerated().compactMap { index, sourceLine -> (Int, Double)? in
+            let candidateTokens = sourceAlignmentTokens(sourceLine.text)
+            guard !candidateTokens.isEmpty else { return nil }
+            let overlap = targetTokens.intersection(candidateTokens).count
+            guard overlap > 0 else { return nil }
+
+            var score = Double(overlap) / Double(max(targetTokens.count, candidateTokens.count))
+            if containsPurchasingCriticalMeasurement(line)
+                && containsPurchasingCriticalMeasurement(sourceLine.text) {
+                score += 0.05
+            }
+            return (index, min(score, 1))
+        }
+        .sorted { lhs, rhs in
+            lhs.1 == rhs.1 ? lhs.0 < rhs.0 : lhs.1 > rhs.1
+        }
+
+        guard let best = ranked.first, best.1 >= 0.65 else { return nil }
+        if ranked.count > 1, best.1 - ranked[1].1 < 0.15 { return nil }
+        return best.0
+    }
+
+    private static func sourceAlignmentTokens(_ text: String) -> Set<String> {
+        Set(
+            normalizedSourceText(text)
+                .split { !$0.isLetter && !$0.isNumber }
+                .map { token in
+                    let value = String(token)
+                    guard value.contains(where: { $0.isNumber }) else { return value }
+                    return value
+                        .replacingOccurrences(of: "o", with: "0")
+                        .replacingOccurrences(of: "l", with: "1")
+                }
+                .filter { !$0.isEmpty }
+        )
+    }
+
+    private static func containsPurchasingCriticalMeasurement(_ text: String) -> Bool {
+        text.range(
+            of: #"[¼½¾⅓⅔⅛⅜⅝⅞⅙⅚]|\d\s*[⁄/]\s*\d|^\s*[-•*☐✓]?\s*\d|\b(cups?|tbsp|tsp|oz|lbs?|grams?|kg|ml|liters?|cloves?|cans?|packages?)\b"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
+    }
+
+    private struct LeadingQuantity {
+        var lowerBound: Double
+        var upperBound: Double
+        var consumedTokenCount: Int
+    }
+
+    private static func normalizedIngredientText(_ line: String) -> String {
+        let fractionMap: [Character: String] = [
+            "½": "1/2", "¼": "1/4", "¾": "3/4", "⅓": "1/3", "⅔": "2/3",
+            "⅛": "1/8", "⅜": "3/8", "⅝": "5/8", "⅞": "7/8", "⅙": "1/6",
+            "⅚": "5/6"
+        ]
+        var expanded = ""
+        for character in line {
+            if let fraction = fractionMap[character] {
+                if expanded.last?.isNumber == true { expanded.append(" ") }
+                expanded.append(fraction)
+            } else {
+                expanded.append(character)
+            }
+        }
+        return expanded
+            .replacingOccurrences(of: #"^[-•*☐✓]\s*"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: "⁄", with: "/")
+            .replacingOccurrences(of: "–", with: "-")
+            .replacingOccurrences(of: "—", with: "-")
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func parseLeadingQuantity(_ tokens: [String]) -> LeadingQuantity? {
+        guard let first = tokens.first else { return nil }
+        let token = first.trimmingCharacters(in: CharacterSet(charactersIn: "~≈+,"))
+
+        // A hyphen between a whole number and a fraction is conventional mixed
+        // number notation ("1-1/2"), not a range.
+        if let regex = try? NSRegularExpression(pattern: #"^(\d+)-(\d+)/(\d+)$"#),
+           let match = regex.firstMatch(in: token, range: NSRange(token.startIndex..., in: token)),
+           let wholeRange = Range(match.range(at: 1), in: token),
+           let numeratorRange = Range(match.range(at: 2), in: token),
+           let denominatorRange = Range(match.range(at: 3), in: token),
+           let whole = Double(token[wholeRange]),
+           let numerator = Double(token[numeratorRange]),
+           let denominator = Double(token[denominatorRange]),
+           denominator != 0 {
+            let value = whole + (numerator / denominator)
+            return LeadingQuantity(lowerBound: value, upperBound: value, consumedTokenCount: 1)
+        }
+
+        if token.contains("-") {
+            let rangeParts = token.split(separator: "-", maxSplits: 1).map(String.init)
+            if rangeParts.count == 2,
+               let firstValue = parseQuantity(rangeParts[0]),
+               let secondValue = parseQuantity(rangeParts[1]) {
+                return LeadingQuantity(
+                    lowerBound: min(firstValue, secondValue),
+                    upperBound: max(firstValue, secondValue),
+                    consumedTokenCount: 1
+                )
+            }
+        }
+
+        if tokens.count >= 3,
+           tokens[1].lowercased() == "to",
+           let firstValue = parseQuantity(token),
+           let secondValue = parseQuantity(tokens[2]) {
+            return LeadingQuantity(
+                lowerBound: min(firstValue, secondValue),
+                upperBound: max(firstValue, secondValue),
+                consumedTokenCount: 3
+            )
+        }
+
+        guard var value = parseQuantity(token) else { return nil }
+        var consumed = 1
+        if tokens.count > 1,
+           let fraction = parseFraction(tokens[1]),
+           !tokens[1].contains("-") {
+            value += fraction
+            consumed = 2
+        } else if tokens.count > 2,
+                  tokens[1].lowercased() == "and",
+                  let fraction = parseFraction(tokens[2]) {
+            value += fraction
+            consumed = 3
+        }
+        return LeadingQuantity(lowerBound: value, upperBound: value, consumedTokenCount: consumed)
+    }
+
+    private static func consumeLeadingPackageMeasurement(
+        from tokens: inout [String]
+    ) -> IngredientMeasurement? {
+        guard !tokens.isEmpty else { return nil }
+        if tokens[0].hasPrefix("("),
+           let closingIndex = tokens.firstIndex(where: { $0.contains(")") }) {
+            let candidate = tokens[0...closingIndex].joined(separator: " ")
+            if let measurement = parseMeasurement(candidate) {
+                tokens.removeFirst(closingIndex + 1)
+                return measurement
+            }
+        }
+        if let measurement = parseMeasurement(tokens[0]) {
+            tokens.removeFirst()
+            return measurement
+        }
+        return nil
+    }
+
     private static func matches(pattern: String, in text: String, capture: Int) -> [String] {
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
         let range = NSRange(text.startIndex..., in: text)
@@ -1623,11 +2471,33 @@ enum RecipeParser {
         }
     }
 
+    private static func isPreparationText(_ text: String, pattern: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        if trimmed.range(of: pattern, options: .regularExpression) != nil { return true }
+        let lowercased = trimmed.lowercased()
+        return lowercased.hasPrefix("for ") || lowercased.hasPrefix("plus ")
+    }
+
     private static func parseMeasurement(_ text: String) -> IngredientMeasurement? {
+        let normalized = text
+            .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "()")))
+            .replacingOccurrences(
+                of: #"(?<=\d)-(?=[A-Za-z])"#,
+                with: " ",
+                options: .regularExpression
+            )
+            .replacingOccurrences(
+                of: #"(?<=\d)(?=[A-Za-z])"#,
+                with: " ",
+                options: .regularExpression
+            )
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
         let pattern = #"^\s*([0-9]+(?:\s+[0-9]+/[0-9]+|\.[0-9]+|/[0-9]+)?)\s+([A-Za-z]+(?:\s+oz)?)\s*$"#
-        let captures = matches(pattern: pattern, in: text, capture: 0)
-        guard !captures.isEmpty else { return nil }
-        let parts = text.split(separator: " ").map(String.init)
+        guard normalized.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil else {
+            return nil
+        }
+        let parts = normalized.split(separator: " ").map(String.init)
         guard let first = parts.first, var quantity = parseQuantity(first) else { return nil }
         var unitIndex = 1
         if parts.count > 2, let fraction = parseFraction(parts[1]) {
@@ -1635,7 +2505,8 @@ enum RecipeParser {
             unitIndex = 2
         }
         guard parts.indices.contains(unitIndex) else { return nil }
-        return IngredientMeasurement(quantity: quantity, unit: normalizedUnit(parts[unitIndex].lowercased()), rawText: text)
+        let rawUnit = parts[unitIndex...].joined(separator: " ").lowercased()
+        return IngredientMeasurement(quantity: quantity, unit: normalizedUnit(rawUnit), rawText: text)
     }
 
     private static func totalQuantity(_ measurements: [IngredientMeasurement], in destinationUnit: String) -> Double? {
@@ -1645,8 +2516,16 @@ enum RecipeParser {
                 total += measurement.quantity
             } else if destinationUnit == "cup", measurement.unit == "tbsp" {
                 total += measurement.quantity / 16
+            } else if destinationUnit == "cup", measurement.unit == "tsp" {
+                total += measurement.quantity / 48
             } else if destinationUnit == "tbsp", measurement.unit == "tsp" {
                 total += measurement.quantity / 3
+            } else if destinationUnit == "lb", measurement.unit == "oz" {
+                total += measurement.quantity / 16
+            } else if destinationUnit == "kg", measurement.unit == "g" {
+                total += measurement.quantity / 1_000
+            } else if destinationUnit == "l", measurement.unit == "ml" {
+                total += measurement.quantity / 1_000
             } else {
                 return nil
             }
@@ -1657,9 +2536,6 @@ enum RecipeParser {
     private static func parseQuantity(_ value: String) -> Double? {
         let cleaned = value
             .trimmingCharacters(in: CharacterSet(charactersIn: "~≈+,"))
-            .split(separator: "-")
-            .last
-            .map(String.init) ?? value
         let numberWords: [String: Double] = [
             "a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4,
             "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
@@ -1676,11 +2552,14 @@ enum RecipeParser {
 
     private static func normalizedUnit(_ unit: String) -> String {
         switch unit {
-        case "tablespoon", "tablespoons": "tbsp"
-        case "teaspoon", "teaspoons": "tsp"
+        case "tablespoon", "tablespoons", "tbs", "tbsps": "tbsp"
+        case "teaspoon", "teaspoons", "tsps": "tsp"
         case "ounce", "ounces": "oz"
+        case "fluid ounce", "fluid ounces", "fl ounce", "fl ounces": "fl oz"
         case "pound", "pounds", "lbs": "lb"
         case "packages", "package": "pkg"
+        case "c": "cup"
+        case "ea", "each", "count": "item"
         case "gram", "grams": "g"
         case "kilogram", "kilograms": "kg"
         case "milliliter", "milliliters": "ml"

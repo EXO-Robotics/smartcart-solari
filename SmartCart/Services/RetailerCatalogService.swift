@@ -82,7 +82,7 @@ struct DemoWalmartCatalogService: RetailerCatalogService {
             mode: .guidedProducts,
             url: URL(string: "https://www.walmart.com/cp/grocery-pickup-and-delivery/9524000")!,
             title: "Visit Walmart",
-            disclosure: "SmartCart saved this manifest and can open each exact product or labeled search. It did not transfer a cart, reserve pickup, or submit payment."
+            disclosure: "SmartCart saved this manifest and can open each exact product or labeled search. It did not transfer a cart, link an account, modify a Wishlist, reserve pickup, or submit payment."
         )
     }
 

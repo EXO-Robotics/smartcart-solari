@@ -1,4 +1,5 @@
 import CoreImage
+import ImageIO
 import PhotosUI
 import SwiftUI
 import UIKit
@@ -33,6 +34,13 @@ struct RecipeComposerSheet: View {
     @State private var lastVisionOCRConfidence: Double?
     @State private var lastVisionLayoutConfidence: Double?
     @State private var lastVisionSourceLines: [OCRSourceLine] = []
+    @State private var lastVisionRetryCount = 0
+    @State private var lastVisionDuration: TimeInterval = 0
+    @State private var lastVisionLayoutAmbiguityCount = 0
+    @State private var lastVisionIgnoredInstructionCount = 0
+    @State private var selectedImageSetID: UUID?
+    @State private var recognizedImageSetID: UUID?
+    @State private var recognitionTask: Task<Void, Never>?
     @FocusState private var focusedField: Field?
 
     private enum Field {
@@ -44,6 +52,12 @@ struct RecipeComposerSheet: View {
     init(initialMethod: ImportMethod) {
         self.initialMethod = initialMethod
         _selectedMethod = State(initialValue: initialMethod)
+        if initialMethod == .sample {
+            _title = State(initialValue: "Lemon Herb Chicken Pasta")
+        } else {
+            _title = State(initialValue: "Imported Recipe")
+            _recipeText = State(initialValue: "")
+        }
     }
 
     private var draftRecipe: Recipe {
@@ -119,27 +133,36 @@ struct RecipeComposerSheet: View {
         return UIImage(cgImage: crop).jpegData(compressionQuality: 0.76)
     }
 
-    private var canImport: Bool {
+    private func canImport(_ recipe: Recipe) -> Bool {
         switch selectedMethod {
         case .camera, .photoLibrary:
-            !selectedImages.isEmpty && !draftRecipe.ingredients.isEmpty
+            !selectedImages.isEmpty
+                && selectedImageSetID != nil
+                && selectedImageSetID == recognizedImageSetID
+                && !recipe.ingredients.isEmpty
         case .recipeLink, .pinterest:
             validURL != nil
         case .recipeText:
-            !draftRecipe.ingredients.isEmpty
+            !recipe.ingredients.isEmpty
         case .sample:
             appModel.recipes.indices.contains(selectedSampleIndex)
         }
     }
 
     private var validURL: URL? {
-        guard let url = URL(string: linkText), ["http", "https"].contains(url.scheme?.lowercased()) else {
+        let cleaned = linkText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: cleaned),
+              url.scheme?.lowercased() == "https",
+              let host = url.host,
+              !host.isEmpty
+        else {
             return nil
         }
         return url
     }
 
     var body: some View {
+        let draft = draftRecipe
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
@@ -147,8 +170,8 @@ struct RecipeComposerSheet: View {
                     selectedMethodContent
 
                     if selectedMethod != .sample && selectedMethod != .recipeLink && selectedMethod != .pinterest {
-                        editableRecipeFields
-                        detectedIngredients
+                        editableRecipeFields(for: draft)
+                        detectedIngredients(in: draft)
                     }
 
                     if let errorMessage {
@@ -201,7 +224,7 @@ struct RecipeComposerSheet: View {
                         }
                     }
                     .buttonStyle(PrimaryButtonStyle())
-                    .disabled(!canImport || isProcessing)
+                    .disabled(!canImport(draft) || isProcessing)
                 }
             }
         }
@@ -209,14 +232,16 @@ struct RecipeComposerSheet: View {
         .interactiveDismissDisabled(isProcessing)
         .fullScreenCover(isPresented: $showCamera) {
             CameraPicker { image in
-                selectedImages = [image]
-                Task { await recognizeRecipe(in: [image]) }
+                beginRecognition(in: [image])
             }
             .ignoresSafeArea()
         }
         .onChange(of: photoItems) {
             guard !photoItems.isEmpty else { return }
-            Task { await loadPhotos(photoItems) }
+            beginPhotoLoad(photoItems)
+        }
+        .onDisappear {
+            recognitionTask?.cancel()
         }
     }
 
@@ -230,9 +255,7 @@ struct RecipeComposerSheet: View {
                     ForEach(ImportMethod.allCases) { method in
                         Button {
                             withAnimation(.easeInOut(duration: 0.2)) {
-                                selectedMethod = method
-                                errorMessage = nil
-                                focusedField = nil
+                                switchImportMethod(to: method)
                             }
                         } label: {
                             Label(method.shortTitle, systemImage: method.symbol)
@@ -310,6 +333,12 @@ struct RecipeComposerSheet: View {
                     .autocorrectionDisabled()
                     .focused($focusedField, equals: .link)
                     .smartField()
+
+                if linkText != "https://", validURL == nil {
+                    Label("Enter a complete HTTPS recipe link", systemImage: "exclamationmark.circle.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(SmartCartTheme.coral)
+                }
 
                 InfoBanner(
                     symbol: "lock.shield.fill",
@@ -453,8 +482,9 @@ struct RecipeComposerSheet: View {
         }
     }
 
-    private var editableRecipeFields: some View {
-        VStack(alignment: .leading, spacing: 14) {
+    private func editableRecipeFields(for recipe: Recipe) -> some View {
+        let report = currentImportReport(for: recipe)
+        return VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 7) {
                 Text("RECIPE NAME")
                     .smartEyebrow(SmartCartTheme.mutedInk)
@@ -469,7 +499,7 @@ struct RecipeComposerSheet: View {
                     Text("INGREDIENT TEXT")
                         .smartEyebrow(SmartCartTheme.mutedInk)
                     Spacer()
-                    Text("\(draftRecipe.ingredients.count) found")
+                    Text("\(recipe.ingredients.count) found")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(SmartCartTheme.green)
                 }
@@ -487,14 +517,18 @@ struct RecipeComposerSheet: View {
                             .stroke(SmartCartTheme.border, lineWidth: 1)
                     }
             }
+
+            if !recipeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                importQualitySummary(report)
+            }
         }
     }
 
-    private var detectedIngredients: some View {
+    private func detectedIngredients(in recipe: Recipe) -> some View {
         VStack(alignment: .leading, spacing: 11) {
             SectionHeader(title: "Detected ingredients", subtitle: "You’ll confirm these on the next screen")
 
-            ForEach(draftRecipe.ingredients.prefix(6)) { ingredient in
+            ForEach(recipe.ingredients.prefix(6)) { ingredient in
                 HStack(spacing: 11) {
                     Image(systemName: ingredient.category.symbol)
                         .font(.subheadline.bold())
@@ -528,12 +562,75 @@ struct RecipeComposerSheet: View {
                 }
             }
 
-            if draftRecipe.ingredients.count > 6 {
-                Text("+ \(draftRecipe.ingredients.count - 6) more ingredients")
+            if recipe.ingredients.count > 6 {
+                Text("+ \(recipe.ingredients.count - 6) more ingredients")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(SmartCartTheme.green)
                     .padding(.leading, 4)
             }
+        }
+    }
+
+    private func currentImportReport(for recipe: Recipe) -> RecipeImportReport {
+        var report = RecipeParser.importReport(
+            for: recipe,
+            recognizedText: recipeText,
+            sourcePageCount: max(1, selectedImages.count),
+            retryCount: lastVisionRetryCount,
+            duration: lastVisionDuration
+        )
+        report.layoutConfidence = lastVisionLayoutConfidence ?? 1
+        report.layoutAmbiguityCount = lastVisionLayoutAmbiguityCount
+        report.ignoredInstructionLineCount = lastVisionIgnoredInstructionCount
+        report.sourceEvidenceCount = recipe.ingredients.filter { $0.sourceEvidence != nil }.count
+        report.quantityAlternativeReviewCount = recipe.ingredients.filter {
+            ($0.sourceEvidence?.alternateQuantityCandidates.count ?? 0) > 1
+        }.count
+        return report
+    }
+
+    private func importQualitySummary(_ report: RecipeImportReport) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 8) {
+                Image(systemName: report.confidenceLabel == "High confidence"
+                    ? "checkmark.seal.fill"
+                    : "exclamationmark.triangle.fill")
+                Text(report.confidenceLabel)
+                    .font(.subheadline.weight(.bold))
+                Spacer()
+                Text("\(report.highConfidenceCount) ready · \(report.reviewCount + report.unknownCount) review")
+                    .font(.caption.weight(.semibold))
+            }
+            .foregroundStyle(report.confidenceLabel == "High confidence"
+                ? SmartCartTheme.green
+                : SmartCartTheme.coral)
+
+            if report.requiredConfirmationCount > 0 {
+                Text("Confirm \(report.requiredConfirmationCount) uncertain amount\(report.requiredConfirmationCount == 1 ? "" : "s") before matching products.")
+                    .font(.caption)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
+            } else if report.omittedCandidateLineCount > 0 {
+                Text("SmartCart may have skipped \(report.omittedCandidateLineCount) ingredient-like line\(report.omittedCandidateLineCount == 1 ? "" : "s"). Compare the text with the recipe image.")
+                    .font(.caption)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
+            } else {
+                Text("Every detected line remains editable, and you’ll confirm the ingredients before SmartCart shops.")
+                    .font(.caption)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
+            }
+
+            if report.retryCount > 0 {
+                Label("SmartCart automatically tried an enhanced image pass.", systemImage: "wand.and.stars")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
+            }
+        }
+        .padding(12)
+        .background(SmartCartTheme.paper)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(SmartCartTheme.border, lineWidth: 1)
         }
     }
 
@@ -556,34 +653,101 @@ struct RecipeComposerSheet: View {
         }
     }
 
-    private func loadPhotos(_ items: [PhotosPickerItem]) async {
+    private func switchImportMethod(to method: ImportMethod) {
+        guard selectedMethod != method else { return }
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        selectedImages = []
+        photoItems = []
+        selectedImageSetID = nil
+        recognizedImageSetID = nil
+        isProcessing = false
+        clearVisionResult()
+        selectedMethod = method
+        errorMessage = nil
+        focusedField = nil
+        if method == .camera || method == .photoLibrary {
+            recipeText = ""
+            title = "Imported Recipe"
+        } else if method == .recipeText {
+            recipeText = ""
+            title = "Imported Recipe"
+        }
+    }
+
+    private func beginRecognition(in images: [UIImage]) {
+        recognitionTask?.cancel()
+        let imageSetID = UUID()
+        let boundedImages = images.map { RecipeImagePreprocessor.resizedForOCR($0) }
+        selectedImages = boundedImages
+        selectedImageSetID = imageSetID
+        recognizedImageSetID = nil
+        recipeText = ""
+        title = "Imported Recipe"
+        clearVisionResult()
+        errorMessage = nil
+        recognitionTask = Task {
+            await recognizeRecipe(in: boundedImages, imageSetID: imageSetID)
+        }
+    }
+
+    private func beginPhotoLoad(_ items: [PhotosPickerItem]) {
+        recognitionTask?.cancel()
+        let imageSetID = UUID()
+        selectedImages = []
+        selectedImageSetID = imageSetID
+        recognizedImageSetID = nil
+        recipeText = ""
+        title = "Imported Recipe"
+        clearVisionResult()
+        errorMessage = nil
+        recognitionTask = Task {
+            await loadPhotos(items, imageSetID: imageSetID)
+        }
+    }
+
+    private func loadPhotos(_ items: [PhotosPickerItem], imageSetID: UUID) async {
         isProcessing = true
         processingMessage = "Loading \(items.count) page\(items.count == 1 ? "" : "s")…"
         errorMessage = nil
-        defer { isProcessing = false }
+        defer {
+            if selectedImageSetID == imageSetID {
+                isProcessing = false
+            }
+        }
 
         do {
             var images: [UIImage] = []
             for item in items {
+                try Task.checkCancellation()
                 guard let data = try await item.loadTransferable(type: Data.self),
-                      let image = UIImage(data: data)
+                      let image = RecipeImagePreprocessor.downsampledImage(from: data)
                 else {
                     throw RecipeVisionError.unreadableImage
                 }
+                try Task.checkCancellation()
                 images.append(image)
             }
+            guard !Task.isCancelled, selectedImageSetID == imageSetID else { return }
             selectedImages = images
-            await recognizeRecipe(in: images)
+            await recognizeRecipe(in: images, imageSetID: imageSetID)
         } catch {
+            guard !Task.isCancelled, selectedImageSetID == imageSetID else { return }
+            selectedImages = []
+            recognizedImageSetID = nil
             errorMessage = error.localizedDescription
         }
     }
 
-    private func recognizeRecipe(in images: [UIImage]) async {
+    private func recognizeRecipe(in images: [UIImage], imageSetID: UUID) async {
         isProcessing = true
         processingMessage = "Reading recipe text…"
         errorMessage = nil
-        defer { isProcessing = false }
+        defer {
+            if selectedImageSetID == imageSetID {
+                isProcessing = false
+            }
+        }
 
         do {
             let customWords = [title] + appModel.pantryInventory.map(\.name)
@@ -591,17 +755,16 @@ struct RecipeComposerSheet: View {
                 in: images,
                 contextualWords: customWords
             )
+            guard !Task.isCancelled, selectedImageSetID == imageSetID else { return }
             processingMessage = "Normalizing ingredients…"
             recipeText = result.text
             lastVisionOCRConfidence = Double(result.confidence)
             lastVisionLayoutConfidence = result.layoutConfidence
             lastVisionSourceLines = result.sourceLines
-            if let firstLine = result.text
-                .components(separatedBy: .newlines)
-                .map({ $0.trimmingCharacters(in: .whitespacesAndNewlines) })
-                .first(where: { !$0.isEmpty && $0.range(of: #"\d"#, options: .regularExpression) == nil }) {
-                title = String(firstLine.prefix(60))
-            }
+            lastVisionRetryCount = result.retryCount
+            lastVisionDuration = result.duration
+            lastVisionLayoutAmbiguityCount = result.layoutAmbiguityCount
+            lastVisionIgnoredInstructionCount = result.ignoredInstructionLineCount
             let recipe = RecipeParser.parse(
                 title: title,
                 text: result.text,
@@ -628,10 +791,25 @@ struct RecipeComposerSheet: View {
             if recipe.ingredients.isEmpty {
                 errorMessage = "No ingredients were detected. Keep the photo and try a tighter crop, a clearer image, pasted text, or manual ingredient entry. SmartCart will never invent replacement groceries."
             }
+            recognizedImageSetID = imageSetID
             try? await Task.sleep(for: .milliseconds(220))
         } catch {
+            guard !Task.isCancelled, selectedImageSetID == imageSetID else { return }
+            recipeText = ""
+            clearVisionResult()
+            recognizedImageSetID = nil
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func clearVisionResult() {
+        lastVisionOCRConfidence = nil
+        lastVisionLayoutConfidence = nil
+        lastVisionSourceLines = []
+        lastVisionRetryCount = 0
+        lastVisionDuration = 0
+        lastVisionLayoutAmbiguityCount = 0
+        lastVisionIgnoredInstructionCount = 0
     }
 
     private func importRecipe() async {
@@ -687,6 +865,24 @@ private enum RecipeVisionReader {
         var ignoredInstructionLineCount: Int
     }
 
+    private struct PageResult {
+        var text: String
+        var sourceLines: [OCRSourceLine]
+        var confidence: Float
+        var layoutConfidence: Double
+        var layoutAmbiguityCount: Int
+        var ignoredInstructionLineCount: Int
+
+        var qualityScore: Double {
+            RecipeOCRPolicy.qualityScore(
+                confidence: confidence,
+                layoutConfidence: layoutConfidence,
+                ambiguityCount: layoutAmbiguityCount,
+                sourceLineCount: sourceLines.count
+            )
+        }
+    }
+
     static func recognizeText(
         in images: [UIImage],
         contextualWords: [String] = []
@@ -703,37 +899,59 @@ private enum RecipeVisionReader {
 
         for (pageIndex, image) in images.enumerated() {
             let normalizedImage = RecipeImagePreprocessor.normalizeOrientation(image)
+            let page: PageResult
             do {
-                let page = try await recognizeText(
+                let primary = try await recognizeText(
                     in: normalizedImage,
                     pageIndex: pageIndex,
                     level: .accurate,
                     minimumTextHeight: 0.008,
                     customWords: customWords
                 )
-                pages.append(page.text)
-                sourceLines.append(contentsOf: page.sourceLines)
-                confidenceTotal += page.confidence
-                layoutConfidenceTotal += page.layoutConfidence
-                layoutAmbiguityCount += page.layoutAmbiguityCount
-                ignoredInstructionLineCount += page.ignoredInstructionLineCount
+                if RecipeOCRPolicy.shouldRunEnhancedPass(
+                    confidence: primary.confidence,
+                    layoutConfidence: primary.layoutConfidence,
+                    ambiguityCount: primary.layoutAmbiguityCount,
+                    sourceLineCount: primary.sourceLines.count
+                ) {
+                    retryCount += 1
+                    do {
+                        let enhanced = try await recognizeText(
+                            in: RecipeImagePreprocessor.contrastEnhanced(normalizedImage),
+                            pageIndex: pageIndex,
+                            level: .accurate,
+                            minimumTextHeight: 0.004,
+                            customWords: customWords
+                        )
+                        page = enhanced.qualityScore > primary.qualityScore
+                            ? enhanced
+                            : primary
+                    } catch {
+                        // A usable primary pass is always safer than discarding
+                        // the page because an optional enhancement failed.
+                        page = primary
+                    }
+                } else {
+                    page = primary
+                }
             } catch {
                 retryCount += 1
                 let correctedImage = RecipeImagePreprocessor.contrastEnhanced(normalizedImage)
-                let page = try await recognizeText(
+                page = try await recognizeText(
                     in: correctedImage,
                     pageIndex: pageIndex,
                     level: .accurate,
                     minimumTextHeight: 0.004,
                     customWords: customWords
                 )
-                pages.append(page.text)
-                sourceLines.append(contentsOf: page.sourceLines)
-                confidenceTotal += page.confidence
-                layoutConfidenceTotal += page.layoutConfidence
-                layoutAmbiguityCount += page.layoutAmbiguityCount
-                ignoredInstructionLineCount += page.ignoredInstructionLineCount
             }
+            try Task.checkCancellation()
+            pages.append(page.text)
+            sourceLines.append(contentsOf: page.sourceLines)
+            confidenceTotal += page.confidence
+            layoutConfidenceTotal += page.layoutConfidence
+            layoutAmbiguityCount += page.layoutAmbiguityCount
+            ignoredInstructionLineCount += page.ignoredInstructionLineCount
         }
 
         let combined = pages.joined(separator: "\n")
@@ -758,7 +976,7 @@ private enum RecipeVisionReader {
         level: VNRequestTextRecognitionLevel,
         minimumTextHeight: Float,
         customWords: [String]
-    ) async throws -> (text: String, sourceLines: [OCRSourceLine], confidence: Float, layoutConfidence: Double, layoutAmbiguityCount: Int, ignoredInstructionLineCount: Int) {
+    ) async throws -> PageResult {
         guard let cgImage = image.cgImage else {
             throw RecipeVisionError.unreadableImage
         }
@@ -797,7 +1015,7 @@ private enum RecipeVisionReader {
                 }
                 let layout = OCRLayoutReconstructor.reconstruct(
                     candidates.map { observation, candidate, alternatives in
-                        OCRTextObservation(
+                    OCRTextObservation(
                             text: candidate.string,
                             boundingBox: OCRNormalizedBoundingBox(
                                 x: observation.boundingBox.origin.x,
@@ -807,6 +1025,7 @@ private enum RecipeVisionReader {
                             ),
                             confidence: Double(candidate.confidence),
                             pageIndex: pageIndex,
+                            bulletMarker: RecipeOCRPolicy.leadingBulletMarker(in: candidate.string),
                             alternateCandidates: alternatives
                         )
                     }
@@ -819,13 +1038,13 @@ private enum RecipeVisionReader {
                 } else {
                     let confidence = candidates.reduce(Float.zero) { $0 + $1.1.confidence } / Float(max(1, candidates.count))
                     continuation.resume(
-                        returning: (
-                            text,
-                            layout.ingredientSourceLines,
-                            confidence,
-                            layout.layoutConfidence,
-                            layout.ambiguities.count,
-                            layout.ignoredInstructionLines.count
+                        returning: PageResult(
+                            text: text,
+                            sourceLines: layout.ingredientSourceLines,
+                            confidence: confidence,
+                            layoutConfidence: layout.layoutConfidence,
+                            layoutAmbiguityCount: layout.ambiguities.count,
+                            ignoredInstructionLineCount: layout.ignoredInstructionLines.count
                         )
                     )
                 }
@@ -891,9 +1110,83 @@ enum RecipeOCRPolicy {
             options: .regularExpression
         ) != nil
     }
+
+    static func leadingBulletMarker(in text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let first = trimmed.first,
+              ["•", "-", "*", "☐", "✓"].contains(String(first))
+        else { return nil }
+        return String(first)
+    }
+
+    static func shouldRunEnhancedPass(
+        confidence: Float,
+        layoutConfidence: Double,
+        ambiguityCount: Int,
+        sourceLineCount: Int
+    ) -> Bool {
+        confidence < 0.78
+            || layoutConfidence < 0.78
+            || ambiguityCount > 0
+            || sourceLineCount < 2
+    }
+
+    static func qualityScore(
+        confidence: Float,
+        layoutConfidence: Double,
+        ambiguityCount: Int,
+        sourceLineCount: Int
+    ) -> Double {
+        let lineCoverage = min(1, Double(max(0, sourceLineCount)) / 4)
+        let ambiguityPenalty = min(0.24, Double(max(0, ambiguityCount)) * 0.06)
+        return min(
+            1,
+            max(
+                0,
+                (Double(confidence) * 0.48)
+                    + (layoutConfidence * 0.36)
+                    + (lineCoverage * 0.16)
+                    - ambiguityPenalty
+            )
+        )
+    }
 }
 
 enum RecipeImagePreprocessor {
+    private static let maximumOCRPixelDimension: CGFloat = 2_600
+    private static let renderingContext = CIContext(options: [.cacheIntermediates: true])
+
+    static func downsampledImage(from data: Data) -> UIImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: Int(maximumOCRPixelDimension),
+            kCGImageSourceShouldCacheImmediately: true
+        ]
+        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            return nil
+        }
+        return UIImage(cgImage: image, scale: 1, orientation: .up)
+    }
+
+    static func resizedForOCR(_ image: UIImage) -> UIImage {
+        let normalized = normalizeOrientation(image)
+        let longestSide = max(normalized.size.width, normalized.size.height)
+        guard longestSide > maximumOCRPixelDimension else { return normalized }
+        let scale = maximumOCRPixelDimension / longestSide
+        let size = CGSize(
+            width: max(1, normalized.size.width * scale),
+            height: max(1, normalized.size.height * scale)
+        )
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        format.opaque = true
+        return UIGraphicsImageRenderer(size: size, format: format).image { _ in
+            normalized.draw(in: CGRect(origin: .zero, size: size))
+        }
+    }
+
     static func normalizeOrientation(_ image: UIImage) -> UIImage {
         guard image.imageOrientation != .up else { return image }
         let format = UIGraphicsImageRendererFormat.default()
@@ -914,8 +1207,7 @@ enum RecipeImagePreprocessor {
                 kCIInputBrightnessKey: 0.02
             ]
         )
-        let context = CIContext(options: nil)
-        guard let cgImage = context.createCGImage(output, from: output.extent) else { return normalized }
+        guard let cgImage = renderingContext.createCGImage(output, from: output.extent) else { return normalized }
         return UIImage(cgImage: cgImage, scale: normalized.scale, orientation: .up)
     }
 }

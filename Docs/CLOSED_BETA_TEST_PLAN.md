@@ -14,7 +14,8 @@ Recruit 20–50 testers who shop for groceries at least twice per month. Include
 
 ## Recipe matrix
 
-Test at least 25 recipes across:
+First complete the stricter source-level acceptance run in
+`OCR_PARSER_HUMAN_TEST_PLAN.md`. Then test at least 25 recipes across:
 
 - 5 clean screenshots from recipe sites.
 - 5 camera photos of cards, books, or handwritten print.
@@ -22,7 +23,9 @@ Test at least 25 recipes across:
 - 3 short recipes with five or fewer ingredients.
 - 3 complex recipes with 15 or more ingredients or multiple image pages.
 - 2 organic-only cases, including one with no eligible exact organic product.
-- 2 pantry-heavy cases where most ingredients should be skipped.
+- 2 pantry-heavy cases where most ingredients should receive visible full or
+  partial coverage suggestions; the tester must still confirm use, remainder,
+  or buy-full behavior.
 
 ## Required task script
 
@@ -36,7 +39,10 @@ For every recipe, record:
 6. Number of product replacements and retailer search fallbacks.
 7. Time from import start to first retailer product handoff.
 8. Whether the tester completed the guided flow.
-9. One sentence describing the largest source of friction.
+9. Which post-shopping outcome the tester selected and whether the resulting
+   pantry quantities were correct after relaunch.
+10. Whether a substitution was recorded and learned only after explicit opt-in.
+11. One sentence describing the largest source of friction.
 
 ## Metrics and decision thresholds
 
@@ -57,4 +63,7 @@ The app’s diagnostic funnel stays on device and excludes recipe text, URLs, ad
 
 ## Exit gate
 
-Advance to physical-device barcode testing and partner integration only after the core import-to-handoff flow meets the targets above or the team has documented and accepted each miss.
+Advance beyond closed beta only after the core import-to-pantry loop meets the
+targets above, reconciliation never double-increments stock, and the team has
+documented and accepted every non-safety miss. Silent purchasing errors, false
+pantry removals, and data loss cannot be accepted as metric tradeoffs.
