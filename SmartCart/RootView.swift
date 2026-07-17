@@ -102,7 +102,7 @@ struct RootView: View {
         case .preferences:
             ShoppingPreferencesView()
         case .storeSelection:
-            StoreSelectionView()
+            CommerceRouteSelectionView()
         case .matching:
             ProductMatchingView()
         case .shoppingList:

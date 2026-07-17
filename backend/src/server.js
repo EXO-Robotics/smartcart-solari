@@ -15,7 +15,11 @@ server.listen(config.port, config.host, () => {
   logger.info('server_started', {
     host: config.host,
     port: config.port,
-    disclosure: 'Credential-free local/demo service. No live auth, persistence, catalog, or affiliate integration.'
+    disclosure: config.instacartDemoHandoffUrl
+      ? 'Local/demo service with an explicit non-live Instacart demo handoff URL.'
+      : config.instacartApiKey
+        ? 'Local/demo auth and persistence with a configured server-side Instacart handoff provider.'
+        : 'Credential-free local/demo service. Instacart handoff is unavailable until explicitly configured.'
   });
 });
 

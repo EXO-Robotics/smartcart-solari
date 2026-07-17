@@ -1,8 +1,8 @@
 # SmartCart local/demo backend
 
-This directory is a credential-free Milestone 7 backend foundation. It is a zero-dependency Node.js ESM HTTP service intended only for local development and automated tests.
+This directory is a zero-dependency Node.js ESM HTTP service intended for local development and automated tests. It can optionally make a server-authenticated Instacart Developer Platform handoff request when explicitly configured.
 
-**Nothing here is production-ready.** Accounts and bearer sessions are mock local/demo identities. Manifests and analytics events exist only in process memory and disappear on restart. Product/catalog fields are client-supplied local/demo records and are never refreshed from a retailer. OAuth performs no provider request or token exchange. Affiliate URLs are deterministic local/demo decoration and do not provide attribution, pricing, inventory, cart transfer, or checkout. The recipe-page endpoint is the one deliberate outbound capability: when an authenticated caller supplies a URL, it requests that third-party page under the limits below.
+**Nothing here is production-ready.** Accounts and bearer sessions are mock local/demo identities. Manifests, handoff URL caches, and analytics events exist only in process memory and disappear on restart. Product/catalog fields are client-supplied local/demo records and are never refreshed from a retailer. OAuth performs no provider request or token exchange. Affiliate URLs are deterministic local/demo decoration and do not provide attribution, pricing, inventory, cart transfer, or checkout. Recipe-page extraction and an explicitly configured Instacart handoff are the only deliberate outbound capabilities.
 
 ## Requirements and start
 
@@ -53,6 +53,7 @@ Every JSON response includes `meta.dataMode: "local-demo"`, and every JSON respo
 | `POST` | `/v1/analytics/events` | Ingest up to 100 bounded, identifier-free events |
 | `POST` | `/v1/affiliate-links` | Decorate an HTTPS target through a provider abstraction |
 | `POST` | `/v1/recipe-pages/extract` | Bounded HTTPS fetch and deterministic recipe extraction |
+| `POST` | `/api/handoffs/instacart` | Validate an owned manifest and create/reuse an Instacart shopping-list URL |
 
 The complete contract is in [`openapi.yaml`](openapi.yaml).
 
@@ -91,6 +92,8 @@ curl -s http://127.0.0.1:8787/v1/demo/account \
 - Recipe pages must use HTTPS, including every redirect, and cannot contain URL credentials. The fetcher uses `SmartCartRecipePageFetcher/0.1 (user-requested recipe import)` as its user agent, follows at most 5 redirects, times out after 10 seconds, accepts only `text/html` or `application/xhtml+xml`, and reads at most 2 MiB after transport decoding. These limits are configurable with `RECIPE_PAGE_MAX_REDIRECTS`, `RECIPE_PAGE_TIMEOUT_MS`, and `RECIPE_PAGE_MAX_BYTES`.
 - HTML decoding honors a response `charset`, a Unicode BOM, or an early HTML `<meta charset>` when Node's `TextDecoder` supports that encoding. Unsupported encodings fail explicitly instead of silently guessing.
 - Recipe extraction is deterministic and inert: it uses `JSON.parse` for JSON-LD and a local HTML tokenizer for fallback markup. It never evaluates JavaScript, loads subresources, follows page links, or exposes fetched HTML in the API response.
+- `InstacartHandoffService` filters pantry and explicitly excluded optional items, blocks unresolved alternatives and unconfirmed or low-confidence quantities, maps only official health filters and supported measurements, and fingerprints the normalized manifest plus postal/retailer/fulfillment preference with SHA-256 before provider access.
+- `INSTACART_API_KEY` is read only by the server and sent only as an authorization header to the configured Instacart API base. Structured logging also redacts API-key and credential-shaped fields. Do not put this key in a client bundle, request body, checked-in file, or URL.
 - Recipe candidates are searched through JSON-LD objects, arrays, `@graph`, and nested values; the candidate with the most ingredient lines wins, with document order as the tie-breaker. Fallback order is recipe microdata, common recipe-plugin ingredient containers, then visible `Ingredients` content. Fallbacks preserve section headings and stop before instructions, directions, methods, notes, nutrition, or equipment.
 - CORS permits only configured local origins. Responses use no-store, MIME-sniffing, frame, and referrer protections.
 
@@ -106,6 +109,23 @@ curl -s http://127.0.0.1:8787/v1/recipe-pages/extract \
 ```
 
 Typed failures distinguish invalid or non-HTTPS URLs, invalid/unsafe redirects, redirect-limit and missing-location errors, network failure, timeout, upstream access denial/not-found/rate-limit/other status, oversized pages, unsupported MIME or charset, empty bodies, and pages with no extractable recipe.
+
+## Instacart shopping-list handoff
+
+`POST /api/handoffs/instacart` requires the local/demo bearer token and accepts `shoppingManifestId`, `postalCode`, optional `preferredRetailerKey`, and `fulfillmentPreference` (`pickup`, `delivery`, or `decide_in_instacart`). The manifest is loaded through the authenticated account, so another account receives the same `404 manifest_not_found` boundary as the manifest read API.
+
+Each included manifest item must provide a `commerce` object (the SmartCart client contract), an `instacart` compatibility object, or the same fields directly on the item with:
+
+- `name`, optional `displayText`, positive `quantity` and a supported `unit` (or 1–10 `lineItemMeasurements`);
+- `quantityConfirmed: true` and `unresolvedAlternative: false`; if a separate `quantityConfidence` is supplied, it must be high (`high`, `High confidence`, or a score of at least `0.82`). SmartCart's client maps unresolved low-confidence review state to `quantityConfirmed: false` before upload;
+- optional `healthFilters`, of which only Instacart's official `ORGANIC`, `GLUTEN_FREE`, `FAT_FREE`, `VEGAN`, `KOSHER`, `SUGAR_FREE`, and `LOW_FAT` values are forwarded;
+- optional `exactUPC`, which is forwarded only when `exactIdentityReliable: true`, `upcExactAndReliable: true`, `exactUPCReliable: true`, or `upcReliability: "exact"` is also explicit, and only when it is a valid 12- or 14-digit UPC.
+
+Items marked as pantry (`pantryExcluded: true`, `inclusion: "pantry"`, `pantry: true`, or equivalent confirmed pantry state) or optional-excluded (`optionalSelected: false`, `inclusion: "optional-excluded"`, `optionalExcluded: true`, or `includeInList: false`) are removed before safety validation. The provider request uses the official 2026 `line_items` and `line_item_measurements` fields; deprecated line-item `quantity` and `unit` fields are never emitted.
+
+Configure a development key with `INSTACART_API_KEY` and the default development base `https://connect.dev.instacart.tools`. Production defaults to `https://connect.instacart.com`; either can be overridden with `INSTACART_API_BASE_URL`. If a preferred retailer key is supplied, the service makes an advisory `GET /idp/v1/retailers` lookup using the postal code and appends a verified `retailer_key` to the generated URL. Lookup failure or a missing retailer match does not block creation of the otherwise valid shopping-list URL.
+
+For UI-only development, `INSTACART_DEMO_HANDOFF_URL` returns that explicit URL with `provider: "instacart-demo"` and `presentationMode: "development-demo"`; it makes no Instacart call and is rejected when `NODE_ENV=production`. Successful results are cached in memory by the 64-character SHA-256 `manifestFingerprint`, so identical normalized manifest and preference requests reuse the original URL and `createdAt`.
 
 ## What production work would still require
 

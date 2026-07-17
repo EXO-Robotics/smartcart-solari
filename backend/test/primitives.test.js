@@ -28,4 +28,5 @@ test('structured logger redacts credentials and direct identifiers', () => {
   assert.equal(record.message, 'received Bearer [REDACTED]');
   assert.equal(record.dataMode, 'local-demo');
   assert.deepEqual(redact({ password: 'never-log-me' }), { password: '[REDACTED]' });
+  assert.deepEqual(redact({ apiKey: 'instacart-secret' }), { apiKey: '[REDACTED]' });
 });

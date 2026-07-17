@@ -230,6 +230,185 @@ struct AppFeatureFlags: Codable, Hashable {
     }
 }
 
+struct CommerceCapabilities: Codable, Hashable {
+    let preparesShoppingList: Bool
+    let liveProductReview: Bool
+    let livePricing: Bool
+    let liveAvailability: Bool
+    let pickup: Bool
+    let delivery: Bool
+    let checkout: Bool
+    let embeddedCheckout: Bool
+
+    static let instacart = CommerceCapabilities(
+        preparesShoppingList: true,
+        liveProductReview: true,
+        livePricing: true,
+        liveAvailability: true,
+        pickup: true,
+        delivery: true,
+        checkout: true,
+        embeddedCheckout: false
+    )
+
+    static let walmartGuided = CommerceCapabilities(
+        preparesShoppingList: true,
+        liveProductReview: false,
+        livePricing: false,
+        liveAvailability: false,
+        pickup: true,
+        delivery: false,
+        checkout: true,
+        embeddedCheckout: false
+    )
+
+    static let linkOnly = CommerceCapabilities(
+        preparesShoppingList: false,
+        liveProductReview: false,
+        livePricing: false,
+        liveAvailability: false,
+        pickup: false,
+        delivery: false,
+        checkout: false,
+        embeddedCheckout: false
+    )
+}
+
+enum ShoppingRoutePreference: String, CaseIterable, Identifiable, Codable, Hashable {
+    case instacart
+    case walmartDirect
+    case otherRetailerLinks
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .instacart: "Shop through Instacart"
+        case .walmartDirect: "Shop directly at Walmart"
+        case .otherRetailerLinks: "Other retailer links"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .instacart: "SmartCart prepares the list; Instacart confirms products and checkout."
+        case .walmartDirect: "Use exact Walmart links and guided product-by-product shopping."
+        case .otherRetailerLinks: "Open clearly labeled retailer destinations without a list transfer."
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .instacart: "carrot.fill"
+        case .walmartDirect: "storefront.fill"
+        case .otherRetailerLinks: "arrow.up.right.square.fill"
+        }
+    }
+}
+
+enum InstacartRetailerPreference: String, CaseIterable, Identifiable, Codable, Hashable {
+    case bestAvailable = "best_available"
+    case walmart
+    case aldi
+    case martinsGiant = "martins_giant"
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .bestAvailable: "Best available nearby"
+        case .walmart: "Walmart, where available"
+        case .aldi: "ALDI"
+        case .martinsGiant: "MARTIN’S / GIANT"
+        }
+    }
+}
+
+enum CommerceFulfillmentPreference: String, CaseIterable, Identifiable, Codable, Hashable {
+    case pickup
+    case delivery
+    case decideInInstacart = "decide_in_instacart"
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .pickup: "Pickup"
+        case .delivery: "Delivery"
+        case .decideInInstacart: "Decide in Instacart"
+        }
+    }
+}
+
+enum CommerceHandoffFeedback: String, CaseIterable, Identifiable, Codable, Hashable {
+    case orderPlaced
+    case savedForLater
+    case productsUnavailable
+    case changedProducts
+    case didNotFinish
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .orderPlaced: "Order placed"
+        case .savedForLater: "Saved for later"
+        case .productsUnavailable: "Some products unavailable"
+        case .changedProducts: "I changed products"
+        case .didNotFinish: "I did not finish"
+        }
+    }
+}
+
+struct InstacartManifestLineItem: Codable, Hashable {
+    var ingredientID: UUID
+    var name: String
+    var displayText: String
+    var quantity: Double
+    var unit: String
+    var healthFilters: [String]
+    var exactUPC: String?
+    var quantityConfirmed: Bool
+    var unresolvedAlternative: Bool
+}
+
+struct InstacartManifestDraft: Codable, Hashable {
+    var localManifestID: UUID
+    var recipeID: UUID
+    var title: String
+    var desiredServings: Int
+    var items: [InstacartManifestLineItem]
+    var pantryItemsRemoved: Int
+}
+
+struct InstacartHandoffResponse: Codable, Identifiable, Hashable {
+    var provider: String
+    var url: URL
+    var manifestFingerprint: String
+    var createdAt: Date
+    var presentationMode: String
+
+    var id: String { manifestFingerprint }
+}
+
+enum InstacartHandoffError: LocalizedError {
+    case blocked([String])
+    case backendUnavailable
+    case timeout
+    case unreadableResponse
+    case server(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .blocked(let issues): issues.joined(separator: " ")
+        case .backendUnavailable: "The SmartCart commerce service is unavailable. Start the backend or configure its reachable URL."
+        case .timeout: "Instacart handoff preparation took too long. Try again."
+        case .unreadableResponse: "The SmartCart commerce service returned an unreadable response."
+        case .server(let message): message
+        }
+    }
+}
+
 struct RetailerCapabilities: OptionSet, Codable, Hashable {
     let rawValue: Int
 

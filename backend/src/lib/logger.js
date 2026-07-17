@@ -1,5 +1,5 @@
 const REDACTED = '[REDACTED]';
-const SENSITIVE_KEY = /authorization|cookie|token|secret|password|email|code|verifier|challenge/i;
+const SENSITIVE_KEY = /authorization|cookie|token|secret|password|email|code|verifier|challenge|credential|api[-_]?key/i;
 const BEARER = /Bearer\s+[A-Za-z0-9._~+/=-]+/gi;
 
 export function redact(value, seen = new WeakSet()) {

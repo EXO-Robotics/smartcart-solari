@@ -8,6 +8,8 @@ info:
     ephemeral, client-supplied, or simulated; it is never live retailer or identity-provider data.
     The recipe-page extraction endpoint makes a bounded, user-requested HTTPS GET to the supplied
     third-party page and returns extracted text plus URL provenance; it does not execute page scripts.
+    When explicitly configured, the Instacart handoff endpoint is the only server-authenticated
+    commerce-provider call and keeps the provider API key out of clients and responses.
 servers:
   - url: http://127.0.0.1:8787
     description: Loopback local/demo server
@@ -19,6 +21,7 @@ tags:
   - name: Analytics
   - name: Affiliate links
   - name: Recipe pages
+  - name: Instacart handoffs
 paths:
   /health:
     get:
@@ -426,6 +429,61 @@ paths:
         '422': { $ref: '#/components/responses/Error' }
         '502': { $ref: '#/components/responses/Error' }
         '504': { $ref: '#/components/responses/Error' }
+  /api/handoffs/instacart:
+    post:
+      tags: [Instacart handoffs]
+      summary: Create or reuse a safe Instacart shopping-list handoff
+      description: |
+        Loads the authenticated account's manifest, excludes pantry and optional-excluded items,
+        validates alternative and quantity safety, emits the official 2026 line_items and
+        line_item_measurements contract, and caches the returned URL by SHA-256 manifest-plus-preference
+        fingerprint. A preferred retailer lookup is advisory. INSTACART_DEMO_HANDOFF_URL is explicitly
+        identified as a non-live development provider.
+      operationId: createInstacartHandoff
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [shoppingManifestId, postalCode, fulfillmentPreference]
+              properties:
+                shoppingManifestId: { type: string, format: uuid }
+                postalCode:
+                  type: string
+                  minLength: 5
+                  maxLength: 10
+                  description: US ZIP or Canadian postal code; used only for advisory retailer lookup and fingerprinting.
+                preferredRetailerKey:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+                  description: Optional retailer_key to validate against nearby retailers and append to the returned URL.
+                fulfillmentPreference: { type: string, enum: [pickup, delivery, decide_in_instacart] }
+      responses:
+        '200':
+          description: Cached or newly created provider handoff URL.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [provider, url, manifestFingerprint, createdAt, presentationMode, meta]
+                properties:
+                  provider: { type: string, enum: [instacart, instacart-demo] }
+                  url: { type: string, format: uri, pattern: '^https://' }
+                  manifestFingerprint: { type: string, pattern: '^[a-f0-9]{64}$' }
+                  createdAt: { type: string, format: date-time }
+                  presentationMode: { type: string, enum: [external-browser, development-demo] }
+                  meta: { $ref: '#/components/schemas/LocalDemoMeta' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '502': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+        '504': { $ref: '#/components/responses/Error' }
 components:
   securitySchemes:
     demoBearer:
@@ -562,10 +620,73 @@ components:
         requestedQuantity: { type: string, maxLength: 100 }
         purchaseQuantity: { type: integer, minimum: 1, maximum: 1000 }
         status: { type: string, enum: [waiting, added, skipped], default: waiting }
+        includeInList:
+          type: boolean
+          description: False explicitly excludes an optional item from handoff.
+        optionalExcluded: { type: boolean }
+        pantry: { type: boolean }
+        pantryState: { type: string }
+        instacart: { $ref: '#/components/schemas/InstacartManifestLineItem' }
+        commerce:
+          allOf:
+            - $ref: '#/components/schemas/InstacartManifestLineItem'
+          description: SmartCart client compatibility name for Instacart handoff metadata.
         product:
           type: object
           description: Client-supplied local/demo catalog record. Never live price, inventory, eligibility, or retailer data.
           additionalProperties: true
+    InstacartManifestLineItem:
+      type: object
+      additionalProperties: false
+      required: [name, quantityConfirmed, unresolvedAlternative]
+      properties:
+        inclusion: { type: string, enum: [included, pantry, optional-excluded] }
+        name: { type: string, minLength: 1, maxLength: 200 }
+        displayText: { type: string, minLength: 1, maxLength: 300 }
+        quantity: { type: number, exclusiveMinimum: 0 }
+        unit: { type: string, minLength: 1, maxLength: 50 }
+        lineItemMeasurements:
+          type: array
+          minItems: 1
+          maxItems: 10
+          items: { $ref: '#/components/schemas/InstacartMeasurement' }
+        healthFilters:
+          type: array
+          maxItems: 20
+          description: Only official Instacart health filters are forwarded; unrecognized values are omitted.
+          items: { type: string }
+        exactUPC: { type: string, pattern: '^(?:[0-9]{12}|[0-9]{14})$' }
+        upcExactAndReliable:
+          type: boolean
+          description: Must be true before exactUPC can be forwarded.
+        exactUPCReliable: { type: boolean, description: Compatibility alias for upcExactAndReliable. }
+        exactIdentityReliable: { type: boolean, description: SmartCart client compatibility alias for upcExactAndReliable. }
+        upcReliability: { type: string, enum: [exact] }
+        quantityConfirmed: { type: boolean, const: true }
+        quantityConfidence:
+          oneOf:
+            - type: string
+              enum: [high, High confidence, confirmed]
+            - type: number
+              minimum: 0.82
+              maximum: 1
+        unresolvedAlternative: { type: boolean, const: false }
+        pantry: { type: boolean }
+        pantryState: { type: string }
+        pantryExcluded: { type: boolean }
+        optionalExcluded: { type: boolean }
+        optionalSelected: { type: boolean }
+    InstacartMeasurement:
+      type: object
+      additionalProperties: false
+      required: [quantity, unit]
+      properties:
+        quantity: { type: number, exclusiveMinimum: 0 }
+        unit:
+          type: string
+          minLength: 1
+          maxLength: 50
+          description: Must normalize to an official Instacart unit of measurement.
     Manifest:
       allOf:
         - $ref: '#/components/schemas/ManifestInput'

@@ -1,16 +1,28 @@
+import SafariServices
 import SwiftUI
 
 struct ProductMatchingView: View {
     @Environment(AppModel.self) private var appModel
 
-    private let stages = [
-        ("Reading saved shopping preferences", "slider.horizontal.3"),
-        ("Searching the selected Walmart store", "magnifyingglass"),
-        ("Checking package sizes", "shippingbox.fill"),
-        ("Applying dietary and organic rules", "checkmark.shield.fill"),
-        ("Ranking eligible products", "arrow.up.arrow.down"),
-        ("Building the shopping manifest", "checklist")
-    ]
+    private var stages: [(String, String)] {
+        if appModel.shoppingRoute == .instacart {
+            return [
+                ("Reviewing pantry exclusions", "cabinet.fill"),
+                ("Converting ingredient quantities", "scalemass.fill"),
+                ("Applying dietary and organic rules", "checkmark.shield.fill"),
+                ("Checking unresolved ingredients", "exclamationmark.magnifyingglass"),
+                ("Building the normalized manifest", "checklist")
+            ]
+        }
+        return [
+            ("Reading saved shopping preferences", "slider.horizontal.3"),
+            ("Searching the selected Walmart store", "magnifyingglass"),
+            ("Checking package sizes", "shippingbox.fill"),
+            ("Applying dietary and organic rules", "checkmark.shield.fill"),
+            ("Ranking eligible products", "arrow.up.arrow.down"),
+            ("Building the shopping manifest", "checklist")
+        ]
+    }
 
     var body: some View {
         ScrollView {
@@ -18,9 +30,13 @@ struct ProductMatchingView: View {
                 WorkflowHeader(
                     step: 6,
                     total: 6,
-                    eyebrow: "Product matching",
-                    title: appModel.matchProgress == 1 ? "Your products are ready" : "Finding the best matches",
-                    message: "SmartCart applies \(appModel.preferences.summary), then resolves exact retailer products or clearly labeled searches."
+                    eyebrow: appModel.shoppingRoute == .instacart ? "Manifest preparation" : "Product matching",
+                    title: appModel.matchProgress == 1
+                        ? (appModel.shoppingRoute == .instacart ? "Your list is ready to review" : "Your products are ready")
+                        : (appModel.shoppingRoute == .instacart ? "Preparing a safe handoff" : "Finding the best matches"),
+                    message: appModel.shoppingRoute == .instacart
+                        ? "SmartCart removes pantry items, normalizes quantities, and applies supported preferences before Instacart performs live matching."
+                        : "SmartCart applies \(appModel.preferences.summary), then resolves exact retailer products or clearly labeled searches."
                 )
 
                 matchingCard
@@ -28,21 +44,25 @@ struct ProductMatchingView: View {
 
                 if appModel.matchProgress == 1 {
                     resultsSummary
-                    productPreview
+                    if appModel.shoppingRoute != .instacart {
+                        productPreview
+                    }
                 }
 
                 InfoBanner(
                     symbol: "waveform.path.ecg",
-                    title: "Seeded retailer records",
-                    message: "Exact Walmart item IDs and observed demo prices are stored on-device. Availability is not live, and search fallbacks are never presented as exact products.",
-                    color: SmartCartTheme.amber
+                    title: appModel.shoppingRoute == .instacart ? "No products selected yet" : "Seeded retailer records",
+                    message: appModel.shoppingRoute == .instacart
+                        ? "Instacart will confirm live products, store, prices, availability, substitutions, pickup or delivery, and checkout after you approve this manifest."
+                        : "Exact Walmart item IDs and observed demo prices are stored on-device. Availability is not live, and search fallbacks are never presented as exact products.",
+                    color: appModel.shoppingRoute == .instacart ? SmartCartTheme.green : SmartCartTheme.amber
                 )
             }
             .padding(18)
             .padding(.bottom, 96)
         }
         .smartCartBackground()
-        .navigationTitle("Match products")
+        .navigationTitle(appModel.shoppingRoute == .instacart ? "Prepare manifest" : "Match products")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
             BottomActionBar {
@@ -50,7 +70,7 @@ struct ProductMatchingView: View {
                     appModel.continueTo(.shoppingList)
                 } label: {
                     HStack {
-                        Text(appModel.matchProgress == 1 ? "Review shopping list" : "Matching products…")
+                        Text(appModel.matchProgress == 1 ? "Review shopping list" : "Preparing list…")
                         Spacer()
                         if appModel.isMatching {
                             ProgressView()
@@ -88,7 +108,7 @@ struct ProductMatchingView: View {
                     Text("\(Int(appModel.matchProgress * 100))%")
                         .font(.system(size: 28, weight: .bold, design: .rounded))
                         .foregroundStyle(SmartCartTheme.navy)
-                    Text("matched")
+                    Text(appModel.shoppingRoute == .instacart ? "prepared" : "matched")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(SmartCartTheme.secondaryInk)
                 }
@@ -100,7 +120,9 @@ struct ProductMatchingView: View {
                     .font(.headline)
                     .foregroundStyle(SmartCartTheme.navy)
                     .multilineTextAlignment(.center)
-                Text("\(appModel.ingredientsToBuy.count) ingredients · \(appModel.selectedStores.count) selected \(appModel.selectedStores.count == 1 ? "store" : "stores")")
+                Text(appModel.shoppingRoute == .instacart
+                    ? "\(appModel.ingredientsToBuy.count) ingredients · \(appModel.pantrySkipCount) pantry item(s) removed"
+                    : "\(appModel.ingredientsToBuy.count) ingredients · \(appModel.selectedStores.count) selected \(appModel.selectedStores.count == 1 ? "store" : "stores")")
                     .font(.caption)
                     .foregroundStyle(SmartCartTheme.secondaryInk)
             }
@@ -149,9 +171,15 @@ struct ProductMatchingView: View {
 
     private var resultsSummary: some View {
         HStack(spacing: 10) {
-            resultMetric("\(appModel.matchedItemCount)", "Exact links", "checkmark.seal.fill", SmartCartTheme.green)
-            resultMetric("\(appModel.searchFallbackCount)", "Searches", "magnifyingglass.circle.fill", SmartCartTheme.amber)
-            resultMetric(appModel.estimatedTotal.formatted(.currency(code: "USD")), "Observed", "cart.fill", SmartCartTheme.walmartBlue)
+            if appModel.shoppingRoute == .instacart {
+                resultMetric("\(appModel.ingredientsToBuy.count)", "To shop", "basket.fill", SmartCartTheme.green)
+                resultMetric("\(appModel.pantrySkipCount)", "Removed", "cabinet.fill", SmartCartTheme.purple)
+                resultMetric("\(appModel.commerceBlockingIssues.count)", "Need review", "exclamationmark.triangle.fill", SmartCartTheme.amber)
+            } else {
+                resultMetric("\(appModel.matchedItemCount)", "Exact links", "checkmark.seal.fill", SmartCartTheme.green)
+                resultMetric("\(appModel.searchFallbackCount)", "Searches", "magnifyingglass.circle.fill", SmartCartTheme.amber)
+                resultMetric(appModel.estimatedTotal.formatted(.currency(code: "USD")), "Observed", "cart.fill", SmartCartTheme.walmartBlue)
+            }
         }
     }
 
@@ -202,8 +230,22 @@ struct ProductMatchingView: View {
 struct ShoppingListReviewView: View {
     @Environment(\.openURL) private var openURL
     @Environment(AppModel.self) private var appModel
+    @State private var commerceSheet: CommerceSheetDestination?
+    @State private var safariWasPresented = false
 
+    @ViewBuilder
     var body: some View {
+        switch appModel.shoppingRoute {
+        case .instacart:
+            instacartReview
+        case .walmartDirect:
+            walmartReview
+        case .otherRetailerLinks:
+            otherRetailerReview
+        }
+    }
+
+    private var walmartReview: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 listHeader
@@ -274,6 +316,210 @@ struct ShoppingListReviewView: View {
                     }
                 }
             }
+        }
+    }
+
+    private var instacartReview: some View {
+        ZStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    instacartHeader
+                    instacartSummary
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        SectionHeader(
+                            title: "Ingredients Instacart will receive",
+                            subtitle: "\(appModel.ingredientsToBuy.count) normalized line items · no products selected yet"
+                        )
+                        ForEach(appModel.ingredientsToBuy) { ingredient in
+                            InstacartIngredientRow(
+                                ingredient: ingredient,
+                                quantityText: appModel.quantityToBuyText(for: ingredient)
+                            )
+                        }
+                    }
+
+                    if !appModel.commerceBlockingIssues.isEmpty {
+                        InfoBanner(
+                            symbol: "exclamationmark.triangle.fill",
+                            title: "Review required before handoff",
+                            message: appModel.commerceBlockingIssues.joined(separator: " "),
+                            color: SmartCartTheme.amber
+                        )
+                    }
+
+                    InfoBanner(
+                        symbol: "checkmark.shield.fill",
+                        title: "SmartCart prepares; Instacart confirms",
+                        message: "Instacart will confirm products, prices, availability, substitutions, store, pickup or delivery, sign-in, payment, checkout, and order tracking.",
+                        color: SmartCartTheme.green
+                    )
+                    ShareLink(item: appModel.shareText) {
+                        Label("Share ingredient list", systemImage: "square.and.arrow.up")
+                    }
+                    .buttonStyle(SecondaryButtonStyle())
+                }
+                .padding(18)
+                .padding(.bottom, 142)
+            }
+            .smartCartBackground()
+
+            if appModel.isPreparingCommerceHandoff {
+                CommerceHandoffLoadingView(stage: appModel.commerceHandoffStage)
+                    .transition(.opacity)
+                    .zIndex(5)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: appModel.isPreparingCommerceHandoff)
+        .navigationTitle("Final list review")
+        .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .bottom) {
+            BottomActionBar {
+                VStack(spacing: 8) {
+                    Button {
+                        Task { await prepareInstacartHandoff() }
+                    } label: {
+                        HStack {
+                            Text("Shop ingredients")
+                            Spacer()
+                            Image(systemName: "arrow.up.right")
+                        }
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .disabled(
+                        !appModel.activeCommerceCapabilities.preparesShoppingList ||
+                        !appModel.commerceBlockingIssues.isEmpty ||
+                        appModel.isPreparingCommerceHandoff
+                    )
+
+                    if let handoff = appModel.lastInstacartHandoff {
+                        Button("Open in Instacart or Safari") {
+                            openURL(handoff.url)
+                        }
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(SmartCartTheme.green)
+                    }
+                }
+            }
+        }
+        .sheet(item: $commerceSheet, onDismiss: commerceSheetDidDismiss) { destination in
+            switch destination {
+            case .safari(let handoff):
+                InstacartSafariView(url: handoff.url)
+                    .ignoresSafeArea()
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+            case .feedback(let handoff):
+                CommerceFeedbackSheet(handoff: handoff) {
+                    commerceSheet = .safari(handoff)
+                    safariWasPresented = true
+                }
+                .presentationDetents([.medium, .large])
+            }
+        }
+    }
+
+    private var instacartHeader: some View {
+        VStack(alignment: .leading, spacing: 13) {
+            HStack(spacing: 13) {
+                Image(systemName: "carrot.fill")
+                    .font(.title2.bold())
+                    .foregroundStyle(SmartCartTheme.onAccent)
+                    .frame(width: 54, height: 54)
+                    .background(SmartCartTheme.green)
+                    .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(appModel.activeRecipe.title)
+                        .font(.title3.bold())
+                        .foregroundStyle(SmartCartTheme.navy)
+                    Text("SmartCart → Instacart shopping-list handoff")
+                        .font(.caption)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
+                }
+                Spacer(minLength: 0)
+            }
+            Text("Review the final manifest before SmartCart creates a secure shopping-list link.")
+                .font(.subheadline)
+                .foregroundStyle(SmartCartTheme.secondaryInk)
+        }
+        .smartCartCard()
+        .smartCartShadow()
+    }
+
+    private var instacartSummary: some View {
+        VStack(spacing: 11) {
+            totalRow("Ingredients", value: "\(appModel.ingredientsToBuy.count)", emphasized: true)
+            totalRow("Pantry items removed", value: "\(appModel.pantrySkipCount)")
+            totalRow("Preferences", value: appModel.preferences.summary)
+            totalRow("Preferred retailer", value: appModel.instacartRetailerPreference.label)
+            totalRow("Fulfillment", value: "\(appModel.commerceFulfillmentPreference.label) · advisory")
+            totalRow("List composition", value: listComposition)
+            totalRow("Items requiring review", value: "\(appModel.commerceBlockingIssues.count)")
+        }
+        .smartCartCard()
+    }
+
+    private var listComposition: String {
+        let grouped = Dictionary(grouping: appModel.ingredientsToBuy, by: \.category)
+        return grouped
+            .sorted { $0.key.rawValue < $1.key.rawValue }
+            .map { "\($0.value.count) \($0.key.rawValue.lowercased())" }
+            .joined(separator: " · ")
+    }
+
+    private var otherRetailerReview: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                WorkflowHeader(
+                    step: 6,
+                    total: 6,
+                    eyebrow: "Retailer links",
+                    title: "Choose an external destination",
+                    message: "These links do not receive your SmartCart manifest. Products, prices, availability, fulfillment, and checkout are not connected."
+                )
+                ForEach(appModel.deliveryPartners) { partner in
+                    Button {
+                        openURL(partner.url)
+                    } label: {
+                        HStack {
+                            Image(systemName: partner.symbol)
+                                .foregroundStyle(partner.color)
+                            Text(partner.name)
+                                .font(.headline)
+                                .foregroundStyle(SmartCartTheme.navy)
+                            Spacer()
+                            Image(systemName: "arrow.up.right")
+                                .foregroundStyle(SmartCartTheme.secondaryInk)
+                        }
+                    }
+                    .buttonStyle(SecondaryButtonStyle())
+                }
+                InfoBanner(
+                    symbol: "info.circle.fill",
+                    title: "No list transfer",
+                    message: "Return to Shopping route and choose Instacart when you want SmartCart to prepare a normalized list.",
+                    color: SmartCartTheme.amber
+                )
+            }
+            .padding(18)
+        }
+        .smartCartBackground()
+        .navigationTitle("Retailer links")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func prepareInstacartHandoff() async {
+        guard let handoff = await appModel.prepareInstacartHandoff() else { return }
+        safariWasPresented = true
+        commerceSheet = .safari(handoff)
+    }
+
+    private func commerceSheetDidDismiss() {
+        guard safariWasPresented, let handoff = appModel.lastInstacartHandoff else { return }
+        safariWasPresented = false
+        Task { @MainActor in
+            await Task.yield()
+            commerceSheet = .feedback(handoff)
         }
     }
 
@@ -418,6 +664,157 @@ struct ShoppingListReviewView: View {
             message: "SmartCart saves your selected product records and progress. You open exact items or labeled searches, then add, reserve pickup, and pay at Walmart.",
             color: SmartCartTheme.green
         )
+    }
+}
+
+private enum CommerceSheetDestination: Identifiable {
+    case safari(InstacartHandoffResponse)
+    case feedback(InstacartHandoffResponse)
+
+    var id: String {
+        switch self {
+        case .safari(let handoff): "safari-\(handoff.manifestFingerprint)"
+        case .feedback(let handoff): "feedback-\(handoff.manifestFingerprint)"
+        }
+    }
+}
+
+private struct InstacartIngredientRow: View {
+    let ingredient: Ingredient
+    let quantityText: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: ingredient.category.symbol)
+                .font(.subheadline.bold())
+                .foregroundStyle(SmartCartTheme.green)
+                .frame(width: 38, height: 38)
+                .background(SmartCartTheme.herbLight)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(ingredient.name)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(SmartCartTheme.navy)
+                Text(ingredient.preparation.isEmpty ? quantityText : "\(quantityText) · \(ingredient.preparation)")
+                    .font(.caption)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
+            }
+            Spacer()
+            if ingredient.quantityReviewRequired == true || ingredient.alternativeGroup != nil {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(SmartCartTheme.amber)
+                    .accessibilityLabel("Needs review")
+            } else {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(SmartCartTheme.green)
+                    .accessibilityLabel("Ready")
+            }
+        }
+        .padding(13)
+        .background(SmartCartTheme.paper)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(SmartCartTheme.border, lineWidth: 1)
+        }
+    }
+}
+
+private struct CommerceHandoffLoadingView: View {
+    let stage: String
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.36)
+                .ignoresSafeArea()
+            VStack(spacing: 17) {
+                ProgressView()
+                    .controlSize(.large)
+                    .tint(SmartCartTheme.green)
+                Text(stage)
+                    .font(.headline)
+                    .foregroundStyle(SmartCartTheme.navy)
+                    .multilineTextAlignment(.center)
+                Text("No order is placed during this step.")
+                    .font(.caption)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
+            }
+            .padding(26)
+            .frame(maxWidth: 300)
+            .background(SmartCartTheme.paper)
+            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .smartCartShadow()
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(stage)
+    }
+}
+
+private struct InstacartSafariView: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeUIViewController(context: Context) -> SFSafariViewController {
+        let controller = SFSafariViewController(url: url)
+        controller.dismissButtonStyle = .close
+        controller.preferredControlTintColor = UIColor(SmartCartTheme.green)
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
+}
+
+private struct CommerceFeedbackSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(AppModel.self) private var appModel
+
+    let handoff: InstacartHandoffResponse
+    let reopen: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    SectionHeader(
+                        title: "How did shopping go?",
+                        subtitle: "This is self-reported. SmartCart does not infer checkout completion."
+                    )
+                    ForEach(CommerceHandoffFeedback.allCases) { feedback in
+                        Button {
+                            appModel.recordHandoffFeedback(feedback)
+                            dismiss()
+                        } label: {
+                            HStack {
+                                Text(feedback.label)
+                                    .font(.subheadline.weight(.bold))
+                                Spacer()
+                                Image(systemName: appModel.latestHandoffFeedback == feedback ? "checkmark.circle.fill" : "circle")
+                            }
+                        }
+                        .buttonStyle(SecondaryButtonStyle())
+                    }
+
+                    Button {
+                        dismiss()
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(250))
+                            reopen()
+                        }
+                    } label: {
+                        Label("Reopen Instacart", systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                }
+                .padding(18)
+            }
+            .smartCartBackground()
+            .navigationTitle("Shopping feedback")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
     }
 }
 
@@ -991,7 +1388,7 @@ struct AccountView: View {
                 InfoBanner(
                     symbol: "waveform.path.ecg",
                     title: "Last import · \(report.confidenceLabel)",
-                    message: "\(report.sourcePageCount) page(s), \(report.ingredientLineCount) ingredients, \(report.reviewCount) review item(s), layout \(report.layoutConfidence.formatted(.percent.precision(.fractionLength(0)))) with \(report.layoutAmbiguityCount) ambiguity flag(s), \(report.ignoredInstructionLineCount) instruction line(s) excluded, \(report.retryCount) OCR retry/retries, \(report.duration.formatted(.number.precision(.fractionLength(2))))s.",
+                    message: "\(report.sourcePageCount) page(s), \(report.ingredientLineCount) ingredients, \(report.reviewCount) review item(s), evidence preserved for \(report.sourceEvidenceCount), \(report.quantityAlternativeReviewCount) quantity alternative(s), layout \(report.layoutConfidence.formatted(.percent.precision(.fractionLength(0)))) with \(report.layoutAmbiguityCount) ambiguity flag(s), \(report.ignoredInstructionLineCount) instruction line(s) excluded, \(report.retryCount) OCR retry/retries, \(report.duration.formatted(.number.precision(.fractionLength(2))))s.",
                     color: report.confidenceScore >= 0.82 ? SmartCartTheme.green : SmartCartTheme.amber
                 )
             }

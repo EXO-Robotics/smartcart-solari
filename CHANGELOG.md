@@ -2,6 +2,8 @@
 
 ## 0.3.0 — Human-validation candidate (unreleased)
 
+- Adds the capability-driven SmartCart → Instacart workflow: shopping-route selection, advisory retailer/fulfillment preferences, normalized manifest review, safe backend handoff preparation and fingerprint caching, full-height in-app Safari, external-open fallback, and self-reported shopping outcomes.
+- Removes invented fallback groceries from failed imports, preserves per-line OCR geometry and credible quantity alternatives through ingredient review, adds local source crops, applies page-level spanning instruction boundaries, bounds Vision recipe vocabulary, and replaces the fast retry with an accurate orientation-normalized contrast pass.
 - Reconstructs multi-column recipe photos from OCR bounding boxes, preserves bullet continuations, stops at instruction boundaries, and reports layout ambiguity separately from text confidence.
 - Adds a permanent 20-ingredient, multi-section recipe fixture plus compound measurements, equivalents, preparation phrases, brand notes, alternatives, and explicit malformed-quantity review.
 - Routes URL import through the local recipe-page backend, which enforces HTTPS/redirect/timeout/size/MIME rules, preserves original/final URL provenance, and uses inert JSON-LD or visible-page extraction.

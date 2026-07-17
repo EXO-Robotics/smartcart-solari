@@ -283,6 +283,8 @@ struct IngredientSourceEvidence: Hashable, Codable {
     var parserConfidence: Double
     var normalizationConfidence: Double
     var alternateQuantityCandidates: [Double]
+    var alternateSourceTexts: [String]? = nil
+    var sourceCropJPEGData: Data? = nil
 }
 
 enum PantryCoverage: String, Hashable, Codable {
@@ -322,6 +324,8 @@ struct RecipeImportReport: Hashable {
     var layoutConfidence: Double = 1
     var layoutAmbiguityCount: Int = 0
     var ignoredInstructionLineCount: Int = 0
+    var sourceEvidenceCount: Int = 0
+    var quantityAlternativeReviewCount: Int = 0
 
     var confidenceScore: Double {
         guard ingredientLineCount > 0 else { return 0 }
@@ -592,6 +596,7 @@ enum AnalyticsEventName: String, CaseIterable, Codable, Hashable {
     case matchingCompleted = "matching_completed"
     case productReplaced = "product_replaced"
     case retailerLinkOpened = "retailer_link_opened"
+    case handoffFeedbackRecorded = "handoff_feedback_recorded"
     case guidedItemCompleted = "guided_item_completed"
     case guidedShoppingCompleted = "guided_shopping_completed"
     case barcodeScanned = "barcode_scanned"

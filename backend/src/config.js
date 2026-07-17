@@ -9,8 +9,9 @@ function integer(name, fallback, { min = 1, max = Number.MAX_SAFE_INTEGER } = {}
 }
 
 export function loadConfig(overrides = {}) {
+  const env = overrides.env ?? process.env.NODE_ENV ?? 'development';
   const config = {
-    env: process.env.NODE_ENV ?? 'development',
+    env,
     host: process.env.HOST ?? '127.0.0.1',
     port: integer('PORT', 8787, { max: 65_535 }),
     logLevel: process.env.LOG_LEVEL ?? 'info',
@@ -27,6 +28,13 @@ export function loadConfig(overrides = {}) {
     recipePageTimeoutMs: integer('RECIPE_PAGE_TIMEOUT_MS', 10_000, { max: 60_000 }),
     recipePageMaxBytes: integer('RECIPE_PAGE_MAX_BYTES', 2_097_152, { max: 10_485_760 }),
     recipePageMaxRedirects: integer('RECIPE_PAGE_MAX_REDIRECTS', 5, { max: 10 }),
+    instacartApiKey: process.env.INSTACART_API_KEY || undefined,
+    instacartApiBaseUrl: process.env.INSTACART_API_BASE_URL ?? (
+      env === 'production' ? 'https://connect.instacart.com' : 'https://connect.dev.instacart.tools'
+    ),
+    instacartDemoHandoffUrl: process.env.INSTACART_DEMO_HANDOFF_URL || undefined,
+    instacartTimeoutMs: integer('INSTACART_TIMEOUT_MS', 10_000, { max: 60_000 }),
+    instacartHandoffCacheTtlMs: integer('INSTACART_HANDOFF_CACHE_TTL_SECONDS', 86_400, { max: 31_536_000 }) * 1_000,
     oauthClientId: process.env.OAUTH_DEMO_CLIENT_ID ?? 'smartcart-local-demo-client',
     oauthRedirectUri:
       process.env.OAUTH_DEMO_REDIRECT_URI ?? 'http://127.0.0.1:8787/v1/oauth/demo/callback',

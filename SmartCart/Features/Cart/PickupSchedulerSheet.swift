@@ -251,6 +251,225 @@ private struct PantryIngredientRow: View {
     }
 }
 
+struct CommerceRouteSelectionView: View {
+    @Environment(AppModel.self) private var appModel
+
+    var body: some View {
+        @Bindable var appModel = appModel
+
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                WorkflowHeader(
+                    step: 5,
+                    total: 6,
+                    eyebrow: "Shopping route",
+                    title: "How should SmartCart hand off your list?",
+                    message: "Choose the commerce route first. Stores, live products, fulfillment, and checkout remain with the selected retailer service."
+                )
+
+                locationField
+                shoppingRouteCards
+
+                switch appModel.shoppingRoute {
+                case .instacart:
+                    instacartPreferences
+                    capabilityDisclosure
+                case .walmartDirect:
+                    walmartStoreCards
+                    walmartFulfillment
+                case .otherRetailerLinks:
+                    InfoBanner(
+                        symbol: "link.circle.fill",
+                        title: "Links only",
+                        message: "Other retailer destinations do not receive a SmartCart manifest in this build. No cart, live price, availability, or checkout connection is implied.",
+                        color: SmartCartTheme.amber
+                    )
+                }
+            }
+            .padding(18)
+            .padding(.bottom, 96)
+        }
+        .smartCartBackground()
+        .navigationTitle("Shopping route")
+        .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .bottom) {
+            BottomActionBar {
+                Button {
+                    if appModel.shoppingRoute == .otherRetailerLinks {
+                        appModel.continueTo(.shoppingList)
+                    } else {
+                        appModel.continueTo(.matching)
+                    }
+                } label: {
+                    HStack {
+                        Text(primaryButtonTitle)
+                        Spacer()
+                        Image(systemName: "arrow.right")
+                    }
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .disabled(appModel.shoppingRoute == .walmartDirect && appModel.selectedStores.isEmpty)
+            }
+        }
+    }
+
+    private var primaryButtonTitle: String {
+        switch appModel.shoppingRoute {
+        case .instacart: "Build shopping list"
+        case .walmartDirect: "Match Walmart products"
+        case .otherRetailerLinks: "Review link options"
+        }
+    }
+
+    private var locationField: some View {
+        HStack(spacing: 11) {
+            Image(systemName: "location.fill")
+                .foregroundStyle(SmartCartTheme.green)
+            TextField("ZIP code", text: Bindable(appModel).zipCode)
+                .keyboardType(.numberPad)
+                .textContentType(.postalCode)
+            Text("Used for nearby retailers")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(SmartCartTheme.secondaryInk)
+        }
+        .smartField()
+    }
+
+    private var shoppingRouteCards: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionHeader(title: "Shopping route", subtitle: "Instacart is a service route, not a grocery store")
+            ForEach(ShoppingRoutePreference.allCases) { route in
+                selectionCard(
+                    title: route.title,
+                    subtitle: route.subtitle,
+                    symbol: route.symbol,
+                    selected: appModel.shoppingRoute == route
+                ) {
+                    appModel.shoppingRoute = route
+                }
+            }
+        }
+    }
+
+    private var instacartPreferences: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            SectionHeader(
+                title: "Instacart preferences",
+                subtitle: "Advisory until Instacart confirms nearby options"
+            )
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("PREFERRED RETAILER")
+                    .smartEyebrow(SmartCartTheme.mutedInk)
+                ForEach(InstacartRetailerPreference.allCases) { retailer in
+                    selectionCard(
+                        title: retailer.label,
+                        subtitle: retailer == .bestAvailable
+                            ? "Let Instacart choose from nearby availability."
+                            : "Requested where the retailer is available near \(appModel.zipCode).",
+                        symbol: "storefront",
+                        selected: appModel.instacartRetailerPreference == retailer
+                    ) {
+                        appModel.instacartRetailerPreference = retailer
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("FULFILLMENT PREFERENCE")
+                    .smartEyebrow(SmartCartTheme.mutedInk)
+                ForEach(CommerceFulfillmentPreference.allCases) { preference in
+                    selectionCard(
+                        title: preference.label,
+                        subtitle: "Instacart confirms available pickup or delivery options.",
+                        symbol: preference == .pickup ? "car.fill" : preference == .delivery ? "house.fill" : "slider.horizontal.3",
+                        selected: appModel.commerceFulfillmentPreference == preference
+                    ) {
+                        appModel.commerceFulfillmentPreference = preference
+                    }
+                }
+            }
+        }
+        .smartCartCard()
+    }
+
+    private var capabilityDisclosure: some View {
+        let capabilities = appModel.activeCommerceCapabilities
+        return InfoBanner(
+            symbol: "checkmark.shield.fill",
+            title: "Clear ownership",
+            message: capabilities.embeddedCheckout
+                ? "SmartCart prepares the list and the approved provider can complete checkout in-app."
+                : "SmartCart prepares the list. Instacart confirms live products, prices, availability, substitutions, store, pickup or delivery, sign-in, payment, checkout, and order tracking.",
+            color: SmartCartTheme.green
+        )
+    }
+
+    private var walmartStoreCards: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionHeader(title: "Walmart location", subtitle: "Choose one store for the guided-link route")
+            ForEach(appModel.stores) { store in
+                selectionCard(
+                    title: store.name,
+                    subtitle: "\(store.distance.formatted(.number.precision(.fractionLength(1)))) mi · \(store.address)",
+                    symbol: "storefront.fill",
+                    selected: appModel.selectedStoreIDs.contains(store.id)
+                ) {
+                    appModel.selectStore(store)
+                }
+            }
+        }
+    }
+
+    private var walmartFulfillment: some View {
+        InfoBanner(
+            symbol: "car.fill",
+            title: "Pickup preference",
+            message: "SmartCart remembers the preference. Walmart confirms inventory, substitutions, payment, and the actual pickup reservation.",
+            color: SmartCartTheme.walmartBlue
+        )
+    }
+
+    private func selectionCard(
+        title: String,
+        subtitle: String,
+        symbol: String,
+        selected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: symbol)
+                    .font(.subheadline.bold())
+                    .foregroundStyle(selected ? SmartCartTheme.onAccent : SmartCartTheme.green)
+                    .frame(width: 38, height: 38)
+                    .background(selected ? SmartCartTheme.green : SmartCartTheme.herbLight)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(SmartCartTheme.navy)
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 4)
+                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(selected ? SmartCartTheme.green : SmartCartTheme.borderStrong)
+            }
+            .padding(13)
+            .background(SmartCartTheme.paper)
+            .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 17, style: .continuous)
+                    .stroke(selected ? SmartCartTheme.borderStrong : SmartCartTheme.border, lineWidth: selected ? 1.5 : 1)
+            }
+        }
+        .buttonStyle(PressableButtonStyle())
+    }
+}
+
 struct StoreSelectionView: View {
     @Environment(AppModel.self) private var appModel
 

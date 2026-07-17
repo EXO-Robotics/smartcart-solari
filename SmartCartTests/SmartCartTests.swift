@@ -569,6 +569,81 @@ final class SmartCartTests: XCTestCase {
         let expected = try String(contentsOf: expectedURL, encoding: .utf8)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         XCTAssertEqual(result.reconstructedText, expected)
+        XCTAssertEqual(result.ingredientSourceLines.count, result.ingredientLines.count)
+        XCTAssertTrue(result.ingredientSourceLines.allSatisfy { $0.boundingBox.isUsable })
+    }
+
+    func testParserNeverInventsFallbackGroceriesForFailedImports() {
+        for source in [RecipeSource.photo, .text, .link] {
+            let recipe = RecipeParser.parse(
+                title: "Unreadable",
+                text: "Instructions\nMix until smooth\nBake for 20 minutes",
+                source: source
+            )
+            XCTAssertTrue(recipe.ingredients.isEmpty, "Failed \(source.rawValue) imports must stay empty")
+        }
+    }
+
+    func testSpanningInstructionHeadingStopsEveryColumnAtPageLevel() {
+        let observations = [
+            OCRTextObservation(text: "1 cup flour", boundingBox: .init(x: 0.05, y: 0.82, width: 0.30, height: 0.05), confidence: 0.95),
+            OCRTextObservation(text: "2 eggs", boundingBox: .init(x: 0.58, y: 0.82, width: 0.24, height: 0.05), confidence: 0.95),
+            OCRTextObservation(text: "1 tsp salt", boundingBox: .init(x: 0.05, y: 0.70, width: 0.30, height: 0.05), confidence: 0.94),
+            OCRTextObservation(text: "1 cup sugar", boundingBox: .init(x: 0.58, y: 0.70, width: 0.28, height: 0.05), confidence: 0.94),
+            OCRTextObservation(text: "INSTRUCTIONS", boundingBox: .init(x: 0.08, y: 0.56, width: 0.80, height: 0.06), confidence: 0.99),
+            OCRTextObservation(text: "Mix the flour and eggs", boundingBox: .init(x: 0.05, y: 0.43, width: 0.38, height: 0.05), confidence: 0.94),
+            OCRTextObservation(text: "Bake for 20 minutes", boundingBox: .init(x: 0.58, y: 0.43, width: 0.34, height: 0.05), confidence: 0.94)
+        ]
+
+        let result = OCRLayoutReconstructor.reconstruct(observations)
+
+        XCTAssertEqual(result.ingredientLines.count, 4)
+        XCTAssertFalse(result.ingredientLines.contains { $0.localizedCaseInsensitiveContains("bake") })
+        XCTAssertTrue(result.ignoredInstructionLines.contains { $0 == "INSTRUCTIONS" })
+        XCTAssertTrue(result.ignoredInstructionLines.contains { $0.localizedCaseInsensitiveContains("mix") })
+    }
+
+    func testOCRAlternativesAndGeometryReachIngredientReviewEvidence() throws {
+        let observation = OCRTextObservation(
+            text: "2 cups flour",
+            boundingBox: .init(x: 0.12, y: 0.66, width: 0.52, height: 0.07),
+            confidence: 0.68,
+            pageIndex: 1,
+            alternateCandidates: [
+                OCRTextAlternative(text: "12 cups flour", confidence: 0.64)
+            ]
+        )
+        let reconstruction = OCRLayoutReconstructor.reconstruct([observation])
+        let recipe = RecipeParser.parse(
+            title: "Evidence",
+            text: reconstruction.reconstructedText,
+            source: .photo,
+            sourceLines: reconstruction.ingredientSourceLines
+        )
+        let ingredient = try recipe.ingredients.firstUnwrapped()
+        let evidence = try ingredient.sourceEvidence.firstUnwrapped()
+        let box = try evidence.boundingBox.firstUnwrapped()
+        let ocrConfidence = try evidence.ocrConfidence.firstUnwrapped()
+
+        XCTAssertEqual(evidence.pageIndex, 1)
+        XCTAssertEqual(box.x, 0.12, accuracy: 0.0001)
+        XCTAssertEqual(ocrConfidence, 0.68, accuracy: 0.0001)
+        XCTAssertEqual(evidence.alternateSourceTexts, ["12 cups flour"])
+        XCTAssertEqual(evidence.alternateQuantityCandidates, [2, 12])
+        XCTAssertEqual(ingredient.confidence, .review)
+        XCTAssertEqual(ingredient.quantityReviewRequired, true)
+    }
+
+    func testOCRVocabularyIsBoundedAndCriticalLinesPreserveAlternatives() {
+        let contextual = (0..<150).map { "PantryItem\($0)" }
+        let words = RecipeOCRPolicy.boundedCustomWords(contextual)
+
+        XCTAssertLessThanOrEqual(words.count, RecipeOCRPolicy.maximumCustomWordCount)
+        XCTAssertTrue(words.contains("gochujang"))
+        XCTAssertTrue(words.contains("tbsp"))
+        XCTAssertTrue(RecipeOCRPolicy.shouldPreserveAlternatives(in: "1/2 cup cream", confidence: 0.95))
+        XCTAssertTrue(RecipeOCRPolicy.shouldPreserveAlternatives(in: "mascarpone", confidence: 0.60))
+        XCTAssertFalse(RecipeOCRPolicy.shouldPreserveAlternatives(in: "fresh parsley", confidence: 0.95))
     }
 
     func testBarcodeNormalizationPreservesLeadingZerosAndValidatesGTINs() throws {
@@ -768,6 +843,105 @@ final class SmartCartTests: XCTestCase {
         XCTAssertEqual(relaunchedAgain.pantryInventory[0].name, "Pantry staple")
     }
 
+    @MainActor
+    func testInstacartCommerceCapabilitiesAndPreferencesPersist() {
+        let defaults = isolatedCommerceDefaults()
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            instacartHandoffService: RecordingInstacartHandoffService(),
+            commerceDefaults: defaults
+        )
+
+        XCTAssertEqual(model.shoppingRoute, .instacart)
+        XCTAssertTrue(model.activeCommerceCapabilities.preparesShoppingList)
+        XCTAssertTrue(model.activeCommerceCapabilities.livePricing)
+        XCTAssertFalse(model.activeCommerceCapabilities.embeddedCheckout)
+
+        model.instacartRetailerPreference = .aldi
+        model.commerceFulfillmentPreference = .delivery
+        model.recordHandoffFeedback(.savedForLater)
+
+        let restored = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            instacartHandoffService: RecordingInstacartHandoffService(),
+            commerceDefaults: defaults
+        )
+        XCTAssertEqual(restored.instacartRetailerPreference, .aldi)
+        XCTAssertEqual(restored.commerceFulfillmentPreference, .delivery)
+        XCTAssertEqual(restored.latestHandoffFeedback, .savedForLater)
+    }
+
+    @MainActor
+    func testInstacartManifestExcludesPantryAndOptionalItemsAndPreservesPreferences() {
+        let defaults = isolatedCommerceDefaults()
+        var flour = Ingredient(name: "Flour", quantity: 2, unit: "cups")
+        flour.pantryState = .needToBuy
+        var butter = Ingredient(name: "Butter", quantity: 0.5, unit: "cup")
+        butter.pantryState = .haveEnough
+        let optionalParsley = Ingredient(name: "Parsley", quantity: 1, unit: "bunch", includeInList: false)
+        let recipe = Recipe(
+            title: "Cookies",
+            source: .text,
+            sourceDetail: "Test",
+            heroSymbol: "birthday.cake.fill",
+            servings: 4,
+            prepMinutes: 10,
+            cookMinutes: 12,
+            ingredients: [flour, butter, optionalParsley]
+        )
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            instacartHandoffService: RecordingInstacartHandoffService(),
+            commerceDefaults: defaults
+        )
+        model.activeRecipe = recipe
+        model.desiredServings = 4
+        model.preferences.organicPolicy = .only
+        model.preferences.dietaryRestrictions = [.glutenFree, .vegan, .dairyFree]
+
+        let draft = model.instacartManifestDraft
+        XCTAssertEqual(draft.items.count, 1)
+        XCTAssertEqual(draft.items[0].name, "Flour")
+        XCTAssertEqual(draft.items[0].quantity, 2, accuracy: 0.001)
+        XCTAssertEqual(draft.items[0].unit, "cups")
+        XCTAssertEqual(draft.items[0].healthFilters, ["GLUTEN_FREE", "ORGANIC", "VEGAN"])
+        XCTAssertNil(draft.items[0].exactUPC)
+        XCTAssertEqual(draft.pantryItemsRemoved, 1)
+    }
+
+    @MainActor
+    func testInstacartManifestBlocksUnconfirmedQuantitiesAndUnresolvedAlternatives() {
+        let defaults = isolatedCommerceDefaults()
+        let ingredient = Ingredient(
+            name: "Sugar or honey",
+            quantity: 1,
+            unit: "cup",
+            alternativeGroup: "Sugar or honey",
+            quantityReviewRequired: true
+        )
+        let recipe = Recipe(
+            title: "Sweet Test",
+            source: .text,
+            sourceDetail: "Test",
+            heroSymbol: "fork.knife",
+            servings: 2,
+            prepMinutes: 1,
+            cookMinutes: 1,
+            ingredients: [ingredient]
+        )
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            instacartHandoffService: RecordingInstacartHandoffService(),
+            commerceDefaults: defaults
+        )
+        model.activeRecipe = recipe
+
+        XCTAssertEqual(model.unresolvedQuantityReviewCount, 1)
+        XCTAssertEqual(model.unresolvedAlternativeCount, 1)
+        XCTAssertTrue(model.commerceBlockingIssues.contains { $0.contains("uncertain quantity") })
+        XCTAssertTrue(model.commerceBlockingIssues.contains { $0.contains("unresolved alternative") })
+    }
+
     private func searchRequest(
         for name: String,
         quantity: Double = 1,
@@ -872,6 +1046,33 @@ final class SmartCartTests: XCTestCase {
             try? FileManager.default.removeItem(at: url)
         }
         return url
+    }
+
+    private func isolatedCommerceDefaults() -> UserDefaults {
+        let name = "SmartCartTests-Commerce-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defaults.removePersistentDomain(forName: name)
+        addTeardownBlock {
+            defaults.removePersistentDomain(forName: name)
+        }
+        return defaults
+    }
+}
+
+private actor RecordingInstacartHandoffService: InstacartHandoffServicing {
+    func createHandoff(
+        draft: InstacartManifestDraft,
+        postalCode: String,
+        preferredRetailer: InstacartRetailerPreference,
+        fulfillment: CommerceFulfillmentPreference
+    ) async throws -> InstacartHandoffResponse {
+        InstacartHandoffResponse(
+            provider: "instacart",
+            url: URL(string: "https://www.instacart.com/store/shopping_lists/test")!,
+            manifestFingerprint: "sha256:test",
+            createdAt: Date(timeIntervalSince1970: 0),
+            presentationMode: "in_app_safari"
+        )
     }
 }
 

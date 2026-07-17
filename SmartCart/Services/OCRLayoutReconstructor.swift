@@ -25,20 +25,38 @@ struct OCRTextObservation: Codable, Equatable, Hashable, Sendable {
     var confidence: Double
     var pageIndex: Int
     var bulletMarker: String?
+    var alternateCandidates: [OCRTextAlternative]?
 
     init(
         text: String,
         boundingBox: OCRNormalizedBoundingBox,
         confidence: Double,
         pageIndex: Int = 0,
-        bulletMarker: String? = nil
+        bulletMarker: String? = nil,
+        alternateCandidates: [OCRTextAlternative]? = nil
     ) {
         self.text = text
         self.boundingBox = boundingBox
         self.confidence = confidence
         self.pageIndex = pageIndex
         self.bulletMarker = bulletMarker
+        self.alternateCandidates = alternateCandidates
     }
+}
+
+struct OCRTextAlternative: Codable, Equatable, Hashable, Sendable {
+    var text: String
+    var confidence: Double
+}
+
+/// One reconstructed ingredient line that still carries the exact page and
+/// normalized geometry needed to make visual evidence reviewable.
+struct OCRSourceLine: Codable, Equatable, Hashable, Sendable {
+    var text: String
+    var pageIndex: Int
+    var boundingBox: OCRNormalizedBoundingBox
+    var confidence: Double
+    var alternateCandidates: [OCRTextAlternative]
 }
 
 enum OCRLayoutAmbiguity: String, Codable, Equatable, Hashable, Sendable {
@@ -58,6 +76,7 @@ struct OCRPageLayout: Codable, Equatable, Sendable {
 
 struct OCRLayoutReconstruction: Codable, Equatable, Sendable {
     var ingredientLines: [String]
+    var ingredientSourceLines: [OCRSourceLine]
     var ignoredInstructionLines: [String]
     var pageLayouts: [OCRPageLayout]
     var layoutConfidence: Double
@@ -95,7 +114,8 @@ struct OCRLayoutReconstructor {
                 box: observation.boundingBox,
                 confidence: Self.clamp(observation.confidence),
                 pageIndex: observation.pageIndex,
-                bulletMarker: Self.cleanedBullet(observation.bulletMarker)
+                bulletMarker: Self.cleanedBullet(observation.bulletMarker),
+                alternateCandidates: observation.alternateCandidates ?? []
             )
         }
 
@@ -103,6 +123,7 @@ struct OCRLayoutReconstructor {
             ambiguities.insert(.uncertainColumnDetection)
             return OCRLayoutReconstruction(
                 ingredientLines: [],
+                ingredientSourceLines: [],
                 ignoredInstructionLines: [],
                 pageLayouts: [],
                 layoutConfidence: 0,
@@ -111,6 +132,7 @@ struct OCRLayoutReconstructor {
         }
 
         var ingredientLines: [String] = []
+        var ingredientSourceLines: [OCRSourceLine] = []
         var ignoredInstructionLines: [String] = []
         var pageLayouts: [OCRPageLayout] = []
         var weightedConfidence = 0.0
@@ -121,6 +143,7 @@ struct OCRLayoutReconstructor {
             guard let pageObservations = pages[pageIndex] else { continue }
             let analysis = analyzePage(pageObservations)
             ingredientLines.append(contentsOf: analysis.ingredientLines)
+            ingredientSourceLines.append(contentsOf: analysis.ingredientSourceLines)
             ignoredInstructionLines.append(contentsOf: analysis.ignoredInstructionLines)
             pageLayouts.append(
                 OCRPageLayout(
@@ -141,6 +164,7 @@ struct OCRLayoutReconstructor {
 
         return OCRLayoutReconstruction(
             ingredientLines: ingredientLines,
+            ingredientSourceLines: ingredientSourceLines,
             ignoredInstructionLines: ignoredInstructionLines,
             pageLayouts: pageLayouts,
             layoutConfidence: Self.clamp(weightedConfidence / Double(max(1, observationTotal))),
@@ -153,15 +177,48 @@ struct OCRLayoutReconstructor {
     }
 
     private func analyzePage(_ observations: [PreparedObservation]) -> PageAnalysis {
-        let detection = detectColumns(in: observations)
-        var ambiguities = detection.ambiguities
         let averageOCRConfidence = observations.map(\.confidence).reduce(0, +) / Double(observations.count)
+        let spanningInstructionBoundary = observations
+            .filter { $0.box.width >= 0.58 && Self.isInstructionHeading($0.text) }
+            .map { $0.box.midY }
+            .max()
+
+        let globalIgnored: [PreparedObservation]
+        let ingredientRegion: [PreparedObservation]
+        if let boundary = spanningInstructionBoundary {
+            globalIgnored = observations.filter { $0.box.midY <= boundary + 0.004 }
+            ingredientRegion = observations.filter {
+                $0.box.midY > boundary + 0.004
+                    && !(Self.isIngredientHeading($0.text) && $0.box.width >= 0.58)
+            }
+        } else {
+            globalIgnored = []
+            ingredientRegion = observations.filter {
+                !(Self.isIngredientHeading($0.text) && $0.box.width >= 0.58)
+            }
+        }
+
+        guard !ingredientRegion.isEmpty else {
+            return PageAnalysis(
+                ingredientLines: [],
+                ingredientSourceLines: [],
+                ignoredInstructionLines: globalIgnored
+                    .sorted(by: Self.physicalReadingOrder)
+                    .map(\.renderedText),
+                columnCount: 1,
+                confidence: Self.clamp(averageOCRConfidence * 0.72),
+                ambiguities: [.uncertainColumnDetection]
+            )
+        }
+
+        let detection = detectColumns(in: ingredientRegion)
+        var ambiguities = detection.ambiguities
         if averageOCRConfidence < 0.55 {
             ambiguities.insert(.lowObservationConfidence)
         }
 
         var columns = Array(repeating: [PreparedObservation](), count: detection.centers.count)
-        for observation in observations {
+        for observation in ingredientRegion {
             let nearest = detection.centers.indices.min { lhs, rhs in
                 abs(observation.box.minX - detection.centers[lhs])
                     < abs(observation.box.minX - detection.centers[rhs])
@@ -170,7 +227,10 @@ struct OCRLayoutReconstructor {
         }
 
         var ingredientLines: [String] = []
-        var ignoredInstructionLines: [String] = []
+        var ingredientSourceLines: [OCRSourceLine] = []
+        var ignoredInstructionLines = globalIgnored
+            .sorted(by: Self.physicalReadingOrder)
+            .map(\.renderedText)
 
         for column in columns {
             let physicalLines = makePhysicalLines(from: column)
@@ -188,6 +248,7 @@ struct OCRLayoutReconstructor {
                     ignoredInstructionLines.append(rendered)
                 } else {
                     ingredientLines.append(rendered)
+                    ingredientSourceLines.append(line.sourceLine)
                 }
             }
         }
@@ -199,6 +260,7 @@ struct OCRLayoutReconstructor {
 
         return PageAnalysis(
             ingredientLines: ingredientLines,
+            ingredientSourceLines: ingredientSourceLines,
             ignoredInstructionLines: ignoredInstructionLines,
             columnCount: columns.count,
             confidence: confidence,
@@ -299,19 +361,45 @@ struct OCRLayoutReconstructor {
         return rows.map { row in
             let fragments = row.sorted { $0.box.minX < $1.box.minX }
             var marker: String?
-            let textFragments = fragments.compactMap { fragment -> String? in
+            let primaryFragments = fragments.compactMap { fragment -> String? in
                 let split = Self.extractBullet(from: fragment.text, explicit: fragment.bulletMarker)
                 if marker == nil { marker = split.marker }
                 return split.text.isEmpty ? nil : split.text
             }
-            let joined = Self.collapseWhitespace(textFragments.joined(separator: " "))
+            let joined = Self.collapseWhitespace(primaryFragments.joined(separator: " "))
+            var alternatives: [OCRTextAlternative] = []
+            for (fragmentIndex, fragment) in fragments.enumerated() {
+                for alternative in fragment.alternateCandidates.prefix(2) {
+                    var variant = fragments.map {
+                        Self.extractBullet(from: $0.text, explicit: $0.bulletMarker).text
+                    }
+                    variant[fragmentIndex] = Self.extractBullet(
+                        from: alternative.text,
+                        explicit: fragment.bulletMarker
+                    ).text
+                    let variantText = Self.repairMeasurementUnitTokenJoins(
+                        in: Self.collapseWhitespace(variant.joined(separator: " "))
+                    )
+                    guard !variantText.isEmpty,
+                          variantText.caseInsensitiveCompare(joined) != .orderedSame,
+                          !alternatives.contains(where: { $0.text.caseInsensitiveCompare(variantText) == .orderedSame })
+                    else { continue }
+                    alternatives.append(
+                        OCRTextAlternative(text: variantText, confidence: alternative.confidence)
+                    )
+                }
+            }
             return PhysicalLine(
                 text: Self.repairMeasurementUnitTokenJoins(in: joined),
                 bulletMarker: marker,
+                pageIndex: fragments.first?.pageIndex ?? 0,
                 minX: fragments.map { $0.box.minX }.min() ?? 0,
                 minY: fragments.map { $0.box.minY }.min() ?? 0,
+                maxX: fragments.map { $0.box.maxX }.max() ?? 0,
                 maxY: fragments.map { $0.box.maxY }.max() ?? 0,
-                averageHeight: fragments.map { $0.box.height }.reduce(0, +) / Double(fragments.count)
+                averageHeight: fragments.map { $0.box.height }.reduce(0, +) / Double(fragments.count),
+                confidence: fragments.map(\.confidence).reduce(0, +) / Double(fragments.count),
+                alternateCandidates: Array(alternatives.prefix(4))
             )
         }
         .filter { !$0.text.isEmpty }
@@ -327,16 +415,43 @@ struct OCRLayoutReconstructor {
                line.minX >= previous.minX + max(0.018, previous.averageHeight * 0.45),
                previous.minY - line.maxY <= max(0.065, previous.averageHeight * 2.2),
                !Self.isInstructionLine(line.text) {
-                result[result.count - 1].text = Self.collapseWhitespace(previous.text + " " + line.text)
+                let mergedText = Self.collapseWhitespace(previous.text + " " + line.text)
+                var alternatives = previous.alternateCandidates.map {
+                    OCRTextAlternative(
+                        text: Self.collapseWhitespace($0.text + " " + line.text),
+                        confidence: min($0.confidence, line.confidence)
+                    )
+                }
+                alternatives.append(contentsOf: line.alternateCandidates.map {
+                    OCRTextAlternative(
+                        text: Self.collapseWhitespace(previous.text + " " + $0.text),
+                        confidence: min(previous.confidence, $0.confidence)
+                    )
+                })
+                result[result.count - 1].text = mergedText
+                result[result.count - 1].minX = min(previous.minX, line.minX)
                 result[result.count - 1].minY = min(previous.minY, line.minY)
+                result[result.count - 1].maxX = max(previous.maxX, line.maxX)
+                result[result.count - 1].maxY = max(previous.maxY, line.maxY)
+                result[result.count - 1].confidence = (previous.confidence + line.confidence) / 2
+                result[result.count - 1].alternateCandidates = Array(
+                    alternatives
+                        .filter { $0.text.caseInsensitiveCompare(mergedText) != .orderedSame }
+                        .prefix(6)
+                )
             } else {
                 result.append(
                     LogicalLine(
                         text: line.text,
                         bulletMarker: line.bulletMarker,
+                        pageIndex: line.pageIndex,
                         minX: line.minX,
                         minY: line.minY,
-                        averageHeight: line.averageHeight
+                        maxX: line.maxX,
+                        maxY: line.maxY,
+                        averageHeight: line.averageHeight,
+                        confidence: line.confidence,
+                        alternateCandidates: line.alternateCandidates
                     )
                 )
             }
@@ -445,13 +560,17 @@ struct OCRLayoutReconstructor {
         return ["ingredient", "ingredients", "what you need", "you will need"].contains(normalized)
     }
 
-    private static func isInstructionLine(_ text: String) -> Bool {
+    private static func isInstructionHeading(_ text: String) -> Bool {
         let normalized = headingKey(text)
-        let headings: Set<String> = [
+        return [
             "direction", "directions", "instruction", "instructions", "method",
             "preparation", "steps", "how to make", "make it"
-        ]
-        if headings.contains(normalized) { return true }
+        ].contains(normalized)
+    }
+
+    private static func isInstructionLine(_ text: String) -> Bool {
+        let normalized = headingKey(text)
+        if isInstructionHeading(normalized) { return true }
 
         var actionText = normalized
         if let match = actionText.range(of: #"^\d{1,2}[.)]\s*"#, options: .regularExpression) {
@@ -503,6 +622,13 @@ struct OCRLayoutReconstructor {
     private static func ambiguitySort(_ lhs: OCRLayoutAmbiguity, _ rhs: OCRLayoutAmbiguity) -> Bool {
         lhs.rawValue < rhs.rawValue
     }
+
+    private static func physicalReadingOrder(_ lhs: PreparedObservation, _ rhs: PreparedObservation) -> Bool {
+        if abs(lhs.box.midY - rhs.box.midY) > 0.006 {
+            return lhs.box.midY > rhs.box.midY
+        }
+        return lhs.box.minX < rhs.box.minX
+    }
 }
 
 private struct PreparedObservation {
@@ -511,27 +637,57 @@ private struct PreparedObservation {
     var confidence: Double
     var pageIndex: Int
     var bulletMarker: String?
+    var alternateCandidates: [OCRTextAlternative]
+
+    var renderedText: String {
+        guard let bulletMarker else { return text }
+        return "\(bulletMarker) \(text)"
+    }
 }
 
 private struct PhysicalLine {
     var text: String
     var bulletMarker: String?
+    var pageIndex: Int
     var minX: Double
     var minY: Double
+    var maxX: Double
     var maxY: Double
     var averageHeight: Double
+    var confidence: Double
+    var alternateCandidates: [OCRTextAlternative]
 }
 
 private struct LogicalLine {
     var text: String
     var bulletMarker: String?
+    var pageIndex: Int
     var minX: Double
     var minY: Double
+    var maxX: Double
+    var maxY: Double
     var averageHeight: Double
+    var confidence: Double
+    var alternateCandidates: [OCRTextAlternative]
 
     var renderedText: String {
         guard let bulletMarker else { return text }
         return "\(bulletMarker) \(text)"
+    }
+
+    var sourceLine: OCRSourceLine {
+        OCRSourceLine(
+            text: renderedText,
+            pageIndex: pageIndex,
+            boundingBox: OCRNormalizedBoundingBox(
+                x: minX,
+                y: minY,
+                width: max(0, maxX - minX),
+                height: max(0, maxY - minY)
+            ),
+            confidence: confidence,
+            alternateCandidates: alternateCandidates
+        )
     }
 }
 
@@ -543,6 +699,7 @@ private struct ColumnDetection {
 
 private struct PageAnalysis {
     var ingredientLines: [String]
+    var ingredientSourceLines: [OCRSourceLine]
     var ignoredInstructionLines: [String]
     var columnCount: Int
     var confidence: Double

@@ -8,6 +8,11 @@ import { LocalDemoStore } from './services/local-demo-store.js';
 import { LocalDemoOAuthPkce } from './services/oauth-pkce.js';
 import { RecipePageExtractor } from './services/recipe-page-extractor.js';
 import { RecipePageFetcher } from './services/recipe-page-fetcher.js';
+import {
+  InstacartApiProvider,
+  InstacartDemoProvider,
+  InstacartHandoffService
+} from './services/instacart-handoff.js';
 
 function bearerToken(request) {
   const header = request.headers.authorization;
@@ -39,6 +44,9 @@ function routeMatch(pathname, expression) {
 
 export function createApp(options = {}) {
   const config = loadConfig(options.config);
+  if (config.env === 'production' && config.instacartDemoHandoffUrl) {
+    throw new Error('INSTACART_DEMO_HANDOFF_URL cannot be used in production');
+  }
   const logger = options.logger ?? createLogger({ level: config.logLevel });
   const now = options.now ?? Date.now;
   const store = options.store ?? new LocalDemoStore({ sessionTtlMs: config.sessionTtlMs, now });
@@ -64,6 +72,20 @@ export function createApp(options = {}) {
     maxRedirects: config.recipePageMaxRedirects
   });
   const recipePageExtractor = options.recipePageExtractor ?? new RecipePageExtractor();
+  const instacartProvider = options.instacartProvider ?? (
+    config.instacartDemoHandoffUrl
+      ? new InstacartDemoProvider({ url: config.instacartDemoHandoffUrl })
+      : new InstacartApiProvider({
+          apiKey: config.instacartApiKey,
+          baseUrl: config.instacartApiBaseUrl,
+          timeoutMs: config.instacartTimeoutMs
+        })
+  );
+  const instacartHandoff = options.instacartHandoff ?? new InstacartHandoffService({
+    provider: instacartProvider,
+    cacheTtlMs: config.instacartHandoffCacheTtlMs,
+    now
+  });
 
   async function handler(request, response) {
     const id = requestId(request);
@@ -140,6 +162,22 @@ export function createApp(options = {}) {
       }
 
       const token = bearerToken(request);
+      if (method === 'POST' && url.pathname === '/api/handoffs/instacart') {
+        const account = store.authenticate(token);
+        const body = await readJson(request, config.maxBodyBytes);
+        const shoppingManifestId = assertString(body.shoppingManifestId, 'shoppingManifestId', { max: 100 });
+        const manifest = store.getManifest(account.id, shoppingManifestId);
+        const handoff = await instacartHandoff.create(manifest, body);
+        sendJson(response, 200, {
+          ...handoff,
+          meta: localDemoMeta({
+            outboundProvider: handoff.provider,
+            presentationMode: handoff.presentationMode
+          })
+        }, headers);
+        return;
+      }
+
       if (method === 'POST' && url.pathname === '/v1/recipe-pages/extract') {
         store.authenticate(token);
         const body = await readJson(request, config.maxBodyBytes);
@@ -275,7 +313,7 @@ export function createApp(options = {}) {
   return {
     handler,
     config,
-    services: { store, oauth, affiliate, limiter, recipePageFetcher, recipePageExtractor }
+    services: { store, oauth, affiliate, limiter, recipePageFetcher, recipePageExtractor, instacartHandoff }
   };
 }
 

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct IngredientReviewView: View {
     @Environment(AppModel.self) private var appModel
@@ -207,6 +208,20 @@ private struct IngredientReviewRow: View {
             if let evidence = ingredient.sourceEvidence {
                 DisclosureGroup(isExpanded: $showSourceEvidence) {
                     VStack(alignment: .leading, spacing: 5) {
+                        if let cropData = evidence.sourceCropJPEGData,
+                           let crop = UIImage(data: cropData) {
+                            Image(uiImage: crop)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(maxWidth: .infinity, maxHeight: 120)
+                                .background(SmartCartTheme.canvasRaise)
+                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .stroke(SmartCartTheme.border, lineWidth: 1)
+                                }
+                                .accessibilityLabel("Source crop for \(ingredient.name)")
+                        }
                         Text(evidence.rawText)
                             .font(.caption.monospaced())
                             .textSelection(.enabled)
@@ -217,6 +232,32 @@ private struct IngredientReviewRow: View {
                             Text("Layout confidence: \(layout.formatted(.percent.precision(.fractionLength(0))))")
                                 .font(.caption2)
                                 .foregroundStyle(SmartCartTheme.secondaryInk)
+                        }
+                        if let pageIndex = evidence.pageIndex,
+                           let box = evidence.boundingBox {
+                            Text(
+                                "Page \(pageIndex + 1) · source box x \(box.x.formatted(.percent.precision(.fractionLength(0)))), y \(box.y.formatted(.percent.precision(.fractionLength(0))))"
+                            )
+                            .font(.caption2)
+                            .foregroundStyle(SmartCartTheme.secondaryInk)
+                        }
+                        if let alternatives = evidence.alternateSourceTexts,
+                           !alternatives.isEmpty {
+                            Text("OCR alternatives")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(SmartCartTheme.amber)
+                            ForEach(Array(alternatives.enumerated()), id: \.offset) { _, alternative in
+                                Text(alternative)
+                                    .font(.caption2.monospaced())
+                                    .foregroundStyle(SmartCartTheme.secondaryInk)
+                            }
+                        }
+                        if evidence.alternateQuantityCandidates.count > 1 {
+                            Text(
+                                "Quantity candidates: \(evidence.alternateQuantityCandidates.map { $0.formatted(.number.precision(.fractionLength(0...2))) }.joined(separator: " · "))"
+                            )
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(SmartCartTheme.coral)
                         }
                     }
                     .padding(.top, 7)

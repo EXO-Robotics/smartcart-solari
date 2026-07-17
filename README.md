@@ -6,7 +6,7 @@ SmartCart converts a recipe into a persisted, retailer-aware shopping manifest. 
 
 ## Beta 3 validation candidate
 
-Import recipe → review ingredients → adjust servings → check pantry → apply preferences → select one store → resolve products → confirm manifest → open retailer handoff.
+Import recipe → review ingredients → adjust servings → check pantry → apply preferences → choose a shopping route → confirm the normalized manifest → open the provider handoff.
 
 The app currently supports:
 
@@ -24,12 +24,15 @@ The app currently supports:
 - Persistent barcode/manual pantry inventory with checksum-valid UPC/EAN/GTIN handling, leading-zero preservation, offline fixtures, required naming for unknown products, and explicit duplicate actions.
 - Privacy-limited on-device funnel instrumentation and an internal tester dashboard.
 - Credential-free connector contracts for six retailer/affiliate integration shapes.
+- A capability-driven Instacart shopping-list route with advisory retailer and fulfillment preferences, manifest safety gates, backend URL caching, in-app Safari presentation, and explicitly self-reported return feedback.
 
 The repository also includes a local reference backend in `backend/`, a local deploy-ready business website in `website/`, and explicit human handoff gates in `Docs/`.
 
 ## Capability boundary
 
 The demo Walmart adapter supports catalog search, exact product links, pickup and delivery eligibility metadata, and guided product handoff.
+
+The Instacart route is wired to the backend-only Developer Platform adapter. Without an approved server-side `INSTACART_API_KEY`, it remains development-ready rather than live. SmartCart never embeds the provider key and never infers that an order was placed merely because the handoff page opened.
 
 It does **not** claim to:
 
@@ -47,6 +50,11 @@ Advanced testing tools can reveal experimental multi-stop, generic delivery-prov
 State is stored as versioned JSON in Application Support. Schema-v3 migration preserves prior pantry records and converts legacy inferred scan names into editable `Unknown Product` records. Migration and corrupt-state quarantine are covered by tests.
 
 ## Release notes and limitations
+
+Photo-import safety thresholds and the required human corpus are documented in
+[`Docs/PHOTO_PARSER_RELEASE_GATES.md`](Docs/PHOTO_PARSER_RELEASE_GATES.md).
+Instacart configuration, ownership boundaries, and validation steps are documented in
+[`Docs/INSTACART_HANDOFF.md`](Docs/INSTACART_HANDOFF.md).
 
 See [CHANGELOG.md](CHANGELOG.md) for release history and [Docs/ROADMAP_STATUS.md](Docs/ROADMAP_STATUS.md) for the engineering/human boundary.
 

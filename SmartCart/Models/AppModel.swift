@@ -69,6 +69,25 @@ final class AppModel {
     var analyticsEvents: [AnalyticsEvent] {
         didSet { persistState() }
     }
+    var shoppingRoute: ShoppingRoutePreference {
+        didSet { commerceDefaults.set(shoppingRoute.rawValue, forKey: Self.shoppingRouteKey) }
+    }
+    var instacartRetailerPreference: InstacartRetailerPreference {
+        didSet { commerceDefaults.set(instacartRetailerPreference.rawValue, forKey: Self.instacartRetailerKey) }
+    }
+    var commerceFulfillmentPreference: CommerceFulfillmentPreference {
+        didSet {
+            commerceDefaults.set(commerceFulfillmentPreference.rawValue, forKey: Self.commerceFulfillmentKey)
+            if commerceFulfillmentPreference == .pickup { fulfillmentMode = .pickup }
+            if commerceFulfillmentPreference == .delivery { fulfillmentMode = .delivery }
+        }
+    }
+    var latestHandoffFeedback: CommerceHandoffFeedback? {
+        didSet { commerceDefaults.set(latestHandoffFeedback?.rawValue, forKey: Self.handoffFeedbackKey) }
+    }
+    var isPreparingCommerceHandoff = false
+    var commerceHandoffStage = "Ready to prepare"
+    var lastInstacartHandoff: InstacartHandoffResponse?
     var lastImportReport: RecipeImportReport?
     var toastMessage: String?
     private(set) var persistenceIssue: String?
@@ -82,6 +101,10 @@ final class AppModel {
     }
 
     private static let recentRecipesKey = "smartcart.recentRecipeIDs"
+    private static let shoppingRouteKey = "smartcart.commerce.shoppingRoute"
+    private static let instacartRetailerKey = "smartcart.commerce.instacartRetailer"
+    private static let commerceFulfillmentKey = "smartcart.commerce.fulfillment"
+    private static let handoffFeedbackKey = "smartcart.commerce.lastFeedback"
 
     var recentRecipes: [Recipe] {
         recentRecipeIDs.compactMap { id in recipes.first { $0.id == id } }
@@ -95,14 +118,31 @@ final class AppModel {
     @ObservationIgnored
     private let retailerService: any RetailerCatalogService
     @ObservationIgnored
+    private let instacartHandoffService: any InstacartHandoffServicing
+    @ObservationIgnored
+    private let commerceDefaults: UserDefaults
+    @ObservationIgnored
     private var persistenceReady = false
 
     init(
         stateStore: any SmartCartStateStoring = JSONSmartCartStateStore(),
-        retailerService: any RetailerCatalogService = DemoWalmartCatalogService()
+        retailerService: any RetailerCatalogService = DemoWalmartCatalogService(),
+        instacartHandoffService: any InstacartHandoffServicing = InstacartHandoffClient(),
+        commerceDefaults: UserDefaults = .standard
     ) {
         self.stateStore = stateStore
         self.retailerService = retailerService
+        self.instacartHandoffService = instacartHandoffService
+        self.commerceDefaults = commerceDefaults
+
+        shoppingRoute = commerceDefaults.string(forKey: Self.shoppingRouteKey)
+            .flatMap(ShoppingRoutePreference.init(rawValue:)) ?? .instacart
+        instacartRetailerPreference = commerceDefaults.string(forKey: Self.instacartRetailerKey)
+            .flatMap(InstacartRetailerPreference.init(rawValue:)) ?? .bestAvailable
+        commerceFulfillmentPreference = commerceDefaults.string(forKey: Self.commerceFulfillmentKey)
+            .flatMap(CommerceFulfillmentPreference.init(rawValue:)) ?? .decideInInstacart
+        latestHandoffFeedback = commerceDefaults.string(forKey: Self.handoffFeedbackKey)
+            .flatMap(CommerceHandoffFeedback.init(rawValue:))
 
         let availableStores = [
             RetailerStore(
@@ -293,12 +333,88 @@ final class AppModel {
 
     var pantrySkipCount: Int {
         activeRecipe.ingredients.filter {
-            quantityToBuy(for: $0) == 0
+            $0.includeInList && quantityToBuy(for: $0) == 0
         }.count
     }
 
     var pantrySuggestionCount: Int {
         activeRecipe.ingredients.filter { $0.pantrySuggestion != nil }.count
+    }
+
+    var activeCommerceCapabilities: CommerceCapabilities {
+        switch shoppingRoute {
+        case .instacart: .instacart
+        case .walmartDirect: .walmartGuided
+        case .otherRetailerLinks: .linkOnly
+        }
+    }
+
+    var unresolvedAlternativeCount: Int {
+        ingredientsToBuy.filter {
+            $0.alternativeGroup != nil && $0.name.range(
+                of: #"\s+or\s+"#,
+                options: [.regularExpression, .caseInsensitive]
+            ) != nil
+        }.count
+    }
+
+    var commerceBlockingIssues: [String] {
+        var issues: [String] = []
+        if ingredientsToBuy.isEmpty {
+            issues.append("Add at least one ingredient to the shopping list.")
+        }
+        if unresolvedQuantityReviewCount > 0 {
+            issues.append("Confirm \(unresolvedQuantityReviewCount) uncertain quantity value(s).")
+        }
+        if unresolvedAlternativeCount > 0 {
+            issues.append("Choose one option for \(unresolvedAlternativeCount) unresolved alternative ingredient(s).")
+        }
+        let postalCode = zipCode.filter(\.isNumber)
+        if postalCode.count != 5 {
+            issues.append("Enter a five-digit US ZIP code.")
+        }
+        return issues
+    }
+
+    var instacartManifestDraft: InstacartManifestDraft {
+        let filters = instacartHealthFilters
+        let items = ingredientsToBuy.map { ingredient in
+            let quantity = quantityToBuy(for: ingredient)
+            let quantityText = Ingredient.quantityText(quantity, unit: ingredient.unit)
+            let preparation = ingredient.preparation.trimmingCharacters(in: .whitespacesAndNewlines)
+            let displayName = preparation.isEmpty ? ingredient.name : "\(ingredient.name), \(preparation)"
+            return InstacartManifestLineItem(
+                ingredientID: ingredient.id,
+                name: ingredient.name,
+                displayText: "\(quantityText) \(displayName)",
+                quantity: quantity,
+                unit: ingredient.unit,
+                healthFilters: filters,
+                exactUPC: nil,
+                quantityConfirmed: ingredient.quantityReviewRequired != true,
+                unresolvedAlternative: ingredient.alternativeGroup != nil && ingredient.name.range(
+                    of: #"\s+or\s+"#,
+                    options: [.regularExpression, .caseInsensitive]
+                ) != nil
+            )
+        }
+        return InstacartManifestDraft(
+            localManifestID: currentSavedManifest?.id ?? activeRecipe.id,
+            recipeID: activeRecipe.id,
+            title: activeRecipe.title,
+            desiredServings: desiredServings,
+            items: items,
+            pantryItemsRemoved: pantrySkipCount
+        )
+    }
+
+    private var instacartHealthFilters: [String] {
+        var filters: Set<String> = []
+        if preferences.organicPolicy != .noPreference { filters.insert("ORGANIC") }
+        if preferences.dietaryRestrictions.contains(.glutenFree) { filters.insert("GLUTEN_FREE") }
+        if preferences.dietaryRestrictions.contains(.vegan) { filters.insert("VEGAN") }
+        if preferences.dietaryRestrictions.contains(.kosher) { filters.insert("KOSHER") }
+        return filters.sorted()
     }
 
     var estimatedTotal: Double {
@@ -504,6 +620,31 @@ final class AppModel {
     }
 
     func startMatching(force: Bool = false) async {
+        if shoppingRoute == .instacart {
+            isMatching = true
+            matchProgress = 0
+            shoppingItems = []
+            let stages = [
+                ("Reviewing pantry exclusions", 0.18),
+                ("Converting ingredient quantities", 0.40),
+                ("Applying organic and dietary preferences", 0.64),
+                ("Checking unresolved ingredients", 0.82),
+                ("Building the normalized shopping manifest", 1.0)
+            ]
+            for (stage, progress) in stages {
+                matchStage = stage
+                withAnimation(.easeInOut(duration: 0.24)) { matchProgress = progress }
+                try? await Task.sleep(for: .milliseconds(260))
+            }
+            matchStage = "\(ingredientsToBuy.count) ingredients ready for Instacart"
+            isMatching = false
+            track(.matchingCompleted, properties: [
+                "items": String(ingredientsToBuy.count),
+                "route": "instacart"
+            ])
+            return
+        }
+
         if !shoppingItems.isEmpty && !force {
             matchProgress = 1
             matchStage = "\(shoppingItems.count) products ready"
@@ -623,6 +764,56 @@ final class AppModel {
 
     func retailerURL() -> URL {
         URL(string: "https://www.walmart.com/cp/grocery-pickup-and-delivery/9524000")!
+    }
+
+    func prepareInstacartHandoff() async -> InstacartHandoffResponse? {
+        guard activeCommerceCapabilities.preparesShoppingList else {
+            showToast("This shopping route cannot transfer a prepared list")
+            return nil
+        }
+        guard commerceBlockingIssues.isEmpty else {
+            showToast(commerceBlockingIssues.first ?? "Review the shopping list before continuing")
+            return nil
+        }
+
+        isPreparingCommerceHandoff = true
+        defer { isPreparingCommerceHandoff = false }
+        let stages = [
+            "Preparing your shoppable list…",
+            "Converting quantities…",
+            "Applying preferences…",
+            "Creating secure Instacart handoff…"
+        ]
+        for stage in stages {
+            commerceHandoffStage = stage
+            try? await Task.sleep(for: .milliseconds(320))
+        }
+
+        do {
+            let handoff = try await instacartHandoffService.createHandoff(
+                draft: instacartManifestDraft,
+                postalCode: zipCode.filter(\.isNumber),
+                preferredRetailer: instacartRetailerPreference,
+                fulfillment: commerceFulfillmentPreference
+            )
+            lastInstacartHandoff = handoff
+            commerceHandoffStage = "Instacart handoff ready"
+            track(.retailerLinkOpened, properties: [
+                "retailer": "instacart",
+                "mode": "manifest_transfer"
+            ])
+            return handoff
+        } catch {
+            commerceHandoffStage = "Handoff needs attention"
+            showToast(error.localizedDescription)
+            return nil
+        }
+    }
+
+    func recordHandoffFeedback(_ feedback: CommerceHandoffFeedback) {
+        latestHandoffFeedback = feedback
+        track(.handoffFeedbackRecorded, properties: ["result": feedback.rawValue])
+        showToast("Shopping feedback saved")
     }
 
     func prepareRetailerHandoff() async -> RetailerHandoff? {
@@ -1119,7 +1310,8 @@ enum RecipeParser {
         title: String,
         text: String,
         source: RecipeSource = .text,
-        sourceDetail: String = "Pasted into SmartCart"
+        sourceDetail: String = "Pasted into SmartCart",
+        sourceLines: [OCRSourceLine] = []
     ) -> Recipe {
         let lines = text
             .components(separatedBy: .newlines)
@@ -1128,6 +1320,7 @@ enum RecipeParser {
 
         var sectionName: String?
         var ingredients: [Ingredient] = []
+        var remainingSourceLines = sourceLines
         for line in lines.prefix(120) {
             if isInstructionHeading(line) { break }
             if isSectionHeading(line) {
@@ -1136,14 +1329,15 @@ enum RecipeParser {
             }
             guard isLikelyIngredient(line), ingredients.count < 60 else { continue }
             var ingredient = parseIngredient(line, source: source)
+            if let sourceIndex = remainingSourceLines.firstIndex(where: {
+                normalizedSourceText($0.text) == normalizedSourceText(line)
+            }) {
+                let sourceLine = remainingSourceLines.remove(at: sourceIndex)
+                apply(sourceLine: sourceLine, to: &ingredient, source: source)
+            }
             ingredient.sectionName = sectionName
             ingredients.append(ingredient)
         }
-        let fallback = [
-            Ingredient(name: "Yellow onion", category: .produce, confidence: .review),
-            Ingredient(name: "Garlic", quantity: 3, unit: "cloves", category: .produce),
-            Ingredient(name: "Olive oil", quantity: 2, unit: "tbsp", category: .pantry, pantryState: .runningLow)
-        ]
 
         return Recipe(
             title: title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? inferredTitle(from: lines) : title,
@@ -1153,7 +1347,7 @@ enum RecipeParser {
             servings: inferredServings(from: text),
             prepMinutes: 15,
             cookMinutes: inferredCookTime(from: text),
-            ingredients: ingredients.isEmpty ? fallback : ingredients
+            ingredients: ingredients
         )
     }
 
@@ -1358,6 +1552,65 @@ enum RecipeParser {
             ),
             quantityReviewRequired: malformedQuantity
         )
+    }
+
+    private static func apply(
+        sourceLine: OCRSourceLine,
+        to ingredient: inout Ingredient,
+        source: RecipeSource
+    ) {
+        guard var evidence = ingredient.sourceEvidence else { return }
+        evidence.rawText = sourceLine.text
+        evidence.pageIndex = sourceLine.pageIndex
+        evidence.boundingBox = NormalizedSourceRect(
+            x: sourceLine.boundingBox.x,
+            y: sourceLine.boundingBox.y,
+            width: sourceLine.boundingBox.width,
+            height: sourceLine.boundingBox.height
+        )
+        evidence.ocrConfidence = sourceLine.confidence
+
+        let credibleAlternatives = sourceLine.alternateCandidates.filter {
+            $0.confidence >= max(0.35, sourceLine.confidence - 0.12)
+        }
+        evidence.alternateSourceTexts = credibleAlternatives.isEmpty
+            ? nil
+            : credibleAlternatives.map(\.text)
+
+        var quantityCandidates = [ingredient.quantity]
+        var quantityOrUnitDiffers = false
+        var parsedMeaningDiffers = false
+        for alternative in credibleAlternatives {
+            guard isLikelyIngredient(alternative.text) else { continue }
+            let parsed = parseIngredient(alternative.text, source: source)
+            guard (parsed.sourceEvidence?.parserConfidence ?? 0) >= 0.8 else { continue }
+            if !quantityCandidates.contains(where: { abs($0 - parsed.quantity) < 0.0001 }) {
+                quantityCandidates.append(parsed.quantity)
+            }
+            if abs(parsed.quantity - ingredient.quantity) >= 0.0001 || parsed.unit != ingredient.unit {
+                quantityOrUnitDiffers = true
+            }
+            if parsed.name.caseInsensitiveCompare(ingredient.name) != .orderedSame {
+                parsedMeaningDiffers = true
+            }
+        }
+        evidence.alternateQuantityCandidates = quantityCandidates
+        ingredient.sourceEvidence = evidence
+
+        if sourceLine.confidence < 0.72 || quantityOrUnitDiffers || parsedMeaningDiffers {
+            ingredient.confidence = .review
+        }
+        if quantityOrUnitDiffers {
+            ingredient.quantityReviewRequired = true
+        }
+    }
+
+    private static func normalizedSourceText(_ text: String) -> String {
+        text
+            .replacingOccurrences(of: #"^[-•*☐✓]\s*"#, with: "", options: .regularExpression)
+            .lowercased()
+            .split(whereSeparator: \Character.isWhitespace)
+            .joined(separator: " ")
     }
 
     private static func matches(pattern: String, in text: String, capture: Int) -> [String] {

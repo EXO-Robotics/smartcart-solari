@@ -1,3 +1,4 @@
+import CoreImage
 import PhotosUI
 import SwiftUI
 import UIKit
@@ -31,6 +32,7 @@ struct RecipeComposerSheet: View {
     @State private var errorMessage: String?
     @State private var lastVisionOCRConfidence: Double?
     @State private var lastVisionLayoutConfidence: Double?
+    @State private var lastVisionSourceLines: [OCRSourceLine] = []
     @FocusState private var focusedField: Field?
 
     private enum Field {
@@ -49,11 +51,16 @@ struct RecipeComposerSheet: View {
             title: title,
             text: recipeText,
             source: source(for: selectedMethod),
-            sourceDetail: sourceDetail
+            sourceDetail: sourceDetail,
+            sourceLines: selectedMethod == .camera || selectedMethod == .photoLibrary
+                ? lastVisionSourceLines
+                : []
         )
         if selectedMethod == .camera || selectedMethod == .photoLibrary {
             for index in recipe.ingredients.indices {
-                recipe.ingredients[index].sourceEvidence?.ocrConfidence = lastVisionOCRConfidence
+                if recipe.ingredients[index].sourceEvidence?.ocrConfidence == nil {
+                    recipe.ingredients[index].sourceEvidence?.ocrConfidence = lastVisionOCRConfidence
+                }
                 recipe.ingredients[index].sourceEvidence?.layoutConfidence = lastVisionLayoutConfidence
             }
         }
@@ -70,14 +77,56 @@ struct RecipeComposerSheet: View {
         }
     }
 
+    private func addingSourceCrops(to sourceRecipe: Recipe) -> Recipe {
+        var recipe = sourceRecipe
+        let normalizedImages: [CGImage?] = selectedImages.map {
+            RecipeImagePreprocessor.normalizeOrientation($0).cgImage
+        }
+        for index in recipe.ingredients.indices {
+            guard let evidence = recipe.ingredients[index].sourceEvidence else { continue }
+            recipe.ingredients[index].sourceEvidence?.sourceCropJPEGData = sourceCropData(
+                for: evidence,
+                normalizedImages: normalizedImages
+            )
+        }
+        return recipe
+    }
+
+    private func sourceCropData(
+        for evidence: IngredientSourceEvidence,
+        normalizedImages: [CGImage?]
+    ) -> Data? {
+        guard let pageIndex = evidence.pageIndex,
+              normalizedImages.indices.contains(pageIndex),
+              let cgImage = normalizedImages[pageIndex],
+              let box = evidence.boundingBox
+        else { return nil }
+
+        let width = CGFloat(cgImage.width)
+        let height = CGFloat(cgImage.height)
+        let horizontalPadding = max(5, width * 0.02)
+        let verticalPadding = max(5, height * 0.012)
+        let sourceRect = CGRect(
+            x: CGFloat(box.x) * width - horizontalPadding,
+            y: (1 - CGFloat(box.y + box.height)) * height - verticalPadding,
+            width: CGFloat(box.width) * width + (horizontalPadding * 2),
+            height: CGFloat(box.height) * height + (verticalPadding * 2)
+        ).intersection(CGRect(x: 0, y: 0, width: width, height: height))
+        guard sourceRect.width > 1,
+              sourceRect.height > 1,
+              let crop = cgImage.cropping(to: sourceRect.integral)
+        else { return nil }
+        return UIImage(cgImage: crop).jpegData(compressionQuality: 0.76)
+    }
+
     private var canImport: Bool {
         switch selectedMethod {
         case .camera, .photoLibrary:
-            !selectedImages.isEmpty && !recipeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            !selectedImages.isEmpty && !draftRecipe.ingredients.isEmpty
         case .recipeLink, .pinterest:
             validURL != nil
         case .recipeText:
-            !recipeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            !draftRecipe.ingredients.isEmpty
         case .sample:
             appModel.recipes.indices.contains(selectedSampleIndex)
         }
@@ -537,11 +586,16 @@ struct RecipeComposerSheet: View {
         defer { isProcessing = false }
 
         do {
-            let result = try await RecipeVisionReader.recognizeText(in: images)
+            let customWords = [title] + appModel.pantryInventory.map(\.name)
+            let result = try await RecipeVisionReader.recognizeText(
+                in: images,
+                contextualWords: customWords
+            )
             processingMessage = "Normalizing ingredients…"
             recipeText = result.text
             lastVisionOCRConfidence = Double(result.confidence)
             lastVisionLayoutConfidence = result.layoutConfidence
+            lastVisionSourceLines = result.sourceLines
             if let firstLine = result.text
                 .components(separatedBy: .newlines)
                 .map({ $0.trimmingCharacters(in: .whitespacesAndNewlines) })
@@ -552,7 +606,8 @@ struct RecipeComposerSheet: View {
                 title: title,
                 text: result.text,
                 source: source(for: selectedMethod),
-                sourceDetail: sourceDetail
+                sourceDetail: sourceDetail,
+                sourceLines: result.sourceLines
             )
             appModel.lastImportReport = RecipeParser.importReport(
                 for: recipe,
@@ -564,6 +619,15 @@ struct RecipeComposerSheet: View {
             appModel.lastImportReport?.layoutConfidence = result.layoutConfidence
             appModel.lastImportReport?.layoutAmbiguityCount = result.layoutAmbiguityCount
             appModel.lastImportReport?.ignoredInstructionLineCount = result.ignoredInstructionLineCount
+            appModel.lastImportReport?.sourceEvidenceCount = recipe.ingredients.filter {
+                $0.sourceEvidence?.pageIndex != nil && $0.sourceEvidence?.boundingBox != nil
+            }.count
+            appModel.lastImportReport?.quantityAlternativeReviewCount = recipe.ingredients.filter {
+                !($0.sourceEvidence?.alternateQuantityCandidates.isEmpty ?? true)
+            }.count
+            if recipe.ingredients.isEmpty {
+                errorMessage = "No ingredients were detected. Keep the photo and try a tighter crop, a clearer image, pasted text, or manual ingredient entry. SmartCart will never invent replacement groceries."
+            }
             try? await Task.sleep(for: .milliseconds(220))
         } catch {
             errorMessage = error.localizedDescription
@@ -597,7 +661,15 @@ struct RecipeComposerSheet: View {
             }
 
         case .camera, .photoLibrary, .recipeText:
-            appModel.beginRecipe(draftRecipe)
+            let parsedRecipe = draftRecipe
+            guard !parsedRecipe.ingredients.isEmpty else {
+                errorMessage = "No ingredients detected. Retry the image, edit or paste the ingredient text, or add ingredients manually before continuing."
+                return
+            }
+            let recipe = selectedMethod == .camera || selectedMethod == .photoLibrary
+                ? addingSourceCrops(to: parsedRecipe)
+                : parsedRecipe
+            appModel.beginRecipe(recipe)
         }
     }
 }
@@ -605,6 +677,7 @@ struct RecipeComposerSheet: View {
 private enum RecipeVisionReader {
     struct Result {
         var text: String
+        var sourceLines: [OCRSourceLine]
         var pageCount: Int
         var retryCount: Int
         var duration: TimeInterval
@@ -614,27 +687,48 @@ private enum RecipeVisionReader {
         var ignoredInstructionLineCount: Int
     }
 
-    static func recognizeText(in images: [UIImage]) async throws -> Result {
+    static func recognizeText(
+        in images: [UIImage],
+        contextualWords: [String] = []
+    ) async throws -> Result {
         let startedAt = Date()
         var pages: [String] = []
+        var sourceLines: [OCRSourceLine] = []
         var retryCount = 0
         var confidenceTotal: Float = 0
         var layoutConfidenceTotal = 0.0
         var layoutAmbiguityCount = 0
         var ignoredInstructionLineCount = 0
+        let customWords = RecipeOCRPolicy.boundedCustomWords(contextualWords)
 
         for (pageIndex, image) in images.enumerated() {
+            let normalizedImage = RecipeImagePreprocessor.normalizeOrientation(image)
             do {
-                let page = try await recognizeText(in: image, pageIndex: pageIndex, level: .accurate, minimumTextHeight: 0.008)
+                let page = try await recognizeText(
+                    in: normalizedImage,
+                    pageIndex: pageIndex,
+                    level: .accurate,
+                    minimumTextHeight: 0.008,
+                    customWords: customWords
+                )
                 pages.append(page.text)
+                sourceLines.append(contentsOf: page.sourceLines)
                 confidenceTotal += page.confidence
                 layoutConfidenceTotal += page.layoutConfidence
                 layoutAmbiguityCount += page.layoutAmbiguityCount
                 ignoredInstructionLineCount += page.ignoredInstructionLineCount
             } catch {
                 retryCount += 1
-                let page = try await recognizeText(in: image, pageIndex: pageIndex, level: .fast, minimumTextHeight: 0.004)
+                let correctedImage = RecipeImagePreprocessor.contrastEnhanced(normalizedImage)
+                let page = try await recognizeText(
+                    in: correctedImage,
+                    pageIndex: pageIndex,
+                    level: .accurate,
+                    minimumTextHeight: 0.004,
+                    customWords: customWords
+                )
                 pages.append(page.text)
+                sourceLines.append(contentsOf: page.sourceLines)
                 confidenceTotal += page.confidence
                 layoutConfidenceTotal += page.layoutConfidence
                 layoutAmbiguityCount += page.layoutAmbiguityCount
@@ -647,6 +741,7 @@ private enum RecipeVisionReader {
         guard !combined.isEmpty else { throw RecipeVisionError.noTextFound }
         return Result(
             text: combined,
+            sourceLines: sourceLines,
             pageCount: images.count,
             retryCount: retryCount,
             duration: Date().timeIntervalSince(startedAt),
@@ -661,8 +756,9 @@ private enum RecipeVisionReader {
         in image: UIImage,
         pageIndex: Int,
         level: VNRequestTextRecognitionLevel,
-        minimumTextHeight: Float
-    ) async throws -> (text: String, confidence: Float, layoutConfidence: Double, layoutAmbiguityCount: Int, ignoredInstructionLineCount: Int) {
+        minimumTextHeight: Float,
+        customWords: [String]
+    ) async throws -> (text: String, sourceLines: [OCRSourceLine], confidence: Float, layoutConfidence: Double, layoutAmbiguityCount: Int, ignoredInstructionLineCount: Int) {
         guard let cgImage = image.cgImage else {
             throw RecipeVisionError.unreadableImage
         }
@@ -675,12 +771,32 @@ private enum RecipeVisionReader {
                 }
 
                 let observations = request.results as? [VNRecognizedTextObservation] ?? []
-                let candidates = observations.compactMap { observation -> (VNRecognizedTextObservation, VNRecognizedText)? in
-                    guard let candidate = observation.topCandidates(1).first else { return nil }
-                    return (observation, candidate)
+                let candidates = observations.compactMap {
+                    observation -> (VNRecognizedTextObservation, VNRecognizedText, [OCRTextAlternative])? in
+                    let recognized = observation.topCandidates(3)
+                    guard let candidate = recognized.first else { return nil }
+                    let alternatives: [OCRTextAlternative]
+                    if RecipeOCRPolicy.shouldPreserveAlternatives(
+                        in: candidate.string,
+                        confidence: candidate.confidence
+                    ) {
+                        alternatives = recognized.dropFirst().compactMap { alternative in
+                            let text = alternative.string.trimmingCharacters(in: .whitespacesAndNewlines)
+                            guard !text.isEmpty,
+                                  text.caseInsensitiveCompare(candidate.string) != .orderedSame
+                            else { return nil }
+                            return OCRTextAlternative(
+                                text: text,
+                                confidence: Double(alternative.confidence)
+                            )
+                        }
+                    } else {
+                        alternatives = []
+                    }
+                    return (observation, candidate, alternatives)
                 }
                 let layout = OCRLayoutReconstructor.reconstruct(
-                    candidates.map { observation, candidate in
+                    candidates.map { observation, candidate, alternatives in
                         OCRTextObservation(
                             text: candidate.string,
                             boundingBox: OCRNormalizedBoundingBox(
@@ -690,7 +806,8 @@ private enum RecipeVisionReader {
                                 height: observation.boundingBox.height
                             ),
                             confidence: Double(candidate.confidence),
-                            pageIndex: pageIndex
+                            pageIndex: pageIndex,
+                            alternateCandidates: alternatives
                         )
                     }
                 )
@@ -704,6 +821,7 @@ private enum RecipeVisionReader {
                     continuation.resume(
                         returning: (
                             text,
+                            layout.ingredientSourceLines,
                             confidence,
                             layout.layoutConfidence,
                             layout.ambiguities.count,
@@ -716,6 +834,7 @@ private enum RecipeVisionReader {
             request.usesLanguageCorrection = true
             request.recognitionLanguages = ["en-US"]
             request.minimumTextHeight = minimumTextHeight
+            request.customWords = customWords
 
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
@@ -726,6 +845,78 @@ private enum RecipeVisionReader {
                 }
             }
         }
+    }
+}
+
+enum RecipeOCRPolicy {
+    static let maximumCustomWordCount = 96
+
+    private static let standardWords = [
+        "tablespoon", "teaspoon", "tbsp", "tsp", "ounces", "ounce", "oz",
+        "pounds", "pound", "lbs", "grams", "kilograms", "milliliters",
+        "cups", "cloves", "pinch", "bunch", "package", "all-purpose",
+        "mascarpone", "gochujang", "za'atar", "clearjel", "gruyère",
+        "worcestershire", "parmesan", "mozzarella", "cilantro", "shallot",
+        "scallion", "cornstarch", "buttermilk", "confectioners", "semi-sweet",
+        "softened", "melted", "minced", "chopped", "divided", "drained",
+        "rinsed", "packed", "sifted", "optional", "to taste"
+    ]
+
+    static func boundedCustomWords(_ contextualWords: [String]) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        let contextual = contextualWords.flatMap { value in
+            [value] + value.split(whereSeparator: \Character.isWhitespace).map(String.init)
+        }
+        for value in standardWords + contextual {
+            let cleaned = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = cleaned.lowercased()
+            guard (2...40).contains(cleaned.count), seen.insert(key).inserted else { continue }
+            result.append(cleaned)
+            if result.count == maximumCustomWordCount { break }
+        }
+        return result
+    }
+
+    static func shouldPreserveAlternatives(in text: String, confidence: Float) -> Bool {
+        if confidence < 0.78 { return true }
+        if text.range(of: #"[¼½¾⅓⅔⅛⅜⅝⅞⅙⅚]|\d\s*/\s*\d"#, options: .regularExpression) != nil {
+            return true
+        }
+        if text.range(of: #"^\s*[-•*☐✓]?\s*\d"#, options: .regularExpression) != nil {
+            return true
+        }
+        return text.range(
+            of: #"(?i)\b(cups?|tbsp|tablespoons?|tsp|teaspoons?|oz|ounces?|lbs?|pounds?|g|grams?|kg|ml|liters?|cloves?|cans?|packages?)\b"#,
+            options: .regularExpression
+        ) != nil
+    }
+}
+
+enum RecipeImagePreprocessor {
+    static func normalizeOrientation(_ image: UIImage) -> UIImage {
+        guard image.imageOrientation != .up else { return image }
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = image.scale
+        return UIGraphicsImageRenderer(size: image.size, format: format).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: image.size))
+        }
+    }
+
+    static func contrastEnhanced(_ image: UIImage) -> UIImage {
+        let normalized = normalizeOrientation(image)
+        guard let input = CIImage(image: normalized) else { return normalized }
+        let output = input.applyingFilter(
+            "CIColorControls",
+            parameters: [
+                kCIInputSaturationKey: 0.0,
+                kCIInputContrastKey: 1.28,
+                kCIInputBrightnessKey: 0.02
+            ]
+        )
+        let context = CIContext(options: nil)
+        guard let cgImage = context.createCGImage(output, from: output.extent) else { return normalized }
+        return UIImage(cgImage: cgImage, scale: normalized.scale, orientation: .up)
     }
 }
 
