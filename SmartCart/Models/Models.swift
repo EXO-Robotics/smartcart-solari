@@ -13,7 +13,7 @@ enum AppTab: String, CaseIterable, Identifiable, Codable, Hashable {
     var title: String {
         switch self {
         case .home: "Home"
-        case .lists: "Lists"
+        case .lists: "Recipes"
         case .pantry: "Pantry"
         case .store: "Store"
         case .account: "Account"
@@ -23,7 +23,7 @@ enum AppTab: String, CaseIterable, Identifiable, Codable, Hashable {
     var symbol: String {
         switch self {
         case .home: "house.fill"
-        case .lists: "checklist"
+        case .lists: "book.fill"
         case .pantry: "cabinet.fill"
         case .store: "storefront.fill"
         case .account: "person.crop.circle.fill"
@@ -174,6 +174,15 @@ struct Ingredient: Identifiable, Hashable, Codable {
     var includeInList: Bool
     var pantryState: PantryState
     var preferenceNote: String
+    var sectionName: String?
+    var brandNote: String?
+    var compoundMeasurements: [IngredientMeasurement]?
+    var equivalentMeasurements: [IngredientMeasurement]?
+    var alternativeGroup: String?
+    var sourceEvidence: IngredientSourceEvidence?
+    var quantityReviewRequired: Bool?
+    var pantrySuggestion: PantrySuggestion?
+    var pantryDecision: PantryDecision?
 
     init(
         id: UUID = UUID(),
@@ -186,7 +195,16 @@ struct Ingredient: Identifiable, Hashable, Codable {
         confidence: IngredientConfidence = .high,
         includeInList: Bool = true,
         pantryState: PantryState = .needToBuy,
-        preferenceNote: String = ""
+        preferenceNote: String = "",
+        sectionName: String? = nil,
+        brandNote: String? = nil,
+        compoundMeasurements: [IngredientMeasurement]? = nil,
+        equivalentMeasurements: [IngredientMeasurement]? = nil,
+        alternativeGroup: String? = nil,
+        sourceEvidence: IngredientSourceEvidence? = nil,
+        quantityReviewRequired: Bool? = nil,
+        pantrySuggestion: PantrySuggestion? = nil,
+        pantryDecision: PantryDecision? = nil
     ) {
         self.id = id
         self.rawText = rawText.isEmpty ? "\(quantity) \(unit) \(name)" : rawText
@@ -199,6 +217,15 @@ struct Ingredient: Identifiable, Hashable, Codable {
         self.includeInList = includeInList
         self.pantryState = pantryState
         self.preferenceNote = preferenceNote
+        self.sectionName = sectionName
+        self.brandNote = brandNote
+        self.compoundMeasurements = compoundMeasurements
+        self.equivalentMeasurements = equivalentMeasurements
+        self.alternativeGroup = alternativeGroup
+        self.sourceEvidence = sourceEvidence
+        self.quantityReviewRequired = quantityReviewRequired
+        self.pantrySuggestion = pantrySuggestion
+        self.pantryDecision = pantryDecision
     }
 
     var displayQuantity: String {
@@ -218,6 +245,71 @@ struct Ingredient: Identifiable, Hashable, Codable {
     }
 }
 
+struct IngredientMeasurement: Hashable, Codable {
+    var quantity: Double
+    var unit: String
+    var rawText: String
+
+    init(quantity: Double, unit: String, rawText: String = "") {
+        self.quantity = quantity
+        self.unit = unit
+        self.rawText = rawText.isEmpty ? Ingredient.quantityText(quantity, unit: unit) : rawText
+    }
+}
+
+struct NormalizedSourceRect: Hashable, Codable {
+    var x: Double
+    var y: Double
+    var width: Double
+    var height: Double
+}
+
+enum IngredientExtractionStrategy: String, Hashable, Codable {
+    case pastedText
+    case visionOCR
+    case structuredData
+    case visiblePageText
+    case sample
+    case manual
+}
+
+struct IngredientSourceEvidence: Hashable, Codable {
+    var rawText: String
+    var pageIndex: Int?
+    var boundingBox: NormalizedSourceRect?
+    var extractionStrategy: IngredientExtractionStrategy
+    var ocrConfidence: Double?
+    var layoutConfidence: Double?
+    var parserConfidence: Double
+    var normalizationConfidence: Double
+    var alternateQuantityCandidates: [Double]
+}
+
+enum PantryCoverage: String, Hashable, Codable {
+    case full
+    case partial
+    case possible
+}
+
+struct PantrySuggestion: Hashable, Codable {
+    var pantryItemID: UUID
+    var pantryItemName: String
+    var coverage: PantryCoverage
+    var availableQuantity: Double
+    var availableUnit: String
+    var requiredQuantity: Double
+    var requiredUnit: String
+    var matchScore: Double
+}
+
+enum PantryDecision: String, CaseIterable, Identifiable, Hashable, Codable {
+    case review
+    case useAvailable
+    case buyFull
+
+    var id: String { rawValue }
+}
+
 struct RecipeImportReport: Hashable {
     var sourcePageCount: Int
     var recognizedLineCount: Int
@@ -227,6 +319,9 @@ struct RecipeImportReport: Hashable {
     var unknownCount: Int
     var retryCount: Int
     var duration: TimeInterval
+    var layoutConfidence: Double = 1
+    var layoutAmbiguityCount: Int = 0
+    var ignoredInstructionLineCount: Int = 0
 
     var confidenceScore: Double {
         guard ingredientLineCount > 0 else { return 0 }
@@ -410,6 +505,16 @@ struct PantryInventoryItem: Identifiable, Hashable, Codable {
     var preferredRetailerProductID: String?
     var source: PantryItemSource
     var updatedAt: Date
+    var packageSize: Double?
+    var packageUnit: String?
+    var requiresUserNaming: Bool?
+    var rawBarcode: String?
+    var barcodeSymbology: String?
+    var gtin14: String?
+    /// Every normalized barcode observed for this pantry item. Optional keeps
+    /// older persisted states migration-safe; `gtin14` remains the primary
+    /// legacy identity while this array records additional package barcodes.
+    var barcodeGTINs: [String]?
 
     init(
         id: UUID = UUID(),
@@ -420,7 +525,14 @@ struct PantryInventoryItem: Identifiable, Hashable, Codable {
         unit: String = "item",
         preferredRetailerProductID: String? = nil,
         source: PantryItemSource = .manual,
-        updatedAt: Date = .now
+        updatedAt: Date = .now,
+        packageSize: Double? = nil,
+        packageUnit: String? = nil,
+        requiresUserNaming: Bool? = nil,
+        rawBarcode: String? = nil,
+        barcodeSymbology: String? = nil,
+        gtin14: String? = nil,
+        barcodeGTINs: [String]? = nil
     ) {
         self.id = id
         self.upc = upc
@@ -431,6 +543,45 @@ struct PantryInventoryItem: Identifiable, Hashable, Codable {
         self.preferredRetailerProductID = preferredRetailerProductID
         self.source = source
         self.updatedAt = updatedAt
+        self.packageSize = packageSize
+        self.packageUnit = packageUnit
+        self.requiresUserNaming = requiresUserNaming
+        self.rawBarcode = rawBarcode
+        self.barcodeSymbology = barcodeSymbology
+        self.gtin14 = gtin14
+        if let barcodeGTINs {
+            self.barcodeGTINs = Array(Set(barcodeGTINs)).sorted()
+        } else if let gtin14 {
+            self.barcodeGTINs = [gtin14]
+        } else {
+            self.barcodeGTINs = nil
+        }
+    }
+
+    func matches(barcode: NormalizedBarcode) -> Bool {
+        gtin14 == barcode.canonicalGTIN14 ||
+            upc == barcode.digits ||
+            (barcodeGTINs?.contains(barcode.canonicalGTIN14) ?? false)
+    }
+
+    mutating func register(
+        barcode: NormalizedBarcode,
+        rawValue: String,
+        symbology: String?
+    ) {
+        if upc == nil { upc = barcode.digits }
+        if gtin14 == nil { gtin14 = barcode.canonicalGTIN14 }
+        if rawBarcode == nil { rawBarcode = rawValue }
+        if barcodeSymbology == nil { barcodeSymbology = symbology }
+
+        var identities = barcodeGTINs ?? []
+        if let primary = gtin14, !identities.contains(primary) {
+            identities.append(primary)
+        }
+        if !identities.contains(barcode.canonicalGTIN14) {
+            identities.append(barcode.canonicalGTIN14)
+        }
+        barcodeGTINs = identities.sorted()
     }
 }
 

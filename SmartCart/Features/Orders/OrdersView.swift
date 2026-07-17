@@ -41,7 +41,7 @@ struct ProductMatchingView: View {
             .padding(18)
             .padding(.bottom, 96)
         }
-        .background(SmartCartTheme.canvas)
+        .smartCartBackground()
         .navigationTitle("Match products")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
@@ -54,7 +54,7 @@ struct ProductMatchingView: View {
                         Spacer()
                         if appModel.isMatching {
                             ProgressView()
-                                .tint(.white)
+                                .tint(SmartCartTheme.onAccent)
                         } else {
                             Image(systemName: "arrow.right")
                         }
@@ -81,6 +81,7 @@ struct ProductMatchingView: View {
                         style: StrokeStyle(lineWidth: 10, lineCap: .round)
                     )
                     .rotationEffect(.degrees(-90))
+                    .shadow(color: SmartCartTheme.mintGlow, radius: 12)
                     .animation(.easeInOut(duration: 0.35), value: appModel.matchProgress)
 
                 VStack(spacing: 2) {
@@ -226,7 +227,7 @@ struct ShoppingListReviewView: View {
             .padding(18)
             .padding(.bottom, 138)
         }
-        .background(SmartCartTheme.canvas)
+        .smartCartBackground()
         .navigationTitle("Review shopping list")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
@@ -281,10 +282,11 @@ struct ShoppingListReviewView: View {
             HStack(alignment: .top, spacing: 14) {
                 Image(systemName: appModel.activeRecipe.heroSymbol)
                     .font(.title.bold())
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SmartCartTheme.onAccent)
                     .frame(width: 62, height: 62)
                     .background(SmartCartTheme.green)
                     .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
+                    .shadow(color: SmartCartTheme.mintGlow, radius: 12)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(appModel.activeRecipe.title)
@@ -582,7 +584,7 @@ struct GuidedShoppingView: View {
             .padding(18)
             .padding(.bottom, 30)
         }
-        .background(SmartCartTheme.canvas)
+        .smartCartBackground()
         .navigationTitle("Guided shopping")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -808,12 +810,14 @@ struct GuidedShoppingView: View {
 
 struct AccountView: View {
     @Environment(AppModel.self) private var appModel
+    @Environment(SmartCartAppearanceController.self) private var appearanceController
     @State private var creatorMode = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 21) {
                 accountHeader
+                appearanceCard
                 preferenceCard
                 advancedToolsCard
                 testerModeCard
@@ -838,8 +842,44 @@ struct AccountView: View {
             .padding(.horizontal, 18)
             .padding(.bottom, 34)
         }
-        .background(SmartCartTheme.canvas)
+        .smartCartBackground()
         .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private var cleanLightModeEnabled: Binding<Bool> {
+        Binding(
+            get: { appearanceController.cleanLightModeEnabled },
+            set: { appearanceController.cleanLightModeEnabled = $0 }
+        )
+    }
+
+    private var appearanceCard: some View {
+        Toggle(isOn: cleanLightModeEnabled) {
+            HStack(spacing: 13) {
+                Image(systemName: cleanLightModeEnabled.wrappedValue ? "sun.max.fill" : "moon.stars.fill")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(SmartCartTheme.green)
+                    .frame(width: 42, height: 42)
+                    .background(SmartCartTheme.herbLight)
+                    .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Clean light theme")
+                        .font(.headline)
+                        .foregroundStyle(SmartCartTheme.navy)
+                    Text(
+                        cleanLightModeEnabled.wrappedValue
+                            ? SmartCartAppearance.cleanLight.subtitle
+                            : "Off · \(SmartCartAppearance.midnight.subtitle)"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
+                }
+            }
+        }
+        .tint(SmartCartTheme.green)
+        .accessibilityIdentifier("smartcart.appearance.cleanLight")
+        .smartCartCard()
     }
 
     private var accountHeader: some View {
@@ -951,7 +991,7 @@ struct AccountView: View {
                 InfoBanner(
                     symbol: "waveform.path.ecg",
                     title: "Last import · \(report.confidenceLabel)",
-                    message: "\(report.sourcePageCount) page(s), \(report.ingredientLineCount) ingredients, \(report.reviewCount) review item(s), \(report.retryCount) OCR retry/retries, \(report.duration.formatted(.number.precision(.fractionLength(2))))s.",
+                    message: "\(report.sourcePageCount) page(s), \(report.ingredientLineCount) ingredients, \(report.reviewCount) review item(s), layout \(report.layoutConfidence.formatted(.percent.precision(.fractionLength(0)))) with \(report.layoutAmbiguityCount) ambiguity flag(s), \(report.ignoredInstructionLineCount) instruction line(s) excluded, \(report.retryCount) OCR retry/retries, \(report.duration.formatted(.number.precision(.fractionLength(2))))s.",
                     color: report.confidenceScore >= 0.82 ? SmartCartTheme.green : SmartCartTheme.amber
                 )
             }

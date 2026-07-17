@@ -26,7 +26,7 @@ struct ShoppingPreferencesView: View {
             .padding(18)
             .padding(.bottom, 96)
         }
-        .background(SmartCartTheme.canvas)
+        .smartCartBackground()
         .navigationTitle("Shopping preferences")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
@@ -85,9 +85,7 @@ struct ShoppingPreferenceControls: View {
 
             VStack(alignment: .leading, spacing: 10) {
                 Text("DIETARY HARD FILTERS")
-                    .font(.caption2.weight(.heavy))
-                    .tracking(0.7)
-                    .foregroundStyle(SmartCartTheme.secondaryInk)
+                    .smartEyebrow(SmartCartTheme.mutedInk)
 
                 LazyVGrid(
                     columns: [GridItem(.adaptive(minimum: 126), spacing: 8)],
@@ -108,12 +106,17 @@ struct ShoppingPreferenceControls: View {
                                 systemImage: selected ? "checkmark.circle.fill" : "circle"
                             )
                             .font(.caption.weight(.bold))
-                            .foregroundStyle(selected ? .white : SmartCartTheme.navy)
+                            .foregroundStyle(selected ? SmartCartTheme.onAccent : SmartCartTheme.ink)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 11)
                             .padding(.vertical, 10)
-                            .background(selected ? SmartCartTheme.green : SmartCartTheme.canvas)
+                            .background(selected ? SmartCartTheme.green : SmartCartTheme.canvasRaise)
                             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .stroke(selected ? Color.clear : SmartCartTheme.border, lineWidth: 1)
+                            }
+                            .shadow(color: selected ? SmartCartTheme.mintGlow : .clear, radius: 8)
                         }
                         .buttonStyle(PressableButtonStyle())
                     }

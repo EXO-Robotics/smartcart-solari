@@ -37,7 +37,7 @@ struct PantryCheckView: View {
             .padding(18)
             .padding(.bottom, 96)
         }
-        .background(SmartCartTheme.canvas)
+        .smartCartBackground()
         .navigationTitle("Pantry check")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
@@ -110,6 +110,7 @@ struct PantryCheckView: View {
                 Button("Buy everything") {
                     for index in appModel.activeRecipe.ingredients.indices where appModel.activeRecipe.ingredients[index].includeInList {
                         appModel.activeRecipe.ingredients[index].pantryState = .needToBuy
+                        appModel.activeRecipe.ingredients[index].pantryDecision = .buyFull
                     }
                 }
                 .buttonStyle(SecondaryButtonStyle())
@@ -119,6 +120,7 @@ struct PantryCheckView: View {
                         let value = appModel.activeRecipe.ingredients[index].name.lowercased()
                         if value.contains("salt") || value.contains("pepper") || value.contains("water") {
                             appModel.activeRecipe.ingredients[index].pantryState = .haveEnough
+                            appModel.activeRecipe.ingredients[index].pantryDecision = .useAvailable
                         }
                     }
                 }
@@ -129,6 +131,7 @@ struct PantryCheckView: View {
                 Button("Buy everything") {
                     for index in appModel.activeRecipe.ingredients.indices where appModel.activeRecipe.ingredients[index].includeInList {
                         appModel.activeRecipe.ingredients[index].pantryState = .needToBuy
+                        appModel.activeRecipe.ingredients[index].pantryDecision = .buyFull
                     }
                 }
                 .buttonStyle(SecondaryButtonStyle())
@@ -138,6 +141,7 @@ struct PantryCheckView: View {
                         let value = appModel.activeRecipe.ingredients[index].name.lowercased()
                         if value.contains("salt") || value.contains("pepper") || value.contains("water") {
                             appModel.activeRecipe.ingredients[index].pantryState = .haveEnough
+                            appModel.activeRecipe.ingredients[index].pantryDecision = .useAvailable
                         }
                     }
                 }
@@ -151,47 +155,79 @@ private struct PantryIngredientRow: View {
     @Binding var ingredient: Ingredient
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: ingredient.category.symbol)
-                .font(.subheadline.bold())
-                .foregroundStyle(ingredient.pantryState.color)
-                .frame(width: 40, height: 40)
-                .background(ingredient.pantryState.color.opacity(0.10))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                Image(systemName: ingredient.category.symbol)
+                    .font(.subheadline.bold())
+                    .foregroundStyle(ingredient.pantryState.color)
+                    .frame(width: 40, height: 40)
+                    .background(ingredient.pantryState.color.opacity(0.10))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(ingredient.name)
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(SmartCartTheme.navy)
-                    .lineLimit(1)
-                Text(ingredient.displayQuantity)
-                    .font(.caption)
-                    .foregroundStyle(SmartCartTheme.secondaryInk)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(ingredient.name)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(SmartCartTheme.navy)
+                        .lineLimit(1)
+                    Text(ingredient.displayQuantity)
+                        .font(.caption)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
+                }
+
+                Spacer(minLength: 6)
+
+                Menu {
+                    ForEach(PantryState.allCases) { state in
+                        Button {
+                            ingredient.pantryState = state
+                            ingredient.pantryDecision = state == .needToBuy ? .buyFull : (state == .haveEnough ? .useAvailable : .review)
+                        } label: {
+                            Label(state.rawValue, systemImage: state.symbol)
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Text(ingredient.pantryState.shortLabel)
+                            .lineLimit(1)
+                        Image(systemName: "chevron.down")
+                            .font(.caption2.bold())
+                    }
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(ingredient.pantryState.color)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(ingredient.pantryState.color.opacity(0.09))
+                    .clipShape(Capsule())
+                }
             }
 
-            Spacer(minLength: 6)
-
-            Menu {
-                ForEach(PantryState.allCases) { state in
-                    Button {
-                        ingredient.pantryState = state
-                    } label: {
-                        Label(state.rawValue, systemImage: state.symbol)
+            if let suggestion = ingredient.pantrySuggestion {
+                VStack(alignment: .leading, spacing: 7) {
+                    Label("Found in pantry: \(suggestion.pantryItemName)", systemImage: "sparkles")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(SmartCartTheme.purple)
+                    Text(suggestionText(suggestion))
+                        .font(.caption2)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
+                    HStack(spacing: 8) {
+                        Button(suggestion.coverage == .partial ? "Use + buy remainder" : "Use pantry") {
+                            ingredient.pantryDecision = .useAvailable
+                            ingredient.pantryState = .runningLow
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(SmartCartTheme.green)
+                        .foregroundStyle(SmartCartTheme.onAccent)
+                        Button("Buy full") {
+                            ingredient.pantryDecision = .buyFull
+                            ingredient.pantryState = .needToBuy
+                        }
+                        .buttonStyle(.bordered)
                     }
+                    .font(.caption.weight(.bold))
                 }
-            } label: {
-                HStack(spacing: 5) {
-                    Text(ingredient.pantryState.shortLabel)
-                        .lineLimit(1)
-                    Image(systemName: "chevron.down")
-                        .font(.caption2.bold())
-                }
-                .font(.caption.weight(.bold))
-                .foregroundStyle(ingredient.pantryState.color)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background(ingredient.pantryState.color.opacity(0.09))
-                .clipShape(Capsule())
+                .padding(10)
+                .background(SmartCartTheme.purple.opacity(0.07))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
         }
         .padding(13)
@@ -200,6 +236,17 @@ private struct PantryIngredientRow: View {
         .overlay {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(SmartCartTheme.border, lineWidth: 1)
+        }
+    }
+
+    private func suggestionText(_ suggestion: PantrySuggestion) -> String {
+        switch suggestion.coverage {
+        case .full:
+            "Saved stock appears sufficient. SmartCart will skip it only after you choose Use pantry."
+        case .partial:
+            "Saved stock covers \(Ingredient.quantityText(suggestion.availableQuantity, unit: suggestion.availableUnit)); choose Use to buy only the remainder."
+        case .possible:
+            "The name matches, but package units are not comparable. You decide whether to use it or buy the full amount."
         }
     }
 }
@@ -248,7 +295,7 @@ struct StoreSelectionView: View {
             .padding(18)
             .padding(.bottom, 96)
         }
-        .background(SmartCartTheme.canvas)
+        .smartCartBackground()
         .navigationTitle("Select store")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
@@ -294,9 +341,7 @@ struct StoreSelectionView: View {
 
         return VStack(alignment: .leading, spacing: 9) {
             Text("SHOPPING PLAN")
-                .font(.caption2.weight(.heavy))
-                .tracking(0.8)
-                .foregroundStyle(SmartCartTheme.secondaryInk)
+                .smartEyebrow(SmartCartTheme.mutedInk)
             Picker("Shopping plan", selection: $appModel.storeStrategy) {
                 ForEach(StoreStrategy.allCases) { strategy in
                     Text(strategy.rawValue).tag(strategy)
@@ -348,8 +393,9 @@ struct StoreSelectionView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                     .overlay {
                         RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .stroke(selected ? SmartCartTheme.walmartBlue : SmartCartTheme.border, lineWidth: selected ? 1.6 : 1)
+                            .stroke(selected ? SmartCartTheme.borderStrong : SmartCartTheme.border, lineWidth: selected ? 1.6 : 1)
                     }
+                    .shadow(color: selected ? SmartCartTheme.mintGlow : .clear, radius: 14)
                 }
                 .buttonStyle(PressableButtonStyle())
             }
@@ -425,7 +471,7 @@ private struct ChoiceChip: View {
         Button(action: action) {
             Text(title)
                 .font(.caption.weight(.bold))
-                .foregroundStyle(selected ? .white : SmartCartTheme.navy)
+                .foregroundStyle(selected ? SmartCartTheme.onAccent : SmartCartTheme.ink)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
@@ -435,6 +481,7 @@ private struct ChoiceChip: View {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .stroke(selected ? Color.clear : SmartCartTheme.border, lineWidth: 1)
                 }
+                .shadow(color: selected ? SmartCartTheme.mintGlow : .clear, radius: 8)
         }
         .buttonStyle(PressableButtonStyle())
     }
@@ -442,138 +489,496 @@ private struct ChoiceChip: View {
 
 struct PantryDashboardView: View {
     @Environment(AppModel.self) private var appModel
-    @State private var showBarcodeScanner = false
+    @State private var pantrySheet: PantrySheetDestination?
     @State private var manualPantryName = ""
+    @State private var searchText = ""
+    @State private var scannerExpanded =
+        ProcessInfo.processInfo.environment["SMARTCART_PANTRY_DRAWER"] == "scanner"
+    @GestureState private var scannerDrag: CGFloat = 0
+
+    private let collapsedDrawerHeight: CGFloat = 92
 
     var body: some View {
-        @Bindable var appModel = appModel
+        GeometryReader { geometry in
+            let drawerHeight = max(420, geometry.size.height - 88)
+            let collapsedOffset = drawerHeight - collapsedDrawerHeight
 
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Pantry")
-                        .font(.system(size: 29, weight: .bold, design: .rounded))
-                        .foregroundStyle(SmartCartTheme.navy)
-                    Text("What SmartCart will skip or ask about")
-                        .font(.subheadline)
-                        .foregroundStyle(SmartCartTheme.secondaryInk)
-                }
-                .padding(.top, 8)
+            ZStack(alignment: .bottom) {
+                VStack(spacing: 0) {
+                    header
+                        .padding(.horizontal, 18)
 
-                HStack(spacing: 10) {
-                    pantryMetric("Have", count: appModel.activeRecipe.ingredients.filter { $0.pantryState == .haveEnough }.count, color: SmartCartTheme.green)
-                    pantryMetric("Low", count: appModel.activeRecipe.ingredients.filter { $0.pantryState == .runningLow }.count, color: SmartCartTheme.amber)
-                    pantryMetric("Buy", count: appModel.ingredientsToBuy.count, color: SmartCartTheme.walmartBlue)
+                    inventoryContents
                 }
 
-                Button {
-                    showBarcodeScanner = true
-                } label: {
-                    Label("Scan a pantry barcode", systemImage: "barcode.viewfinder")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(PrimaryButtonStyle())
-
-                VStack(alignment: .leading, spacing: 12) {
-                    SectionHeader(
-                        title: "Pantry inventory",
-                        subtitle: "Saved on this device · barcode lookup works offline"
+                scannerDrawer(height: drawerHeight, collapsedOffset: collapsedOffset)
+                    .offset(y: scannerDrawerOffset(collapsedOffset: collapsedOffset))
+                    .animation(
+                        .spring(response: 0.42, dampingFraction: 0.86),
+                        value: scannerExpanded
                     )
-
-                    HStack(spacing: 9) {
-                        TextField("Add an item manually", text: $manualPantryName)
-                            .smartField()
-                        Button {
-                            appModel.addManualPantryItem(name: manualPantryName)
-                            manualPantryName = ""
-                        } label: {
-                            Image(systemName: "plus")
-                                .font(.headline.bold())
-                                .frame(width: 44, height: 44)
-                        }
-                        .buttonStyle(SecondaryButtonStyle())
-                        .disabled(manualPantryName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    }
-
-                    if appModel.pantryInventory.isEmpty {
-                        InfoBanner(
-                            symbol: "cabinet.fill",
-                            title: "No saved pantry items",
-                            message: "Scan a barcode or add an item. Unknown UPCs are retained locally for later catalog matching.",
-                            color: SmartCartTheme.walmartBlue
-                        )
-                    } else {
-                        ForEach(appModel.pantryInventory) { item in
-                            HStack(spacing: 12) {
-                                Image(systemName: item.source == .barcode ? "barcode" : "cabinet.fill")
-                                    .foregroundStyle(SmartCartTheme.green)
-                                    .frame(width: 38, height: 38)
-                                    .background(SmartCartTheme.herbLight)
-                                    .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(item.name)
-                                        .font(.subheadline.weight(.bold))
-                                        .foregroundStyle(SmartCartTheme.navy)
-                                    Text("\(item.brand.isEmpty ? item.source.label : item.brand) · \(item.quantity.formatted()) \(item.unit)")
-                                        .font(.caption)
-                                        .foregroundStyle(SmartCartTheme.secondaryInk)
-                                }
-                                Spacer()
-                                Button(role: .destructive) {
-                                    guard let index = appModel.pantryInventory.firstIndex(where: { $0.id == item.id }) else { return }
-                                    appModel.removePantryItems(at: IndexSet(integer: index))
-                                } label: {
-                                    Image(systemName: "trash")
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel("Remove \(item.name)")
-                            }
-                            .smartCartCard(padding: 12)
-                        }
-                    }
-                }
-
-                SectionHeader(title: appModel.activeRecipe.title, subtitle: "Current recipe pantry decisions")
-
-                ForEach($appModel.activeRecipe.ingredients) { $ingredient in
-                    PantryIngredientRow(ingredient: $ingredient)
-                }
-
-                InfoBanner(
-                    symbol: "lock.fill",
-                    title: "Private by default",
-                    message: "Pantry choices stay inside this prototype and are never sent to Walmart.",
-                    color: SmartCartTheme.green
-                )
             }
-            .padding(.horizontal, 18)
-            .padding(.bottom, 34)
         }
-        .background(SmartCartTheme.canvas)
+        .smartCartBackground()
         .toolbar(.hidden, for: .navigationBar)
-        .sheet(isPresented: $showBarcodeScanner) {
-            BarcodeScannerSheet { code in
-                appModel.addPantryItem(upc: code)
+        .sensoryFeedback(.selection, trigger: scannerExpanded)
+        .sheet(item: $pantrySheet) { destination in
+            switch destination {
+            case .editor(let item):
+                PantryInventoryEditor(item: item) { edited in
+                    appModel.updatePantryItem(edited)
+                }
             }
         }
     }
 
-    private func pantryMetric(_ title: String, count: Int, color: Color) -> some View {
-        VStack(spacing: 5) {
-            Text("\(count)")
-                .font(.title2.bold())
-                .foregroundStyle(color)
-            Text(title)
-                .font(.caption.weight(.bold))
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Pantry")
+                .font(.system(size: 29, weight: .bold, design: .rounded))
+                .foregroundStyle(SmartCartTheme.navy)
+            Text("Search, rename, and adjust everything you have on hand.")
+                .font(.subheadline)
                 .foregroundStyle(SmartCartTheme.secondaryInk)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 8)
+        .padding(.bottom, 12)
+    }
+
+    private func scannerDrawer(height: CGFloat, collapsedOffset: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            scannerDrawerHandle(collapsedOffset: collapsedOffset)
+
+            Divider()
+                .overlay(SmartCartTheme.border)
+
+            if scannerExpanded {
+                BarcodeScannerSheet(embedded: true) {
+                    scannerExpanded = false
+                }
+                .transition(.opacity)
+            } else {
+                Color.clear
+                    .allowsHitTesting(false)
+            }
+        }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 14)
-        .background(SmartCartTheme.paper)
-        .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+        .frame(height: height, alignment: .top)
+        .background(SmartCartTheme.scannerSurface)
+        .clipShape(PantryPullUpShape())
         .overlay {
-            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .stroke(SmartCartTheme.border, lineWidth: 1)
+            PantryPullUpShape()
+                .stroke(SmartCartTheme.borderStrong.opacity(0.72), lineWidth: 1)
+        }
+        .shadow(color: .black.opacity(0.28), radius: 22, y: -8)
+        .padding(.horizontal, 8)
+        .accessibilityElement(children: .contain)
+    }
+
+    private func scannerDrawerHandle(collapsedOffset: CGFloat) -> some View {
+        VStack(spacing: 4) {
+            Image(systemName: scannerExpanded ? "chevron.compact.down" : "chevron.compact.up")
+                .font(.system(size: 24, weight: .bold))
+                .foregroundStyle(SmartCartTheme.green)
+                .frame(height: 35)
+
+            HStack(spacing: 9) {
+                Label("Scan an item", systemImage: "barcode.viewfinder")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(SmartCartTheme.ink)
+
+                Spacer()
+
+                Text(scannerExpanded ? "Swipe down to hide" : "Swipe up for camera or code")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
+            }
+            .padding(.horizontal, 18)
+            .padding(.bottom, 10)
+        }
+        .frame(height: collapsedDrawerHeight)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            scannerExpanded.toggle()
+        }
+        .gesture(scannerDragGesture(collapsedOffset: collapsedOffset))
+        .accessibilityLabel("Barcode scanner drawer")
+        .accessibilityValue(scannerExpanded ? "Expanded" : "Collapsed")
+        .accessibilityHint(scannerExpanded ? "Swipe down to hide the scanner" : "Swipe up to show the scanner")
+        .accessibilityAddTraits(.isButton)
+    }
+
+    private var inventoryContents: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                SectionHeader(
+                    title: "Pantry inventory",
+                    subtitle: "Search and edit without leaving this screen"
+                )
+
+                HStack(spacing: 10) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
+                    TextField("Search your pantry", text: $searchText)
+                        .textInputAutocapitalization(.never)
+                    if !searchText.isEmpty {
+                        Button {
+                            searchText = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(SmartCartTheme.secondaryInk)
+                        }
+                        .accessibilityLabel("Clear search")
+                    }
+                }
+                .smartField()
+
+                HStack(spacing: 9) {
+                    TextField("Add an item manually", text: $manualPantryName)
+                        .smartField()
+                    Button {
+                        appModel.addManualPantryItem(name: manualPantryName)
+                        manualPantryName = ""
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.headline.bold())
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(SecondaryButtonStyle())
+                    .disabled(manualPantryName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+
+                if appModel.pantryInventory.isEmpty {
+                    InfoBanner(
+                        symbol: "cabinet.fill",
+                        title: "No saved pantry items",
+                        message: "Scan a barcode or add an item. Unknown UPCs are retained locally for later catalog matching.",
+                        color: SmartCartTheme.walmartBlue
+                    )
+                } else if filteredInventory.isEmpty {
+                    InfoBanner(
+                        symbol: "magnifyingglass",
+                        title: "No matches for “\(searchText)”",
+                        message: "Try a shorter search, or add it as a new item above.",
+                        color: SmartCartTheme.amber
+                    )
+                } else {
+                    ForEach(filteredInventory) { item in
+                        PantryInlineRow(
+                            item: item,
+                            onUpdate: { appModel.updatePantryItem($0) },
+                            onDelete: {
+                                guard let index = appModel.pantryInventory.firstIndex(where: { $0.id == item.id }) else { return }
+                                appModel.removePantryItems(at: IndexSet(integer: index))
+                            },
+                            onDetails: { pantrySheet = .editor(item) }
+                        )
+                    }
+
+                    Text("Tap a name or amount to edit it in place · long-press a row for package details")
+                        .font(.caption2)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.top, 2)
+                }
+            }
+            .padding(.horizontal, 18)
+            .padding(.bottom, collapsedDrawerHeight + 34)
+        }
+        .scrollIndicators(.hidden)
+        .scrollDismissesKeyboard(.interactively)
+    }
+
+    private func scannerDrawerOffset(collapsedOffset: CGFloat) -> CGFloat {
+        let restingOffset = scannerExpanded ? 0 : collapsedOffset
+        return min(max(restingOffset + scannerDrag, 0), collapsedOffset)
+    }
+
+    private func scannerDragGesture(collapsedOffset: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 6)
+            .updating($scannerDrag) { value, state, _ in
+                state = value.translation.height
+            }
+            .onEnded { value in
+                let projected = value.predictedEndTranslation.height
+                let decisiveDistance = min(96, collapsedOffset * 0.22)
+
+                if scannerExpanded {
+                    if projected > decisiveDistance {
+                        scannerExpanded = false
+                    }
+                } else if projected < -decisiveDistance {
+                    scannerExpanded = true
+                }
+            }
+    }
+
+    private var filteredInventory: [PantryInventoryItem] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return appModel.pantryInventory }
+        return appModel.pantryInventory.filter {
+            $0.name.lowercased().contains(query) || $0.brand.lowercased().contains(query)
+        }
+    }
+
+}
+
+/// A drawer with a centered half-circle rising above its top edge. The curved
+/// handle makes the vertical scanner gesture visible without looking like a
+/// second tab bar or a horizontal page control.
+private struct PantryPullUpShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let top: CGFloat = 34
+        let cornerRadius: CGFloat = 26
+        let handleRadius: CGFloat = 36
+        let centerX = rect.midX
+
+        var path = Path()
+        path.move(to: CGPoint(x: cornerRadius, y: top))
+        path.addLine(to: CGPoint(x: centerX - handleRadius, y: top))
+        path.addCurve(
+            to: CGPoint(x: centerX, y: 0),
+            control1: CGPoint(x: centerX - 23, y: top),
+            control2: CGPoint(x: centerX - 28, y: 0)
+        )
+        path.addCurve(
+            to: CGPoint(x: centerX + handleRadius, y: top),
+            control1: CGPoint(x: centerX + 28, y: 0),
+            control2: CGPoint(x: centerX + 23, y: top)
+        )
+        path.addLine(to: CGPoint(x: rect.maxX - cornerRadius, y: top))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX, y: top + cornerRadius),
+            control: CGPoint(x: rect.maxX, y: top)
+        )
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: top + cornerRadius))
+        path.addQuadCurve(
+            to: CGPoint(x: cornerRadius, y: top),
+            control: CGPoint(x: rect.minX, y: top)
+        )
+        path.closeSubpath()
+        return path
+    }
+}
+
+private enum PantrySheetDestination: Identifiable {
+    case editor(PantryInventoryItem)
+
+    var id: String {
+        switch self {
+        case .editor(let item): "editor-\(item.id.uuidString)"
+        }
+    }
+}
+
+/// One saved pantry item with the name and amount editable directly in the
+/// row — no separate editor sheet for the common corrections.
+private struct PantryInlineRow: View {
+    let item: PantryInventoryItem
+    let onUpdate: (PantryInventoryItem) -> Void
+    let onDelete: () -> Void
+    let onDetails: () -> Void
+
+    @State private var name: String
+    @State private var quantityText: String
+    @FocusState private var nameFocused: Bool
+    @FocusState private var quantityFocused: Bool
+
+    init(
+        item: PantryInventoryItem,
+        onUpdate: @escaping (PantryInventoryItem) -> Void,
+        onDelete: @escaping () -> Void,
+        onDetails: @escaping () -> Void
+    ) {
+        self.item = item
+        self.onUpdate = onUpdate
+        self.onDelete = onDelete
+        self.onDetails = onDetails
+        _name = State(initialValue: item.name)
+        _quantityText = State(initialValue: item.quantity.formatted())
+    }
+
+    var body: some View {
+        HStack(spacing: 11) {
+            Image(systemName: item.source == .barcode ? "barcode" : "cabinet.fill")
+                .foregroundStyle(SmartCartTheme.green)
+                .frame(width: 36, height: 36)
+                .background(SmartCartTheme.herbLight)
+                .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 2) {
+                TextField("Item name", text: $name)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(SmartCartTheme.navy)
+                    .textInputAutocapitalization(.words)
+                    .focused($nameFocused)
+                    .onSubmit(commitName)
+                    .onChange(of: nameFocused) { _, focused in
+                        if !focused { commitName() }
+                    }
+                Text(item.brand.isEmpty ? item.source.label : item.brand)
+                    .font(.caption2)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 6)
+
+            HStack(spacing: 7) {
+                quantityButton("minus") {
+                    var edited = item
+                    edited.quantity = max(0, edited.quantity - 1)
+                    onUpdate(edited)
+                }
+                VStack(spacing: 0) {
+                    TextField("Amount", text: $quantityText)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(SmartCartTheme.navy)
+                        .keyboardType(.decimalPad)
+                        .multilineTextAlignment(.center)
+                        .focused($quantityFocused)
+                        .onSubmit(commitQuantity)
+                        .onChange(of: quantityFocused) { _, focused in
+                            if !focused { commitQuantity() }
+                        }
+                    Text(item.unit)
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
+                }
+                .frame(minWidth: 34)
+                quantityButton("plus") {
+                    var edited = item
+                    edited.quantity += 1
+                    onUpdate(edited)
+                }
+            }
+
+        }
+        .smartCartCard(padding: 12)
+        .contextMenu {
+            Button("Package details", systemImage: "shippingbox") { onDetails() }
+            Button("Delete", systemImage: "trash", role: .destructive) { onDelete() }
+        }
+        .onChange(of: item.name) { _, newValue in
+            if !nameFocused { name = newValue }
+        }
+        .onChange(of: item.quantity) { _, newValue in
+            if !quantityFocused { quantityText = newValue.formatted() }
+        }
+        .animation(.spring(response: 0.28, dampingFraction: 0.85), value: item.quantity)
+    }
+
+    private func commitName() {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != item.name else {
+            name = item.name
+            return
+        }
+        var edited = item
+        edited.name = trimmed
+        edited.requiresUserNaming = false
+        onUpdate(edited)
+    }
+
+    private func commitQuantity() {
+        let normalized = quantityText.replacingOccurrences(of: ",", with: "")
+        guard let quantity = Double(normalized), quantity >= 0 else {
+            quantityText = item.quantity.formatted()
+            return
+        }
+        guard quantity != item.quantity else {
+            quantityText = item.quantity.formatted()
+            return
+        }
+        var edited = item
+        edited.quantity = quantity
+        onUpdate(edited)
+    }
+
+    private func quantityButton(_ symbol: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.caption.bold())
+                .foregroundStyle(SmartCartTheme.green)
+                .frame(width: 28, height: 28)
+                .background(SmartCartTheme.herbLight)
+                .clipShape(Circle())
+        }
+        .buttonStyle(PressableButtonStyle())
+        .accessibilityLabel(symbol == "plus" ? "Increase \(item.name) amount" : "Decrease \(item.name) amount")
+    }
+}
+
+private struct PantryInventoryEditor: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var draft: PantryInventoryItem
+    let onSave: (PantryInventoryItem) -> Void
+
+    init(item: PantryInventoryItem, onSave: @escaping (PantryInventoryItem) -> Void) {
+        _draft = State(initialValue: item)
+        self.onSave = onSave
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Identity") {
+                    TextField("Required product name", text: $draft.name)
+                    TextField("Brand (optional)", text: $draft.brand)
+                    if let upc = draft.upc {
+                        LabeledContent("Barcode", value: upc)
+                    }
+                    if draft.requiresUserNaming == true {
+                        Label("Name this product before pantry matching can use it", systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(SmartCartTheme.amber)
+                    }
+                }
+
+                Section("Inventory") {
+                    TextField("Packages on hand", value: $draft.quantity, format: .number)
+                        .keyboardType(.decimalPad)
+                    TextField("Package label", text: $draft.unit)
+                    TextField(
+                        "Amount per package (optional)",
+                        value: $draft.packageSize,
+                        format: .number
+                    )
+                    .keyboardType(.decimalPad)
+                    TextField(
+                        "Unit, such as cup, oz, g",
+                        text: Binding(
+                            get: { draft.packageUnit ?? "" },
+                            set: { draft.packageUnit = $0.isEmpty ? nil : $0 }
+                        )
+                    )
+                }
+
+                Section {
+                    Text("When a recipe is imported, SmartCart compares this name and saved amount with each ingredient. A match is always shown for confirmation before anything is skipped.")
+                        .font(.caption)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
+                }
+            }
+            .navigationTitle("Edit pantry item")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        draft.name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                        draft.requiresUserNaming = draft.name.isEmpty || draft.name == "Unknown Product"
+                        onSave(draft)
+                        dismiss()
+                    }
+                    .disabled(draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
         }
     }
 }
@@ -704,7 +1109,7 @@ struct StoreDashboardView: View {
             .padding(.horizontal, 18)
             .padding(.bottom, 34)
         }
-        .background(SmartCartTheme.canvas)
+        .smartCartBackground()
         .toolbar(.hidden, for: .navigationBar)
     }
 }

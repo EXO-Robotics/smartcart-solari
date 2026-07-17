@@ -38,7 +38,7 @@ struct IngredientReviewView: View {
             .padding(18)
             .padding(.bottom, 96)
         }
-        .background(SmartCartTheme.canvas)
+        .smartCartBackground()
         .navigationTitle("Review ingredients")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
@@ -60,7 +60,7 @@ struct IngredientReviewView: View {
                     }
                 }
                 .buttonStyle(PrimaryButtonStyle())
-                .disabled(appModel.includedIngredientCount == 0)
+                .disabled(appModel.includedIngredientCount == 0 || appModel.unresolvedQuantityReviewCount > 0)
             }
         }
     }
@@ -69,10 +69,11 @@ struct IngredientReviewView: View {
         HStack(spacing: 14) {
             Image(systemName: appModel.activeRecipe.heroSymbol)
                 .font(.title2.bold())
-                .foregroundStyle(.white)
+                .foregroundStyle(SmartCartTheme.onAccent)
                 .frame(width: 56, height: 56)
                 .background(SmartCartTheme.green)
                 .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+                .shadow(color: SmartCartTheme.mintGlow, radius: 12)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(appModel.activeRecipe.title)
@@ -100,6 +101,7 @@ struct IngredientReviewView: View {
 
 private struct IngredientReviewRow: View {
     @Binding var ingredient: Ingredient
+    @State private var showSourceEvidence = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -153,6 +155,78 @@ private struct IngredientReviewRow: View {
             }
             .font(.caption)
 
+            if let suggestion = ingredient.pantrySuggestion {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(pantrySuggestionTitle(suggestion), systemImage: "cabinet.fill")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(SmartCartTheme.purple)
+                    Text(pantrySuggestionMessage(suggestion))
+                        .font(.caption2)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
+
+                    HStack(spacing: 8) {
+                        Button(suggestion.coverage == .partial ? "Use it + buy rest" : "Use pantry") {
+                            ingredient.pantryDecision = .useAvailable
+                            ingredient.pantryState = .runningLow
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(SmartCartTheme.green)
+                        .foregroundStyle(SmartCartTheme.onAccent)
+
+                        Button("Buy full amount") {
+                            ingredient.pantryDecision = .buyFull
+                            ingredient.pantryState = .needToBuy
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    .font(.caption.weight(.bold))
+                }
+                .padding(11)
+                .background(SmartCartTheme.purple.opacity(0.07))
+                .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .stroke(SmartCartTheme.purple.opacity(0.22), lineWidth: 1)
+                }
+            }
+
+            if ingredient.quantityReviewRequired == true {
+                HStack {
+                    Label("Quantity is uncertain. Confirm it before product matching.", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(SmartCartTheme.coral)
+                    Spacer()
+                    Button("Confirm \(ingredient.displayQuantity)") {
+                        ingredient.quantityReviewRequired = false
+                    }
+                    .font(.caption.weight(.bold))
+                    .buttonStyle(.bordered)
+                }
+            }
+
+            if let evidence = ingredient.sourceEvidence {
+                DisclosureGroup(isExpanded: $showSourceEvidence) {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(evidence.rawText)
+                            .font(.caption.monospaced())
+                            .textSelection(.enabled)
+                        Text("\(evidence.extractionStrategy.rawValue) · parser \(evidence.parserConfidence.formatted(.percent.precision(.fractionLength(0)))) · normalization \(evidence.normalizationConfidence.formatted(.percent.precision(.fractionLength(0))))")
+                            .font(.caption2)
+                            .foregroundStyle(SmartCartTheme.secondaryInk)
+                        if let layout = evidence.layoutConfidence {
+                            Text("Layout confidence: \(layout.formatted(.percent.precision(.fractionLength(0))))")
+                                .font(.caption2)
+                                .foregroundStyle(SmartCartTheme.secondaryInk)
+                        }
+                    }
+                    .padding(.top, 7)
+                } label: {
+                    Label("Source evidence", systemImage: "doc.text.magnifyingglass")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(SmartCartTheme.walmartBlue)
+                }
+            }
+
             HStack {
                 Menu {
                     ForEach(GroceryCategory.allCases, id: \.self) { category in
@@ -189,6 +263,25 @@ private struct IngredientReviewRow: View {
         }
         .opacity(ingredient.includeInList ? 1 : 0.62)
     }
+
+    private func pantrySuggestionTitle(_ suggestion: PantrySuggestion) -> String {
+        switch suggestion.coverage {
+        case .full: "Pantry may cover this"
+        case .partial: "Pantry may cover part of this"
+        case .possible: "Possible pantry match"
+        }
+    }
+
+    private func pantrySuggestionMessage(_ suggestion: PantrySuggestion) -> String {
+        switch suggestion.coverage {
+        case .full:
+            "\(suggestion.pantryItemName) appears to cover \(ingredient.displayQuantity). Confirm before SmartCart skips it."
+        case .partial:
+            "\(suggestion.pantryItemName) covers about \(Ingredient.quantityText(suggestion.availableQuantity, unit: suggestion.availableUnit)); SmartCart can buy the remainder."
+        case .possible:
+            "\(suggestion.pantryItemName) matches by name, but its saved package unit cannot be compared with \(ingredient.unit.isEmpty ? "this recipe amount" : ingredient.unit)."
+        }
+    }
 }
 
 struct ServingAdjustmentView: View {
@@ -214,7 +307,7 @@ struct ServingAdjustmentView: View {
             .padding(18)
             .padding(.bottom, 96)
         }
-        .background(SmartCartTheme.canvas)
+        .smartCartBackground()
         .navigationTitle("Adjust servings")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
@@ -350,31 +443,102 @@ struct ServingAdjustmentView: View {
     }
 }
 
-struct ListsView: View {
+struct RecipesView: View {
     @Environment(AppModel.self) private var appModel
+    @State private var page: RecipesPage =
+        ProcessInfo.processInfo.environment["SMARTCART_RECIPES_PAGE"] == "recent" ? .recent : .saved
+
+    private enum RecipesPage: Int, CaseIterable {
+        case saved
+        case recent
+
+        var title: String {
+            switch self {
+            case .saved: "Saved"
+            case .recent: "Recent"
+            }
+        }
+
+        var symbol: String {
+            switch self {
+            case .saved: "bookmark.fill"
+            case .recent: "clock.fill"
+            }
+        }
+    }
 
     var body: some View {
+        VStack(spacing: 0) {
+            header
+                .padding(.horizontal, 18)
+
+            TabView(selection: $page) {
+                savedPage
+                    .tag(RecipesPage.saved)
+                recentPage
+                    .tag(RecipesPage.recent)
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+        }
+        .smartCartBackground()
+        .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Recipes")
+                        .font(.system(size: 29, weight: .bold, design: .rounded))
+                        .foregroundStyle(SmartCartTheme.navy)
+                    Text("Saved lists and recent imports")
+                        .font(.subheadline)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
+                }
+                Spacer()
+                SmartCartLogo(compact: true)
+                    .accessibilityHidden(true)
+            }
+
+            HStack(spacing: 4) {
+                ForEach(RecipesPage.allCases, id: \.rawValue) { candidate in
+                    Button {
+                        withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                            page = candidate
+                        }
+                    } label: {
+                        Label(candidate.title, systemImage: candidate.symbol)
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(page == candidate ? SmartCartTheme.onAccent : SmartCartTheme.secondaryInk)
+                            .padding(.horizontal, 13)
+                            .padding(.vertical, 9)
+                            .frame(maxWidth: .infinity)
+                            .background {
+                                if page == candidate {
+                                    Capsule().fill(SmartCartTheme.green)
+                                }
+                            }
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(PressableButtonStyle())
+                }
+            }
+            .padding(4)
+            .background(SmartCartTheme.paper)
+            .clipShape(Capsule())
+            .overlay { Capsule().stroke(SmartCartTheme.border, lineWidth: 1) }
+        }
+        .padding(.top, 8)
+        .padding(.bottom, 12)
+    }
+
+    private var savedPage: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Shopping lists")
-                            .font(.system(size: 29, weight: .bold, design: .rounded))
-                            .foregroundStyle(SmartCartTheme.navy)
-                        Text("Ready to share, open, or shop")
-                            .font(.subheadline)
-                            .foregroundStyle(SmartCartTheme.secondaryInk)
-                    }
-                    Spacer()
-                    SmartCartLogo(compact: true)
-                        .accessibilityHidden(true)
-                }
-                .padding(.top, 8)
-
                 if appModel.shoppingItems.isEmpty {
                     EmptyStateView(
-                        symbol: "checklist",
-                        title: "No list yet",
+                        symbol: "book.fill",
+                        title: "No recipe in progress",
                         message: "Import a recipe and SmartCart will build your first product-matched list.",
                         actionTitle: "Import recipe"
                     ) {
@@ -391,8 +555,72 @@ struct ListsView: View {
             .padding(.horizontal, 18)
             .padding(.bottom, 34)
         }
-        .background(SmartCartTheme.canvas)
-        .toolbar(.hidden, for: .navigationBar)
+        .scrollIndicators(.hidden)
+    }
+
+    private var recentPage: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                SectionHeader(
+                    title: "Recently shopped",
+                    subtitle: "Your last \(min(5, max(1, appModel.recentRecipes.count))) recipes, newest first"
+                )
+
+                if appModel.recentRecipes.isEmpty {
+                    EmptyStateView(
+                        symbol: "clock.fill",
+                        title: "Nothing recent yet",
+                        message: "Recipes you import or shop show up here so you can run them again in one tap."
+                    )
+                } else {
+                    ForEach(appModel.recentRecipes.prefix(5)) { recipe in
+                        recentRecipeCard(recipe)
+                    }
+                }
+            }
+            .padding(.horizontal, 18)
+            .padding(.bottom, 34)
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    private func recentRecipeCard(_ recipe: Recipe) -> some View {
+        HStack(spacing: 13) {
+            Image(systemName: recipe.heroSymbol)
+                .font(.title3.bold())
+                .foregroundStyle(SmartCartTheme.green)
+                .frame(width: 48, height: 48)
+                .background(SmartCartTheme.herbLight)
+                .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(recipe.title)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(SmartCartTheme.navy)
+                    .lineLimit(2)
+                Text("\(recipe.ingredients.count) ingredients · \(recipe.servings) servings · \(recipe.source.rawValue)")
+                    .font(.caption)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 6)
+
+            Button {
+                appModel.beginRecipe(recipe)
+            } label: {
+                Label("Shop", systemImage: "arrow.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(SmartCartTheme.onAccent)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 9)
+                    .background(SmartCartTheme.green)
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(PressableButtonStyle())
+            .accessibilityLabel("Shop \(recipe.title) again")
+        }
+        .smartCartCard(padding: 13)
     }
 
     private var currentListCard: some View {
@@ -417,10 +645,11 @@ struct ListsView: View {
                 HStack(spacing: 14) {
                     Image(systemName: appModel.activeRecipe.heroSymbol)
                         .font(.title.bold())
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SmartCartTheme.onAccent)
                         .frame(width: 62, height: 62)
                         .background(SmartCartTheme.green)
                         .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
+                        .shadow(color: SmartCartTheme.mintGlow, radius: 12)
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text(appModel.activeRecipe.title)

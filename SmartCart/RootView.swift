@@ -2,12 +2,14 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(AppModel.self) private var appModel
+    @AppStorage("smartcart.hasSeenJourneyIntro") private var hasSeenJourneyIntro = false
+    @State private var showIntro = false
 
     var body: some View {
         @Bindable var appModel = appModel
 
         ZStack(alignment: .top) {
-            SmartCartTheme.canvas
+            WoodGrainBackground()
                 .ignoresSafeArea()
 
             TabView(selection: $appModel.selectedTab) {
@@ -23,7 +25,7 @@ struct RootView: View {
                 }
 
                 NavigationStack {
-                    ListsView()
+                    RecipesView()
                 }
                 .tag(AppTab.lists)
                 .tabItem {
@@ -55,7 +57,7 @@ struct RootView: View {
                 }
             }
             .tint(SmartCartTheme.green)
-            .toolbarBackground(SmartCartTheme.paper, for: .tabBar)
+            .toolbarBackground(SmartCartTheme.canvasRaise, for: .tabBar)
             .toolbarBackground(.visible, for: .tabBar)
 
             if let message = appModel.toastMessage {
@@ -71,6 +73,19 @@ struct RootView: View {
             switch destination {
             case .importer(let method):
                 RecipeComposerSheet(initialMethod: method)
+            }
+        }
+        .onAppear {
+            let environment = ProcessInfo.processInfo.environment
+            if environment["SMARTCART_SKIP_INTRO"] != nil {
+                hasSeenJourneyIntro = true
+            }
+            showIntro = !hasSeenJourneyIntro || environment["SMARTCART_SHOW_INTRO"] != nil
+        }
+        .fullScreenCover(isPresented: $showIntro) {
+            IntroJourneyView {
+                hasSeenJourneyIntro = true
+                showIntro = false
             }
         }
     }
@@ -95,5 +110,110 @@ struct RootView: View {
         case .guidedShopping:
             GuidedShoppingView()
         }
+    }
+}
+
+/// One-time onboarding walk-through of the SmartCart journey, shown on
+/// first launch instead of living on the Home screen.
+struct IntroJourneyView: View {
+    let onFinish: () -> Void
+
+    @State private var step = 0
+
+    private struct JourneyStep {
+        let symbol: String
+        let title: String
+        let message: String
+    }
+
+    private let steps: [JourneyStep] = [
+        .init(symbol: "square.and.arrow.down.fill", title: "Import from anywhere", message: "Snap a cookbook photo, paste a link or text, or start from a sample recipe."),
+        .init(symbol: "checklist", title: "Review every ingredient", message: "Confirm names and quantities before anything is matched to a product."),
+        .init(symbol: "slider.horizontal.3", title: "Set your rules", message: "Dietary filters, organic, budget, and brand preferences shape every match."),
+        .init(symbol: "storefront.fill", title: "Choose your store", message: "Pick the store and a pickup window that fits your day."),
+        .init(symbol: "tag.fill", title: "Match real products", message: "SmartCart resolves exact retailer items, or clearly labeled searches."),
+        .init(symbol: "cart.fill", title: "Hand off and shop", message: "Open items at the retailer or share the list. Checkout always stays with you.")
+    ]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                SmartCartLogo(compact: true)
+                Spacer()
+                Button("Skip", action: onFinish)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
+            }
+            .padding(.horizontal, 22)
+            .padding(.top, 18)
+
+            TabView(selection: $step) {
+                ForEach(Array(steps.enumerated()), id: \.offset) { index, item in
+                    VStack(spacing: 22) {
+                        Text("THE SMARTCART JOURNEY · \(index + 1)/\(steps.count)")
+                            .smartEyebrow()
+
+                        Image(systemName: item.symbol)
+                            .font(.system(size: 46, weight: .bold))
+                            .foregroundStyle(SmartCartTheme.green)
+                            .frame(width: 118, height: 118)
+                            .background(SmartCartTheme.herbLight)
+                            .clipShape(RoundedRectangle(cornerRadius: 34, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 34, style: .continuous)
+                                    .stroke(SmartCartTheme.borderStrong, lineWidth: 1)
+                            }
+                            .shadow(color: SmartCartTheme.mintGlow, radius: 24)
+
+                        VStack(spacing: 9) {
+                            Text(item.title)
+                                .font(.system(size: 27, weight: .bold, design: .rounded))
+                                .foregroundStyle(SmartCartTheme.ink)
+                                .multilineTextAlignment(.center)
+                            Text(item.message)
+                                .font(.subheadline)
+                                .foregroundStyle(SmartCartTheme.secondaryInk)
+                                .multilineTextAlignment(.center)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(.horizontal, 34)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .tag(index)
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+
+            HStack(spacing: 7) {
+                ForEach(steps.indices, id: \.self) { index in
+                    Capsule()
+                        .fill(index == step ? SmartCartTheme.green : SmartCartTheme.border)
+                        .frame(width: index == step ? 22 : 7, height: 7)
+                }
+            }
+            .animation(.spring(response: 0.32, dampingFraction: 0.85), value: step)
+            .padding(.bottom, 20)
+
+            Button {
+                if step < steps.count - 1 {
+                    withAnimation(.spring(response: 0.36, dampingFraction: 0.86)) {
+                        step += 1
+                    }
+                } else {
+                    onFinish()
+                }
+            } label: {
+                HStack {
+                    Text(step < steps.count - 1 ? "Next" : "Get started")
+                    Spacer()
+                    Image(systemName: "arrow.right")
+                }
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .padding(.horizontal, 22)
+            .padding(.bottom, 26)
+        }
+        .smartCartBackground()
+        .interactiveDismissDisabled()
     }
 }

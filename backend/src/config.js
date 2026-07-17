@@ -24,6 +24,9 @@ export function loadConfig(overrides = {}) {
     rateLimitWindowMs: integer('RATE_LIMIT_WINDOW_SECONDS', 60) * 1_000,
     rateLimitMax: integer('RATE_LIMIT_MAX_REQUESTS', 120),
     maxBodyBytes: integer('MAX_BODY_BYTES', 262_144, { max: 5_242_880 }),
+    recipePageTimeoutMs: integer('RECIPE_PAGE_TIMEOUT_MS', 10_000, { max: 60_000 }),
+    recipePageMaxBytes: integer('RECIPE_PAGE_MAX_BYTES', 2_097_152, { max: 10_485_760 }),
+    recipePageMaxRedirects: integer('RECIPE_PAGE_MAX_REDIRECTS', 5, { max: 10 }),
     oauthClientId: process.env.OAUTH_DEMO_CLIENT_ID ?? 'smartcart-local-demo-client',
     oauthRedirectUri:
       process.env.OAUTH_DEMO_REDIRECT_URI ?? 'http://127.0.0.1:8787/v1/oauth/demo/callback',

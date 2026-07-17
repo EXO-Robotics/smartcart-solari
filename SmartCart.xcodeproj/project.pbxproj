@@ -25,6 +25,11 @@
 		A10000000000000000000010 /* RetailConnectorRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000011 /* RetailConnectorRegistry.swift */; };
 		A10000000000000000000011 /* BarcodeScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000012 /* BarcodeScannerView.swift */; };
 		A10000000000000000000012 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000013 /* PrivacyInfo.xcprivacy */; };
+		A10000000000000000000013 /* PantryMatchingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000014 /* PantryMatchingService.swift */; };
+		A10000000000000000000014 /* BarcodeResolutionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000015 /* BarcodeResolutionService.swift */; };
+		A10000000000000000000015 /* OCRLayoutReconstructor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000016 /* OCRLayoutReconstructor.swift */; };
+		A10000000000000000000016 /* RecipePageClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000017 /* RecipePageClient.swift */; };
+		A10000000000000000000017 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000018 /* Assets.xcassets */; };
 		A20000000000000000000001 /* SmartCartTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000001 /* SmartCartTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -58,6 +63,11 @@
 		B10000000000000000000011 /* RetailConnectorRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RetailConnectorRegistry.swift; sourceTree = "<group>"; };
 		B10000000000000000000012 /* BarcodeScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BarcodeScannerView.swift; sourceTree = "<group>"; };
 		B10000000000000000000013 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		B10000000000000000000014 /* PantryMatchingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PantryMatchingService.swift; sourceTree = "<group>"; };
+		B10000000000000000000015 /* BarcodeResolutionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BarcodeResolutionService.swift; sourceTree = "<group>"; };
+		B10000000000000000000016 /* OCRLayoutReconstructor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRLayoutReconstructor.swift; sourceTree = "<group>"; };
+		B10000000000000000000017 /* RecipePageClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipePageClient.swift; sourceTree = "<group>"; };
+		B10000000000000000000018 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B20000000000000000000001 /* SmartCartTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartCartTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000002 /* SmartCartTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SmartCartTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -95,6 +105,7 @@
 				B10000000000000000000001 /* SmartCartApp.swift */,
 				B10000000000000000000006 /* RootView.swift */,
 				B10000000000000000000013 /* PrivacyInfo.xcprivacy */,
+				B10000000000000000000018 /* Assets.xcassets */,
 				D10000000000000000000003 /* Models */,
 				D10000000000000000000004 /* Theme */,
 				D10000000000000000000005 /* Components */,
@@ -174,6 +185,10 @@
 				B1000000000000000000000E /* Persistence.swift */,
 				B1000000000000000000000F /* RetailerCatalogService.swift */,
 				B10000000000000000000011 /* RetailConnectorRegistry.swift */,
+				B10000000000000000000014 /* PantryMatchingService.swift */,
+				B10000000000000000000015 /* BarcodeResolutionService.swift */,
+				B10000000000000000000016 /* OCRLayoutReconstructor.swift */,
+				B10000000000000000000017 /* RecipePageClient.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -290,6 +305,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10000000000000000000012 /* PrivacyInfo.xcprivacy in Resources */,
+				A10000000000000000000017 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -324,6 +340,10 @@
 				A1000000000000000000000F /* ShoppingPreferencesView.swift in Sources */,
 				A10000000000000000000010 /* RetailConnectorRegistry.swift in Sources */,
 				A10000000000000000000011 /* BarcodeScannerView.swift in Sources */,
+				A10000000000000000000013 /* PantryMatchingService.swift in Sources */,
+				A10000000000000000000014 /* BarcodeResolutionService.swift in Sources */,
+				A10000000000000000000015 /* OCRLayoutReconstructor.swift in Sources */,
+				A10000000000000000000016 /* RecipePageClient.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -423,6 +443,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = SmartCart;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.food-and-drink";
 				INFOPLIST_KEY_NSCameraUsageDescription = "SmartCart uses the camera to scan recipe cards, cookbook pages, and pantry barcodes.";
+				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking = YES;
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "SmartCart imports recipe screenshots and photos from your library.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -451,6 +472,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = SmartCart;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.food-and-drink";
 				INFOPLIST_KEY_NSCameraUsageDescription = "SmartCart uses the camera to scan recipe cards, cookbook pages, and pantry barcodes.";
+				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking = YES;
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "SmartCart imports recipe screenshots and photos from your library.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

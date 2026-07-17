@@ -1,11 +1,13 @@
 import { createServer as createNodeServer } from 'node:http';
 import { loadConfig } from './config.js';
-import { HttpError, localDemoMeta, readJson, requestId, sendJson } from './lib/http.js';
+import { assertString, HttpError, localDemoMeta, readJson, requestId, sendJson } from './lib/http.js';
 import { createLogger } from './lib/logger.js';
 import { FixedWindowRateLimiter } from './lib/rate-limiter.js';
 import { AffiliateLinkService, LocalDemoAffiliateProvider } from './services/affiliate-links.js';
 import { LocalDemoStore } from './services/local-demo-store.js';
 import { LocalDemoOAuthPkce } from './services/oauth-pkce.js';
+import { RecipePageExtractor } from './services/recipe-page-extractor.js';
+import { RecipePageFetcher } from './services/recipe-page-fetcher.js';
 
 function bearerToken(request) {
   const header = request.headers.authorization;
@@ -56,6 +58,12 @@ export function createApp(options = {}) {
     windowMs: config.rateLimitWindowMs,
     now
   });
+  const recipePageFetcher = options.recipePageFetcher ?? new RecipePageFetcher({
+    timeoutMs: config.recipePageTimeoutMs,
+    maxBytes: config.recipePageMaxBytes,
+    maxRedirects: config.recipePageMaxRedirects
+  });
+  const recipePageExtractor = options.recipePageExtractor ?? new RecipePageExtractor();
 
   async function handler(request, response) {
     const id = requestId(request);
@@ -132,6 +140,27 @@ export function createApp(options = {}) {
       }
 
       const token = bearerToken(request);
+      if (method === 'POST' && url.pathname === '/v1/recipe-pages/extract') {
+        store.authenticate(token);
+        const body = await readJson(request, config.maxBodyBytes);
+        const targetUrl = assertString(body.url, 'url', { max: 2_048 });
+        const page = await recipePageFetcher.fetch(targetUrl);
+        const recipe = recipePageExtractor.extract(page.html);
+        sendJson(response, 200, {
+          page: {
+            originalUrl: page.originalUrl,
+            finalUrl: page.finalUrl,
+            redirectCount: page.redirectCount,
+            contentType: page.contentType,
+            charset: page.charset,
+            byteLength: page.byteLength
+          },
+          recipe,
+          meta: localDemoMeta({ recipePageSource: 'user-requested-third-party-page' })
+        }, headers);
+        return;
+      }
+
       if (method === 'DELETE' && url.pathname === '/v1/demo/sessions/current') {
         if (!token) throw new HttpError(401, 'invalid_session', 'A local/demo bearer session is required');
         store.authenticate(token);
@@ -243,7 +272,11 @@ export function createApp(options = {}) {
     }
   }
 
-  return { handler, config, services: { store, oauth, affiliate, limiter } };
+  return {
+    handler,
+    config,
+    services: { store, oauth, affiliate, limiter, recipePageFetcher, recipePageExtractor }
+  };
 }
 
 export function createServer(options = {}) {

@@ -29,6 +29,8 @@ struct RecipeComposerSheet: View {
     @State private var isProcessing = false
     @State private var processingMessage = ""
     @State private var errorMessage: String?
+    @State private var lastVisionOCRConfidence: Double?
+    @State private var lastVisionLayoutConfidence: Double?
     @FocusState private var focusedField: Field?
 
     private enum Field {
@@ -43,12 +45,19 @@ struct RecipeComposerSheet: View {
     }
 
     private var draftRecipe: Recipe {
-        RecipeParser.parse(
+        var recipe = RecipeParser.parse(
             title: title,
             text: recipeText,
             source: source(for: selectedMethod),
             sourceDetail: sourceDetail
         )
+        if selectedMethod == .camera || selectedMethod == .photoLibrary {
+            for index in recipe.ingredients.indices {
+                recipe.ingredients[index].sourceEvidence?.ocrConfidence = lastVisionOCRConfidence
+                recipe.ingredients[index].sourceEvidence?.layoutConfidence = lastVisionLayoutConfidence
+            }
+        }
+        return recipe
     }
 
     private var sourceDetail: String {
@@ -106,7 +115,7 @@ struct RecipeComposerSheet: View {
                 .padding(.bottom, 96)
             }
             .scrollDismissesKeyboard(.interactively)
-            .background(SmartCartTheme.canvas)
+            .smartCartBackground()
             .navigationTitle("Import recipe")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -125,7 +134,7 @@ struct RecipeComposerSheet: View {
                                 Spacer()
                                 if isProcessing {
                                     ProgressView()
-                                        .tint(.white)
+                                        .tint(SmartCartTheme.onAccent)
                                 } else {
                                     Image(systemName: "arrow.right")
                                 }
@@ -135,7 +144,7 @@ struct RecipeComposerSheet: View {
                                 Spacer()
                                 if isProcessing {
                                     ProgressView()
-                                        .tint(.white)
+                                        .tint(SmartCartTheme.onAccent)
                                 } else {
                                     Image(systemName: "arrow.right")
                                 }
@@ -165,9 +174,7 @@ struct RecipeComposerSheet: View {
     private var methodPicker: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("IMPORT FROM")
-                .font(.caption2.weight(.heavy))
-                .tracking(0.9)
-                .foregroundStyle(SmartCartTheme.secondaryInk)
+                .smartEyebrow(SmartCartTheme.mutedInk)
 
             ScrollView(.horizontal) {
                 HStack(spacing: 8) {
@@ -288,10 +295,11 @@ struct RecipeComposerSheet: View {
                     HStack(spacing: 13) {
                         Image(systemName: recipe.heroSymbol)
                             .font(.title3.bold())
-                            .foregroundStyle(index == selectedSampleIndex ? .white : SmartCartTheme.green)
+                            .foregroundStyle(index == selectedSampleIndex ? SmartCartTheme.onAccent : SmartCartTheme.green)
                             .frame(width: 48, height: 48)
-                            .background(index == selectedSampleIndex ? SmartCartTheme.green : SmartCartTheme.herbLight)
+                            .background(index == selectedSampleIndex ? AnyShapeStyle(SmartCartTheme.green) : AnyShapeStyle(SmartCartTheme.herbLight))
                             .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+                            .shadow(color: index == selectedSampleIndex ? SmartCartTheme.mintGlow : .clear, radius: 10)
 
                         VStack(alignment: .leading, spacing: 4) {
                             Text(recipe.title)
@@ -357,11 +365,12 @@ struct RecipeComposerSheet: View {
                     if isProcessing {
                         Label(processingMessage, systemImage: "text.viewfinder")
                             .font(.caption.weight(.bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(SmartCartTheme.ink)
                             .padding(.horizontal, 11)
                             .padding(.vertical, 8)
-                            .background(SmartCartTheme.navy.opacity(0.86))
+                            .background(SmartCartTheme.canvas.opacity(0.86))
                             .clipShape(Capsule())
+                            .overlay { Capsule().stroke(SmartCartTheme.border, lineWidth: 1) }
                             .padding(10)
                     }
                 }
@@ -369,11 +378,12 @@ struct RecipeComposerSheet: View {
                     if selectedImages.count > 1 {
                         Label("\(selectedImages.count) pages", systemImage: "doc.on.doc.fill")
                             .font(.caption.weight(.bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(SmartCartTheme.ink)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 7)
-                            .background(SmartCartTheme.navy.opacity(0.86))
+                            .background(SmartCartTheme.canvas.opacity(0.86))
                             .clipShape(Capsule())
+                            .overlay { Capsule().stroke(SmartCartTheme.border, lineWidth: 1) }
                             .padding(10)
                     }
                 }
@@ -398,9 +408,7 @@ struct RecipeComposerSheet: View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 7) {
                 Text("RECIPE NAME")
-                    .font(.caption2.weight(.heavy))
-                    .tracking(0.8)
-                    .foregroundStyle(SmartCartTheme.secondaryInk)
+                    .smartEyebrow(SmartCartTheme.mutedInk)
                 TextField("Recipe name", text: $title)
                     .font(.headline)
                     .focused($focusedField, equals: .title)
@@ -410,9 +418,7 @@ struct RecipeComposerSheet: View {
             VStack(alignment: .leading, spacing: 7) {
                 HStack {
                     Text("INGREDIENT TEXT")
-                        .font(.caption2.weight(.heavy))
-                        .tracking(0.8)
-                        .foregroundStyle(SmartCartTheme.secondaryInk)
+                        .smartEyebrow(SmartCartTheme.mutedInk)
                     Spacer()
                     Text("\(draftRecipe.ingredients.count) found")
                         .font(.caption.weight(.bold))
@@ -534,6 +540,8 @@ struct RecipeComposerSheet: View {
             let result = try await RecipeVisionReader.recognizeText(in: images)
             processingMessage = "Normalizing ingredients…"
             recipeText = result.text
+            lastVisionOCRConfidence = Double(result.confidence)
+            lastVisionLayoutConfidence = result.layoutConfidence
             if let firstLine = result.text
                 .components(separatedBy: .newlines)
                 .map({ $0.trimmingCharacters(in: .whitespacesAndNewlines) })
@@ -553,6 +561,9 @@ struct RecipeComposerSheet: View {
                 retryCount: result.retryCount,
                 duration: result.duration
             )
+            appModel.lastImportReport?.layoutConfidence = result.layoutConfidence
+            appModel.lastImportReport?.layoutAmbiguityCount = result.layoutAmbiguityCount
+            appModel.lastImportReport?.ignoredInstructionLineCount = result.ignoredInstructionLineCount
             try? await Task.sleep(for: .milliseconds(220))
         } catch {
             errorMessage = error.localizedDescription
@@ -598,6 +609,9 @@ private enum RecipeVisionReader {
         var retryCount: Int
         var duration: TimeInterval
         var confidence: Float
+        var layoutConfidence: Double
+        var layoutAmbiguityCount: Int
+        var ignoredInstructionLineCount: Int
     }
 
     static func recognizeText(in images: [UIImage]) async throws -> Result {
@@ -605,17 +619,26 @@ private enum RecipeVisionReader {
         var pages: [String] = []
         var retryCount = 0
         var confidenceTotal: Float = 0
+        var layoutConfidenceTotal = 0.0
+        var layoutAmbiguityCount = 0
+        var ignoredInstructionLineCount = 0
 
-        for image in images {
+        for (pageIndex, image) in images.enumerated() {
             do {
-                let page = try await recognizeText(in: image, level: .accurate, minimumTextHeight: 0.008)
+                let page = try await recognizeText(in: image, pageIndex: pageIndex, level: .accurate, minimumTextHeight: 0.008)
                 pages.append(page.text)
                 confidenceTotal += page.confidence
+                layoutConfidenceTotal += page.layoutConfidence
+                layoutAmbiguityCount += page.layoutAmbiguityCount
+                ignoredInstructionLineCount += page.ignoredInstructionLineCount
             } catch {
                 retryCount += 1
-                let page = try await recognizeText(in: image, level: .fast, minimumTextHeight: 0.004)
+                let page = try await recognizeText(in: image, pageIndex: pageIndex, level: .fast, minimumTextHeight: 0.004)
                 pages.append(page.text)
                 confidenceTotal += page.confidence
+                layoutConfidenceTotal += page.layoutConfidence
+                layoutAmbiguityCount += page.layoutAmbiguityCount
+                ignoredInstructionLineCount += page.ignoredInstructionLineCount
             }
         }
 
@@ -627,15 +650,19 @@ private enum RecipeVisionReader {
             pageCount: images.count,
             retryCount: retryCount,
             duration: Date().timeIntervalSince(startedAt),
-            confidence: confidenceTotal / Float(max(1, images.count))
+            confidence: confidenceTotal / Float(max(1, images.count)),
+            layoutConfidence: layoutConfidenceTotal / Double(max(1, images.count)),
+            layoutAmbiguityCount: layoutAmbiguityCount,
+            ignoredInstructionLineCount: ignoredInstructionLineCount
         )
     }
 
     private static func recognizeText(
         in image: UIImage,
+        pageIndex: Int,
         level: VNRequestTextRecognitionLevel,
         minimumTextHeight: Float
-    ) async throws -> (text: String, confidence: Float) {
+    ) async throws -> (text: String, confidence: Float, layoutConfidence: Double, layoutAmbiguityCount: Int, ignoredInstructionLineCount: Int) {
         guard let cgImage = image.cgImage else {
             throw RecipeVisionError.unreadableImage
         }
@@ -648,16 +675,41 @@ private enum RecipeVisionReader {
                 }
 
                 let observations = request.results as? [VNRecognizedTextObservation] ?? []
-                let candidates = observations.compactMap { $0.topCandidates(1).first }
-                let lines = candidates.map(\.string)
-                let text = lines.joined(separator: "\n")
+                let candidates = observations.compactMap { observation -> (VNRecognizedTextObservation, VNRecognizedText)? in
+                    guard let candidate = observation.topCandidates(1).first else { return nil }
+                    return (observation, candidate)
+                }
+                let layout = OCRLayoutReconstructor.reconstruct(
+                    candidates.map { observation, candidate in
+                        OCRTextObservation(
+                            text: candidate.string,
+                            boundingBox: OCRNormalizedBoundingBox(
+                                x: observation.boundingBox.origin.x,
+                                y: observation.boundingBox.origin.y,
+                                width: observation.boundingBox.width,
+                                height: observation.boundingBox.height
+                            ),
+                            confidence: Double(candidate.confidence),
+                            pageIndex: pageIndex
+                        )
+                    }
+                )
+                let text = layout.reconstructedText
                     .trimmingCharacters(in: .whitespacesAndNewlines)
 
                 if text.isEmpty {
                     continuation.resume(throwing: RecipeVisionError.noTextFound)
                 } else {
-                    let confidence = candidates.reduce(Float.zero) { $0 + $1.confidence } / Float(max(1, candidates.count))
-                    continuation.resume(returning: (text, confidence))
+                    let confidence = candidates.reduce(Float.zero) { $0 + $1.1.confidence } / Float(max(1, candidates.count))
+                    continuation.resume(
+                        returning: (
+                            text,
+                            confidence,
+                            layout.layoutConfidence,
+                            layout.ambiguities.count,
+                            layout.ignoredInstructionLines.count
+                        )
+                    )
                 }
             }
             request.recognitionLevel = level

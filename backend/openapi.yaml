@@ -6,6 +6,8 @@ info:
     Credential-free local-development API foundation. All authentication, persistence,
     account, session, manifest, analytics, affiliate, and catalog/product data is local/demo,
     ephemeral, client-supplied, or simulated; it is never live retailer or identity-provider data.
+    The recipe-page extraction endpoint makes a bounded, user-requested HTTPS GET to the supplied
+    third-party page and returns extracted text plus URL provenance; it does not execute page scripts.
 servers:
   - url: http://127.0.0.1:8787
     description: Loopback local/demo server
@@ -16,6 +18,7 @@ tags:
   - name: Manifests
   - name: Analytics
   - name: Affiliate links
+  - name: Recipe pages
 paths:
   /health:
     get:
@@ -381,6 +384,48 @@ paths:
                   meta: { $ref: '#/components/schemas/LocalDemoMeta' }
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
+  /v1/recipe-pages/extract:
+    post:
+      tags: [Recipe pages]
+      summary: Fetch and deterministically extract an HTTPS recipe page
+      description: |
+        Makes a bounded user-requested HTTPS GET with manual HTTPS-only redirects and an identifiable
+        SmartCart user agent. Accepts only HTML, executes no scripts, and extracts Recipe JSON-LD first,
+        followed by microdata, common recipe-plugin markup, and visible Ingredients sections.
+      operationId: extractRecipePage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [url]
+              properties:
+                url:
+                  type: string
+                  format: uri
+                  maxLength: 2048
+                  pattern: '^https://'
+      responses:
+        '200':
+          description: Recipe ingredients extracted with original/final URL provenance.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [page, recipe, meta]
+                properties:
+                  page: { $ref: '#/components/schemas/RecipePageProvenance' }
+                  recipe: { $ref: '#/components/schemas/ExtractedRecipe' }
+                  meta: { $ref: '#/components/schemas/LocalDemoMeta' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '413': { $ref: '#/components/responses/Error' }
+        '415': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '502': { $ref: '#/components/responses/Error' }
+        '504': { $ref: '#/components/responses/Error' }
 components:
   securitySchemes:
     demoBearer:
@@ -455,6 +500,41 @@ components:
         email: { type: string, format: email }
         createdAt: { type: string, format: date-time }
         dataMode: { type: string, const: local-demo }
+    RecipePageProvenance:
+      type: object
+      additionalProperties: false
+      required: [originalUrl, finalUrl, redirectCount, contentType, charset, byteLength]
+      properties:
+        originalUrl: { type: string, format: uri, pattern: '^https://' }
+        finalUrl: { type: string, format: uri, pattern: '^https://' }
+        redirectCount: { type: integer, minimum: 0, maximum: 10 }
+        contentType: { type: string, enum: [text/html, application/xhtml+xml] }
+        charset: { type: string }
+        byteLength: { type: integer, minimum: 0 }
+    ExtractedRecipe:
+      type: object
+      additionalProperties: false
+      required: [name, ingredients, ingredientSections, extractionMethod]
+      properties:
+        name: { type: string }
+        ingredients:
+          type: array
+          minItems: 1
+          items: { type: string }
+        ingredientSections:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            additionalProperties: false
+            required: [name, ingredients]
+            properties:
+              name: { type: [string, 'null'] }
+              ingredients:
+                type: array
+                minItems: 1
+                items: { type: string }
+        extractionMethod: { type: string, enum: [json-ld, microdata, plugin, visible] }
     ManifestInput:
       type: object
       additionalProperties: false

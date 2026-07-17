@@ -10,11 +10,10 @@ struct HomeView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 24) {
                 header
                 promiseCard
                 importSection
-                journeySection
                 sampleSection
                 storeCard
                 trustStrip
@@ -23,7 +22,7 @@ struct HomeView: View {
             .padding(.bottom, 34)
         }
         .scrollIndicators(.hidden)
-        .background(SmartCartTheme.canvas)
+        .smartCartBackground()
         .toolbar(.hidden, for: .navigationBar)
     }
 
@@ -52,27 +51,34 @@ struct HomeView: View {
     }
 
     private var promiseCard: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .top, spacing: 16) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Turn any recipe into a ready-to-shop grocery list.")
-                        .font(.system(size: 27, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    Text("Capture. Confirm. Shop smarter.")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(SmartCartTheme.yellow)
-                }
-
-                Spacer(minLength: 0)
-
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .center) {
+                Text("RECIPE IN · CART OUT")
+                    .smartEyebrow()
+                Spacer()
                 Image(systemName: "cart.fill.badge.plus")
-                    .font(.system(size: 36, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 68, height: 68)
-                    .background(Color.white.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 21, style: .continuous))
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(SmartCartTheme.green)
+                    .frame(width: 42, height: 42)
+                    .background(SmartCartTheme.herbLight)
+                    .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 13, style: .continuous)
+                            .stroke(SmartCartTheme.borderStrong, lineWidth: 1)
+                    }
+                    .accessibilityHidden(true)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Any recipe, ready to shop.")
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .foregroundStyle(SmartCartTheme.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("Capture a recipe, confirm the ingredients, and hand off a product-matched list to your store.")
+                    .font(.subheadline)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             HStack(spacing: 8) {
@@ -81,30 +87,24 @@ struct HomeView: View {
                 promisePill("Share or shop", symbol: "square.and.arrow.up.fill")
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(20)
-        .background {
-            LinearGradient(
-                colors: [SmartCartTheme.navy, Color(red: 0.02, green: 0.22, blue: 0.26)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(Color.white.opacity(0.10), lineWidth: 1)
-        }
+        .background(SmartCartTheme.paper)
+        .smartCartCardEdge(radius: 26)
         .smartCartShadow()
     }
 
     private func promisePill(_ title: String, symbol: String) -> some View {
         Label(title, systemImage: symbol)
             .font(.system(size: 10, weight: .bold))
-            .foregroundStyle(.white.opacity(0.92))
+            .foregroundStyle(SmartCartTheme.green)
             .padding(.horizontal, 9)
             .padding(.vertical, 7)
-            .background(Color.white.opacity(0.10))
+            .background(SmartCartTheme.herbLight.opacity(0.7))
             .clipShape(Capsule())
+            .overlay {
+                Capsule().stroke(SmartCartTheme.border, lineWidth: 1)
+            }
     }
 
     private var importSection: some View {
@@ -122,40 +122,6 @@ struct HomeView: View {
                 }
             }
         }
-    }
-
-    private var journeySection: some View {
-        VStack(alignment: .leading, spacing: 13) {
-            SectionHeader(
-                title: "The SmartCart journey",
-                subtitle: "You stay in control at every step"
-            )
-
-            ScrollView(.horizontal) {
-                HStack(spacing: 9) {
-                    JourneyStepCard(number: 1, symbol: "square.and.arrow.down.fill", title: "Import", subtitle: "From anywhere", isActive: true)
-                    journeyArrow
-                    JourneyStepCard(number: 2, symbol: "checklist", title: "Review", subtitle: "Confirm items")
-                    journeyArrow
-                    JourneyStepCard(number: 3, symbol: "slider.horizontal.3", title: "Rules", subtitle: "Apply preferences")
-                    journeyArrow
-                    JourneyStepCard(number: 4, symbol: "storefront.fill", title: "Store", subtitle: "Choose location")
-                    journeyArrow
-                    JourneyStepCard(number: 5, symbol: "tag.fill", title: "Match", subtitle: "Resolve products")
-                    journeyArrow
-                    JourneyStepCard(number: 6, symbol: "cart.fill", title: "Handoff", subtitle: "Open or share")
-                }
-                .padding(.vertical, 2)
-            }
-            .scrollIndicators(.hidden)
-            .contentMargins(.horizontal, 1, for: .scrollContent)
-        }
-    }
-
-    private var journeyArrow: some View {
-        Image(systemName: "arrow.right")
-            .font(.caption.bold())
-            .foregroundStyle(SmartCartTheme.green)
     }
 
     private var sampleSection: some View {
@@ -199,7 +165,7 @@ struct HomeView: View {
                 if appModel.selectedStores.count > 1 {
                     Text("+\(appModel.selectedStores.count - 1)")
                         .font(.caption.bold())
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SmartCartTheme.onAccent)
                         .frame(width: 29, height: 29)
                         .background(SmartCartTheme.green)
                         .clipShape(Circle())
@@ -231,6 +197,6 @@ struct HomeView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
         .background(SmartCartTheme.herbLight.opacity(0.65))
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .smartCartCardEdge(radius: 20, elevated: false)
     }
 }

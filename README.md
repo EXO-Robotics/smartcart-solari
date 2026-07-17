@@ -10,9 +10,9 @@ Import recipe → review ingredients → adjust servings → check pantry → ap
 
 The app currently supports:
 
-- Camera, photo-library, pasted-text, sample, and schema.org recipe imports.
-- Multi-page on-device Vision text recognition with retry and confidence diagnostics.
-- Ingredient editing, fractions, units, optional-item handling, and serving scaling.
+- Camera, photo-library, pasted-text, sample, and backend-mediated recipe-page imports.
+- Multi-page Vision OCR with bounding-box reading order, multi-column reconstruction, instruction boundaries, retry, and separate OCR/layout/parser confidence.
+- Ingredient editing, sections, fractions, metric/common/count units, compound and equivalent measurements, preparation/brand notes, alternatives, optional-item handling, and serving scaling.
 - Persisted pantry decisions, recipes, preferences, store choices, product matches, replacements, manifests, and guided-handoff progress.
 - Executable organic, dietary, budget, and store-brand matching rules.
 - Canonical `RetailerProductRecord` values with retailer/store identity, item IDs, URLs, package data, observed prices, availability, fulfillment eligibility, source, and observation timestamp.
@@ -20,7 +20,8 @@ The app currently supports:
 - Explicit, unpriced Walmart-search fallbacks where no eligible exact record exists.
 - Single-store pickup planning in the public-beta flow.
 - Saved manifests, sharing, and guided product-by-product handoff.
-- Persistent barcode/manual pantry inventory with an offline demo UPC cache.
+- Pantry-first import review with editable package amounts, full/partial/possible coverage, buy-remainder math, and an always-available buy-full override.
+- Persistent barcode/manual pantry inventory with checksum-valid UPC/EAN/GTIN handling, leading-zero preservation, offline fixtures, required naming for unknown products, and explicit duplicate actions.
 - Privacy-limited on-device funnel instrumentation and an internal tester dashboard.
 - Credential-free connector contracts for six retailer/affiliate integration shapes.
 
@@ -43,7 +44,7 @@ Advanced testing tools can reveal experimental multi-stop, generic delivery-prov
 
 ## Persistence
 
-State is stored as versioned JSON in Application Support. Schema migration and corrupt-state quarantine are covered by tests.
+State is stored as versioned JSON in Application Support. Schema-v3 migration preserves prior pantry records and converts legacy inferred scan names into editable `Unknown Product` records. Migration and corrupt-state quarantine are covered by tests.
 
 ## Release notes and limitations
 

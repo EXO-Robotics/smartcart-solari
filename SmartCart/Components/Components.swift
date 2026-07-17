@@ -9,11 +9,12 @@ struct SmartCartLogo: View {
                 Image(systemName: "cart.fill.badge.plus")
                     .font(.system(size: compact ? 22 : 29, weight: .bold))
                     .foregroundStyle(SmartCartTheme.green)
+                    .shadow(color: SmartCartTheme.mintGlow, radius: 10)
             }
             .frame(width: compact ? 29 : 38, height: compact ? 29 : 38)
 
             Text("Smart")
-                .foregroundStyle(SmartCartTheme.navy)
+                .foregroundStyle(SmartCartTheme.ink)
             + Text("Cart")
                 .foregroundStyle(SmartCartTheme.green)
         }
@@ -64,13 +65,17 @@ struct ImportActionTile: View {
                     .font(.system(size: 18, weight: .bold))
                     .foregroundStyle(method.tint)
                     .frame(width: 39, height: 39)
-                    .background(method.tint.opacity(0.10))
+                    .background(method.tint.opacity(0.12))
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(method.tint.opacity(0.28), lineWidth: 1)
+                    }
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(homeTitle)
                         .font(.subheadline.weight(.bold))
-                        .foregroundStyle(SmartCartTheme.navy)
+                        .foregroundStyle(SmartCartTheme.ink)
                         .lineLimit(1)
                         .minimumScaleFactor(0.78)
                         .allowsTightening(true)
@@ -85,11 +90,7 @@ struct ImportActionTile: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)
             .background(SmartCartTheme.paper)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(SmartCartTheme.border, lineWidth: 1)
-            }
+            .smartCartCardEdge(radius: 18, elevated: false)
         }
         .buttonStyle(PressableButtonStyle())
     }
@@ -114,24 +115,17 @@ struct RecipeHeroCard: View {
     var body: some View {
         VStack(spacing: 0) {
             ZStack {
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.96, green: 0.78, blue: 0.30),
-                        Color(red: 0.94, green: 0.45, blue: 0.16)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+                Color(red: 0.66, green: 0.36, blue: 0.11)
 
                 Circle()
-                    .fill(Color.white.opacity(0.18))
+                    .fill(Color.white.opacity(0.12))
                     .frame(width: 180, height: 180)
                     .offset(x: 92, y: -48)
 
                 Image(systemName: recipe.heroSymbol)
                     .font(.system(size: 60, weight: .medium))
                     .foregroundStyle(.white)
-                    .shadow(color: Color.black.opacity(0.18), radius: 18, y: 9)
+                    .shadow(color: Color.black.opacity(0.28), radius: 18, y: 9)
             }
             .frame(height: 150)
 
@@ -139,7 +133,7 @@ struct RecipeHeroCard: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(recipe.title)
                         .font(.system(size: 21, weight: .bold, design: .rounded))
-                        .foregroundStyle(SmartCartTheme.navy)
+                        .foregroundStyle(SmartCartTheme.ink)
                         .lineLimit(2)
                     HStack(spacing: 14) {
                         Label("\(recipe.servings) servings", systemImage: "person.2.fill")
@@ -163,11 +157,7 @@ struct RecipeHeroCard: View {
             .padding(16)
             .background(SmartCartTheme.paper)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(SmartCartTheme.border, lineWidth: 1)
-        }
+        .smartCartCardEdge(radius: 24)
         .smartCartShadow()
     }
 }
@@ -182,14 +172,11 @@ struct WorkflowHeader: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 13) {
             HStack {
-                Text(eyebrow.uppercased())
-                    .font(.caption2.weight(.heavy))
-                    .tracking(0.9)
-                    .foregroundStyle(SmartCartTheme.green)
+                Text(eyebrow)
+                    .smartEyebrow()
                 Spacer()
-                Text("Step \(step) of \(total)")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(SmartCartTheme.secondaryInk)
+                Text("STEP \(step)/\(total)")
+                    .smartEyebrow(SmartCartTheme.mutedInk)
             }
 
             GeometryReader { proxy in
@@ -199,13 +186,14 @@ struct WorkflowHeader: View {
                     Capsule()
                         .fill(SmartCartTheme.green)
                         .frame(width: proxy.size.width * CGFloat(step) / CGFloat(total))
+                        .shadow(color: SmartCartTheme.mintGlow, radius: 6)
                 }
             }
-            .frame(height: 5)
+            .frame(height: 4)
 
             Text(title)
                 .font(.system(size: 29, weight: .bold, design: .rounded))
-                .foregroundStyle(SmartCartTheme.navy)
+                .foregroundStyle(SmartCartTheme.ink)
                 .fixedSize(horizontal: false, vertical: true)
 
             Text(message)
@@ -227,14 +215,15 @@ struct JourneyStepCard: View {
         VStack(spacing: 8) {
             Image(systemName: symbol)
                 .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(isActive ? .white : SmartCartTheme.green)
+                .foregroundStyle(isActive ? SmartCartTheme.onAccent : SmartCartTheme.green)
                 .frame(width: 40, height: 40)
-                .background(isActive ? SmartCartTheme.green : SmartCartTheme.herbLight)
+                .background(isActive ? AnyShapeStyle(SmartCartTheme.green) : AnyShapeStyle(SmartCartTheme.herbLight))
                 .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .shadow(color: isActive ? SmartCartTheme.mintGlow : .clear, radius: 10)
 
             Text(title)
                 .font(.caption.weight(.bold))
-                .foregroundStyle(SmartCartTheme.navy)
+                .foregroundStyle(SmartCartTheme.ink)
                 .lineLimit(1)
             Text(subtitle)
                 .font(.system(size: 9, weight: .medium))
@@ -245,11 +234,7 @@ struct JourneyStepCard: View {
         .frame(width: 88)
         .padding(.vertical, 12)
         .background(SmartCartTheme.paper)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(isActive ? SmartCartTheme.green.opacity(0.55) : SmartCartTheme.border, lineWidth: 1)
-        }
+        .smartCartCardEdge(radius: 18, elevated: false)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Step \(number), \(title), \(subtitle)")
     }
@@ -264,8 +249,11 @@ struct IngredientConfidenceBadge: View {
             .foregroundStyle(confidence.color)
             .padding(.horizontal, 9)
             .padding(.vertical, 6)
-            .background(confidence.color.opacity(0.10))
+            .background(confidence.color.opacity(0.12))
             .clipShape(Capsule())
+            .overlay {
+                Capsule().stroke(confidence.color.opacity(0.30), lineWidth: 1)
+            }
     }
 }
 
@@ -280,8 +268,11 @@ struct StatusPill: View {
             .foregroundStyle(color)
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
-            .background(color.opacity(0.10))
+            .background(color.opacity(0.12))
             .clipShape(Capsule())
+            .overlay {
+                Capsule().stroke(color.opacity(0.30), lineWidth: 1)
+            }
     }
 }
 
@@ -291,10 +282,12 @@ struct StoreMark: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
-                .fill(SmartCartTheme.walmartBlue)
+                .fill(SmartCartTheme.walmartLight)
+            RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
+                .stroke(SmartCartTheme.walmartBlue.opacity(0.4), lineWidth: 1)
             Image(systemName: "sparkles")
                 .font(.system(size: size * 0.38, weight: .bold))
-                .foregroundStyle(SmartCartTheme.yellow)
+                .foregroundStyle(SmartCartTheme.walmartBlue)
         }
         .frame(width: size, height: size)
         .accessibilityHidden(true)
@@ -314,7 +307,7 @@ struct ProductIcon: View {
             .clipShape(RoundedRectangle(cornerRadius: size * 0.25, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: size * 0.25, style: .continuous)
-                    .stroke(SmartCartTheme.walmartBlue.opacity(0.12), lineWidth: 1)
+                    .stroke(SmartCartTheme.walmartBlue.opacity(0.25), lineWidth: 1)
             }
     }
 }
@@ -331,13 +324,13 @@ struct InfoBanner: View {
                 .font(.headline)
                 .foregroundStyle(color)
                 .frame(width: 34, height: 34)
-                .background(color.opacity(0.10))
+                .background(color.opacity(0.12))
                 .clipShape(Circle())
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.subheadline.weight(.bold))
-                    .foregroundStyle(SmartCartTheme.navy)
+                    .foregroundStyle(SmartCartTheme.ink)
                 Text(message)
                     .font(.caption)
                     .foregroundStyle(SmartCartTheme.secondaryInk)
@@ -346,12 +339,8 @@ struct InfoBanner: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .background(color.opacity(0.055))
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(color.opacity(0.14), lineWidth: 1)
-        }
+        .background(color.opacity(0.07))
+        .smartCartCardEdge(radius: 18, elevated: false)
     }
 }
 
@@ -361,18 +350,22 @@ struct ToastView: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(SmartCartTheme.yellow)
+                .foregroundStyle(SmartCartTheme.green)
             Text(message)
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(SmartCartTheme.ink)
                 .lineLimit(2)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 13)
-        .background(SmartCartTheme.navy.opacity(0.97))
+        .background(SmartCartTheme.paperElevated.opacity(0.97))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .shadow(color: Color.black.opacity(0.18), radius: 16, y: 8)
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(SmartCartTheme.borderStrong, lineWidth: 1)
+        }
+        .shadow(color: Color.black.opacity(0.45), radius: 16, y: 8)
     }
 }
 
@@ -391,9 +384,13 @@ struct EmptyStateView: View {
                 .frame(width: 66, height: 66)
                 .background(SmartCartTheme.herbLight)
                 .clipShape(Circle())
+                .overlay {
+                    Circle().stroke(SmartCartTheme.borderStrong, lineWidth: 1)
+                }
+                .shadow(color: SmartCartTheme.mintGlow, radius: 16)
             Text(title)
                 .font(.title3.bold())
-                .foregroundStyle(SmartCartTheme.navy)
+                .foregroundStyle(SmartCartTheme.ink)
             Text(message)
                 .font(.subheadline)
                 .foregroundStyle(SmartCartTheme.secondaryInk)
@@ -426,12 +423,15 @@ struct BottomActionBar<Content: View>: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Divider()
+            Rectangle()
+                .fill(SmartCartTheme.border)
+                .frame(height: 1)
             content
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
                 .padding(.bottom, 8)
         }
+        .background(SmartCartTheme.canvas.opacity(0.72))
         .background(.ultraThinMaterial)
     }
 }

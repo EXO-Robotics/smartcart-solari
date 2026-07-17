@@ -2,6 +2,12 @@
 
 ## 0.3.0 — Human-validation candidate (unreleased)
 
+- Reconstructs multi-column recipe photos from OCR bounding boxes, preserves bullet continuations, stops at instruction boundaries, and reports layout ambiguity separately from text confidence.
+- Adds a permanent 20-ingredient, multi-section recipe fixture plus compound measurements, equivalents, preparation phrases, brand notes, alternatives, and explicit malformed-quantity review.
+- Routes URL import through the local recipe-page backend, which enforces HTTPS/redirect/timeout/size/MIME rules, preserves original/final URL provenance, and uses inert JSON-LD or visible-page extraction.
+- Adds pantry-first recipe review: imported ingredients are compared with saved inventory, but matches never silently skip a purchase. Testers can use pantry stock, buy only the remainder, or override and buy the full amount.
+- Adds editable pantry package amounts and schema-v3 migration of legacy inferred barcode names to `Unknown Product` with required naming.
+- Adds validated UPC-A/EAN-13/GTIN-14 resolution, leading-zero preservation, explicit duplicate actions, and no inferred product names, prices, or availability.
 - Adds multi-image OCR import, retry diagnostics, expanded fraction/range parsing, ingredient aliases, confidence scoring, and golden recipe tests.
 - Adds persistent pantry inventory, physical-device VisionKit barcode scanning, Simulator UPC entry, and a bundled offline demo UPC cache.
 - Remembers manual product replacements as preferred matches for later runs.
@@ -14,6 +20,8 @@
 ### Known limitations
 
 - Barcode camera scanning requires a supported physical iPhone; the Simulator uses manual UPC entry.
+- Pantry quantity coverage is exact only when saved and recipe units are convertible. Name-only or cross-dimension matches are labeled as possible and require a user decision.
+- Recipe URL import requires the local `backend/` service in this validation build; publisher blocks and unsupported pages fall back to pasted text or screenshots.
 - Analytics remains local diagnostic state, not a production telemetry or crash-reporting service.
 - Backend persistence and authentication are demo/local foundations, not production infrastructure.
 - Website/legal text requires owner and legal review before deployment.

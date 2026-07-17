@@ -527,6 +527,247 @@ final class SmartCartTests: XCTestCase {
         XCTAssertFalse(restored.analyticsEvents.contains { $0.properties["upc"] != nil })
     }
 
+    func testRedVelvetRegressionFixturePreservesTwentyIngredientsAndSections() throws {
+        let fixtureURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/Recipes/red-velvet-20.txt")
+        let text = try String(contentsOf: fixtureURL, encoding: .utf8)
+        let recipe = RecipeParser.parse(title: "Red Velvet Cake", text: text)
+
+        XCTAssertEqual(recipe.ingredients.count, 20)
+        XCTAssertEqual(Set(recipe.ingredients.compactMap(\.sectionName)), ["Cake", "Filling", "Frosting"])
+        XCTAssertEqual(recipe.ingredients.first?.equivalentMeasurements?.first?.quantity, 300)
+        XCTAssertEqual(recipe.ingredients.first?.brandNote, "King Arthur preferred")
+        let cream = try recipe.ingredients.first(where: { $0.name.localizedCaseInsensitiveContains("Heavy Cream") }).firstUnwrapped()
+        XCTAssertEqual(cream.quantity, 0.375, accuracy: 0.001)
+        XCTAssertEqual(cream.compoundMeasurements?.count, 2)
+        XCTAssertNotNil(recipe.ingredients.first(where: { $0.alternativeGroup != nil }))
+    }
+
+    func testMalformedFractionRemainsReviewRequired() throws {
+        let recipe = RecipeParser.parse(title: "Needs Review", text: "1/? cup flour")
+        let ingredient = try recipe.ingredients.firstUnwrapped()
+        XCTAssertEqual(ingredient.confidence, .review)
+        XCTAssertEqual(ingredient.quantityReviewRequired, true)
+        XCTAssertEqual(ingredient.rawText, "1/? cup flour")
+    }
+
+    func testOCRFixtureReconstructsColumnsAndStopsAtInstructions() throws {
+        let fixtureURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/OCR/two_column_chocolate_chip_observations.json")
+        let data = try Data(contentsOf: fixtureURL)
+        let observations = try JSONDecoder().decode([OCRTextObservation].self, from: data)
+        let result = OCRLayoutReconstructor.reconstruct(observations)
+
+        XCTAssertEqual(result.detectedColumnCount, 2)
+        XCTAssertEqual(result.ingredientLines.count, 5)
+        XCTAssertEqual(result.ignoredInstructionLines.count, 3)
+        XCTAssertGreaterThan(result.layoutConfidence, 0.9)
+        let expectedURL = fixtureURL.deletingLastPathComponent()
+            .appendingPathComponent("two_column_chocolate_chip_expected.txt")
+        let expected = try String(contentsOf: expectedURL, encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        XCTAssertEqual(result.reconstructedText, expected)
+    }
+
+    func testBarcodeNormalizationPreservesLeadingZerosAndValidatesGTINs() throws {
+        for code in ["0762111380135", "0785357023567"] {
+            let result = BarcodeNormalizer.normalize(BarcodeScan(rawBarcode: code, rawSymbology: "ean13"))
+            guard case .success(let barcode) = result else { return XCTFail("Expected valid barcode \(code)") }
+            XCTAssertEqual(barcode.digits, code)
+            XCTAssertEqual(barcode.format, .ean13)
+            XCTAssertEqual(barcode.canonicalGTIN14, "0\(code)")
+        }
+    }
+
+    func testSchemaV2MigratesInferredBarcodeNamesWithoutLosingBarcode() throws {
+        let directory = temporaryDirectory()
+        let fileURL = directory.appendingPathComponent("state.json")
+        let state = try makeState()
+        let legacy = LegacySmartCartPersistedStateV2(
+            recipes: state.recipes,
+            activeRecipe: state.activeRecipe,
+            desiredServings: state.desiredServings,
+            preferences: state.preferences,
+            featureFlags: state.featureFlags,
+            storeStrategy: state.storeStrategy,
+            fulfillmentMode: state.fulfillmentMode,
+            selectedStoreIDs: state.selectedStoreIDs,
+            zipCode: state.zipCode,
+            pickupDay: state.pickupDay,
+            pickupTime: state.pickupTime,
+            shoppingItems: state.shoppingItems,
+            guidedIndex: state.guidedIndex,
+            savedLists: state.savedLists,
+            preferredDeliveryPartnerName: state.preferredDeliveryPartnerName,
+            pantryInventory: [
+                PantryInventoryItem(
+                    upc: "0785357023567",
+                    name: "Scanned item 3567",
+                    brand: "Unmatched UPC",
+                    source: .barcode
+                )
+            ],
+            preferredProductIDsByIngredient: state.preferredProductIDsByIngredient,
+            analyticsEvents: state.analyticsEvents
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(legacy).write(to: fileURL)
+
+        let migrated = try JSONSmartCartStateStore(fileURL: fileURL).load()
+        XCTAssertEqual(migrated?.schemaVersion, 3)
+        XCTAssertEqual(migrated?.pantryInventory.first?.name, "Unknown Product")
+        XCTAssertEqual(migrated?.pantryInventory.first?.upc, "0785357023567")
+        XCTAssertEqual(migrated?.pantryInventory.first?.requiresUserNaming, true)
+    }
+
+    @MainActor
+    func testImportedRecipeSuggestsPantryWithoutSilentlySkippingAndSupportsRemainder() throws {
+        let model = AppModel(stateStore: InMemorySmartCartStateStore())
+        model.pantryInventory = [
+            PantryInventoryItem(
+                name: "All-purpose flour",
+                quantity: 1,
+                unit: "bag",
+                packageSize: 1,
+                packageUnit: "cup"
+            )
+        ]
+        let recipe = RecipeParser.parse(title: "Cookies", text: "2 cups all-purpose flour")
+        model.beginRecipe(recipe)
+
+        let imported = try model.activeRecipe.ingredients.firstUnwrapped()
+        XCTAssertEqual(imported.pantrySuggestion?.coverage, .partial)
+        XCTAssertEqual(imported.pantryDecision, .review)
+        XCTAssertEqual(model.quantityToBuy(for: imported), 2, accuracy: 0.001, "Unreviewed matches must buy the full amount")
+
+        model.setPantryDecision(.useAvailable, for: imported.id)
+        let confirmed = try model.activeRecipe.ingredients.firstUnwrapped()
+        XCTAssertEqual(model.quantityToBuy(for: confirmed), 1, accuracy: 0.001)
+
+        model.setPantryDecision(.buyFull, for: imported.id)
+        let overridden = try model.activeRecipe.ingredients.firstUnwrapped()
+        XCTAssertEqual(model.quantityToBuy(for: overridden), 2, accuracy: 0.001)
+    }
+
+    @MainActor
+    func testPantryAutocompleteAndCaseInsensitiveNameMerge() throws {
+        let model = AppModel(stateStore: InMemorySmartCartStateStore())
+        model.pantryInventory = [
+            PantryInventoryItem(name: "Flour", quantity: 2, unit: "bag"),
+            PantryInventoryItem(name: "Olive oil", quantity: 1, unit: "bottle")
+        ]
+
+        XCTAssertEqual(model.pantryNameSuggestions(for: "Fl").map(\.name), ["Flour"])
+
+        model.addPantryStock(name: "flour", amount: 1.5)
+
+        XCTAssertEqual(model.pantryInventory.count, 2)
+        let merged = try model.pantryItem(named: "FLOUR").firstUnwrapped()
+        XCTAssertEqual(merged.quantity, 3.5, accuracy: 0.001)
+    }
+
+    @MainActor
+    func testPantryBarcodeMergeUsesGTINBeforeDisplayName() throws {
+        let model = AppModel(stateStore: InMemorySmartCartStateStore())
+        let barcode: NormalizedBarcode
+        switch BarcodeNormalizer.normalize("078742002163") {
+        case .success(let normalized):
+            barcode = normalized
+        case .failure(let error):
+            return XCTFail("Fixture barcode should be valid: \(error)")
+        }
+
+        model.pantryInventory = [
+            PantryInventoryItem(
+                upc: barcode.digits,
+                name: "Pasta",
+                quantity: 2,
+                unit: "box",
+                source: .barcode,
+                gtin14: barcode.canonicalGTIN14
+            )
+        ]
+        let submission = PantryBarcodeSubmission(
+            scan: BarcodeScan(rawBarcode: barcode.digits, rawSymbology: "test"),
+            barcode: barcode,
+            name: "Great Value Penne",
+            brand: "Great Value",
+            externalProductID: "fixture",
+            requiresUserNaming: false
+        )
+
+        model.addPantryStock(name: "Penne Pasta", amount: 3, submission: submission)
+
+        XCTAssertEqual(model.pantryInventory.count, 1)
+        XCTAssertEqual(model.pantryInventory[0].quantity, 5, accuracy: 0.001)
+        XCTAssertEqual(model.pantryInventory[0].name, "Pasta")
+    }
+
+    @MainActor
+    func testEveryScannedBarcodePersistsAndRestacksAfterRelaunch() throws {
+        let store = JSONSmartCartStateStore(
+            fileURL: temporaryDirectory().appendingPathComponent("barcode-state.json")
+        )
+        let firstBarcode: NormalizedBarcode
+        let alternateBarcode: NormalizedBarcode
+        switch (
+            BarcodeNormalizer.normalize("078742002163"),
+            BarcodeNormalizer.normalize("078742131917")
+        ) {
+        case (.success(let first), .success(let alternate)):
+            firstBarcode = first
+            alternateBarcode = alternate
+        default:
+            return XCTFail("Fixture barcodes should be valid")
+        }
+
+        func submission(_ barcode: NormalizedBarcode) -> PantryBarcodeSubmission {
+            PantryBarcodeSubmission(
+                scan: BarcodeScan(rawBarcode: barcode.digits, rawSymbology: "test"),
+                barcode: barcode,
+                name: "Pantry staple",
+                brand: "Test",
+                externalProductID: nil,
+                requiresUserNaming: false
+            )
+        }
+
+        let model = AppModel(stateStore: store)
+        model.addPantryStock(
+            name: "Pantry staple",
+            amount: 1,
+            submission: submission(firstBarcode)
+        )
+        model.addPantryStock(
+            name: "Pantry staple",
+            amount: 2,
+            submission: submission(alternateBarcode)
+        )
+
+        let restored = AppModel(stateStore: store)
+        XCTAssertEqual(restored.pantryInventory.count, 1)
+        XCTAssertEqual(restored.pantryInventory[0].quantity, 3, accuracy: 0.001)
+        XCTAssertEqual(
+            Set(restored.pantryInventory[0].barcodeGTINs ?? []),
+            Set([firstBarcode.canonicalGTIN14, alternateBarcode.canonicalGTIN14])
+        )
+        XCTAssertEqual(restored.pantryItem(matching: alternateBarcode)?.id, restored.pantryInventory[0].id)
+
+        restored.addPantryStock(
+            name: "A different catalog name",
+            amount: 4,
+            submission: submission(alternateBarcode)
+        )
+
+        let relaunchedAgain = AppModel(stateStore: store)
+        XCTAssertEqual(relaunchedAgain.pantryInventory.count, 1)
+        XCTAssertEqual(relaunchedAgain.pantryInventory[0].quantity, 7, accuracy: 0.001)
+        XCTAssertEqual(relaunchedAgain.pantryInventory[0].name, "Pantry staple")
+    }
+
     private func searchRequest(
         for name: String,
         quantity: Double = 1,

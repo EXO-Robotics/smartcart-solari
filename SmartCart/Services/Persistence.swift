@@ -1,9 +1,31 @@
 import Foundation
 
 struct SmartCartPersistedState: Codable, Hashable {
-    static let currentSchemaVersion = 2
+    static let currentSchemaVersion = 3
 
     var schemaVersion: Int = currentSchemaVersion
+    var recipes: [Recipe]
+    var activeRecipe: Recipe
+    var desiredServings: Int
+    var preferences: ShoppingPreferences
+    var featureFlags: AppFeatureFlags
+    var storeStrategy: StoreStrategy
+    var fulfillmentMode: FulfillmentMode
+    var selectedStoreIDs: Set<UUID>
+    var zipCode: String
+    var pickupDay: String
+    var pickupTime: String
+    var shoppingItems: [ShoppingListItem]
+    var guidedIndex: Int
+    var savedLists: [SavedShoppingList]
+    var preferredDeliveryPartnerName: String?
+    var pantryInventory: [PantryInventoryItem]
+    var preferredProductIDsByIngredient: [String: String]
+    var analyticsEvents: [AnalyticsEvent]
+}
+
+struct LegacySmartCartPersistedStateV2: Codable, Hashable {
+    var schemaVersion = 2
     var recipes: [Recipe]
     var activeRecipe: Recipe
     var desiredServings: Int
@@ -105,6 +127,11 @@ final class JSONSmartCartStateStore: SmartCartStateStoring {
             switch version {
             case SmartCartPersistedState.currentSchemaVersion:
                 return try decoder().decode(SmartCartPersistedState.self, from: data)
+            case 2:
+                let legacy = try decoder().decode(LegacySmartCartPersistedStateV2.self, from: data)
+                let migrated = migrate(legacy)
+                try save(migrated)
+                return migrated
             case 1:
                 let legacy = try decoder().decode(LegacySmartCartPersistedStateV1.self, from: data)
                 let migrated = migrate(legacy)
@@ -131,6 +158,40 @@ final class JSONSmartCartStateStore: SmartCartStateStoring {
         )
         let data = try encoder().encode(state)
         try data.write(to: fileURL, options: [.atomic])
+    }
+
+    private func migrate(
+        _ legacy: LegacySmartCartPersistedStateV2
+    ) -> SmartCartPersistedState {
+        let normalizedPantry = legacy.pantryInventory.map { item -> PantryInventoryItem in
+            var item = item
+            if item.name.range(of: #"^Scanned item \d{1,8}$"#, options: [.regularExpression, .caseInsensitive]) != nil {
+                item.name = "Unknown Product"
+                item.brand = ""
+                item.requiresUserNaming = true
+            }
+            return item
+        }
+        return SmartCartPersistedState(
+            recipes: legacy.recipes,
+            activeRecipe: legacy.activeRecipe,
+            desiredServings: legacy.desiredServings,
+            preferences: legacy.preferences,
+            featureFlags: legacy.featureFlags,
+            storeStrategy: legacy.storeStrategy,
+            fulfillmentMode: legacy.fulfillmentMode,
+            selectedStoreIDs: legacy.selectedStoreIDs,
+            zipCode: legacy.zipCode,
+            pickupDay: legacy.pickupDay,
+            pickupTime: legacy.pickupTime,
+            shoppingItems: legacy.shoppingItems,
+            guidedIndex: legacy.guidedIndex,
+            savedLists: legacy.savedLists,
+            preferredDeliveryPartnerName: legacy.preferredDeliveryPartnerName,
+            pantryInventory: normalizedPantry,
+            preferredProductIDsByIngredient: legacy.preferredProductIDsByIngredient,
+            analyticsEvents: legacy.analyticsEvents
+        )
     }
 
     private func migrate(
