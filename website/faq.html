@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Answers about the SmartCart private validation candidate, demo data, retailer handoff, and privacy.">
+  <title>SmartCart FAQ</title><link rel="stylesheet" href="styles.css"><script src="script.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header"><div class="nav-shell"><a class="brand" href="index.html" aria-label="SmartCart home"><span class="brand-mark" aria-hidden="true">+</span><span>SmartCart</span><span class="beta-tag">Private beta</span></a><button class="nav-toggle" type="button" data-nav-toggle aria-expanded="false" aria-controls="site-nav">Menu</button><nav class="site-nav" id="site-nav" data-site-nav data-open="false" aria-label="Primary navigation"><a href="index.html">Overview</a><a href="about.html">About</a><a href="faq.html" aria-current="page">FAQ</a><a href="support.html">Support</a><a href="developers/index.html">Developers</a></nav></div></header>
+  <main id="main">
+    <section class="page-hero"><div class="page-shell"><div class="breadcrumbs"><a href="index.html">Home</a><span aria-hidden="true">/</span><span>FAQ</span></div><span class="eyebrow">Questions and boundaries</span><h1>SmartCart private-beta FAQ</h1><p class="lede">Straight answers about what the unreleased validation candidate can do, what remains simulated, and where retailer responsibility begins.</p></div></section>
+    <div class="page-shell prose">
+      <h2>Product and access</h2>
+      <details open><summary>Is SmartCart publicly available?</summary><p>No public download, waitlist, or launch date is represented in this website package. It is a private iOS beta. Distribution details are a human-owned placeholder until they are verified and approved.</p></details>
+      <details><summary>What can I import?</summary><p>The current app supports camera captures, photo-library images, pasted recipe text, included samples, and recipe pages with accessible schema.org recipe data. Blocked or unsupported pages may fail.</p></details>
+      <details><summary>Does image recognition happen on the device?</summary><p>The current beta uses Apple Vision text recognition for recipe images. Imported recipe and shopping state is persisted locally by the app; see the <a href="privacy.html">privacy draft</a> for important third-party handoff details.</p></details>
+      <h2>Retail and pricing</h2>
+      <details open><summary>Does SmartCart connect to live Walmart systems?</summary><p>No. The current candidate uses a demo Walmart adapter with seeded records and retailer links. Prices, inventory, store details, and pickup windows are not live. No retailer partnership or approval is claimed.</p></details>
+      <details><summary>Does SmartCart add products to my cart?</summary><p>No. SmartCart does not create or modify a retailer cart or wishlist. It opens exact product pages or labeled searches so the shopper can review and act at the retailer.</p></details>
+      <details><summary>Are the prices current?</summary><p>No. Seeded prices are demo or observed values and are explicitly not live. Search fallbacks have no SmartCart price. The retailer determines final price, availability, tax, fees, tips, substitutions, and variable-weight adjustments.</p></details>
+      <details><summary>Can SmartCart reserve pickup or check out?</summary><p>No. It does not reserve a pickup window, submit substitutions, transfer a delivery basket, process payment, submit an order, or complete checkout.</p></details>
+      <details><summary>Why do some items say “retailer search”?</summary><p>If the seeded demo catalog has no eligible exact record, SmartCart creates a clearly labeled, unpriced retailer-search fallback. The shopper chooses the final product.</p></details>
+      <h2>Preferences and data</h2>
+      <details><summary>What shopping preferences are supported?</summary><p>The current model includes organic policy, dietary restrictions, budget priority, preferred brands, and store-brand preference. Shoppers should still verify labels, allergens, ingredients, and retailer details themselves.</p></details>
+      <details><summary>Does barcode scanning use a live product database?</summary><p>No. On supported physical iPhones, the candidate can scan a barcode; the Simulator uses manual UPC entry. Lookup uses a small bundled offline demo cache, and unknown codes remain unmatched pantry items.</p></details>
+      <details><summary>What does the app save?</summary><p>Versioned local state can include recipes, servings, preferences, feature flags, store and fulfillment choices, ZIP code and prototype pickup selections, shopping items, pantry inventory, preferred product matches, saved manifests, guided progress, and bounded local tester events.</p></details>
+      <details><summary>Does the website collect information?</summary><p>This static package has no analytics, cookies, remote assets, form endpoint, or account system. The contact demonstration intentionally sends nothing. Hosting and contact choices may change that, so the privacy notice must be reviewed after deployment configuration is selected.</p></details>
+      <h2>Business and affiliations</h2>
+      <details><summary>Is SmartCart affiliated with a retailer?</summary><p>No affiliation, endorsement, integration approval, or partnership is represented. Retailer names may describe demo destinations and product links. See the <a href="affiliate-disclosure.html">affiliate disclosure</a>.</p></details>
+      <details><summary>Are links affiliate links?</summary><p>The current package does not represent affiliate tracking or compensation. If monetized links are added later, the disclosure and link-level labeling must be updated before use.</p></details>
+      <p class="notice">Need help with the beta? Start with <a href="support.html">Support</a>. A real support contact remains a marked pre-publication placeholder.</p>
+    </div>
+  </main>
+  <footer class="site-footer"><div class="footer-shell"><div><a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true">+</span><span>SmartCart</span></a><p class="fine-print">Private iOS beta · demo catalog records · no live retailer integration.</p></div><div><h2>Product</h2><div class="footer-links"><a href="about.html">About</a><a href="support.html">Support</a><a href="contact.html">Contact</a></div></div><div><h2>Trust &amp; resources</h2><div class="footer-links"><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a><a href="affiliate-disclosure.html">Affiliate disclosure</a><a href="media-kit/index.html">Media kit</a></div></div></div><div class="footer-shell footer-bottom">Unpublished website package · Complete all marked placeholders before publication.</div></footer>
+</body>
+</html>

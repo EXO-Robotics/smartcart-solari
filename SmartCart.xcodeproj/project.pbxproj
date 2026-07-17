@@ -22,6 +22,9 @@
 		A1000000000000000000000D /* Persistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000E /* Persistence.swift */; };
 		A1000000000000000000000E /* RetailerCatalogService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000F /* RetailerCatalogService.swift */; };
 		A1000000000000000000000F /* ShoppingPreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000010 /* ShoppingPreferencesView.swift */; };
+		A10000000000000000000010 /* RetailConnectorRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000011 /* RetailConnectorRegistry.swift */; };
+		A10000000000000000000011 /* BarcodeScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000012 /* BarcodeScannerView.swift */; };
+		A10000000000000000000012 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000013 /* PrivacyInfo.xcprivacy */; };
 		A20000000000000000000001 /* SmartCartTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000001 /* SmartCartTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -52,6 +55,9 @@
 		B1000000000000000000000E /* Persistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Persistence.swift; sourceTree = "<group>"; };
 		B1000000000000000000000F /* RetailerCatalogService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RetailerCatalogService.swift; sourceTree = "<group>"; };
 		B10000000000000000000010 /* ShoppingPreferencesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingPreferencesView.swift; sourceTree = "<group>"; };
+		B10000000000000000000011 /* RetailConnectorRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RetailConnectorRegistry.swift; sourceTree = "<group>"; };
+		B10000000000000000000012 /* BarcodeScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BarcodeScannerView.swift; sourceTree = "<group>"; };
+		B10000000000000000000013 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		B20000000000000000000001 /* SmartCartTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartCartTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000002 /* SmartCartTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SmartCartTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -88,6 +94,7 @@
 			children = (
 				B10000000000000000000001 /* SmartCartApp.swift */,
 				B10000000000000000000006 /* RootView.swift */,
+				B10000000000000000000013 /* PrivacyInfo.xcprivacy */,
 				D10000000000000000000003 /* Models */,
 				D10000000000000000000004 /* Theme */,
 				D10000000000000000000005 /* Components */,
@@ -95,6 +102,7 @@
 				D10000000000000000000007 /* Cart */,
 				D10000000000000000000008 /* Orders */,
 				D10000000000000000000009 /* Preferences */,
+				D1000000000000000000000C /* Pantry */,
 				D1000000000000000000000B /* Services */,
 			);
 			path = SmartCart;
@@ -165,8 +173,17 @@
 			children = (
 				B1000000000000000000000E /* Persistence.swift */,
 				B1000000000000000000000F /* RetailerCatalogService.swift */,
+				B10000000000000000000011 /* RetailConnectorRegistry.swift */,
 			);
 			path = Services;
+			sourceTree = "<group>";
+		};
+		D1000000000000000000000C /* Pantry */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000012 /* BarcodeScannerView.swift */,
+			);
+			path = Features/Pantry;
 			sourceTree = "<group>";
 		};
 		D1000000000000000000000A /* Products */ = {
@@ -272,6 +289,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A10000000000000000000012 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -304,6 +322,8 @@
 				A1000000000000000000000D /* Persistence.swift in Sources */,
 				A1000000000000000000000E /* RetailerCatalogService.swift in Sources */,
 				A1000000000000000000000F /* ShoppingPreferencesView.swift in Sources */,
+				A10000000000000000000010 /* RetailConnectorRegistry.swift in Sources */,
+				A10000000000000000000011 /* BarcodeScannerView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -397,12 +417,12 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = SmartCart;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.food-and-drink";
-				INFOPLIST_KEY_NSCameraUsageDescription = "SmartCart uses the camera to scan recipe cards and cookbook pages.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "SmartCart uses the camera to scan recipe cards, cookbook pages, and pantry barcodes.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "SmartCart imports recipe screenshots and photos from your library.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -413,7 +433,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.2.0;
+				MARKETING_VERSION = 0.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.blakestudio.smartcart;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -426,11 +446,11 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = SmartCart;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.food-and-drink";
-				INFOPLIST_KEY_NSCameraUsageDescription = "SmartCart uses the camera to scan recipe cards and cookbook pages.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "SmartCart uses the camera to scan recipe cards, cookbook pages, and pantry barcodes.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "SmartCart imports recipe screenshots and photos from your library.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -441,7 +461,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.2.0;
+				MARKETING_VERSION = 0.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.blakestudio.smartcart;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

@@ -218,6 +218,31 @@ struct Ingredient: Identifiable, Hashable, Codable {
     }
 }
 
+struct RecipeImportReport: Hashable {
+    var sourcePageCount: Int
+    var recognizedLineCount: Int
+    var ingredientLineCount: Int
+    var highConfidenceCount: Int
+    var reviewCount: Int
+    var unknownCount: Int
+    var retryCount: Int
+    var duration: TimeInterval
+
+    var confidenceScore: Double {
+        guard ingredientLineCount > 0 else { return 0 }
+        let weighted = Double(highConfidenceCount) + Double(reviewCount) * 0.55
+        return min(1, max(0, weighted / Double(ingredientLineCount)))
+    }
+
+    var confidenceLabel: String {
+        switch confidenceScore {
+        case 0.82...: "High confidence"
+        case 0.55...: "Review suggested"
+        default: "Needs review"
+        }
+    }
+}
+
 enum IngredientConfidence: String, CaseIterable, Identifiable, Hashable, Codable {
     case high = "High confidence"
     case review = "Review suggested"
@@ -358,6 +383,86 @@ struct RetailerStore: Identifiable, Hashable, Codable {
         self.pickupWindow = pickupWindow
         self.supportsPickup = supportsPickup
         self.supportsDelivery = supportsDelivery
+    }
+}
+
+enum PantryItemSource: String, Codable, Hashable {
+    case barcode
+    case recipe
+    case manual
+
+    var label: String {
+        switch self {
+        case .barcode: "Barcode scan"
+        case .recipe: "Recipe decision"
+        case .manual: "Manual entry"
+        }
+    }
+}
+
+struct PantryInventoryItem: Identifiable, Hashable, Codable {
+    let id: UUID
+    var upc: String?
+    var name: String
+    var brand: String
+    var quantity: Double
+    var unit: String
+    var preferredRetailerProductID: String?
+    var source: PantryItemSource
+    var updatedAt: Date
+
+    init(
+        id: UUID = UUID(),
+        upc: String? = nil,
+        name: String,
+        brand: String = "",
+        quantity: Double = 1,
+        unit: String = "item",
+        preferredRetailerProductID: String? = nil,
+        source: PantryItemSource = .manual,
+        updatedAt: Date = .now
+    ) {
+        self.id = id
+        self.upc = upc
+        self.name = name
+        self.brand = brand
+        self.quantity = quantity
+        self.unit = unit
+        self.preferredRetailerProductID = preferredRetailerProductID
+        self.source = source
+        self.updatedAt = updatedAt
+    }
+}
+
+enum AnalyticsEventName: String, CaseIterable, Codable, Hashable {
+    case importStarted = "import_started"
+    case extractionCompleted = "extraction_completed"
+    case ingredientsCorrected = "ingredients_corrected"
+    case matchingCompleted = "matching_completed"
+    case productReplaced = "product_replaced"
+    case retailerLinkOpened = "retailer_link_opened"
+    case guidedItemCompleted = "guided_item_completed"
+    case guidedShoppingCompleted = "guided_shopping_completed"
+    case barcodeScanned = "barcode_scanned"
+    case pantryItemAdded = "pantry_item_added"
+}
+
+struct AnalyticsEvent: Identifiable, Hashable, Codable {
+    let id: UUID
+    var name: AnalyticsEventName
+    var timestamp: Date
+    var properties: [String: String]
+
+    init(
+        id: UUID = UUID(),
+        name: AnalyticsEventName,
+        timestamp: Date = .now,
+        properties: [String: String] = [:]
+    ) {
+        self.id = id
+        self.name = name
+        self.timestamp = timestamp
+        self.properties = properties
     }
 }
 

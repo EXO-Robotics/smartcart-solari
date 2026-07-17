@@ -653,6 +653,10 @@ struct GuidedShoppingView: View {
             }
 
             Button {
+                appModel.track(
+                    .retailerLinkOpened,
+                    properties: ["retailer": item.product.retailerID, "mode": item.product.linkKind.rawValue]
+                )
                 openURL(appModel.productURL(for: item))
             } label: {
                 HStack {
@@ -812,6 +816,11 @@ struct AccountView: View {
                 accountHeader
                 preferenceCard
                 advancedToolsCard
+                testerModeCard
+                if appModel.featureFlags.internalTesterModeEnabled {
+                    testerDashboard
+                    connectorReadinessCard
+                }
                 if appModel.featureFlags.advancedToolsEnabled {
                     creatorCard
                 }
@@ -880,6 +889,127 @@ struct AccountView: View {
         }
         .tint(SmartCartTheme.green)
         .smartCartCard()
+    }
+
+    private var testerModeCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Toggle(
+                isOn: Binding(
+                    get: { appModel.featureFlags.internalTesterModeEnabled },
+                    set: { appModel.setInternalTesterModeEnabled($0) }
+                )
+            ) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Internal tester mode")
+                        .font(.headline)
+                        .foregroundStyle(SmartCartTheme.navy)
+                    Text("Show the on-device funnel, import quality, and connector readiness.")
+                        .font(.caption)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
+                }
+            }
+            .tint(SmartCartTheme.green)
+
+            Toggle(
+                "Record anonymous events on this device",
+                isOn: Binding(
+                    get: { appModel.featureFlags.localAnalyticsEnabled },
+                    set: { appModel.setLocalAnalyticsEnabled($0) }
+                )
+            )
+            .font(.subheadline.weight(.semibold))
+            .tint(SmartCartTheme.green)
+        }
+        .smartCartCard()
+    }
+
+    private var testerDashboard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                SectionHeader(
+                    title: "Closed-beta funnel",
+                    subtitle: "Local diagnostic events only · no recipe text or UPC values"
+                )
+                Spacer()
+                Button("Clear") { appModel.clearLocalAnalytics() }
+                    .font(.caption.weight(.bold))
+            }
+
+            let importCount = eventCount(.importStarted)
+            let extractionCount = eventCount(.extractionCompleted)
+            let matchCount = eventCount(.matchingCompleted)
+            let handoffCount = eventCount(.retailerLinkOpened)
+
+            HStack(spacing: 8) {
+                testerMetric("Imports", value: importCount)
+                testerMetric("Extracted", value: extractionCount)
+                testerMetric("Matched", value: matchCount)
+                testerMetric("Handoffs", value: handoffCount)
+            }
+
+            if let report = appModel.lastImportReport {
+                InfoBanner(
+                    symbol: "waveform.path.ecg",
+                    title: "Last import · \(report.confidenceLabel)",
+                    message: "\(report.sourcePageCount) page(s), \(report.ingredientLineCount) ingredients, \(report.reviewCount) review item(s), \(report.retryCount) OCR retry/retries, \(report.duration.formatted(.number.precision(.fractionLength(2))))s.",
+                    color: report.confidenceScore >= 0.82 ? SmartCartTheme.green : SmartCartTheme.amber
+                )
+            }
+        }
+        .smartCartCard()
+    }
+
+    private var connectorReadinessCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(
+                title: "Retail connector lab",
+                subtitle: "Contracts are ready; only Walmart demo handoff is active"
+            )
+
+            ForEach(RetailConnectorRegistry.profiles) { profile in
+                HStack(spacing: 11) {
+                    Image(systemName: profile.state == .demoReady ? "checkmark.seal.fill" : "lock.fill")
+                        .foregroundStyle(profile.state == .demoReady ? SmartCartTheme.green : SmartCartTheme.amber)
+                        .frame(width: 28)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(profile.displayName)
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(SmartCartTheme.navy)
+                        Text(profile.state.rawValue)
+                            .font(.caption)
+                            .foregroundStyle(SmartCartTheme.secondaryInk)
+                    }
+                    Spacer()
+                    Text(profile.supportsCart ? "Cart API" : profile.supportsDelivery ? "Delivery" : "Handoff")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(SmartCartTheme.canvas)
+                        .clipShape(Capsule())
+                }
+            }
+        }
+        .smartCartCard()
+    }
+
+    private func eventCount(_ name: AnalyticsEventName) -> Int {
+        appModel.analyticsEvents.filter { $0.name == name }.count
+    }
+
+    private func testerMetric(_ title: String, value: Int) -> some View {
+        VStack(spacing: 4) {
+            Text("\(value)")
+                .font(.headline.bold())
+                .foregroundStyle(SmartCartTheme.green)
+            Text(title)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(SmartCartTheme.secondaryInk)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+        .background(SmartCartTheme.canvas)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private var creatorCard: some View {

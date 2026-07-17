@@ -5,3 +5,7 @@ DerivedData/
 xcuserdata/
 SmartCart-*-Simulator.png
 SmartCart-Simulator.png
+.env
+.env.*
+!.env.example
+backend/.env

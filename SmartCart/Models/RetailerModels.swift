@@ -203,6 +203,31 @@ struct ShoppingPreferences: Codable, Hashable {
 
 struct AppFeatureFlags: Codable, Hashable {
     var advancedToolsEnabled = false
+    var internalTesterModeEnabled = false
+    var localAnalyticsEnabled = true
+
+    private enum CodingKeys: String, CodingKey {
+        case advancedToolsEnabled
+        case internalTesterModeEnabled
+        case localAnalyticsEnabled
+    }
+
+    init(
+        advancedToolsEnabled: Bool = false,
+        internalTesterModeEnabled: Bool = false,
+        localAnalyticsEnabled: Bool = true
+    ) {
+        self.advancedToolsEnabled = advancedToolsEnabled
+        self.internalTesterModeEnabled = internalTesterModeEnabled
+        self.localAnalyticsEnabled = localAnalyticsEnabled
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        advancedToolsEnabled = try container.decodeIfPresent(Bool.self, forKey: .advancedToolsEnabled) ?? false
+        internalTesterModeEnabled = try container.decodeIfPresent(Bool.self, forKey: .internalTesterModeEnabled) ?? false
+        localAnalyticsEnabled = try container.decodeIfPresent(Bool.self, forKey: .localAnalyticsEnabled) ?? true
+    }
 }
 
 struct RetailerCapabilities: OptionSet, Codable, Hashable {

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Pre-publication privacy notice draft for the SmartCart private iOS beta and static website.">
+  <title>SmartCart Privacy Notice — Draft</title><link rel="stylesheet" href="styles.css"><script src="script.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header"><div class="nav-shell"><a class="brand" href="index.html" aria-label="SmartCart home"><span class="brand-mark" aria-hidden="true">+</span><span>SmartCart</span><span class="beta-tag">Private beta</span></a><button class="nav-toggle" type="button" data-nav-toggle aria-expanded="false" aria-controls="site-nav">Menu</button><nav class="site-nav" id="site-nav" data-site-nav data-open="false" aria-label="Primary navigation"><a href="index.html">Overview</a><a href="about.html">About</a><a href="faq.html">FAQ</a><a href="support.html">Support</a><a href="developers/index.html">Developers</a></nav></div></header>
+  <main id="main">
+    <section class="page-hero"><div class="page-shell"><div class="breadcrumbs"><a href="index.html">Home</a><span aria-hidden="true">/</span><span>Privacy</span></div><span class="eyebrow">Pre-publication legal draft</span><h1>Privacy notice</h1><p class="lede">This draft documents the current local beta and static package. It is not publication-ready legal advice.</p><p class="meta-line">Effective date: <span class="placeholder">[REPLACE BEFORE PUBLISHING: EFFECTIVE DATE]</span> · Operator: <span class="placeholder">[REPLACE BEFORE PUBLISHING: VERIFIED OWNER OR LEGAL ENTITY]</span></p></div></section>
+    <div class="page-shell prose">
+      <div class="notice critical"><strong>Draft status:</strong> a qualified human must verify the app, hosting, distribution, support, jurisdiction, and vendor facts; complete every placeholder; and approve this notice before publication.</div>
+      <h2>1. Scope</h2>
+      <p>This notice is intended to cover the SmartCart private iOS beta and this static informational website. It does not yet cover any future production retailer integration, account system, analytics service, hosted form, email platform, payment service, or public app distribution because none is represented in this package.</p>
+      <h2>2. Current website behavior</h2>
+      <p>The local static website package contains only HTML, CSS, JavaScript, and text files. It includes no analytics, advertising tags, cookies, remote images, third-party fonts, account system, or form endpoint. The contact-page demonstration prevents submission and does not transmit or store entered text.</p>
+      <p>Deployment can add server logs, content-delivery services, security systems, analytics, or form processing. Those choices must be documented here after a host and domain are selected.</p>
+      <h2>3. Information the current beta stores locally</h2>
+      <p>Based on the current unreleased validation candidate, SmartCart can save versioned JSON in the app’s Application Support directory. Saved state can include:</p>
+      <ul><li>recipes, ingredients, serving choices, and import source details;</li><li>shopping and pantry preferences, including dietary and organic settings;</li><li>selected prototype store, fulfillment, ZIP code, pickup-day, and pickup-time choices;</li><li>shopping items, pantry inventory, preferred product matches, product records, replacements, saved manifests, and guided-handoff progress;</li><li>feature flags, bounded local tester events, and an optional preferred delivery-provider label used by experimental surfaces.</li></ul>
+      <p>This draft does not claim that local app data is encrypted beyond protections provided by the device and operating system. Production security and backup behavior must be verified before publication.</p>
+      <h2>4. Camera, photos, and text recognition</h2>
+      <p>If a tester chooses a camera or photo-library import, the app requests the applicable iOS permission. The current beta uses Apple Vision text recognition for recipe images. Testers should avoid importing sensitive documents and should review recognized text for errors.</p>
+      <h2>5. Recipe pages and external destinations</h2>
+      <p>If a tester imports a recipe page, the device requests that third-party page so the app can look for supported recipe metadata. The page operator can receive ordinary request information under its own privacy practices. Blocked or unsupported pages may fail.</p>
+      <p>When a tester opens an exact product page, a retailer search, or a retailer home destination, they leave SmartCart for a third-party service. That service may collect information under its own terms and privacy notice. The current candidate does not authenticate to a retailer or submit a retailer cart.</p>
+      <h2>6. Local diagnostics and development backend</h2>
+      <p>The candidate can retain privacy-limited diagnostic funnel events inside its local JSON state for an internal tester dashboard. This is not a production telemetry or crash-reporting service. The current implementation bounds the local event list, but this draft does not treat that as a complete anonymization or compliance guarantee.</p>
+      <p>The repository also contains a credential-free local reference backend for development and automated tests. It can simulate accounts, sessions, OAuth state, manifests, analytics ingestion, and affiliate-link decoration in process memory. It is not connected to this static website, is not represented as a hosted service, uses no real provider token exchange, and loses in-memory data when restarted.</p>
+      <h2>7. Accounts, affiliates, and sales</h2>
+      <p>Production authentication, cloud sync, retailer credentials, hosted telemetry, and live affiliate attribution are not represented. This package does not claim sale or sharing of personal information, targeted advertising, or compensated affiliate tracking. A human legal review must reassess these statements if the product, local backend, or website is promoted or connected to production services.</p>
+      <h2>8. Retention, deletion, and tester controls</h2>
+      <p>Local app state persists across relaunch until it is replaced, reset, removed with the app, or otherwise cleared through approved test procedures. Exact deletion and device-backup behavior must be tested and documented before public release.</p>
+      <p>Requests to access, correct, or delete information handled through a future support system should use: <span class="placeholder">[REPLACE BEFORE PUBLISHING: VERIFIED PRIVACY REQUEST METHOD]</span>.</p>
+      <h2>9. Children, regions, and legal rights</h2>
+      <p>Age eligibility, intended regions, legal bases, consumer-rights procedures, international transfers, retention schedules, and regulator contacts have not been specified for this beta site.</p>
+      <p><span class="placeholder">[REPLACE BEFORE PUBLISHING: APPROVED AGE, REGION, LEGAL BASIS, RIGHTS, AND APPEAL LANGUAGE]</span></p>
+      <h2>10. Security</h2>
+      <p>No system is perfectly secure. Before publication, the operator must document reasonable safeguards, incident reporting, service-provider access, and any limits that are accurate for the production configuration.</p>
+      <h2>11. Changes and contact</h2>
+      <p>Material changes should receive a new effective date and an appropriate notice to users. Privacy contact: <span class="placeholder">[REPLACE BEFORE PUBLISHING: VERIFIED, MONITORED PRIVACY CONTACT]</span>.</p>
+    </div>
+  </main>
+  <footer class="site-footer"><div class="footer-shell"><div><a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true">+</span><span>SmartCart</span></a><p class="fine-print">Private iOS beta · this privacy notice is a pre-publication draft.</p></div><div><h2>Product</h2><div class="footer-links"><a href="about.html">About</a><a href="faq.html">FAQ</a><a href="support.html">Support</a><a href="contact.html">Contact</a></div></div><div><h2>Legal</h2><div class="footer-links"><a href="terms.html">Terms</a><a href="affiliate-disclosure.html">Affiliate disclosure</a><a href="developers/index.html">Developer docs</a></div></div></div><div class="footer-shell footer-bottom">Unpublished legal draft · Human review and all placeholders are required before publication.</div></footer>
+</body>
+</html>

@@ -21,6 +21,41 @@ final class SmartCartTests: XCTestCase {
         XCTAssertFalse(recipe.ingredients[2].includeInList)
     }
 
+    func testGoldenRecipeCorpusParsesCommonFormats() {
+        let corpus: [(String, Int, String, Double)] = [
+            ("½ cup heavy cream\n2 cloves garlic, minced", 2, "Heavy Cream", 0.5),
+            ("2-3 large lemons\nSalt and pepper to taste", 2, "Large Lemons", 3),
+            ("one bunch parsley\n1 1/2 lb chicken breasts", 2, "Parsley", 1),
+            ("1 tbsp EVOO\n¼ cup scallions", 2, "Olive Oil", 1)
+        ]
+
+        for (text, count, firstName, firstQuantity) in corpus {
+            let recipe = RecipeParser.parse(title: "Golden", text: text)
+            XCTAssertEqual(recipe.ingredients.count, count, "Failed corpus text: \(text)")
+            XCTAssertEqual(recipe.ingredients[0].name, firstName, "Failed corpus text: \(text)")
+            XCTAssertEqual(recipe.ingredients[0].quantity, firstQuantity, accuracy: 0.001)
+        }
+    }
+
+    func testImportReportProducesBoundedConfidenceAndPageMetrics() {
+        let text = "1 cup rice\nSalt to taste\n2 tbsp olive oil"
+        let recipe = RecipeParser.parse(title: "Rice", text: text)
+        let report = RecipeParser.importReport(
+            for: recipe,
+            recognizedText: text,
+            sourcePageCount: 3,
+            retryCount: 1,
+            duration: 0.42
+        )
+
+        XCTAssertEqual(report.sourcePageCount, 3)
+        XCTAssertEqual(report.recognizedLineCount, 3)
+        XCTAssertEqual(report.ingredientLineCount, 3)
+        XCTAssertEqual(report.retryCount, 1)
+        XCTAssertGreaterThanOrEqual(report.confidenceScore, 0)
+        XCTAssertLessThanOrEqual(report.confidenceScore, 1)
+    }
+
     func testPackageMathConvertsAndRoundsUp() throws {
         let product = try exactProducts(for: "Penne pasta", unit: "oz").firstUnwrapped()
 
@@ -272,6 +307,42 @@ final class SmartCartTests: XCTestCase {
         XCTAssertNil(migrated.preferredDeliveryPartnerName)
     }
 
+    func testBeta2StateMigratesPantryAndAnalyticsDefaults() throws {
+        let directory = temporaryDirectory()
+        let fileURL = directory.appendingPathComponent("state.json")
+        let store = JSONSmartCartStateStore(fileURL: fileURL)
+        let state = try makeState()
+        let legacy = LegacySmartCartPersistedStateV1(
+            recipes: state.recipes,
+            activeRecipe: state.activeRecipe,
+            desiredServings: state.desiredServings,
+            preferences: state.preferences,
+            featureFlags: AppFeatureFlags(advancedToolsEnabled: true),
+            storeStrategy: state.storeStrategy,
+            fulfillmentMode: state.fulfillmentMode,
+            selectedStoreIDs: state.selectedStoreIDs,
+            zipCode: state.zipCode,
+            pickupDay: state.pickupDay,
+            pickupTime: state.pickupTime,
+            shoppingItems: state.shoppingItems,
+            guidedIndex: state.guidedIndex,
+            savedLists: state.savedLists,
+            preferredDeliveryPartnerName: "Instacart"
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(legacy).write(to: fileURL, options: .atomic)
+
+        let migrated = try XCTUnwrap(store.load())
+
+        XCTAssertEqual(migrated.schemaVersion, SmartCartPersistedState.currentSchemaVersion)
+        XCTAssertTrue(migrated.featureFlags.advancedToolsEnabled)
+        XCTAssertEqual(migrated.preferredDeliveryPartnerName, "Instacart")
+        XCTAssertTrue(migrated.pantryInventory.isEmpty)
+        XCTAssertTrue(migrated.analyticsEvents.isEmpty)
+        XCTAssertTrue(migrated.preferredProductIDsByIngredient.isEmpty)
+    }
+
     func testCorruptPersistenceIsQuarantined() throws {
         let directory = temporaryDirectory()
         let fileURL = directory.appendingPathComponent("state.json")
@@ -321,6 +392,33 @@ final class SmartCartTests: XCTestCase {
         } catch let error as RetailerServiceError {
             XCTAssertEqual(error, .unsupportedCapability("Live price refresh"))
         }
+    }
+
+    func testRetailConnectorRegistryIsCredentialTruthful() async throws {
+        XCTAssertEqual(RetailConnectorRegistry.profiles.count, 6)
+        let walmart = try XCTUnwrap(RetailConnectorRegistry.profile(id: "walmart"))
+        XCTAssertEqual(walmart.state, .demoReady)
+        XCTAssertFalse(walmart.supportsCart)
+        XCTAssertFalse(walmart.supportsWishlist)
+
+        let instacart = try XCTUnwrap(RetailConnectorRegistry.profile(id: "instacart"))
+        let connector = CredentialFreeRetailConnector(profile: instacart)
+        do {
+            _ = try await connector.searchProducts(for: searchRequest(for: "Garlic", unit: "clove"))
+            XCTFail("Credential-free connector must not pretend a live catalog exists")
+        } catch let error as RetailerServiceError {
+            guard case .unsupportedCapability(let message) = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+            XCTAssertTrue(message.contains("without approved credentials"))
+        }
+    }
+
+    func testOfflineBarcodeCatalogMatchesKnownUPCAndRejectsUnknown() {
+        let pasta = OfflineBarcodeCatalog.lookup(upc: "078742002166")
+        XCTAssertEqual(pasta?.name, "Penne Pasta")
+        XCTAssertEqual(pasta?.retailerProductID, "10534084")
+        XCTAssertNil(OfflineBarcodeCatalog.lookup(upc: "000000000000"))
     }
 
     @MainActor
@@ -413,6 +511,22 @@ final class SmartCartTests: XCTestCase {
         XCTAssertEqual(restored.savedLists.first?.manifest.storeID, restored.primaryStore.retailerStoreID)
     }
 
+    @MainActor
+    func testPantryBarcodePreferencesAndAnalyticsSurviveRelaunch() throws {
+        let store = InMemorySmartCartStateStore()
+        let model = AppModel(stateStore: store)
+        model.addPantryItem(upc: "078742002166")
+        model.track(.retailerLinkOpened, properties: ["retailer": "walmart", "upc": "secret"])
+        model.persistNow()
+
+        let restored = AppModel(stateStore: store)
+
+        XCTAssertEqual(restored.pantryInventory.first?.name, "Penne Pasta")
+        XCTAssertEqual(restored.pantryInventory.first?.preferredRetailerProductID, "10534084")
+        XCTAssertTrue(restored.analyticsEvents.contains { $0.name == .barcodeScanned })
+        XCTAssertFalse(restored.analyticsEvents.contains { $0.properties["upc"] != nil })
+    }
+
     private func searchRequest(
         for name: String,
         quantity: Double = 1,
@@ -499,7 +613,10 @@ final class SmartCartTests: XCTestCase {
             shoppingItems: [item],
             guidedIndex: 0,
             savedLists: [SavedShoppingList(manifest: manifest)],
-            preferredDeliveryPartnerName: nil
+            preferredDeliveryPartnerName: nil,
+            pantryInventory: [],
+            preferredProductIDsByIngredient: [:],
+            analyticsEvents: []
         )
     }
 

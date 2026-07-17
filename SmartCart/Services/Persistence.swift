@@ -1,9 +1,31 @@
 import Foundation
 
 struct SmartCartPersistedState: Codable, Hashable {
-    static let currentSchemaVersion = 1
+    static let currentSchemaVersion = 2
 
     var schemaVersion: Int = currentSchemaVersion
+    var recipes: [Recipe]
+    var activeRecipe: Recipe
+    var desiredServings: Int
+    var preferences: ShoppingPreferences
+    var featureFlags: AppFeatureFlags
+    var storeStrategy: StoreStrategy
+    var fulfillmentMode: FulfillmentMode
+    var selectedStoreIDs: Set<UUID>
+    var zipCode: String
+    var pickupDay: String
+    var pickupTime: String
+    var shoppingItems: [ShoppingListItem]
+    var guidedIndex: Int
+    var savedLists: [SavedShoppingList]
+    var preferredDeliveryPartnerName: String?
+    var pantryInventory: [PantryInventoryItem]
+    var preferredProductIDsByIngredient: [String: String]
+    var analyticsEvents: [AnalyticsEvent]
+}
+
+struct LegacySmartCartPersistedStateV1: Codable, Hashable {
+    var schemaVersion = 1
     var recipes: [Recipe]
     var activeRecipe: Recipe
     var desiredServings: Int
@@ -83,6 +105,11 @@ final class JSONSmartCartStateStore: SmartCartStateStoring {
             switch version {
             case SmartCartPersistedState.currentSchemaVersion:
                 return try decoder().decode(SmartCartPersistedState.self, from: data)
+            case 1:
+                let legacy = try decoder().decode(LegacySmartCartPersistedStateV1.self, from: data)
+                let migrated = migrate(legacy)
+                try save(migrated)
+                return migrated
             case 0:
                 let legacy = try decoder().decode(LegacySmartCartPersistedStateV0.self, from: data)
                 let migrated = migrate(legacy)
@@ -124,7 +151,35 @@ final class JSONSmartCartStateStore: SmartCartStateStoring {
             shoppingItems: legacy.shoppingItems,
             guidedIndex: legacy.guidedIndex,
             savedLists: legacy.savedLists,
-            preferredDeliveryPartnerName: nil
+            preferredDeliveryPartnerName: nil,
+            pantryInventory: [],
+            preferredProductIDsByIngredient: [:],
+            analyticsEvents: []
+        )
+    }
+
+    private func migrate(
+        _ legacy: LegacySmartCartPersistedStateV1
+    ) -> SmartCartPersistedState {
+        SmartCartPersistedState(
+            recipes: legacy.recipes,
+            activeRecipe: legacy.activeRecipe,
+            desiredServings: legacy.desiredServings,
+            preferences: legacy.preferences,
+            featureFlags: legacy.featureFlags,
+            storeStrategy: legacy.storeStrategy,
+            fulfillmentMode: legacy.fulfillmentMode,
+            selectedStoreIDs: legacy.selectedStoreIDs,
+            zipCode: legacy.zipCode,
+            pickupDay: legacy.pickupDay,
+            pickupTime: legacy.pickupTime,
+            shoppingItems: legacy.shoppingItems,
+            guidedIndex: legacy.guidedIndex,
+            savedLists: legacy.savedLists,
+            preferredDeliveryPartnerName: legacy.preferredDeliveryPartnerName,
+            pantryInventory: [],
+            preferredProductIDsByIngredient: [:],
+            analyticsEvents: []
         )
     }
 

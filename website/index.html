@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="SmartCart is an unreleased private iOS validation candidate that turns recipes into reviewable shopping manifests using demo catalog records.">
+  <title>SmartCart — From recipe to a reviewable shopping plan</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="script.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="nav-shell">
+      <a class="brand" href="index.html" aria-label="SmartCart home"><span class="brand-mark" aria-hidden="true">+</span><span>SmartCart</span><span class="beta-tag">Private beta</span></a>
+      <button class="nav-toggle" type="button" data-nav-toggle aria-expanded="false" aria-controls="site-nav">Menu</button>
+      <nav class="site-nav" id="site-nav" data-site-nav data-open="false" aria-label="Primary navigation">
+        <a href="index.html" aria-current="page">Overview</a><a href="about.html">About</a><a href="faq.html">FAQ</a><a href="support.html">Support</a><a href="developers/index.html">Developers</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero">
+      <div class="page-shell hero-grid">
+        <div>
+          <span class="eyebrow">iOS private beta · demo catalog</span>
+          <h1>Your recipe. A clearer grocery plan.</h1>
+          <p class="lede">SmartCart turns a recipe into an editable shopping manifest, applies your pantry and shopping preferences, then guides you to exact product pages or clearly labeled retailer searches.</p>
+          <div class="button-row">
+            <a class="button" href="#how-it-works">See how the beta works</a>
+            <a class="button secondary" href="faq.html">Read beta FAQ</a>
+          </div>
+          <p class="fine-print">This unreleased private-beta candidate uses local and demo foundations. It does not create or modify a retailer cart, reserve pickup, refresh live prices, process payment, or complete checkout.</p>
+        </div>
+
+        <div class="app-card" aria-label="Illustrative SmartCart shopping manifest preview">
+          <div class="mock-head"><strong>Weeknight tacos</strong><span class="status-pill">7 items</span></div>
+          <div class="mock-list">
+            <div class="mock-row"><span class="mock-icon" aria-hidden="true">01</span><span><strong>Corn tortillas</strong><small>Exact demo record · pickup eligible</small></span><span class="mock-price">$2.08</span></div>
+            <div class="mock-row"><span class="mock-icon" aria-hidden="true">02</span><span><strong>Fresh cilantro</strong><small>Retailer search · price unavailable</small></span><span class="mock-price">Review</span></div>
+            <div class="mock-row"><span class="mock-icon" aria-hidden="true">03</span><span><strong>Black beans</strong><small>Pantry rule · have enough</small></span><span class="mock-price">Skip</span></div>
+          </div>
+          <div class="mock-action">Open guided product handoff</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section white" id="how-it-works">
+      <div class="page-shell">
+        <div class="section-heading"><span class="eyebrow">The workflow</span><h2>From recipe source to retailer handoff</h2><p>Every step stays reviewable. SmartCart helps organize the work; the shopper remains in control.</p></div>
+        <div class="grid-3">
+          <article class="card"><span class="card-number">1</span><h3>Bring in a recipe</h3><p>Use a camera capture, saved photo, pasted ingredient text, supported recipe page, or included sample. Image text recognition runs with Apple Vision on the device.</p></article>
+          <article class="card blue"><span class="card-number">2</span><h3>Review the list</h3><p>Edit parsed ingredients, scale servings, mark pantry items, and apply saved organic, dietary, budget, or store-brand preferences.</p></article>
+          <article class="card amber"><span class="card-number">3</span><h3>Shop with context</h3><p>Review exact seeded product records and explicit search fallbacks, save the manifest, then open each retailer destination yourself.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="page-shell">
+        <div class="section-heading"><span class="eyebrow">Product truth</span><h2>Clear about what is—and is not—connected</h2><p>The current build is designed to prove the planning flow without presenting demo commerce data as live.</p></div>
+        <div class="grid-2">
+          <article class="card"><h3>Included in the candidate</h3><ul><li>Recipe import and ingredient editing</li><li>Serving and package calculations</li><li>Persistent pantry and shopping preferences</li><li>Offline demo UPC lookup and device barcode scanning</li><li>Saved manifests and guided product handoff</li><li>Seeded exact records plus labeled search fallbacks</li></ul></article>
+          <article class="card"><h3>Not included</h3><ul><li>Live catalog, inventory, or price refresh</li><li>Production retailer authentication or cart creation</li><li>Pickup reservations or substitutions</li><li>Payment, checkout, or order submission</li><li>Production telemetry, cloud sync, or hosted accounts</li><li>Approved retailer or delivery-provider partnerships</li></ul></article>
+        </div>
+        <div class="notice critical" style="margin-top:1rem"><strong>Demo data notice:</strong> store details, distances, pickup windows, product availability, and observed prices in this beta are prototype fixtures or seeded records. A retailer determines final product, price, availability, tax, fees, substitutions, and fulfillment.</div>
+      </div>
+    </section>
+
+    <section class="section white">
+      <div class="page-shell">
+        <div class="section-heading"><span class="eyebrow">Built for review</span><h2>Useful structure without hidden checkout</h2></div>
+        <div class="metric-grid">
+          <article class="card"><h3>Local state</h3><p>Beta state is saved as versioned JSON in the app’s Application Support directory.</p></article>
+          <article class="card"><h3>Explicit sources</h3><p>Exact product links and retailer-search fallbacks are labeled differently.</p></article>
+          <article class="card"><h3>Saved progress</h3><p>Recipes, preferences, manifests, replacements, and guided progress can persist across relaunch.</p></article>
+          <article class="card"><h3>Shopper action</h3><p>Retailer pages open for the shopper to review and act on directly.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="page-shell">
+        <div class="notice good"><strong>Private beta access:</strong> no public download or sign-up channel is represented on this site package. Add a verified distribution method and support channel only after the project owner approves them. For now, explore the <a href="faq.html">FAQ</a>, <a href="privacy.html">privacy draft</a>, and <a href="developers/index.html">developer notes</a>.</div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-shell">
+      <div><a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true">+</span><span>SmartCart</span></a><p class="fine-print">A private iOS beta for recipe-to-shopping planning. Demo data; no live retail integration.</p></div>
+      <div><h2>Product</h2><div class="footer-links"><a href="about.html">About</a><a href="faq.html">FAQ</a><a href="support.html">Support</a><a href="contact.html">Contact</a></div></div>
+      <div><h2>Trust &amp; resources</h2><div class="footer-links"><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a><a href="affiliate-disclosure.html">Affiliate disclosure</a><a href="developers/index.html">Developer docs</a><a href="media-kit/index.html">Media kit</a></div></div>
+    </div>
+    <div class="footer-shell footer-bottom">Unpublished Milestone 8 website package · Legal, domain, distribution, and contact placeholders must be completed before publication.</div>
+  </footer>
+</body>
+</html>

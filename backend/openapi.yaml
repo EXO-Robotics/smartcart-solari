@@ -1,0 +1,503 @@
+openapi: 3.1.0
+info:
+  title: SmartCart Local/Demo Backend API
+  version: 0.1.0
+  description: |
+    Credential-free local-development API foundation. All authentication, persistence,
+    account, session, manifest, analytics, affiliate, and catalog/product data is local/demo,
+    ephemeral, client-supplied, or simulated; it is never live retailer or identity-provider data.
+servers:
+  - url: http://127.0.0.1:8787
+    description: Loopback local/demo server
+tags:
+  - name: Health
+  - name: Local demo auth
+  - name: OAuth scaffold
+  - name: Manifests
+  - name: Analytics
+  - name: Affiliate links
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Check local/demo service health
+      operationId: getHealth
+      security: []
+      responses:
+        '200':
+          description: The local/demo process is healthy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /v1/demo/accounts:
+    post:
+      tags: [Local demo auth]
+      summary: Create an ephemeral mock account
+      operationId: createDemoAccount
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [displayName, email]
+              properties:
+                displayName: { type: string, minLength: 1, maxLength: 100 }
+                email:
+                  type: string
+                  format: email
+                  maxLength: 254
+                  description: Local/demo identifier only; never a verified or live identity.
+      responses:
+        '201':
+          description: Ephemeral mock account created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [account, meta]
+                properties:
+                  account: { $ref: '#/components/schemas/DemoAccount' }
+                  meta: { $ref: '#/components/schemas/LocalDemoMeta' }
+        '400': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /v1/demo/sessions:
+    post:
+      tags: [Local demo auth]
+      summary: Issue an ephemeral mock bearer session
+      operationId: createDemoSession
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [accountId]
+              properties:
+                accountId: { type: string, format: uuid }
+      responses:
+        '201':
+          description: Mock local/demo session issued. This is not production authentication.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [session, meta]
+                properties:
+                  session:
+                    type: object
+                    required: [token, tokenType, expiresInSeconds, account, dataMode]
+                    properties:
+                      token: { type: string, description: Random local-process token only. }
+                      tokenType: { type: string, const: Bearer }
+                      expiresInSeconds: { type: integer, minimum: 1 }
+                      account: { $ref: '#/components/schemas/DemoAccount' }
+                      dataMode: { type: string, const: local-demo }
+                  meta: { $ref: '#/components/schemas/LocalDemoMeta' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+  /v1/demo/account:
+    get:
+      tags: [Local demo auth]
+      summary: Read the authenticated mock account
+      operationId: getDemoAccount
+      responses:
+        '200':
+          description: Current mock account.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [account, meta]
+                properties:
+                  account: { $ref: '#/components/schemas/DemoAccount' }
+                  meta: { $ref: '#/components/schemas/LocalDemoMeta' }
+        '401': { $ref: '#/components/responses/Error' }
+  /v1/demo/sessions/current:
+    delete:
+      tags: [Local demo auth]
+      summary: Revoke the current mock bearer session
+      operationId: revokeDemoSession
+      responses:
+        '200':
+          description: Session removed from local process memory.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [revoked, meta]
+                properties:
+                  revoked: { type: boolean, const: true }
+                  meta: { $ref: '#/components/schemas/LocalDemoMeta' }
+        '401': { $ref: '#/components/responses/Error' }
+  /v1/oauth/{provider}/start:
+    post:
+      tags: [OAuth scaffold]
+      summary: Start a simulated OAuth state and PKCE flow
+      description: Generates state, verifier, and S256 challenge locally. No provider request occurs.
+      operationId: startLocalDemoOAuth
+      parameters:
+        - $ref: '#/components/parameters/Provider'
+      responses:
+        '201':
+          description: One-time local/demo OAuth transaction created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [oauth, meta]
+                properties:
+                  oauth:
+                    type: object
+                    required: [provider, state, codeVerifier, codeChallenge, authorizationUrl, disclosure, dataMode]
+                    properties:
+                      provider: { type: string }
+                      state: { type: string }
+                      codeVerifier: { type: string, minLength: 43, maxLength: 128 }
+                      codeChallenge: { type: string }
+                      authorizationUrl: { type: string, format: uri }
+                      disclosure: { type: string }
+                      dataMode: { type: string, const: local-demo }
+                  meta: { $ref: '#/components/schemas/LocalDemoMeta' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+  /v1/oauth/{provider}/callback:
+    post:
+      tags: [OAuth scaffold]
+      summary: Validate a simulated OAuth callback and PKCE verifier
+      description: Consumes state once and performs no provider token exchange.
+      operationId: completeLocalDemoOAuth
+      parameters:
+        - $ref: '#/components/parameters/Provider'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [state, code, codeVerifier]
+              properties:
+                state: { type: string, maxLength: 200 }
+                code: { type: string, maxLength: 500, description: Simulated local/demo authorization code. }
+                codeVerifier: { type: string, minLength: 43, maxLength: 128 }
+      responses:
+        '200':
+          description: Simulated connection validated; no live tokens exist.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [oauth, meta]
+                properties:
+                  oauth:
+                    type: object
+                    required: [provider, connected, connectionId, disclosure, dataMode]
+                    properties:
+                      provider: { type: string }
+                      connected: { type: boolean, const: true }
+                      connectionId: { type: string }
+                      disclosure: { type: string }
+                      dataMode: { type: string, const: local-demo }
+                  meta: { $ref: '#/components/schemas/LocalDemoMeta' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+  /v1/manifests:
+    post:
+      tags: [Manifests]
+      summary: Create an ephemeral local/demo shopping manifest
+      operationId: createManifest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/ManifestInput'
+                - type: object
+                  required: [manifest]
+                  properties:
+                    manifest: { $ref: '#/components/schemas/ManifestInput' }
+      responses:
+        '201': { $ref: '#/components/responses/Manifest' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+  /v1/manifests/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ManifestId'
+    get:
+      tags: [Manifests]
+      summary: Read an owned local/demo manifest
+      operationId: getManifest
+      responses:
+        '200': { $ref: '#/components/responses/Manifest' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    patch:
+      tags: [Manifests]
+      summary: Update a manifest with optimistic version checking
+      operationId: updateManifest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expectedVersion, manifest]
+              properties:
+                expectedVersion: { type: integer, minimum: 1 }
+                manifest:
+                  type: object
+                  description: Fields to merge before full manifest validation.
+      responses:
+        '200': { $ref: '#/components/responses/Manifest' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /v1/manifests/{id}/sync:
+    post:
+      tags: [Manifests]
+      summary: Synchronize a complete local/demo manifest
+      description: Returns 409 and the server manifest when baseVersion is stale; the client must merge and retry.
+      operationId: syncManifest
+      parameters:
+        - $ref: '#/components/parameters/ManifestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [baseVersion, manifest]
+              properties:
+                baseVersion: { type: integer, minimum: 1 }
+                manifest: { $ref: '#/components/schemas/ManifestInput' }
+      responses:
+        '200':
+          description: Local/demo sync accepted.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [manifest, sync, meta]
+                properties:
+                  manifest: { $ref: '#/components/schemas/Manifest' }
+                  sync:
+                    type: object
+                    properties:
+                      status: { type: string, const: accepted-local-demo }
+                      conflictPolicy: { type: string, const: client-must-merge-and-retry }
+                  meta: { $ref: '#/components/schemas/LocalDemoMeta' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /v1/analytics/events:
+    post:
+      tags: [Analytics]
+      summary: Ingest bounded identifier-free local/demo analytics events
+      operationId: ingestAnalyticsEvents
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [events]
+              properties:
+                events:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [name]
+                    properties:
+                      name: { type: string, minLength: 1, maxLength: 100 }
+                      occurredAt: { type: string, format: date-time }
+                      properties:
+                        type: object
+                        maxProperties: 50
+                        description: Must not contain direct identifiers or credential-like keys.
+      responses:
+        '202':
+          description: Events retained only in bounded process memory.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [accepted, eventIds, disclosure, meta]
+                properties:
+                  accepted: { type: integer, minimum: 1, maximum: 100 }
+                  eventIds: { type: array, items: { type: string, format: uuid } }
+                  disclosure: { type: string }
+                  meta: { $ref: '#/components/schemas/LocalDemoMeta' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+  /v1/affiliate-links:
+    post:
+      tags: [Affiliate links]
+      summary: Build a cached local/demo affiliate URL
+      operationId: createAffiliateLink
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [targetUrl, retailerId]
+              properties:
+                targetUrl: { type: string, format: uri, maxLength: 2048, pattern: '^https://' }
+                retailerId: { type: string, minLength: 1, maxLength: 100 }
+      responses:
+        '200':
+          description: Deterministic local/demo URL; no live attribution or transaction.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [link, meta]
+                properties:
+                  link:
+                    type: object
+                    required: [targetUrl, affiliateUrl, provider, disclosure, dataMode, cache]
+                    properties:
+                      targetUrl: { type: string, format: uri }
+                      affiliateUrl: { type: string, format: uri }
+                      provider: { type: string, const: local-demo }
+                      disclosure: { type: string }
+                      dataMode: { type: string, const: local-demo }
+                      cache: { type: string, enum: [hit, miss] }
+                  meta: { $ref: '#/components/schemas/LocalDemoMeta' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+components:
+  securitySchemes:
+    demoBearer:
+      type: http
+      scheme: bearer
+      description: Ephemeral local/demo bearer token. Never a live identity credential.
+  parameters:
+    Provider:
+      name: provider
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[a-z0-9][a-z0-9-]{0,49}$' }
+      description: Provider label for the local/demo scaffold; no live provider call is made.
+    ManifestId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  responses:
+    Manifest:
+      description: Ephemeral owned local/demo manifest.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [manifest, meta]
+            properties:
+              manifest: { $ref: '#/components/schemas/Manifest' }
+              meta: { $ref: '#/components/schemas/LocalDemoMeta' }
+    Error:
+      description: Structured local/demo API error.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error, meta]
+            properties:
+              error:
+                type: object
+                required: [code, message, requestId]
+                properties:
+                  code: { type: string }
+                  message: { type: string }
+                  requestId: { type: string }
+                  details: { type: object }
+              meta: { $ref: '#/components/schemas/LocalDemoMeta' }
+  schemas:
+    LocalDemoMeta:
+      type: object
+      required: [dataMode, persistence, auth, catalog]
+      properties:
+        dataMode: { type: string, const: local-demo }
+        persistence: { type: string, const: ephemeral-in-memory }
+        auth: { type: string, const: mock-local-demo }
+        catalog: { type: string, const: local-demo-or-client-supplied-never-live }
+    HealthResponse:
+      type: object
+      required: [status, service, version, timestamp, meta]
+      properties:
+        status: { type: string, const: ok }
+        service: { type: string, const: smartcart-local-demo-backend }
+        version: { type: string }
+        timestamp: { type: string, format: date-time }
+        meta: { $ref: '#/components/schemas/LocalDemoMeta' }
+    DemoAccount:
+      type: object
+      description: Ephemeral mock account; never a verified or live identity.
+      required: [id, displayName, email, createdAt, dataMode]
+      properties:
+        id: { type: string, format: uuid }
+        displayName: { type: string }
+        email: { type: string, format: email }
+        createdAt: { type: string, format: date-time }
+        dataMode: { type: string, const: local-demo }
+    ManifestInput:
+      type: object
+      additionalProperties: false
+      required: [recipeID, recipeTitle, retailerID, storeID, storeName, desiredServings, fulfillmentMode, items]
+      properties:
+        recipeID: { type: string, maxLength: 100 }
+        recipeTitle: { type: string, maxLength: 200 }
+        retailerID: { type: string, maxLength: 100 }
+        storeID: { type: string, maxLength: 100 }
+        storeName: { type: string, maxLength: 200 }
+        desiredServings: { type: integer, minimum: 1, maximum: 10000 }
+        fulfillmentMode: { type: string, enum: [Pickup, Delivery] }
+        handoffProgress: { type: string, enum: [notStarted, inProgress, completed], default: notStarted }
+        items:
+          type: array
+          maxItems: 500
+          items: { $ref: '#/components/schemas/ManifestItem' }
+    ManifestItem:
+      type: object
+      required: [ingredientID, ingredientName, requestedQuantity, purchaseQuantity, product]
+      properties:
+        id: { type: string, maxLength: 100 }
+        ingredientID: { type: string, maxLength: 100 }
+        ingredientName: { type: string, maxLength: 200 }
+        requestedQuantity: { type: string, maxLength: 100 }
+        purchaseQuantity: { type: integer, minimum: 1, maximum: 1000 }
+        status: { type: string, enum: [waiting, added, skipped], default: waiting }
+        product:
+          type: object
+          description: Client-supplied local/demo catalog record. Never live price, inventory, eligibility, or retailer data.
+          additionalProperties: true
+    Manifest:
+      allOf:
+        - $ref: '#/components/schemas/ManifestInput'
+        - type: object
+          required: [id, accountId, version, createdAt, updatedAt, lastSyncedAt, dataMode]
+          properties:
+            id: { type: string, format: uuid }
+            accountId: { type: string, format: uuid }
+            version: { type: integer, minimum: 1 }
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
+            lastSyncedAt: { type: [string, 'null'], format: date-time }
+            dataMode: { type: string, const: local-demo }
+security:
+  - demoBearer: []

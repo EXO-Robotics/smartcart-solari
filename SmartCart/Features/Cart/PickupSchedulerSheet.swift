@@ -442,6 +442,8 @@ private struct ChoiceChip: View {
 
 struct PantryDashboardView: View {
     @Environment(AppModel.self) private var appModel
+    @State private var showBarcodeScanner = false
+    @State private var manualPantryName = ""
 
     var body: some View {
         @Bindable var appModel = appModel
@@ -464,6 +466,73 @@ struct PantryDashboardView: View {
                     pantryMetric("Buy", count: appModel.ingredientsToBuy.count, color: SmartCartTheme.walmartBlue)
                 }
 
+                Button {
+                    showBarcodeScanner = true
+                } label: {
+                    Label("Scan a pantry barcode", systemImage: "barcode.viewfinder")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(PrimaryButtonStyle())
+
+                VStack(alignment: .leading, spacing: 12) {
+                    SectionHeader(
+                        title: "Pantry inventory",
+                        subtitle: "Saved on this device · barcode lookup works offline"
+                    )
+
+                    HStack(spacing: 9) {
+                        TextField("Add an item manually", text: $manualPantryName)
+                            .smartField()
+                        Button {
+                            appModel.addManualPantryItem(name: manualPantryName)
+                            manualPantryName = ""
+                        } label: {
+                            Image(systemName: "plus")
+                                .font(.headline.bold())
+                                .frame(width: 44, height: 44)
+                        }
+                        .buttonStyle(SecondaryButtonStyle())
+                        .disabled(manualPantryName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+
+                    if appModel.pantryInventory.isEmpty {
+                        InfoBanner(
+                            symbol: "cabinet.fill",
+                            title: "No saved pantry items",
+                            message: "Scan a barcode or add an item. Unknown UPCs are retained locally for later catalog matching.",
+                            color: SmartCartTheme.walmartBlue
+                        )
+                    } else {
+                        ForEach(appModel.pantryInventory) { item in
+                            HStack(spacing: 12) {
+                                Image(systemName: item.source == .barcode ? "barcode" : "cabinet.fill")
+                                    .foregroundStyle(SmartCartTheme.green)
+                                    .frame(width: 38, height: 38)
+                                    .background(SmartCartTheme.herbLight)
+                                    .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(item.name)
+                                        .font(.subheadline.weight(.bold))
+                                        .foregroundStyle(SmartCartTheme.navy)
+                                    Text("\(item.brand.isEmpty ? item.source.label : item.brand) · \(item.quantity.formatted()) \(item.unit)")
+                                        .font(.caption)
+                                        .foregroundStyle(SmartCartTheme.secondaryInk)
+                                }
+                                Spacer()
+                                Button(role: .destructive) {
+                                    guard let index = appModel.pantryInventory.firstIndex(where: { $0.id == item.id }) else { return }
+                                    appModel.removePantryItems(at: IndexSet(integer: index))
+                                } label: {
+                                    Image(systemName: "trash")
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Remove \(item.name)")
+                            }
+                            .smartCartCard(padding: 12)
+                        }
+                    }
+                }
+
                 SectionHeader(title: appModel.activeRecipe.title, subtitle: "Current recipe pantry decisions")
 
                 ForEach($appModel.activeRecipe.ingredients) { $ingredient in
@@ -482,6 +551,11 @@ struct PantryDashboardView: View {
         }
         .background(SmartCartTheme.canvas)
         .toolbar(.hidden, for: .navigationBar)
+        .sheet(isPresented: $showBarcodeScanner) {
+            BarcodeScannerSheet { code in
+                appModel.addPantryItem(upc: code)
+            }
+        }
     }
 
     private func pantryMetric(_ title: String, count: Int, color: Color) -> some View {

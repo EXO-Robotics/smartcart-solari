@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Developer notes for the SmartCart unreleased validation candidate, including build requirements, boundaries, and source organization.">
+  <title>SmartCart Developer Notes</title><link rel="stylesheet" href="../styles.css"><script src="../script.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header"><div class="nav-shell"><a class="brand" href="../index.html" aria-label="SmartCart home"><span class="brand-mark" aria-hidden="true">+</span><span>SmartCart</span><span class="beta-tag">Private beta</span></a><button class="nav-toggle" type="button" data-nav-toggle aria-expanded="false" aria-controls="site-nav">Menu</button><nav class="site-nav" id="site-nav" data-site-nav data-open="false" aria-label="Primary navigation"><a href="../index.html">Overview</a><a href="../about.html">About</a><a href="../faq.html">FAQ</a><a href="../support.html">Support</a><a href="index.html" aria-current="page">Developers</a></nav></div></header>
+  <main id="main">
+    <section class="page-hero"><div class="page-shell"><div class="breadcrumbs"><a href="../index.html">Home</a><span aria-hidden="true">/</span><span>Developers</span></div><span class="eyebrow">Unreleased candidate notes</span><h1>Developer guide</h1><p class="lede">A concise map of the current iOS project, its local reference backend, and the capability boundaries that future changes must preserve.</p></div></section>
+    <div class="page-shell doc-layout">
+      <nav class="doc-nav" aria-label="Developer guide sections"><strong>On this page</strong><a href="#requirements">Requirements</a><a href="#build">Build and test</a><a href="#structure">Source structure</a><a href="#truth">Product truth</a><a href="#changes">Change checklist</a><a href="architecture.html">Architecture</a></nav>
+      <div class="prose">
+        <div class="notice"><strong>Internal documentation:</strong> this page describes the repository’s unreleased human-validation candidate. It is not a public API promise, partner integration guide, or production-readiness claim.</div>
+        <h2 id="requirements">Requirements</h2>
+        <ul><li>Xcode with the iOS 17 or newer simulator runtime</li><li>The <code>SmartCart.xcodeproj</code> project and <code>SmartCart</code> scheme</li><li>Node.js 20 or newer only when running the optional local reference backend</li><li>No website build dependency: this Milestone 8 package is plain static HTML, CSS, and JavaScript</li></ul>
+        <h2 id="build">Build and test the iOS app</h2>
+        <pre><code>xcodebuild test \
+  -project SmartCart.xcodeproj \
+  -scheme SmartCart \
+  -destination 'platform=iOS Simulator,name=iPhone 17'</code></pre>
+        <p>The repository test suite covers parsing, package conversion, preference constraints, matching and fallback behavior, product encoding and staleness, persistence and migration, manifest behavior, replacements, and handoff capability boundaries.</p>
+        <h3>Test the optional local backend</h3>
+        <pre><code>cd backend
+npm test</code></pre>
+        <p>The zero-dependency Node.js service uses only local, in-memory demo state. Its mock sessions, OAuth scaffold, manifests, analytics ingestion, and affiliate abstraction are test foundations—not hosted production capabilities.</p>
+        <h2 id="structure">Source structure</h2>
+        <table><thead><tr><th>Area</th><th>Responsibility</th></tr></thead><tbody>
+          <tr><td><code>SmartCart/Features</code></td><td>SwiftUI flows for recipe input, cart review, retailer planning, guided handoff, and preferences.</td></tr>
+          <tr><td><code>SmartCart/Models</code></td><td>App state, recipes, shopping preferences, retailer product records, manifests, and capability types.</td></tr>
+          <tr><td><code>SmartCart/Services</code></td><td>Versioned JSON persistence and the current demo retailer catalog adapter.</td></tr>
+          <tr><td><code>SmartCart/Components</code></td><td>Reusable cards, status elements, branding, and interaction components.</td></tr>
+          <tr><td><code>SmartCart/Theme</code></td><td>Shared color, surface, radius, and button treatment.</td></tr>
+          <tr><td><code>SmartCartTests</code></td><td>Regression tests for the supported critical path and boundaries.</td></tr>
+          <tr><td><code>backend</code></td><td>Credential-free local/demo Node.js reference API with in-memory state and no provider token exchange.</td></tr>
+          <tr><td><code>website</code></td><td>Dependency-free, unpublished static business, policy, support, developer, and press package.</td></tr>
+        </tbody></table>
+        <h2 id="truth">Non-negotiable product truth</h2>
+        <ul><li>The current <code>DemoWalmartCatalogService</code> uses seeded demo product records.</li><li>Live price refresh is an unsupported capability.</li><li>Barcode lookup uses a small bundled offline demo cache rather than a live product database.</li><li>Search fallbacks are not exact product links and have no SmartCart price.</li><li>The guided handoff does not transfer a cart, reserve pickup, or submit payment.</li><li>Local diagnostic events are not hosted production analytics.</li><li>Generic delivery-provider, multi-stop, creator, connector, OAuth, and affiliate surfaces remain experimental or local-only.</li><li>Registry profiles and retailer API or partner-feed enum cases express potential shapes; they are not evidence that production integrations exist.</li></ul>
+        <h2 id="changes">Change checklist</h2>
+        <ol><li>Add or update focused tests before widening a capability claim.</li><li>Keep exact-product and search-fallback labels distinct.</li><li>Preserve source, observation time, price type, and availability context.</li><li>Update README, changelog, website FAQ, privacy draft, terms draft, and affiliate disclosure when data flow or monetization changes.</li><li>Re-run the iOS suite and <code>python3 website/validate.py</code>.</li><li>Have humans verify legal, domain, email, distribution, partner, and production-hosting facts.</li></ol>
+        <div class="button-row"><a class="button" href="architecture.html">Read architecture overview</a><a class="button secondary" href="../media-kit/index.html">Open media kit</a></div>
+      </div>
+    </div>
+  </main>
+  <footer class="site-footer"><div class="footer-shell"><div><a class="brand" href="../index.html"><span class="brand-mark" aria-hidden="true">+</span><span>SmartCart</span></a><p class="fine-print">Unreleased validation-candidate notes · not a public API commitment.</p></div><div><h2>Docs</h2><div class="footer-links"><a href="architecture.html">Architecture</a><a href="../support.html">Support</a><a href="../faq.html">FAQ</a></div></div><div><h2>Trust</h2><div class="footer-links"><a href="../privacy.html">Privacy</a><a href="../terms.html">Terms</a><a href="../affiliate-disclosure.html">Affiliate disclosure</a></div></div></div><div class="footer-shell footer-bottom">Unpublished developer documentation · Current private-candidate behavior only.</div></footer>
+</body>
+</html>

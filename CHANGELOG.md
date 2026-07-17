@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.3.0 — Human-validation candidate (unreleased)
+
+- Adds multi-image OCR import, retry diagnostics, expanded fraction/range parsing, ingredient aliases, confidence scoring, and golden recipe tests.
+- Adds persistent pantry inventory, physical-device VisionKit barcode scanning, Simulator UPC entry, and a bundled offline demo UPC cache.
+- Remembers manual product replacements as preferred matches for later runs.
+- Adds privacy-limited on-device funnel events, feature flags, and an internal tester dashboard.
+- Adds credential-honest connector profiles for Walmart, Instacart, Kroger, Target, Amazon Fresh, and generic affiliate handoff.
+- Adds a local reference backend with mock auth/OAuth foundations, manifests, analytics ingestion, caching, affiliate abstraction, rate limits, and redacted logs.
+- Adds an unpublished local business website, policy/support pages, developer docs, and media kit.
+- Adds closed-beta, partner-integration, and App Store human handoff checklists.
+
+### Known limitations
+
+- Barcode camera scanning requires a supported physical iPhone; the Simulator uses manual UPC entry.
+- Analytics remains local diagnostic state, not a production telemetry or crash-reporting service.
+- Backend persistence and authentication are demo/local foundations, not production infrastructure.
+- Website/legal text requires owner and legal review before deployment.
+- Partner approval, credentials, live catalogs, production services, TestFlight, and App Store submission remain human-gated.
+
 ## 0.2.0-beta.1 — Beta 2
 
 SmartCart Beta 2 establishes the first complete closed-beta shopping workflow:

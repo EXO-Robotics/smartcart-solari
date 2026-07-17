@@ -4,14 +4,14 @@ SmartCart converts a recipe into a persisted, retailer-aware shopping manifest. 
 
 ![SmartCart home screen](SmartCart-Beta2-Simulator.png)
 
-## Beta 2 critical path
+## Beta 3 validation candidate
 
 Import recipe → review ingredients → adjust servings → check pantry → apply preferences → select one store → resolve products → confirm manifest → open retailer handoff.
 
 The app currently supports:
 
 - Camera, photo-library, pasted-text, sample, and schema.org recipe imports.
-- On-device Vision text recognition for recipe images.
+- Multi-page on-device Vision text recognition with retry and confidence diagnostics.
 - Ingredient editing, fractions, units, optional-item handling, and serving scaling.
 - Persisted pantry decisions, recipes, preferences, store choices, product matches, replacements, manifests, and guided-handoff progress.
 - Executable organic, dietary, budget, and store-brand matching rules.
@@ -20,6 +20,11 @@ The app currently supports:
 - Explicit, unpriced Walmart-search fallbacks where no eligible exact record exists.
 - Single-store pickup planning in the public-beta flow.
 - Saved manifests, sharing, and guided product-by-product handoff.
+- Persistent barcode/manual pantry inventory with an offline demo UPC cache.
+- Privacy-limited on-device funnel instrumentation and an internal tester dashboard.
+- Credential-free connector contracts for six retailer/affiliate integration shapes.
+
+The repository also includes a local reference backend in `backend/`, a local deploy-ready business website in `website/`, and explicit human handoff gates in `Docs/`.
 
 ## Capability boundary
 
@@ -42,7 +47,7 @@ State is stored as versioned JSON in Application Support. Schema migration and c
 
 ## Release notes and limitations
 
-See [CHANGELOG.md](CHANGELOG.md) for the Beta 2 milestone and its known limitations.
+See [CHANGELOG.md](CHANGELOG.md) for release history and [Docs/ROADMAP_STATUS.md](Docs/ROADMAP_STATUS.md) for the engineering/human boundary.
 
 ## Build and test
 
@@ -57,7 +62,9 @@ xcodebuild test \
   -destination 'platform=iOS Simulator,name=iPhone 17'
 ```
 
-The regression suite covers parsing, package conversion, preference constraints, ranking and fallback behavior, product encoding and staleness, persistence/relaunch/migration/corruption, manifests, replacement persistence, and handoff capabilities.
+The regression suite covers parsing and golden recipes, package conversion, preference constraints, ranking and fallback behavior, barcode lookup, connector truthfulness, product encoding and staleness, persistence/relaunch/migration/corruption, pantry state, local analytics, manifests, replacement persistence, and handoff capabilities.
+
+Before human beta work, follow [Docs/CLOSED_BETA_TEST_PLAN.md](Docs/CLOSED_BETA_TEST_PLAN.md). Partner and public launch work is gated by [Docs/PARTNER_INTEGRATION_CHECKLIST.md](Docs/PARTNER_INTEGRATION_CHECKLIST.md) and [Docs/APP_STORE_RELEASE_CHECKLIST.md](Docs/APP_STORE_RELEASE_CHECKLIST.md).
 
 ## License
 

@@ -23,8 +23,8 @@ struct RecipeComposerSheet: View {
     """
     @State private var linkText = "https://"
     @State private var selectedSampleIndex = 0
-    @State private var photoItem: PhotosPickerItem?
-    @State private var selectedImage: UIImage?
+    @State private var photoItems: [PhotosPickerItem] = []
+    @State private var selectedImages: [UIImage] = []
     @State private var showCamera = false
     @State private var isProcessing = false
     @State private var processingMessage = ""
@@ -64,7 +64,7 @@ struct RecipeComposerSheet: View {
     private var canImport: Bool {
         switch selectedMethod {
         case .camera, .photoLibrary:
-            selectedImage != nil && !recipeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            !selectedImages.isEmpty && !recipeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         case .recipeLink, .pinterest:
             validURL != nil
         case .recipeText:
@@ -151,14 +151,14 @@ struct RecipeComposerSheet: View {
         .interactiveDismissDisabled(isProcessing)
         .fullScreenCover(isPresented: $showCamera) {
             CameraPicker { image in
-                selectedImage = image
-                Task { await recognizeRecipe(in: image) }
+                selectedImages = [image]
+                Task { await recognizeRecipe(in: [image]) }
             }
             .ignoresSafeArea()
         }
-        .onChange(of: photoItem) {
-            guard let photoItem else { return }
-            Task { await loadPhoto(photoItem) }
+        .onChange(of: photoItems) {
+            guard !photoItems.isEmpty else { return }
+            Task { await loadPhotos(photoItems) }
         }
     }
 
@@ -204,7 +204,7 @@ struct RecipeComposerSheet: View {
                 message: UIImagePickerController.isSourceTypeAvailable(.camera)
                     ? "Keep the ingredient list flat, bright, and fully in frame."
                     : "The Simulator has no camera. Use Upload Photo to test image recognition.",
-                buttonTitle: selectedImage == nil ? "Open camera" : "Retake photo",
+                buttonTitle: selectedImages.isEmpty ? "Open camera" : "Retake photo",
                 symbol: "camera.fill"
             ) {
                 if UIImagePickerController.isSourceTypeAvailable(.camera) {
@@ -217,11 +217,15 @@ struct RecipeComposerSheet: View {
         case .photoLibrary:
             VStack(alignment: .leading, spacing: 12) {
                 mediaPreview
-                PhotosPicker(selection: $photoItem, matching: .images) {
-                    Label(selectedImage == nil ? "Choose recipe photo" : "Choose a different photo", systemImage: "photo.on.rectangle.angled")
+                PhotosPicker(selection: $photoItems, maxSelectionCount: 8, matching: .images) {
+                    Label(selectedImages.isEmpty ? "Choose recipe photos" : "Choose different photos", systemImage: "photo.stack.fill")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(SecondaryButtonStyle())
+
+                Text("Select up to 8 pages. SmartCart combines them in selection order.")
+                    .font(.caption)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
             }
 
         case .recipeLink, .pinterest:
@@ -342,7 +346,7 @@ struct RecipeComposerSheet: View {
 
     @ViewBuilder
     private var mediaPreview: some View {
-        if let selectedImage {
+        if let selectedImage = selectedImages.first {
             Image(uiImage: selectedImage)
                 .resizable()
                 .scaledToFill()
@@ -356,6 +360,18 @@ struct RecipeComposerSheet: View {
                             .foregroundStyle(.white)
                             .padding(.horizontal, 11)
                             .padding(.vertical, 8)
+                            .background(SmartCartTheme.navy.opacity(0.86))
+                            .clipShape(Capsule())
+                            .padding(10)
+                    }
+                }
+                .overlay(alignment: .topTrailing) {
+                    if selectedImages.count > 1 {
+                        Label("\(selectedImages.count) pages", systemImage: "doc.on.doc.fill")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
                             .background(SmartCartTheme.navy.opacity(0.86))
                             .clipShape(Capsule())
                             .padding(10)
@@ -485,41 +501,58 @@ struct RecipeComposerSheet: View {
         }
     }
 
-    private func loadPhoto(_ item: PhotosPickerItem) async {
+    private func loadPhotos(_ items: [PhotosPickerItem]) async {
         isProcessing = true
-        processingMessage = "Loading image…"
+        processingMessage = "Loading \(items.count) page\(items.count == 1 ? "" : "s")…"
         errorMessage = nil
         defer { isProcessing = false }
 
         do {
-            guard let data = try await item.loadTransferable(type: Data.self),
-                  let image = UIImage(data: data)
-            else {
-                throw RecipeVisionError.unreadableImage
+            var images: [UIImage] = []
+            for item in items {
+                guard let data = try await item.loadTransferable(type: Data.self),
+                      let image = UIImage(data: data)
+                else {
+                    throw RecipeVisionError.unreadableImage
+                }
+                images.append(image)
             }
-            selectedImage = image
-            await recognizeRecipe(in: image)
+            selectedImages = images
+            await recognizeRecipe(in: images)
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
-    private func recognizeRecipe(in image: UIImage) async {
+    private func recognizeRecipe(in images: [UIImage]) async {
         isProcessing = true
         processingMessage = "Reading recipe text…"
         errorMessage = nil
         defer { isProcessing = false }
 
         do {
-            let recognized = try await RecipeVisionReader.recognizeText(in: image)
+            let result = try await RecipeVisionReader.recognizeText(in: images)
             processingMessage = "Normalizing ingredients…"
-            recipeText = recognized
-            if let firstLine = recognized
+            recipeText = result.text
+            if let firstLine = result.text
                 .components(separatedBy: .newlines)
                 .map({ $0.trimmingCharacters(in: .whitespacesAndNewlines) })
                 .first(where: { !$0.isEmpty && $0.range(of: #"\d"#, options: .regularExpression) == nil }) {
                 title = String(firstLine.prefix(60))
             }
+            let recipe = RecipeParser.parse(
+                title: title,
+                text: result.text,
+                source: source(for: selectedMethod),
+                sourceDetail: sourceDetail
+            )
+            appModel.lastImportReport = RecipeParser.importReport(
+                for: recipe,
+                recognizedText: result.text,
+                sourcePageCount: result.pageCount,
+                retryCount: result.retryCount,
+                duration: result.duration
+            )
             try? await Task.sleep(for: .milliseconds(220))
         } catch {
             errorMessage = error.localizedDescription
@@ -559,7 +592,50 @@ struct RecipeComposerSheet: View {
 }
 
 private enum RecipeVisionReader {
-    static func recognizeText(in image: UIImage) async throws -> String {
+    struct Result {
+        var text: String
+        var pageCount: Int
+        var retryCount: Int
+        var duration: TimeInterval
+        var confidence: Float
+    }
+
+    static func recognizeText(in images: [UIImage]) async throws -> Result {
+        let startedAt = Date()
+        var pages: [String] = []
+        var retryCount = 0
+        var confidenceTotal: Float = 0
+
+        for image in images {
+            do {
+                let page = try await recognizeText(in: image, level: .accurate, minimumTextHeight: 0.008)
+                pages.append(page.text)
+                confidenceTotal += page.confidence
+            } catch {
+                retryCount += 1
+                let page = try await recognizeText(in: image, level: .fast, minimumTextHeight: 0.004)
+                pages.append(page.text)
+                confidenceTotal += page.confidence
+            }
+        }
+
+        let combined = pages.joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !combined.isEmpty else { throw RecipeVisionError.noTextFound }
+        return Result(
+            text: combined,
+            pageCount: images.count,
+            retryCount: retryCount,
+            duration: Date().timeIntervalSince(startedAt),
+            confidence: confidenceTotal / Float(max(1, images.count))
+        )
+    }
+
+    private static func recognizeText(
+        in image: UIImage,
+        level: VNRequestTextRecognitionLevel,
+        minimumTextHeight: Float
+    ) async throws -> (text: String, confidence: Float) {
         guard let cgImage = image.cgImage else {
             throw RecipeVisionError.unreadableImage
         }
@@ -572,19 +648,22 @@ private enum RecipeVisionReader {
                 }
 
                 let observations = request.results as? [VNRecognizedTextObservation] ?? []
-                let lines = observations.compactMap { $0.topCandidates(1).first?.string }
+                let candidates = observations.compactMap { $0.topCandidates(1).first }
+                let lines = candidates.map(\.string)
                 let text = lines.joined(separator: "\n")
                     .trimmingCharacters(in: .whitespacesAndNewlines)
 
                 if text.isEmpty {
                     continuation.resume(throwing: RecipeVisionError.noTextFound)
                 } else {
-                    continuation.resume(returning: text)
+                    let confidence = candidates.reduce(Float.zero) { $0 + $1.confidence } / Float(max(1, candidates.count))
+                    continuation.resume(returning: (text, confidence))
                 }
             }
-            request.recognitionLevel = .accurate
+            request.recognitionLevel = level
             request.usesLanguageCorrection = true
             request.recognitionLanguages = ["en-US"]
+            request.minimumTextHeight = minimumTextHeight
 
             DispatchQueue.global(qos: .userInitiated).async {
                 do {

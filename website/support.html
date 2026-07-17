@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Troubleshooting and support guidance for the SmartCart private iOS beta.">
+  <title>SmartCart Support</title><link rel="stylesheet" href="styles.css"><script src="script.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header"><div class="nav-shell"><a class="brand" href="index.html" aria-label="SmartCart home"><span class="brand-mark" aria-hidden="true">+</span><span>SmartCart</span><span class="beta-tag">Private beta</span></a><button class="nav-toggle" type="button" data-nav-toggle aria-expanded="false" aria-controls="site-nav">Menu</button><nav class="site-nav" id="site-nav" data-site-nav data-open="false" aria-label="Primary navigation"><a href="index.html">Overview</a><a href="about.html">About</a><a href="faq.html">FAQ</a><a href="support.html" aria-current="page">Support</a><a href="developers/index.html">Developers</a></nav></div></header>
+  <main id="main">
+    <section class="page-hero"><div class="page-shell"><div class="breadcrumbs"><a href="index.html">Home</a><span aria-hidden="true">/</span><span>Support</span></div><span class="eyebrow">Private beta help</span><h1>Troubleshoot the current build</h1><p class="lede">These steps cover the unreleased validation candidate. A verified human support channel must be added before this site is published.</p></div></section>
+    <div class="page-shell prose">
+      <div class="notice critical"><strong>Support channel placeholder:</strong> <span class="placeholder">[REPLACE BEFORE PUBLISHING: VERIFIED SUPPORT URL, FORM, OR CONTACT METHOD]</span>. Do not publish an unmonitored address.</div>
+      <h2>Recipe import did not work</h2>
+      <ol><li>For a photo, use a clear, well-lit image with the ingredient list fully visible.</li><li>Review recognized text before continuing; image recognition can misread quantities or units.</li><li>For a recipe page, confirm the page is publicly reachable and exposes supported schema.org recipe metadata.</li><li>If the page is blocked or unsupported, paste the ingredient text instead.</li></ol>
+      <h2>A product match looks wrong</h2>
+      <ol><li>Check the ingredient name, quantity, unit, dietary rules, organic policy, and fulfillment mode.</li><li>Look for the source label. “Retailer search” is a fallback, not an exact product match.</li><li>Verify package size, labels, allergens, availability, and price at the retailer before adding anything.</li><li>Use the in-app replacement flow when a different seeded record is more appropriate.</li></ol>
+      <h2>A price or store detail is incorrect</h2>
+      <p>This is expected in the current demo. Product prices, availability, store names, distances, addresses, and pickup windows are seeded or prototype data—not a live retailer feed. The beta cannot refresh them.</p>
+      <h2>The app did not create a cart or reserve pickup</h2>
+      <p>That behavior is outside the current candidate. SmartCart saves a manifest and guides the shopper through exact links or labeled searches. Cart creation, pickup reservation, substitution submission, payment, and checkout happen only at the retailer and are not automated by SmartCart.</p>
+      <h2>A barcode is not recognized</h2>
+      <p>Camera scanning requires a supported physical iPhone; use manual UPC entry in the Simulator. The lookup is a small offline demo cache, not a live product database, so unknown codes are expected and remain unmatched for manual review.</p>
+      <h2>Local state appears damaged</h2>
+      <p>The app uses versioned JSON persistence and can quarantine corrupt state. Before resetting a test build, record the visible error and preserve reproducible steps. Beta testers should use the approved private-beta reporting channel once one is provided.</p>
+      <h2>Include this in a beta report</h2>
+      <ul><li>App version and iOS version</li><li>Import method used</li><li>Steps immediately before the issue</li><li>What you expected and what happened</li><li>Whether the issue repeats after relaunch</li><li>A screenshot with personal information removed</li></ul>
+      <div class="notice"><strong>Privacy reminder:</strong> do not include full recipes you do not have permission to share, retailer account details, payment data, precise location, or other sensitive information in a support report.</div>
+      <h2>More answers</h2><p>Review the <a href="faq.html">FAQ</a>, <a href="privacy.html">privacy draft</a>, and <a href="contact.html">contact placeholder page</a>.</p>
+    </div>
+  </main>
+  <footer class="site-footer"><div class="footer-shell"><div><a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true">+</span><span>SmartCart</span></a><p class="fine-print">Private iOS beta · demo catalog records · no live retailer integration.</p></div><div><h2>Product</h2><div class="footer-links"><a href="about.html">About</a><a href="faq.html">FAQ</a><a href="contact.html">Contact</a></div></div><div><h2>Trust &amp; resources</h2><div class="footer-links"><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a><a href="affiliate-disclosure.html">Affiliate disclosure</a><a href="developers/index.html">Developer docs</a></div></div></div><div class="footer-shell footer-bottom">Unpublished website package · Complete all marked placeholders before publication.</div></footer>
+</body>
+</html>

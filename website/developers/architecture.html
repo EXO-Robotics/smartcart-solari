@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Architecture overview of the SmartCart unreleased validation candidate, including local app state, demo matching, and reference backend boundaries.">
+  <title>SmartCart Architecture Overview</title><link rel="stylesheet" href="../styles.css"><script src="../script.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header"><div class="nav-shell"><a class="brand" href="../index.html" aria-label="SmartCart home"><span class="brand-mark" aria-hidden="true">+</span><span>SmartCart</span><span class="beta-tag">Private beta</span></a><button class="nav-toggle" type="button" data-nav-toggle aria-expanded="false" aria-controls="site-nav">Menu</button><nav class="site-nav" id="site-nav" data-site-nav data-open="false" aria-label="Primary navigation"><a href="../index.html">Overview</a><a href="../about.html">About</a><a href="../faq.html">FAQ</a><a href="../support.html">Support</a><a href="index.html" aria-current="page">Developers</a></nav></div></header>
+  <main id="main">
+    <section class="page-hero"><div class="page-shell"><div class="breadcrumbs"><a href="../index.html">Home</a><span aria-hidden="true">/</span><a href="index.html">Developers</a><span aria-hidden="true">/</span><span>Architecture</span></div><span class="eyebrow">Source-grounded overview</span><h1>Architecture</h1><p class="lede">The SmartCart candidate is a local SwiftUI app with observable state, explicit retailer capabilities, versioned persistence, and a separate local-only backend reference.</p></div></section>
+    <div class="page-shell doc-layout">
+      <nav class="doc-nav" aria-label="Architecture sections"><strong>On this page</strong><a href="#flow">Critical path</a><a href="#layers">Layers</a><a href="#state">State</a><a href="#retailer">Retailer boundary</a><a href="#persistence">Persistence</a><a href="#backend">Local backend</a><a href="#privacy">Data flow</a><a href="#extension">Extension gates</a></nav>
+      <div class="prose">
+        <div class="notice"><strong>Boundary:</strong> this document describes the checked-in demo architecture. It does not assert production security, scale, cloud services, retailer approval, or live commerce readiness.</div>
+        <h2 id="flow">Supported critical path</h2>
+        <div class="doc-panel"><p><strong>Import recipe</strong> → review and edit ingredients → scale servings → mark pantry status → apply preferences → choose one prototype store → resolve seeded products or search fallbacks → confirm and save manifest → open guided retailer destinations.</p></div>
+        <h2 id="layers">Conceptual layers</h2>
+        <div class="grid-2">
+          <article class="card"><h3>SwiftUI presentation</h3><p>Feature views render the import, recipe, cart, retailer, handoff, and preference experiences. Shared components and theme values keep interaction states consistent.</p></article>
+          <article class="card"><h3>Application state</h3><p><code>AppModel</code> coordinates the active recipe, preferences, stores, shopping items, manifests, navigation state, retailer service, and persistence store.</p></article>
+          <article class="card"><h3>Domain models</h3><p>Recipe, ingredient, package, preference, product-record, manifest, fulfillment, source, and capability types make uncertain data explicit.</p></article>
+          <article class="card"><h3>Services</h3><p>Protocols separate retailer lookup and persistence from views. The candidate supplies a demo catalog service and a local JSON state store.</p></article>
+          <article class="card"><h3>Local reference backend</h3><p>A separate zero-dependency Node.js service demonstrates mock auth, manifests, analytics ingestion, caching, OAuth state, and affiliate abstraction entirely in local/demo mode.</p></article>
+        </div>
+        <h2 id="state">State and dependency seams</h2>
+        <p><code>AppModel</code> receives a <code>SmartCartStateStoring</code> implementation and a <code>RetailerCatalogService</code> implementation. Default construction uses <code>JSONSmartCartStateStore</code> and <code>DemoWalmartCatalogService</code>. In-memory storage supports focused tests.</p>
+        <p>Many user-facing state properties persist on change after initialization. This keeps the beta straightforward, but future production work should measure write frequency, define concurrency behavior, and document failure recovery before promising durability guarantees.</p>
+        <h2 id="retailer">Retailer service boundary</h2>
+        <p>The protocol exposes catalog search, product resolution, refresh, and handoff creation, while a capability set communicates what an adapter supports. The demo adapter advertises local catalog search, exact product links, pickup and delivery eligibility metadata, and guided product handoff. Its live refresh method returns an unsupported-capability error.</p>
+        <table><thead><tr><th>Record state</th><th>Meaning</th><th>Shopper action</th></tr></thead><tbody>
+          <tr><td>Exact seeded record</td><td>A canonical demo product record with source, observed time, package, and destination.</td><td>Verify current retailer details before purchase.</td></tr>
+          <tr><td>Retailer-search fallback</td><td>No eligible exact seeded record was found; price remains unavailable.</td><td>Choose the final product at the retailer.</td></tr>
+          <tr><td>Guided handoff</td><td>A saved manifest plus links or searches.</td><td>Open, add, reserve, and pay manually at the retailer.</td></tr>
+        </tbody></table>
+        <h2 id="persistence">Versioned persistence</h2>
+        <p>The default store writes <code>state.json</code> in the app’s Application Support area. Schema version 2 is current in the unreleased candidate. The store can migrate legacy schemas 0 and 1 and quarantine corrupt state rather than silently treating it as valid. Version 2 adds pantry inventory, preferred product IDs, and bounded local diagnostic events. The test suite covers migration, relaunch, and corruption behavior.</p>
+        <h2 id="backend">Local reference backend</h2>
+        <p>The repository’s <code>backend</code> directory is a credential-free Node.js ESM reference service for local development and automated tests. It binds to loopback by default, has no package dependencies, and labels JSON responses as <code>local-demo</code>.</p>
+        <ul><li>Mock accounts and bearer sessions exist only in process memory.</li><li>OAuth validates local state and PKCE mechanics but performs no provider request or token exchange.</li><li>Manifests and diagnostic events disappear on restart.</li><li>Product and catalog fields are client-supplied demo values, never live retailer data.</li><li>Affiliate-link decoration is deterministic demo behavior with no live attribution or approved program.</li><li>Rate limiting, caching, and redacted logs are development safeguards, not production infrastructure.</li></ul>
+        <p>Nothing in this static site calls that service, and its presence does not establish cloud sync, hosted accounts, production authentication, or a retailer connection.</p>
+        <h2 id="privacy">Current data flow</h2>
+        <ol><li>Camera or photo import uses iOS permission surfaces and Apple Vision text recognition.</li><li>Pasted text and recognized ingredients become local application models.</li><li>Recipe-page import requests a third-party page and extracts supported recipe metadata when available.</li><li>Barcode scanning on supported devices resolves only against a bundled offline demo cache.</li><li>Product matching operates against seeded demo records in the current adapter.</li><li>Opening a product or search leaves SmartCart for a third-party retailer destination.</li><li>Application state, pantry data, and bounded tester events are saved locally as versioned JSON.</li><li>The optional reference backend remains a separately started local process with in-memory demo state.</li></ol>
+        <p>Hosted telemetry, production authentication, cloud sync, provider OAuth, live affiliate attribution, and live catalog refresh are not part of the current candidate. Adding any of them changes the public privacy and architecture story.</p>
+        <h2 id="extension">Gates before widening the system</h2>
+        <ul><li>Implement and test adapter capability truth; never infer a working integration from model enum cases.</li><li>Define credentials, authentication, secrets, rate limits, retries, observability, and vendor failure modes.</li><li>Preserve explicit provenance, observation time, and fallback labels across all catalog sources.</li><li>Review data minimization, retention, deletion, encryption, logging, consent, and third-party disclosures.</li><li>Add end-to-end evidence for cart, reservation, payment, or order claims before changing marketing copy.</li><li>Update legal drafts and affiliate disclosures before introducing tracking or compensation.</li></ul>
+        <div class="button-row"><a class="button secondary" href="index.html">Back to developer guide</a></div>
+      </div>
+    </div>
+  </main>
+  <footer class="site-footer"><div class="footer-shell"><div><a class="brand" href="../index.html"><span class="brand-mark" aria-hidden="true">+</span><span>SmartCart</span></a><p class="fine-print">Unreleased candidate notes · local/demo foundations only.</p></div><div><h2>Docs</h2><div class="footer-links"><a href="index.html">Developer guide</a><a href="../support.html">Support</a><a href="../faq.html">FAQ</a></div></div><div><h2>Trust</h2><div class="footer-links"><a href="../privacy.html">Privacy</a><a href="../terms.html">Terms</a><a href="../affiliate-disclosure.html">Affiliate disclosure</a></div></div></div><div class="footer-shell footer-bottom">Unpublished architecture documentation · Current private-candidate behavior only.</div></footer>
+</body>
+</html>

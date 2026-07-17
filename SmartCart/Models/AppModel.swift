@@ -60,6 +60,16 @@ final class AppModel {
     var preferredDeliveryPartnerName: String? {
         didSet { persistState() }
     }
+    var pantryInventory: [PantryInventoryItem] {
+        didSet { persistState() }
+    }
+    var preferredProductIDsByIngredient: [String: String] {
+        didSet { persistState() }
+    }
+    var analyticsEvents: [AnalyticsEvent] {
+        didSet { persistState() }
+    }
+    var lastImportReport: RecipeImportReport?
     var toastMessage: String?
     private(set) var persistenceIssue: String?
 
@@ -156,6 +166,9 @@ final class AppModel {
         guidedIndex = restoredState?.guidedIndex ?? 0
         savedLists = restoredState?.savedLists ?? []
         preferredDeliveryPartnerName = restoredState?.preferredDeliveryPartnerName
+        pantryInventory = restoredState?.pantryInventory ?? []
+        preferredProductIDsByIngredient = restoredState?.preferredProductIDsByIngredient ?? [:]
+        analyticsEvents = restoredState?.analyticsEvents ?? []
 
         let validStoreIDs = Set(availableStores.map(\.id))
         let restoredStoreIDs = restoredState?.selectedStoreIDs.intersection(validStoreIDs) ?? []
@@ -313,6 +326,7 @@ final class AppModel {
     }
 
     func openImporter(_ method: ImportMethod) {
+        track(.importStarted, properties: ["method": method.rawValue])
         presentedSheet = .importer(method)
     }
 
@@ -332,6 +346,13 @@ final class AppModel {
         selectedTab = .home
         presentedSheet = nil
         homePath = [.ingredientReview]
+        track(
+            .extractionCompleted,
+            properties: [
+                "source": recipe.source.rawValue,
+                "ingredient_count": String(recipe.ingredients.count)
+            ]
+        )
     }
 
     func scaledQuantity(for ingredient: Ingredient) -> Double {
@@ -422,6 +443,14 @@ final class AppModel {
         }
         matchStage = "\(matchedItemCount) exact products · \(searchFallbackCount) searches"
         isMatching = false
+        track(
+            .matchingCompleted,
+            properties: [
+                "items": String(shoppingItems.count),
+                "exact_links": String(matchedItemCount),
+                "fallbacks": String(searchFallbackCount)
+            ]
+        )
     }
 
     func updatePurchaseQuantity(for itemID: UUID, delta: Int) {
@@ -439,12 +468,15 @@ final class AppModel {
         let replacement = shoppingItems[itemIndex].alternatives.remove(at: candidateIndex)
         shoppingItems[itemIndex].alternatives.append(previous)
         shoppingItems[itemIndex].product = replacement
+        preferredProductIDsByIngredient[preferenceKey(for: shoppingItems[itemIndex].ingredient.name)] = replacement.retailerProductID
+        track(.productReplaced, properties: ["link_kind": replacement.linkKind.rawValue])
         showToast("Product replacement selected")
     }
 
     func markCurrentGuidedItem(_ status: GuidedItemStatus) {
         guard shoppingItems.indices.contains(guidedIndex) else { return }
         shoppingItems[guidedIndex].status = status
+        track(.guidedItemCompleted, properties: ["status": status.rawValue])
         persistCurrentManifest(progress: .inProgress)
     }
 
@@ -454,6 +486,7 @@ final class AppModel {
             guidedIndex += 1
         } else {
             persistCurrentManifest(progress: .completed)
+            track(.guidedShoppingCompleted, properties: ["items": String(shoppingItems.count)])
             showToast("Guided shopping complete")
         }
     }
@@ -502,7 +535,9 @@ final class AppModel {
         persistCurrentManifest(progress: .inProgress)
         guard let manifest = currentSavedManifest else { return nil }
         do {
-            return try await retailerService.createHandoff(manifest: manifest)
+            let handoff = try await retailerService.createHandoff(manifest: manifest)
+            track(.retailerLinkOpened, properties: ["retailer": handoff.retailerID, "mode": handoff.mode.rawValue])
+            return handoff
         } catch {
             showToast(error.localizedDescription)
             return nil
@@ -530,6 +565,72 @@ final class AppModel {
 
     func persistNow() {
         persistState()
+    }
+
+    func setInternalTesterModeEnabled(_ enabled: Bool) {
+        featureFlags.internalTesterModeEnabled = enabled
+    }
+
+    func setLocalAnalyticsEnabled(_ enabled: Bool) {
+        featureFlags.localAnalyticsEnabled = enabled
+    }
+
+    func clearLocalAnalytics() {
+        analyticsEvents = []
+        showToast("On-device tester events cleared")
+    }
+
+    func markIngredientsCorrected(count: Int = 1) {
+        track(.ingredientsCorrected, properties: ["count": String(max(1, count))])
+    }
+
+    func addPantryItem(upc: String) {
+        let normalizedUPC = upc.filter(\.isNumber)
+        guard !normalizedUPC.isEmpty else {
+            showToast("Enter a valid UPC")
+            return
+        }
+        let record = OfflineBarcodeCatalog.lookup(upc: normalizedUPC)
+        if let index = pantryInventory.firstIndex(where: { $0.upc == normalizedUPC }) {
+            pantryInventory[index].quantity += 1
+            pantryInventory[index].updatedAt = .now
+        } else {
+            pantryInventory.insert(
+                PantryInventoryItem(
+                    upc: normalizedUPC,
+                    name: record?.name ?? "Scanned item \(normalizedUPC.suffix(4))",
+                    brand: record?.brand ?? "Unmatched UPC",
+                    preferredRetailerProductID: record?.retailerProductID,
+                    source: .barcode
+                ),
+                at: 0
+            )
+        }
+        track(.barcodeScanned, properties: ["matched": record == nil ? "false" : "true"])
+        track(.pantryItemAdded, properties: ["source": PantryItemSource.barcode.rawValue])
+        showToast(record == nil ? "UPC saved for later matching" : "\(record!.name) added to pantry")
+    }
+
+    func addManualPantryItem(name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        pantryInventory.insert(PantryInventoryItem(name: trimmed, source: .manual), at: 0)
+        track(.pantryItemAdded, properties: ["source": PantryItemSource.manual.rawValue])
+    }
+
+    func removePantryItems(at offsets: IndexSet) {
+        pantryInventory.remove(atOffsets: offsets)
+    }
+
+    func track(_ name: AnalyticsEventName, properties: [String: String] = [:]) {
+        guard featureFlags.localAnalyticsEnabled else { return }
+        let safeProperties = properties.filter { key, _ in
+            !["recipe_text", "url", "upc", "address", "email"].contains(key.lowercased())
+        }
+        analyticsEvents.append(AnalyticsEvent(name: name, properties: safeProperties))
+        if analyticsEvents.count > 500 {
+            analyticsEvents.removeFirst(analyticsEvents.count - 500)
+        }
     }
 
     private var currentSavedManifest: ShoppingManifest? {
@@ -596,6 +697,11 @@ final class AppModel {
                 for: request,
                 preferences: preferences
             )
+            if let preferredID = preferredProductIDsByIngredient[preferenceKey(for: ingredient.name)],
+               let preferredIndex = ranked.firstIndex(where: { $0.product.retailerProductID == preferredID }) {
+                let preferred = ranked.remove(at: preferredIndex)
+                ranked.insert(preferred, at: 0)
+            }
             if ranked.isEmpty {
                 let fallback = DemoWalmartCatalogService.searchFallback(
                     for: ingredient,
@@ -718,13 +824,24 @@ final class AppModel {
                     shoppingItems: shoppingItems,
                     guidedIndex: guidedIndex,
                     savedLists: savedLists,
-                    preferredDeliveryPartnerName: preferredDeliveryPartnerName
+                    preferredDeliveryPartnerName: preferredDeliveryPartnerName,
+                    pantryInventory: pantryInventory,
+                    preferredProductIDsByIngredient: preferredProductIDsByIngredient,
+                    analyticsEvents: analyticsEvents
                 )
             )
             persistenceIssue = nil
         } catch {
             persistenceIssue = error.localizedDescription
         }
+    }
+
+    private func preferenceKey(for ingredientName: String) -> String {
+        ingredientName
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
     }
 }
 
@@ -763,6 +880,28 @@ enum RecipeParser {
         )
     }
 
+    static func importReport(
+        for recipe: Recipe,
+        recognizedText: String,
+        sourcePageCount: Int = 1,
+        retryCount: Int = 0,
+        duration: TimeInterval = 0
+    ) -> RecipeImportReport {
+        let nonemptyLines = recognizedText
+            .components(separatedBy: .newlines)
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        return RecipeImportReport(
+            sourcePageCount: max(1, sourcePageCount),
+            recognizedLineCount: nonemptyLines.count,
+            ingredientLineCount: recipe.ingredients.count,
+            highConfidenceCount: recipe.ingredients.filter { $0.confidence == .high }.count,
+            reviewCount: recipe.ingredients.filter { $0.confidence == .review }.count,
+            unknownCount: recipe.ingredients.filter { $0.confidence == .unknown }.count,
+            retryCount: max(0, retryCount),
+            duration: max(0, duration)
+        )
+    }
+
     private static func isLikelyIngredient(_ line: String) -> Bool {
         let value = line.lowercased()
         let instructionPrefixes = [
@@ -790,6 +929,11 @@ enum RecipeParser {
             .replacingOccurrences(of: "⅓", with: "1/3")
             .replacingOccurrences(of: "⅔", with: "2/3")
             .replacingOccurrences(of: "⅛", with: "1/8")
+            .replacingOccurrences(of: "⅜", with: "3/8")
+            .replacingOccurrences(of: "⅝", with: "5/8")
+            .replacingOccurrences(of: "⅞", with: "7/8")
+            .replacingOccurrences(of: "⅙", with: "1/6")
+            .replacingOccurrences(of: "⅚", with: "5/6")
         cleaned = cleaned.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
 
         let tokens = cleaned.split(separator: " ").map(String.init)
@@ -829,9 +973,13 @@ enum RecipeParser {
         let rawName = commaParts.first ?? remaining
         let name = rawName
             .replacingOccurrences(of: #"\([^)]*\)"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"(?i)\b(optional|divided|plus more.*|for serving|for garnish)\b"#, with: "", options: .regularExpression)
             .trimmingCharacters(in: CharacterSet(charactersIn: " ,.-"))
-        let preparation = commaParts.count > 1 ? commaParts[1] : ""
-        let normalizedName = name.isEmpty ? cleaned : name
+        let preparation = commaParts.count > 1
+            ? commaParts[1].replacingOccurrences(of: "optional", with: "", options: .caseInsensitive)
+                .trimmingCharacters(in: CharacterSet(charactersIn: " ,.-"))
+            : ""
+        let normalizedName = normalizeIngredientName(name.isEmpty ? cleaned : name)
         let category = category(for: normalizedName)
         let staple = normalizedName.lowercased()
         let pantryState: PantryState
@@ -860,9 +1008,14 @@ enum RecipeParser {
         let cleaned = value
             .trimmingCharacters(in: CharacterSet(charactersIn: "~≈+,"))
             .split(separator: "-")
-            .first
+            .last
             .map(String.init) ?? value
-        return parseFraction(cleaned) ?? Double(cleaned)
+        let numberWords: [String: Double] = [
+            "a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4,
+            "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+            "half": 0.5, "quarter": 0.25
+        ]
+        return parseFraction(cleaned) ?? Double(cleaned) ?? numberWords[cleaned.lowercased()]
     }
 
     private static func parseFraction(_ value: String) -> Double? {
@@ -880,6 +1033,27 @@ enum RecipeParser {
         case "packages", "package": "pkg"
         default: unit
         }
+    }
+
+    private static func normalizeIngredientName(_ name: String) -> String {
+        var value = name
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let aliases = [
+            "chicken breasts": "chicken breast",
+            "boneless skinless chicken breast": "chicken breast",
+            "boneless, skinless chicken breast": "chicken breast",
+            "extra virgin olive oil": "olive oil",
+            "evoo": "olive oil",
+            "scallions": "green onion",
+            "confectioners sugar": "powdered sugar",
+            "garbanzo beans": "chickpeas"
+        ]
+        let lowercased = value.lowercased()
+        if let alias = aliases[lowercased] {
+            value = alias
+        }
+        return value
     }
 
     private static func category(for name: String) -> GroceryCategory {

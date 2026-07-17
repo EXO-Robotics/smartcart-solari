@@ -1,0 +1,14 @@
+{
+  "name": "smartcart-local-demo-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Credential-free local/demo HTTP foundation for SmartCart Milestone 7.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  }
+}

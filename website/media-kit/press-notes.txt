@@ -1,0 +1,32 @@
+SMARTCART MEDIA NOTES — UNPUBLISHED DRAFT
+
+Status
+SmartCart is a private iOS beta. This file does not announce public availability,
+a company, a launch date, customers, funding, retailer approval, or partnerships.
+
+One-sentence description
+SmartCart is a private iOS beta that turns recipes into reviewable shopping
+manifests, using seeded demo product records and guided retailer links without
+creating a retailer cart or completing checkout.
+
+Current private-candidate workflow
+Import recipe; review ingredients; adjust servings; check pantry; apply shopping
+preferences; select one prototype store; resolve seeded exact records or labeled
+retailer-search fallbacks; confirm and save a manifest; open guided retailer
+destinations.
+
+Capability boundary
+- No live price, inventory, store, or pickup-window feed.
+- No retailer authentication, cart creation, wishlist update, or basket transfer.
+- No pickup reservation, substitution submission, payment, order, or checkout.
+- No retailer affiliation, endorsement, partnership, or integration approval is
+  represented.
+
+Required before external use
+- [REPLACE BEFORE PUBLISHING: VERIFIED OWNER OR LEGAL ENTITY]
+- [REPLACE BEFORE PUBLISHING: APPROVED SPOKESPERSON AND BIOGRAPHY]
+- [REPLACE BEFORE PUBLISHING: VERIFIED PRESS CONTACT METHOD]
+- [REPLACE BEFORE PUBLISHING: APPROVED RELEASE STATUS AND DATE]
+- [REPLACE BEFORE PUBLISHING: APPROVED SCREENSHOTS AND USAGE RIGHTS]
+
+See index.html in this directory for color, wordmark, and language guidance.
