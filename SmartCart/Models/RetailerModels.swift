@@ -256,9 +256,9 @@ struct CommerceCapabilities: Codable, Hashable {
         liveProductReview: false,
         livePricing: false,
         liveAvailability: false,
-        pickup: true,
+        pickup: false,
         delivery: false,
-        checkout: true,
+        checkout: false,
         embeddedCheckout: false
     )
 
@@ -272,6 +272,95 @@ struct CommerceCapabilities: Codable, Hashable {
         checkout: false,
         embeddedCheckout: false
     )
+}
+
+enum RetailerGuideAvailability: String, Codable, Hashable {
+    case available
+    case comingSoon
+}
+
+enum ShoppingRetailer: String, CaseIterable, Identifiable, Codable, Hashable {
+    case walmart
+    case target
+    case kroger
+
+    var id: String { rawValue }
+
+    var configuration: RetailerGuideConfiguration {
+        switch self {
+        case .walmart:
+            RetailerGuideConfiguration(
+                retailer: self,
+                displayName: "Walmart",
+                guideLabel: "Guided Wishlist",
+                cardHighlights: [
+                    "Guided Wishlist",
+                    "Walmart confirms pickup or delivery",
+                    "Broad nationwide coverage"
+                ],
+                availability: .available,
+                listURL: URL(string: "https://www.walmart.com/lists")!,
+                homeURL: URL(string: "https://www.walmart.com/")!,
+                savedListName: "Walmart Wishlist",
+                instructions: [
+                    "Review the product, live price, and availability.",
+                    "Add it to your Walmart Wishlist and set the quantity there.",
+                    "Return to SmartCart and report the result."
+                ]
+            )
+        case .target:
+            RetailerGuideConfiguration(
+                retailer: self,
+                displayName: "Target",
+                guideLabel: "Shopping List",
+                cardHighlights: [
+                    "Target Shopping Lists",
+                    "Target confirms Drive Up eligibility",
+                    "Strong grocery and household coverage"
+                ],
+                availability: .available,
+                listURL: URL(string: "https://www.target.com/lists")!,
+                homeURL: URL(string: "https://www.target.com/")!,
+                savedListName: "Target Shopping List",
+                instructions: [
+                    "Review the product, live price, and store availability.",
+                    "Save the item in Target, then add or adjust it in Lists & Favorites.",
+                    "Return to SmartCart and report the result."
+                ]
+            )
+        case .kroger:
+            RetailerGuideConfiguration(
+                retailer: self,
+                displayName: "Kroger",
+                guideLabel: "Shopping List",
+                cardHighlights: [
+                    "Kroger Shopping List",
+                    "Kroger-family rollout planned",
+                    "Local grocery focus"
+                ],
+                availability: .comingSoon,
+                listURL: URL(string: "https://www.kroger.com/shopping/list")!,
+                homeURL: URL(string: "https://www.kroger.com/")!,
+                savedListName: "Kroger Shopping List",
+                instructions: []
+            )
+        }
+    }
+}
+
+struct RetailerGuideConfiguration: Identifiable, Hashable {
+    var retailer: ShoppingRetailer
+    var displayName: String
+    var guideLabel: String
+    var cardHighlights: [String]
+    var availability: RetailerGuideAvailability
+    var listURL: URL
+    var homeURL: URL
+    var savedListName: String
+    var instructions: [String]
+
+    var id: ShoppingRetailer { retailer }
+    var isAvailable: Bool { availability == .available }
 }
 
 enum ShoppingRoutePreference: String, CaseIterable, Identifiable, Codable, Hashable {
@@ -625,6 +714,7 @@ struct RetailerProductRecord: Codable, Identifiable, Hashable {
 
 struct RetailerProductSearchRequest: Hashable {
     var ingredient: Ingredient
+    var retailerID: String = ShoppingRetailer.walmart.rawValue
     var requestedQuantity: Double
     var requestedUnit: String
     var storeID: String

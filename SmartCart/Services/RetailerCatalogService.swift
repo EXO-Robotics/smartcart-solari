@@ -22,6 +22,16 @@ protocol RetailerCatalogService {
     ) async throws -> RetailerHandoff
 }
 
+protocol RetailerGuideAdapter: RetailerCatalogService {
+    var retailer: ShoppingRetailer { get }
+
+    func searchFallback(
+        for ingredient: Ingredient,
+        storeID: String,
+        preferences: ShoppingPreferences
+    ) -> RetailerProductRecord
+}
+
 enum RetailerServiceError: LocalizedError, Equatable {
     case productNotFound(String)
     case unsupportedCapability(String)
@@ -36,30 +46,49 @@ enum RetailerServiceError: LocalizedError, Equatable {
     }
 }
 
-struct DemoWalmartCatalogService: RetailerCatalogService {
-    let retailerID = "walmart"
-    let capabilities: RetailerCapabilities = [
-        .catalogSearch,
-        .exactProductLinks,
-        .pickup,
-        .delivery,
-        .guidedProductHandoff
-    ]
+private enum RetailerSearchQueryBuilder {
+    static func query(for ingredient: Ingredient, preferences: ShoppingPreferences) -> String {
+        var terms: [String] = []
+        if preferences.organicPolicy == .only {
+            terms.append("organic")
+        }
+        terms.append(contentsOf: preferences.dietaryRestrictions.map(\.label).sorted())
+        terms.append(ingredient.name)
+        return terms.joined(separator: " ")
+    }
+}
+
+private struct SeededRetailerGuideDefinition {
+    var retailer: ShoppingRetailer
+    var products: (Ingredient, String) -> [RetailerProductRecord]
+    var allProducts: () -> [RetailerProductRecord]
+    var fallback: (Ingredient, String, ShoppingPreferences) -> RetailerProductRecord
+    var handoffTitle: String
+    var handoffDisclosure: String
+}
+
+private protocol SeededRetailerGuideService: RetailerGuideAdapter {
+    static var guideDefinition: SeededRetailerGuideDefinition { get }
+}
+
+extension SeededRetailerGuideService {
+    var retailer: ShoppingRetailer { Self.guideDefinition.retailer }
+    var retailerID: String { retailer.rawValue }
+    var capabilities: RetailerCapabilities {
+        [.catalogSearch, .exactProductLinks, .guidedProductHandoff]
+    }
 
     func searchProducts(
         for request: RetailerProductSearchRequest
     ) async throws -> [RetailerProductRecord] {
-        Self.seededProducts(
-            for: request.ingredient,
-            storeID: request.storeID
-        )
+        Self.guideDefinition.products(request.ingredient, request.storeID)
     }
 
     func resolveProduct(
         retailerProductID: String,
         storeID: String?
     ) async throws -> RetailerProductRecord {
-        guard var product = DemoProductCatalog.allProducts.first(where: {
+        guard var product = Self.guideDefinition.allProducts().first(where: {
             $0.retailerProductID == retailerProductID
         }) else {
             throw RetailerServiceError.productNotFound(retailerProductID)
@@ -80,11 +109,93 @@ struct DemoWalmartCatalogService: RetailerCatalogService {
         RetailerHandoff(
             retailerID: retailerID,
             mode: .guidedProducts,
-            url: URL(string: "https://www.walmart.com/cp/grocery-pickup-and-delivery/9524000")!,
-            title: "Visit Walmart",
-            disclosure: "SmartCart saved this manifest and can open each exact product or labeled search. It did not transfer a cart, link an account, modify a Wishlist, reserve pickup, or submit payment."
+            url: retailer.configuration.listURL,
+            title: Self.guideDefinition.handoffTitle,
+            disclosure: Self.guideDefinition.handoffDisclosure
         )
     }
+
+    func searchFallback(
+        for ingredient: Ingredient,
+        storeID: String,
+        preferences: ShoppingPreferences
+    ) -> RetailerProductRecord {
+        Self.guideDefinition.fallback(ingredient, storeID, preferences)
+    }
+}
+
+struct RetailerGuideEngine {
+    private let adapters: [ShoppingRetailer: any RetailerGuideAdapter]
+
+    init(adapters: [ShoppingRetailer: any RetailerGuideAdapter]) {
+        self.adapters = adapters.filter { retailer, adapter in
+            adapter.retailer == retailer && adapter.retailerID == retailer.rawValue
+        }
+    }
+
+    func adapter(for retailer: ShoppingRetailer) -> (any RetailerGuideAdapter)? {
+        adapters[retailer]
+    }
+
+    func supports(_ retailer: ShoppingRetailer) -> Bool {
+        retailer.configuration.isAvailable && adapters[retailer] != nil
+    }
+
+    func rankedProducts(
+        for request: RetailerProductSearchRequest,
+        preferences: ShoppingPreferences
+    ) async -> [RankedRetailerProduct] {
+        guard let retailer = ShoppingRetailer(rawValue: request.retailerID),
+              let adapter = adapters[retailer]
+        else { return [] }
+
+        let candidates = (try? await adapter.searchProducts(for: request)) ?? []
+        var ranked = RetailerProductMatcher.rank(
+            candidates,
+            for: request,
+            preferences: preferences
+        )
+        if ranked.isEmpty {
+            let fallback = adapter.searchFallback(
+                for: request.ingredient,
+                storeID: request.storeID,
+                preferences: preferences
+            )
+            ranked = RetailerProductMatcher.rank(
+                [fallback],
+                for: request,
+                preferences: preferences
+            )
+        }
+        return ranked
+    }
+
+    func createHandoff(
+        for retailer: ShoppingRetailer,
+        manifest: ShoppingManifest
+    ) async throws -> RetailerHandoff {
+        guard let adapter = adapters[retailer] else {
+            throw RetailerServiceError.unsupportedCapability(
+                "\(retailer.configuration.displayName) retailer guide"
+            )
+        }
+        return try await adapter.createHandoff(manifest: manifest)
+    }
+}
+
+struct DemoWalmartCatalogService: SeededRetailerGuideService {
+    fileprivate static let guideDefinition = SeededRetailerGuideDefinition(
+        retailer: .walmart,
+        products: { ingredient, storeID in
+            seededProducts(for: ingredient, storeID: storeID)
+        },
+        allProducts: { DemoProductCatalog.allProducts },
+        fallback: { ingredient, storeID, preferences in
+            searchFallback(for: ingredient, storeID: storeID, preferences: preferences)
+        },
+        handoffTitle: "Open Walmart Wishlist",
+        handoffDisclosure: "SmartCart saved this shopping plan and can open each exact product or labeled search. It did not transfer a cart, link an account, modify a Wishlist, schedule fulfillment, or submit payment."
+    )
 
     static func seededProducts(
         for ingredient: Ingredient,
@@ -102,15 +213,300 @@ struct DemoWalmartCatalogService: RetailerCatalogService {
         storeID: String,
         preferences: ShoppingPreferences
     ) -> RetailerProductRecord {
+        let query = RetailerSearchQueryBuilder.query(for: ingredient, preferences: preferences)
         var product = DemoProductCatalog.searchFallback(
             title: ingredient.name,
-            query: ingredient.name,
+            query: query,
             symbol: ingredient.category.symbol,
-            organicStatus: preferences.organicPolicy == .only ? .certified : .unknown,
-            dietaryAttributes: preferences.dietaryRestrictions
+            organicStatus: .unknown,
+            dietaryAttributes: []
         )
+        product.fulfillmentMethods = []
         product.storeID = storeID
         return product
+    }
+}
+
+struct DemoTargetCatalogService: SeededRetailerGuideService {
+    fileprivate static let guideDefinition = SeededRetailerGuideDefinition(
+        retailer: .target,
+        products: { ingredient, storeID in
+            seededProducts(for: ingredient, storeID: storeID)
+        },
+        allProducts: { allProducts },
+        fallback: { ingredient, storeID, preferences in
+            searchFallback(for: ingredient, storeID: storeID, preferences: preferences)
+        },
+        handoffTitle: "Open Target Shopping List",
+        handoffDisclosure: "SmartCart saved this shopping plan and can open each exact product or labeled search. It did not transfer a cart, link an account, edit a Target list, schedule Drive Up, or submit payment."
+    )
+
+    static func seededProducts(
+        for ingredient: Ingredient,
+        storeID: String
+    ) -> [RetailerProductRecord] {
+        let value = ingredient.name.lowercased()
+        let products: [RetailerProductRecord]
+        if value.contains("chicken") {
+            products = chicken
+        } else if ["pasta", "rigatoni", "penne", "spaghetti", "fettuccine", "noodle"].contains(where: value.contains) {
+            products = pasta
+        } else if value.contains("olive oil") {
+            products = oliveOil
+        } else if value.contains("cream") {
+            products = heavyCream
+        } else if value.contains("parmesan") {
+            products = parmesan
+        } else if value.contains("garlic") {
+            products = garlic
+        } else {
+            products = []
+        }
+        return products.map {
+            var product = $0
+            product.storeID = storeID
+            return product
+        }
+    }
+
+    static func searchFallback(
+        for ingredient: Ingredient,
+        storeID: String,
+        preferences: ShoppingPreferences
+    ) -> RetailerProductRecord {
+        let query = RetailerSearchQueryBuilder.query(for: ingredient, preferences: preferences)
+        let encodedTerms = query
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .map { $0.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? $0 }
+            .joined(separator: "%2B")
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "www.target.com"
+        components.percentEncodedPath = "/s/\(encodedTerms)"
+        let key = query
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .joined(separator: "-")
+        return RetailerProductRecord(
+            retailerID: "target",
+            storeID: storeID,
+            retailerProductID: "search:\(key)",
+            title: ingredient.name,
+            brand: "Target search",
+            exactURL: components.url!,
+            packageDescription: "Choose at Target",
+            observedPrice: nil,
+            unitPriceText: "Price unavailable",
+            priceType: .unavailable,
+            availability: .unknown,
+            fulfillmentMethods: [],
+            organicStatus: .unknown,
+            dietaryAttributes: [],
+            dataSource: .searchFallback,
+            observedAt: observedAt,
+            linkKind: .searchResults,
+            symbol: ingredient.category.symbol,
+            confidence: .unknown,
+            matchKeywords: Set(
+                ingredient.name
+                    .lowercased()
+                    .components(separatedBy: CharacterSet.alphanumerics.inverted)
+                    .filter { !$0.isEmpty }
+            )
+        )
+    }
+
+    private static let observedAt = ISO8601DateFormatter().date(from: "2026-07-17T12:00:00Z")!
+
+    private static var allProducts: [RetailerProductRecord] {
+        chicken + pasta + oliveOil + heavyCream + parmesan + garlic
+    }
+
+    private static let chicken = [
+        product(
+            id: "87544735",
+            title: "Fresh All Natural Boneless & Skinless Chicken Breast",
+            brand: "Good & Gather",
+            package: "random-weight tray",
+            packageQuantity: 2.2,
+            packageUnit: "lb",
+            price: "8.78",
+            unitPriceValue: "3.99",
+            unitPriceText: "$3.99/lb observed",
+            priceType: .variableWeight,
+            organic: .notOrganic,
+            dietary: [.glutenFree, .nutFree],
+            symbol: "fork.knife",
+            variableWeight: true,
+            keywords: ["chicken", "breast"],
+            storeBrand: true
+        )
+    ]
+
+    private static let pasta = [
+        product(
+            id: "13156215",
+            title: "Penne Pasta",
+            brand: "Barilla",
+            package: "16 oz box",
+            packageQuantity: 16,
+            packageUnit: "oz",
+            price: "1.89",
+            unitPriceValue: "0.118",
+            unitPriceText: "11.8¢/oz observed",
+            priceType: .exact,
+            organic: .notOrganic,
+            dietary: [.vegetarian, .vegan, .nutFree, .kosher],
+            symbol: "takeoutbag.and.cup.and.straw.fill",
+            keywords: ["pasta", "penne"]
+        )
+    ]
+
+    private static let oliveOil = [
+        product(
+            id: "89409909",
+            title: "Extra Virgin Olive Oil",
+            brand: "Good & Gather",
+            package: "16.9 fl oz",
+            packageQuantity: 16.9,
+            packageUnit: "fl oz",
+            price: "6.39",
+            unitPriceValue: "0.38",
+            unitPriceText: "38¢/fl oz observed",
+            priceType: .exact,
+            organic: .notOrganic,
+            dietary: [.vegetarian, .vegan, .glutenFree, .dairyFree, .nutFree, .kosher],
+            symbol: "waterbottle.fill",
+            keywords: ["olive", "oil"],
+            storeBrand: true
+        ),
+        product(
+            id: "82102661",
+            title: "Organic Extra Virgin Olive Oil",
+            brand: "Good & Gather",
+            package: "16.9 fl oz",
+            packageQuantity: 16.9,
+            packageUnit: "fl oz",
+            price: "7.79",
+            unitPriceValue: "0.46",
+            unitPriceText: "46¢/fl oz observed",
+            priceType: .exact,
+            organic: .certified,
+            dietary: [.vegetarian, .vegan, .glutenFree, .dairyFree, .nutFree, .kosher],
+            symbol: "waterbottle.fill",
+            keywords: ["olive", "oil", "organic"],
+            storeBrand: true
+        )
+    ]
+
+    private static let heavyCream = [
+        product(
+            id: "47900159",
+            title: "Organic Heavy Whipping Cream",
+            brand: "Horizon Organic",
+            package: "16 fl oz carton",
+            packageQuantity: 16,
+            packageUnit: "fl oz",
+            price: "5.79",
+            unitPriceValue: "0.36",
+            unitPriceText: "36¢/fl oz observed",
+            priceType: .exact,
+            organic: .certified,
+            dietary: [.vegetarian, .glutenFree, .nutFree],
+            symbol: "waterbottle.fill",
+            keywords: ["heavy", "cream"]
+        )
+    ]
+
+    private static let parmesan = [
+        product(
+            id: "54337106",
+            title: "Finely Shredded Parmesan Cheese",
+            brand: "Good & Gather",
+            package: "6 oz bag",
+            packageQuantity: 6,
+            packageUnit: "oz",
+            price: "1.99",
+            unitPriceValue: "0.33",
+            unitPriceText: "33¢/oz observed",
+            priceType: .exact,
+            organic: .notOrganic,
+            dietary: [.vegetarian, .glutenFree, .nutFree],
+            symbol: "waterbottle.fill",
+            keywords: ["parmesan", "cheese"],
+            storeBrand: true
+        )
+    ]
+
+    private static let garlic = [
+        product(
+            id: "78470748",
+            title: "Frozen Crushed Garlic Cubes",
+            brand: "Good & Gather",
+            package: "16 cubes · 2.8 oz",
+            packageQuantity: 16,
+            packageUnit: "count",
+            price: "3.29",
+            unitPriceValue: "0.206",
+            unitPriceText: "Approx. 1 clove/cube",
+            priceType: .exact,
+            organic: .notOrganic,
+            dietary: [.vegetarian, .vegan, .glutenFree, .dairyFree, .nutFree],
+            symbol: "leaf.fill",
+            confidence: .review,
+            keywords: ["garlic", "clove", "crushed"],
+            storeBrand: true
+        )
+    ]
+
+    private static func product(
+        id: String,
+        title: String,
+        brand: String,
+        package: String,
+        packageQuantity: Double?,
+        packageUnit: String?,
+        price: String,
+        unitPriceValue: String?,
+        unitPriceText: String,
+        priceType: PriceType,
+        organic: OrganicStatus,
+        dietary: Set<DietaryAttribute>,
+        symbol: String,
+        confidence: IngredientConfidence = .high,
+        variableWeight: Bool = false,
+        keywords: Set<String>,
+        storeBrand: Bool = false
+    ) -> RetailerProductRecord {
+        RetailerProductRecord(
+            retailerID: "target",
+            storeID: nil,
+            retailerProductID: id,
+            title: title,
+            brand: brand,
+            exactURL: URL(string: "https://www.target.com/p/-/A-\(id)")!,
+            packageDescription: package,
+            packageQuantity: packageQuantity,
+            packageUnit: packageUnit,
+            observedPrice: Decimal(string: price),
+            unitPriceValue: unitPriceValue.flatMap { Decimal(string: $0) },
+            unitPriceText: unitPriceText,
+            priceType: priceType,
+            availability: .unknown,
+            fulfillmentMethods: [],
+            organicStatus: organic,
+            dietaryAttributes: dietary,
+            dataSource: .manualVerification,
+            observedAt: observedAt,
+            linkKind: .exactProduct,
+            symbol: symbol,
+            confidence: confidence,
+            variableWeight: variableWeight,
+            matchKeywords: keywords,
+            isStoreBrand: storeBrand
+        )
     }
 }
 
@@ -120,20 +516,29 @@ enum RetailerProductMatcher {
         for request: RetailerProductSearchRequest,
         preferences: ShoppingPreferences
     ) -> [RankedRetailerProduct] {
-        let hardFiltered = candidates.filter { candidate in
+        let matchingDestinations = candidates.filter { candidate in
+            guard candidate.retailerID == request.retailerID else { return false }
+            guard candidate.storeID == request.storeID else { return false }
             guard candidate.availability != .outOfStock else { return false }
-            guard candidate.fulfillmentMethods.contains(request.fulfillmentMethod) else { return false }
+            return true
+        }
+        let exactCandidates = matchingDestinations.filter { candidate in
+            guard candidate.isExactProductLink else { return false }
             guard candidate.dietaryAttributes.isSuperset(of: preferences.dietaryRestrictions) else {
                 return false
             }
             if preferences.organicPolicy == .only {
-                return candidate.organicStatus.isOrganic
+                guard candidate.organicStatus.isOrganic else { return false }
+            }
+            if !candidate.fulfillmentMethods.isEmpty,
+               !candidate.fulfillmentMethods.contains(request.fulfillmentMethod) {
+                return false
             }
             return true
         }
-
-        let exactCandidates = hardFiltered.filter(\.isExactProductLink)
-        let eligible = exactCandidates.isEmpty ? hardFiltered : exactCandidates
+        let eligible = exactCandidates.isEmpty
+            ? matchingDestinations.filter { $0.linkKind == .searchResults }
+            : exactCandidates
 
         return eligible
             .map { candidate in
@@ -164,17 +569,36 @@ enum RetailerProductMatcher {
                 )
 
                 if leftKey != rightKey {
-                    return leftKey.lexicographicallyPrecedes(rightKey) == false
+                    return leftKey > rightKey
                 }
                 return lhs.product.retailerProductID < rhs.product.retailerProductID
             }
+    }
+
+    private struct MatchVector: Equatable, Comparable {
+        var correctness: Int
+        var organic: Int
+        var availability: Int
+        var fulfillment: Int
+        var sufficient: Int
+        var price: Int
+        var brand: Int
+        var unitPrice: Int
+
+        private var values: [Int] {
+            [correctness, organic, availability, fulfillment, sufficient, price, brand, unitPrice]
+        }
+
+        static func < (lhs: MatchVector, rhs: MatchVector) -> Bool {
+            lhs.values.lexicographicallyPrecedes(rhs.values)
+        }
     }
 
     private static func sortKey(
         _ product: RetailerProductRecord,
         request: RetailerProductSearchRequest,
         preferences: ShoppingPreferences
-    ) -> [Int] {
+    ) -> MatchVector {
         let correctness = ingredientCorrectness(product, ingredient: request.ingredient)
         let organic: Int
         switch preferences.organicPolicy {
@@ -184,12 +608,12 @@ enum RetailerProductMatcher {
             organic = product.organicStatus.isOrganic ? 2 : 0
         }
 
-        let fulfillment = product.fulfillmentMethods.contains(request.fulfillmentMethod) ? 1 : 0
         let sufficient = PackageMath.isPackageSufficient(
             product: product,
             requestedQuantity: request.requestedQuantity,
             requestedUnit: request.requestedUnit
         ) ? 1 : 0
+        let fulfillment = product.fulfillmentMethods.contains(request.fulfillmentMethod) ? 1 : 0
         let priceCents = product.observedPrice.map {
             Int((NSDecimalNumber(decimal: $0).doubleValue * 100).rounded())
         } ?? Int.max / 4
@@ -221,16 +645,16 @@ enum RetailerProductMatcher {
             -Int((NSDecimalNumber(decimal: $0).doubleValue * 10_000).rounded())
         } ?? Int.min / 4
 
-        return [
-            correctness,
-            organic,
-            product.availability.rankingValue,
-            fulfillment,
-            sufficient,
-            priceRank,
-            brandRank,
-            unitPriceRank
-        ]
+        return MatchVector(
+            correctness: correctness,
+            organic: organic,
+            availability: product.availability.rankingValue,
+            fulfillment: fulfillment,
+            sufficient: sufficient,
+            price: priceRank,
+            brand: brandRank,
+            unitPrice: unitPriceRank
+        )
     }
 
     private static func score(
@@ -239,7 +663,14 @@ enum RetailerProductMatcher {
         preferences: ShoppingPreferences
     ) -> Double {
         let key = sortKey(product, request: request, preferences: preferences)
-        return Double(key[0] * 20 + key[1] * 12 + key[2] * 6 + key[3] * 4 + key[4] * 3)
+        return Double(
+            key.correctness * 20 +
+            key.organic * 12 +
+            key.availability * 6 +
+            key.fulfillment * 4 +
+            key.sufficient * 4 +
+            key.brand * 2
+        )
     }
 
     private static func reasons(
@@ -252,7 +683,8 @@ enum RetailerProductMatcher {
         if preferences.organicPolicy != .noPreference, product.organicStatus.isOrganic {
             values.append(product.organicStatus.label)
         }
-        if product.availability == .inStock {
+        if product.availability == .inStock,
+           product.fulfillmentMethods.contains(request.fulfillmentMethod) {
             values.append("Available for \(request.fulfillmentMethod.rawValue)")
         }
         if PackageMath.isPackageSufficient(
@@ -416,15 +848,7 @@ private enum DemoProductCatalog {
         if value.contains("lemon") || value.contains("lime") { return lemon }
         if value.contains("parsley") || value.contains("cilantro") { return parsley }
 
-        return [
-            searchFallback(
-                title: ingredient.name,
-                query: ingredient.name,
-                symbol: ingredient.category.symbol,
-                organicStatus: .unknown,
-                dietaryAttributes: []
-            )
-        ]
+        return []
     }
 
     static let chicken = [

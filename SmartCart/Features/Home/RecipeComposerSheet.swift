@@ -758,6 +758,9 @@ struct RecipeComposerSheet: View {
             guard !Task.isCancelled, selectedImageSetID == imageSetID else { return }
             processingMessage = "Normalizing ingredients…"
             recipeText = result.text
+            if title == "Imported Recipe", let suggestedTitle = result.suggestedTitle {
+                title = suggestedTitle
+            }
             lastVisionOCRConfidence = Double(result.confidence)
             lastVisionLayoutConfidence = result.layoutConfidence
             lastVisionSourceLines = result.sourceLines
@@ -852,8 +855,9 @@ struct RecipeComposerSheet: View {
     }
 }
 
-private enum RecipeVisionReader {
+enum RecipeVisionReader {
     struct Result {
+        var suggestedTitle: String?
         var text: String
         var sourceLines: [OCRSourceLine]
         var pageCount: Int
@@ -866,6 +870,7 @@ private enum RecipeVisionReader {
     }
 
     private struct PageResult {
+        var suggestedTitle: String?
         var text: String
         var sourceLines: [OCRSourceLine]
         var confidence: Float
@@ -889,6 +894,7 @@ private enum RecipeVisionReader {
     ) async throws -> Result {
         let startedAt = Date()
         var pages: [String] = []
+        var suggestedTitle: String?
         var sourceLines: [OCRSourceLine] = []
         var retryCount = 0
         var confidenceTotal: Float = 0
@@ -946,6 +952,9 @@ private enum RecipeVisionReader {
                 )
             }
             try Task.checkCancellation()
+            if suggestedTitle == nil {
+                suggestedTitle = page.suggestedTitle
+            }
             pages.append(page.text)
             sourceLines.append(contentsOf: page.sourceLines)
             confidenceTotal += page.confidence
@@ -958,6 +967,7 @@ private enum RecipeVisionReader {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !combined.isEmpty else { throw RecipeVisionError.noTextFound }
         return Result(
+            suggestedTitle: suggestedTitle,
             text: combined,
             sourceLines: sourceLines,
             pageCount: images.count,
@@ -1014,21 +1024,7 @@ private enum RecipeVisionReader {
                     return (observation, candidate, alternatives)
                 }
                 let layout = OCRLayoutReconstructor.reconstruct(
-                    candidates.map { observation, candidate, alternatives in
-                    OCRTextObservation(
-                            text: candidate.string,
-                            boundingBox: OCRNormalizedBoundingBox(
-                                x: observation.boundingBox.origin.x,
-                                y: observation.boundingBox.origin.y,
-                                width: observation.boundingBox.width,
-                                height: observation.boundingBox.height
-                            ),
-                            confidence: Double(candidate.confidence),
-                            pageIndex: pageIndex,
-                            bulletMarker: RecipeOCRPolicy.leadingBulletMarker(in: candidate.string),
-                            alternateCandidates: alternatives
-                        )
-                    }
+                    layoutObservations(from: candidates, pageIndex: pageIndex)
                 )
                 let text = layout.reconstructedText
                     .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1039,6 +1035,7 @@ private enum RecipeVisionReader {
                     let confidence = candidates.reduce(Float.zero) { $0 + $1.1.confidence } / Float(max(1, candidates.count))
                     continuation.resume(
                         returning: PageResult(
+                            suggestedTitle: layout.suggestedTitle,
                             text: text,
                             sourceLines: layout.ingredientSourceLines,
                             confidence: confidence,
@@ -1063,6 +1060,81 @@ private enum RecipeVisionReader {
                     continuation.resume(throwing: error)
                 }
             }
+        }
+    }
+
+    private static func layoutObservations(
+        from candidates: [(VNRecognizedTextObservation, VNRecognizedText, [OCRTextAlternative])],
+        pageIndex: Int
+    ) -> [OCRTextObservation] {
+        candidates.enumerated().flatMap { observationIndex, entry in
+            let (observation, candidate, alternatives) = entry
+            let ranges = bulletDelimitedRanges(in: candidate.string)
+            let baseID = "page-\(pageIndex)-vision-\(observationIndex)"
+
+            guard ranges.count > 1 else {
+                return [
+                    OCRTextObservation(
+                        observationID: baseID,
+                        text: candidate.string,
+                        boundingBox: normalizedBox(observation.boundingBox),
+                        confidence: Double(candidate.confidence),
+                        pageIndex: pageIndex,
+                        bulletMarker: RecipeOCRPolicy.leadingBulletMarker(in: candidate.string),
+                        alternateCandidates: alternatives
+                    )
+                ]
+            }
+
+            let alternateSegments = alternatives.map { alternative in
+                (alternative, bulletDelimitedSegments(in: alternative.text))
+            }
+            return ranges.enumerated().map { fragmentIndex, range in
+                let fragment = String(candidate.string[range])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                let rectangle = try? candidate.boundingBox(for: range)
+                let box = rectangle?.boundingBox ?? observation.boundingBox
+                let fragmentAlternatives = alternateSegments.compactMap {
+                    alternative, segments -> OCRTextAlternative? in
+                    guard segments.indices.contains(fragmentIndex) else { return nil }
+                    let text = segments[fragmentIndex]
+                    guard text.caseInsensitiveCompare(fragment) != .orderedSame else { return nil }
+                    return OCRTextAlternative(text: text, confidence: alternative.confidence)
+                }
+                return OCRTextObservation(
+                    observationID: baseID,
+                    text: fragment,
+                    boundingBox: normalizedBox(box),
+                    confidence: Double(candidate.confidence),
+                    pageIndex: pageIndex,
+                    bulletMarker: RecipeOCRPolicy.leadingBulletMarker(in: fragment),
+                    alternateCandidates: fragmentAlternatives
+                )
+            }
+        }
+    }
+
+    private static func normalizedBox(_ box: CGRect) -> OCRNormalizedBoundingBox {
+        OCRNormalizedBoundingBox(
+            x: box.origin.x,
+            y: box.origin.y,
+            width: box.width,
+            height: box.height
+        )
+    }
+
+    private static func bulletDelimitedRanges(in text: String) -> [Range<String.Index>] {
+        let starts = text.indices.filter { ["•", "☐", "✓"].contains(text[$0]) }
+        guard starts.count > 1 else { return [] }
+        return starts.enumerated().map { index, start in
+            let end = index + 1 < starts.count ? starts[index + 1] : text.endIndex
+            return start..<end
+        }
+    }
+
+    private static func bulletDelimitedSegments(in text: String) -> [String] {
+        bulletDelimitedRanges(in: text).map {
+            String(text[$0]).trimmingCharacters(in: .whitespacesAndNewlines)
         }
     }
 }

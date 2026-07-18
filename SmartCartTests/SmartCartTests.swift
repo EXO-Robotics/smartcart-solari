@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import XCTest
 @testable import SmartCart
 
@@ -579,12 +580,135 @@ final class SmartCartTests: XCTestCase {
         }
     }
 
+    func testTargetAdapterUsesExactOfficialProductDestinations() async throws {
+        let service = DemoTargetCatalogService()
+        let request = RetailerProductSearchRequest(
+            ingredient: Ingredient(name: "Penne pasta", quantity: 16, unit: "oz"),
+            retailerID: "target",
+            requestedQuantity: 16,
+            requestedUnit: "oz",
+            storeID: "target-online",
+            fulfillmentMethod: .pickup
+        )
+
+        let products = try await service.searchProducts(for: request)
+        let product = try products.firstUnwrapped()
+
+        XCTAssertEqual(service.retailer, .target)
+        XCTAssertEqual(product.retailerID, "target")
+        XCTAssertEqual(product.storeID, "target-online")
+        XCTAssertEqual(product.retailerProductID, "13156215")
+        XCTAssertEqual(product.exactURL.host, "www.target.com")
+        XCTAssertEqual(product.exactURL.path, "/p/-/A-13156215")
+        XCTAssertEqual(product.linkKind, .exactProduct)
+        XCTAssertEqual(product.dataSource, .manualVerification)
+        XCTAssertEqual(product.availability, .unknown)
+        XCTAssertTrue(product.fulfillmentMethods.isEmpty)
+        XCTAssertTrue(product.priceDisclosure.localizedCaseInsensitiveContains("last-known"))
+        XCTAssertTrue(product.priceDisclosure.localizedCaseInsensitiveContains("not live"))
+    }
+
+    func testTargetAdapterContractAndHandoffMatchRegistry() async throws {
+        let service = DemoTargetCatalogService()
+        let profile = try XCTUnwrap(RetailConnectorRegistry.profile(id: "target"))
+        let manifest = try makeState().savedLists.firstUnwrapped().manifest
+
+        XCTAssertEqual(profile.state, .demoReady)
+        XCTAssertEqual(profile.capabilities, service.capabilities)
+        XCTAssertFalse(service.capabilities.contains(.cartCreation))
+        XCTAssertFalse(service.capabilities.contains(.pickup))
+        XCTAssertFalse(service.capabilities.contains(.delivery))
+
+        let handoff = try await service.createHandoff(manifest: manifest)
+        XCTAssertEqual(handoff.retailerID, "target")
+        XCTAssertEqual(handoff.mode, .guidedProducts)
+        XCTAssertEqual(handoff.url, URL(string: "https://www.target.com/lists"))
+        XCTAssertTrue(handoff.disclosure.contains("did not transfer a cart"))
+    }
+
+    func testTargetSearchFallbackEncodesPreferencesWithoutInventingClaims() {
+        var preferences = ShoppingPreferences()
+        preferences.organicPolicy = .only
+        preferences.dietaryRestrictions = [.glutenFree]
+
+        let fallback = DemoTargetCatalogService.searchFallback(
+            for: Ingredient(name: "Dragon fruit jam"),
+            storeID: "target-online",
+            preferences: preferences
+        )
+
+        XCTAssertEqual(fallback.retailerID, "target")
+        XCTAssertEqual(fallback.storeID, "target-online")
+        XCTAssertEqual(fallback.linkKind, .searchResults)
+        XCTAssertEqual(fallback.dataSource, .searchFallback)
+        XCTAssertEqual(fallback.organicStatus, .unknown)
+        XCTAssertTrue(fallback.dietaryAttributes.isEmpty)
+        XCTAssertNil(fallback.observedPrice)
+        XCTAssertTrue(fallback.exactURL.absoluteString.localizedCaseInsensitiveContains("organic"))
+        XCTAssertTrue(fallback.exactURL.absoluteString.localizedCaseInsensitiveContains("gluten"))
+        XCTAssertEqual(fallback.exactURL.host, "www.target.com")
+    }
+
+    func testMatcherRejectsCrossRetailerProductsButAllowsUnknownFulfillment() {
+        let ingredient = Ingredient(name: "Penne pasta", quantity: 16, unit: "oz")
+        let products = DemoTargetCatalogService.seededProducts(
+            for: ingredient,
+            storeID: "target-online"
+        )
+        let targetRequest = RetailerProductSearchRequest(
+            ingredient: ingredient,
+            retailerID: "target",
+            requestedQuantity: 16,
+            requestedUnit: "oz",
+            storeID: "target-online",
+            fulfillmentMethod: .pickup
+        )
+        let walmartRequest = RetailerProductSearchRequest(
+            ingredient: ingredient,
+            retailerID: "walmart",
+            requestedQuantity: 16,
+            requestedUnit: "oz",
+            storeID: "target-online",
+            fulfillmentMethod: .pickup
+        )
+
+        XCTAssertFalse(
+            RetailerProductMatcher.rank(
+                products,
+                for: targetRequest,
+                preferences: ShoppingPreferences()
+            ).isEmpty
+        )
+        XCTAssertTrue(
+            RetailerProductMatcher.rank(
+                products,
+                for: walmartRequest,
+                preferences: ShoppingPreferences()
+            ).isEmpty
+        )
+    }
+
+    func testRetailerGuideEngineRejectsMismatchedAdapterRegistration() {
+        let engine = RetailerGuideEngine(
+            adapters: [.walmart: DemoTargetCatalogService()]
+        )
+
+        XCTAssertFalse(engine.supports(.walmart))
+        XCTAssertNil(engine.adapter(for: .walmart))
+    }
+
     func testRetailConnectorRegistryIsCredentialTruthful() async throws {
         XCTAssertEqual(RetailConnectorRegistry.profiles.count, 6)
         let walmart = try XCTUnwrap(RetailConnectorRegistry.profile(id: "walmart"))
         XCTAssertEqual(walmart.state, .demoReady)
         XCTAssertFalse(walmart.supportsCart)
         XCTAssertFalse(walmart.supportsWishlist)
+
+        let target = try XCTUnwrap(RetailConnectorRegistry.profile(id: "target"))
+        XCTAssertEqual(target.state, .demoReady)
+        XCTAssertTrue(target.supportsLookup)
+        XCTAssertFalse(target.supportsCart)
+        XCTAssertFalse(target.supportsDelivery)
 
         let instacart = try XCTUnwrap(RetailConnectorRegistry.profile(id: "instacart"))
         let connector = CredentialFreeRetailConnector(profile: instacart)
@@ -756,6 +880,155 @@ final class SmartCartTests: XCTestCase {
         XCTAssertEqual(result.reconstructedText, expected)
         XCTAssertEqual(result.ingredientSourceLines.count, result.ingredientLines.count)
         XCTAssertTrue(result.ingredientSourceLines.allSatisfy { $0.boundingBox.isUsable })
+    }
+
+    func testChocolateChipCookieBarsGoldenVisionObservationsReconstructAndParse() throws {
+        let fixtureURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/OCR/chocolate_chip_cookie_bars_vision_observations.json")
+        let observations = try JSONDecoder().decode(
+            [OCRTextObservation].self,
+            from: Data(contentsOf: fixtureURL)
+        )
+
+        XCTAssertEqual(observations.count, 16)
+        XCTAssertEqual(Set(observations.compactMap(\.observationID)).count, observations.count)
+
+        let reconstruction = OCRLayoutReconstructor.reconstruct(observations)
+
+        XCTAssertEqual(reconstruction.suggestedTitle, "Chocolate Chip Cookie Bars")
+        XCTAssertEqual(reconstruction.ingredientLines.count, 5)
+        XCTAssertEqual(reconstruction.ingredientSourceLines.count, 5)
+        XCTAssertFalse(reconstruction.ingredientLines.contains {
+            $0.localizedCaseInsensitiveContains("cookie bars")
+        })
+
+        let butterSource = try reconstruction.ingredientSourceLines.first(where: {
+            $0.text.localizedCaseInsensitiveContains("unsalted butter")
+        }).firstUnwrapped()
+        XCTAssertEqual(butterSource.columnIndex, 0)
+        XCTAssertEqual(
+            butterSource.sourceObservationIDs,
+            ["cookie-bars-ingredient-combined-butter-chocolate"]
+        )
+        XCTAssertFalse(butterSource.continuationAttached)
+        XCTAssertTrue(butterSource.boundingBox.isUsable)
+        XCTAssertGreaterThan(butterSource.reconstructionConfidence, 0)
+        XCTAssertLessThanOrEqual(butterSource.reconstructionConfidence, 1)
+
+        let chocolateSource = try reconstruction.ingredientSourceLines.first(where: {
+            $0.text.localizedCaseInsensitiveContains("chocolate chips")
+        }).firstUnwrapped()
+        XCTAssertEqual(chocolateSource.columnIndex, 1)
+        XCTAssertEqual(
+            chocolateSource.sourceObservationIDs,
+            [
+                "cookie-bars-ingredient-combined-butter-chocolate",
+                "cookie-bars-ingredient-chocolate-chips-continuation"
+            ]
+        )
+        XCTAssertTrue(chocolateSource.continuationAttached)
+        XCTAssertTrue(chocolateSource.boundingBox.isUsable)
+        XCTAssertLessThanOrEqual(chocolateSource.boundingBox.minX, 0.531250)
+        XCTAssertGreaterThanOrEqual(chocolateSource.boundingBox.maxX, 0.593750)
+        XCTAssertGreaterThan(chocolateSource.reconstructionConfidence, 0)
+        XCTAssertLessThanOrEqual(chocolateSource.reconstructionConfidence, 1)
+
+        let recipe = RecipeParser.parse(
+            title: try reconstruction.suggestedTitle.firstUnwrapped(),
+            text: reconstruction.reconstructedText,
+            source: .photo,
+            sourceLines: reconstruction.ingredientSourceLines
+        )
+
+        XCTAssertEqual(recipe.title, "Chocolate Chip Cookie Bars")
+        XCTAssertEqual(recipe.ingredients.count, 5)
+
+        let butter = try recipe.ingredients.first(where: {
+            $0.name.localizedCaseInsensitiveContains("unsalted butter")
+        }).firstUnwrapped()
+        XCTAssertEqual(butter.quantity, 1.5, accuracy: 0.001)
+        XCTAssertEqual(butter.unit, "cup")
+        XCTAssertEqual(butter.preparation.lowercased(), "melted")
+
+        let brownSugar = try recipe.ingredients.first(where: {
+            $0.name.localizedCaseInsensitiveContains("brown sugar")
+        }).firstUnwrapped()
+        XCTAssertEqual(brownSugar.quantity, 1, accuracy: 0.001)
+        XCTAssertFalse(brownSugar.name.localizedCaseInsensitiveContains("chips"))
+
+        let egg = try recipe.ingredients.first(where: {
+            $0.name.localizedCaseInsensitiveContains("egg")
+        }).firstUnwrapped()
+        XCTAssertEqual(egg.quantity, 1, accuracy: 0.001)
+        XCTAssertEqual(egg.unit, "large")
+
+        let vanilla = try recipe.ingredients.first(where: {
+            $0.name.localizedCaseInsensitiveContains("vanilla extract")
+        }).firstUnwrapped()
+        XCTAssertEqual(vanilla.quantity, 1, accuracy: 0.001)
+        XCTAssertEqual(vanilla.unit, "tsp")
+
+        let chocolate = try recipe.ingredients.first(where: {
+            $0.name.localizedCaseInsensitiveContains("semi-sweet chocolate chips")
+        }).firstUnwrapped()
+        XCTAssertEqual(chocolate.quantity, 1, accuracy: 0.001)
+        XCTAssertEqual(chocolate.unit, "cup")
+
+        XCTAssertFalse(recipe.ingredients.contains {
+            $0.name.localizedCaseInsensitiveContains("cookie bars")
+        })
+        XCTAssertFalse(recipe.ingredients.contains {
+            $0.name.localizedCaseInsensitiveContains("brown sugar chips")
+        })
+    }
+
+    func testChocolateChipCookieBarsExactJPEGEndToEndVisionImport() async throws {
+        let imageURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/OCR/chocolate_chip_cookie_bars_exact.jpeg")
+        let image = try UIImage(contentsOfFile: imageURL.path).firstUnwrapped()
+
+        let result = try await RecipeVisionReader.recognizeText(in: [image])
+
+        XCTAssertEqual(result.suggestedTitle, "Chocolate Chip Cookie Bars")
+        XCTAssertEqual(result.pageCount, 1)
+        XCTAssertEqual(result.sourceLines.count, 5)
+        XCTAssertTrue(result.text.localizedCaseInsensitiveContains("unsalted butter"))
+        XCTAssertTrue(result.text.localizedCaseInsensitiveContains("semi-sweet chocolate chips"))
+        XCTAssertFalse(result.text.localizedCaseInsensitiveContains("instructions"))
+        XCTAssertGreaterThan(result.confidence, 0)
+        XCTAssertGreaterThan(result.layoutConfidence, 0)
+
+        let recipe = RecipeParser.parse(
+            title: try result.suggestedTitle.firstUnwrapped(),
+            text: result.text,
+            source: .photo,
+            sourceLines: result.sourceLines
+        )
+
+        XCTAssertEqual(recipe.title, "Chocolate Chip Cookie Bars")
+        XCTAssertEqual(recipe.ingredients.count, 5)
+        XCTAssertTrue(recipe.ingredients.contains {
+            $0.name.localizedCaseInsensitiveContains("unsalted butter")
+                && abs($0.quantity - 1.5) < 0.001
+        })
+        XCTAssertTrue(recipe.ingredients.contains {
+            $0.name.localizedCaseInsensitiveContains("brown sugar")
+        })
+        XCTAssertTrue(recipe.ingredients.contains {
+            $0.name.localizedCaseInsensitiveContains("egg") && $0.unit == "large"
+        })
+        XCTAssertTrue(recipe.ingredients.contains {
+            $0.name.localizedCaseInsensitiveContains("vanilla extract")
+        })
+        XCTAssertTrue(recipe.ingredients.contains {
+            $0.name.localizedCaseInsensitiveContains("semi-sweet chocolate chips")
+        })
+        XCTAssertFalse(recipe.ingredients.contains {
+            $0.name.localizedCaseInsensitiveContains("cookie bars")
+                || $0.name.localizedCaseInsensitiveContains("brown sugar chips")
+        })
     }
 
     func testParserNeverInventsFallbackGroceriesForFailedImports() {
@@ -1164,7 +1437,7 @@ final class SmartCartTests: XCTestCase {
     }
 
     @MainActor
-    func testInstacartCommerceCapabilitiesAndPreferencesPersist() {
+    func testWalmartSafariWorkflowIsTheOnlyRestoredPublicRoute() {
         let defaults = isolatedCommerceDefaults()
         let model = AppModel(
             stateStore: InMemorySmartCartStateStore(),
@@ -1172,9 +1445,12 @@ final class SmartCartTests: XCTestCase {
             commerceDefaults: defaults
         )
 
-        XCTAssertEqual(model.shoppingRoute, .instacart)
+        XCTAssertEqual(model.shoppingRoute, .walmartDirect)
         XCTAssertTrue(model.activeCommerceCapabilities.preparesShoppingList)
-        XCTAssertTrue(model.activeCommerceCapabilities.livePricing)
+        XCTAssertFalse(model.activeCommerceCapabilities.livePricing)
+        XCTAssertFalse(model.activeCommerceCapabilities.pickup)
+        XCTAssertFalse(model.activeCommerceCapabilities.delivery)
+        XCTAssertFalse(model.activeCommerceCapabilities.checkout)
         XCTAssertFalse(model.activeCommerceCapabilities.embeddedCheckout)
 
         model.instacartRetailerPreference = .aldi
@@ -1186,9 +1462,141 @@ final class SmartCartTests: XCTestCase {
             instacartHandoffService: RecordingInstacartHandoffService(),
             commerceDefaults: defaults
         )
+        XCTAssertEqual(restored.shoppingRoute, .walmartDirect)
         XCTAssertEqual(restored.instacartRetailerPreference, .aldi)
         XCTAssertEqual(restored.commerceFulfillmentPreference, .delivery)
         XCTAssertEqual(restored.latestHandoffFeedback, .savedForLater)
+    }
+
+    @MainActor
+    func testPreparingWalmartSafariWorkflowPreservesHiddenLegacyPreferences() {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        model.shoppingRoute = .otherRetailerLinks
+        model.featureFlags.advancedToolsEnabled = true
+        model.storeStrategy = .multipleStops
+        model.fulfillmentMode = .delivery
+        model.selectedStoreIDs = Set(model.stores.prefix(2).map(\.id))
+
+        model.prepareWalmartSafariWorkflow()
+
+        XCTAssertEqual(model.selectedRetailer, .walmart)
+        XCTAssertEqual(model.shoppingRoute, .otherRetailerLinks)
+        XCTAssertEqual(model.storeStrategy, .multipleStops)
+        XCTAssertEqual(model.fulfillmentMode, .delivery)
+        XCTAssertTrue(model.featureFlags.advancedToolsEnabled)
+        XCTAssertEqual(model.selectedStoreIDs, [model.primaryStore.id])
+    }
+
+    @MainActor
+    func testTargetGuideSelectionMatchingAndPersistenceUseSharedWorkflow() async throws {
+        let store = InMemorySmartCartStateStore()
+        let defaults = isolatedCommerceDefaults()
+        let model = AppModel(
+            stateStore: store,
+            commerceDefaults: defaults,
+            seedDemoShoppingState: true
+        )
+        XCTAssertTrue(model.shoppingItems.allSatisfy { $0.product.retailerID == "walmart" })
+
+        model.startRetailerGuide(.target)
+
+        XCTAssertEqual(model.selectedRetailer, .target)
+        XCTAssertEqual(model.primaryStore.retailerID, "target")
+        XCTAssertTrue(model.shoppingItems.isEmpty)
+        XCTAssertEqual(model.retailerConfiguration.guideLabel, "Shopping List")
+
+        let recipe = Recipe(
+            title: "Target Adapter Test",
+            source: .text,
+            sourceDetail: "Tests",
+            heroSymbol: "fork.knife",
+            servings: 2,
+            prepMinutes: 5,
+            cookMinutes: 10,
+            ingredients: [
+                Ingredient(name: "Penne pasta", quantity: 16, unit: "oz"),
+                Ingredient(name: "Dragon fruit jam", quantity: 1, unit: "jar")
+            ]
+        )
+        model.beginRecipe(recipe)
+        await model.startMatching(force: true)
+        model.saveCurrentList()
+
+        XCTAssertEqual(model.shoppingItems.count, 2)
+        XCTAssertTrue(model.shoppingItems.allSatisfy { $0.product.retailerID == "target" })
+        XCTAssertTrue(model.shoppingItems.contains { $0.product.linkKind == .exactProduct })
+        XCTAssertTrue(model.shoppingItems.contains { $0.product.linkKind == .searchResults })
+        XCTAssertEqual(model.savedLists.first?.manifest.retailerID, "target")
+        XCTAssertEqual(model.savedLists.first?.manifest.storeID, "target-online")
+
+        let restored = AppModel(stateStore: store, commerceDefaults: defaults)
+        XCTAssertEqual(restored.selectedRetailer, .target)
+        XCTAssertEqual(restored.primaryStore.retailerID, "target")
+        XCTAssertEqual(restored.shoppingItems.map(\.product.retailerID), ["target", "target"])
+        XCTAssertEqual(restored.retailerURL().host, "www.target.com")
+        XCTAssertEqual(restored.retailerListsURL().path, "/lists")
+    }
+
+    @MainActor
+    func testPersistedTargetItemsOverrideMissingOrStaleRetailerDefaults() async {
+        let store = InMemorySmartCartStateStore()
+        let defaults = isolatedCommerceDefaults()
+        let model = AppModel(stateStore: store, commerceDefaults: defaults)
+        model.startRetailerGuide(.target)
+        await model.startMatching(force: true)
+        XCTAssertFalse(model.shoppingItems.isEmpty)
+        XCTAssertTrue(model.shoppingItems.allSatisfy { $0.product.retailerID == "target" })
+
+        defaults.removeObject(forKey: "smartcart.commerce.selectedRetailer")
+        let withoutDefault = AppModel(stateStore: store, commerceDefaults: defaults)
+        XCTAssertEqual(withoutDefault.selectedRetailer, .target)
+        XCTAssertFalse(withoutDefault.shoppingItems.isEmpty)
+
+        defaults.set("walmart", forKey: "smartcart.commerce.selectedRetailer")
+        let withStaleDefault = AppModel(stateStore: store, commerceDefaults: defaults)
+        XCTAssertEqual(withStaleDefault.selectedRetailer, .target)
+        XCTAssertTrue(withStaleDefault.shoppingItems.allSatisfy { $0.product.retailerID == "target" })
+    }
+
+    @MainActor
+    func testUnknownFutureRetailerDefaultIsNotOverwrittenOnLaunch() {
+        let defaults = isolatedCommerceDefaults()
+        defaults.set("future-retailer", forKey: "smartcart.commerce.selectedRetailer")
+
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: defaults
+        )
+
+        XCTAssertEqual(model.selectedRetailer, .walmart)
+        XCTAssertEqual(
+            defaults.string(forKey: "smartcart.commerce.selectedRetailer"),
+            "future-retailer"
+        )
+    }
+
+    @MainActor
+    func testWalmartAndTargetManifestsForSameRecipeRemainDistinct() async {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedCommerceDefaults(),
+            seedDemoShoppingState: true
+        )
+        model.saveCurrentList()
+        let recipeID = model.activeRecipe.id
+
+        model.startRetailerGuide(.target)
+        await model.startMatching(force: true)
+        model.saveCurrentList()
+
+        let manifests = model.savedLists
+            .map(\.manifest)
+            .filter { $0.recipeID == recipeID }
+        XCTAssertEqual(Set(manifests.map(\.retailerID)), ["walmart", "target"])
+        XCTAssertEqual(manifests.count, 2)
     }
 
     @MainActor
@@ -1438,7 +1846,10 @@ final class SmartCartTests: XCTestCase {
             XCTAssertEqual(model.pantryInventory.first?.remainingAmount, 3 * packageSize)
             XCTAssertEqual(model.pantryInventory.first?.remainingUnit, replacement.packageUnit)
         }
-        XCTAssertEqual(model.pantryInventory.first?.preferredRetailerProductID, replacement.retailerProductID)
+        XCTAssertEqual(
+            model.pantryInventory.first?.preferredRetailerProductID,
+            "\(replacement.retailerID):\(replacement.retailerProductID)"
+        )
         XCTAssertTrue(model.preferredProductIDsByIngredient.values.contains(replacement.retailerProductID))
         XCTAssertEqual(
             model.shoppingSession(id: sessionID)?.reconciliation?.substitutions.first?.replacementName,

@@ -1,0 +1,118 @@
+[
+  {
+    "observationID": "cookie-bars-title-01",
+    "text": "CHOCOLATE CHIP",
+    "boundingBox": { "x": 0.145833, "y": 0.914063, "width": 0.711806, "height": 0.055414 },
+    "confidence": 1.0,
+    "pageIndex": 0
+  },
+  {
+    "observationID": "cookie-bars-title-02",
+    "text": "COOKIE BARS",
+    "boundingBox": { "x": 0.220486, "y": 0.848722, "width": 0.553819, "height": 0.055398 },
+    "confidence": 1.0,
+    "pageIndex": 0
+  },
+  {
+    "observationID": "cookie-bars-ingredients-heading",
+    "text": "INGREDIENTS",
+    "boundingBox": { "x": 0.142361, "y": 0.385174, "width": 0.277778, "height": 0.027616 },
+    "confidence": 1.0,
+    "pageIndex": 0
+  },
+  {
+    "observationID": "cookie-bars-ingredient-combined-butter-chocolate",
+    "text": "• 1½ cup unsalted butter, melted • 1 cup sami-sweet chocolate",
+    "boundingBox": { "x": 0.140625, "y": 0.351563, "width": 0.673611, "height": 0.023438 },
+    "confidence": 1.0,
+    "pageIndex": 0,
+    "bulletMarker": "•"
+  },
+  {
+    "observationID": "cookie-bars-ingredient-brown-sugar",
+    "text": "• 1 cup packed brown sugar",
+    "boundingBox": { "x": 0.140625, "y": 0.322443, "width": 0.310764, "height": 0.024941 },
+    "confidence": 1.0,
+    "pageIndex": 0,
+    "bulletMarker": "•"
+  },
+  {
+    "observationID": "cookie-bars-ingredient-chocolate-chips-continuation",
+    "text": "chips",
+    "boundingBox": { "x": 0.531250, "y": 0.325581, "width": 0.062500, "height": 0.023256 },
+    "confidence": 1.0,
+    "pageIndex": 0
+  },
+  {
+    "observationID": "cookie-bars-ingredient-egg",
+    "text": "• I large egg",
+    "boundingBox": { "x": 0.140625, "y": 0.293324, "width": 0.144097, "height": 0.024990 },
+    "confidence": 1.0,
+    "pageIndex": 0,
+    "bulletMarker": "•"
+  },
+  {
+    "observationID": "cookie-bars-ingredient-vanilla",
+    "text": "• 1 teaspoonvanilla extract",
+    "boundingBox": { "x": 0.140625, "y": 0.267442, "width": 0.298611, "height": 0.021802 },
+    "confidence": 1.0,
+    "pageIndex": 0,
+    "bulletMarker": "•"
+  },
+  {
+    "observationID": "cookie-bars-instructions-heading",
+    "text": "INSTRUCTIONS",
+    "boundingBox": { "x": 0.142361, "y": 0.215116, "width": 0.279514, "height": 0.026163 },
+    "confidence": 1.0,
+    "pageIndex": 0
+  },
+  {
+    "observationID": "cookie-bars-instruction-01a",
+    "text": "1. Preheat oven to 350°F (175°C). Grease a 9x9 inch baking pan,",
+    "boundingBox": { "x": 0.145833, "y": 0.178779, "width": 0.671875, "height": 0.026477 },
+    "confidence": 1.0,
+    "pageIndex": 0
+  },
+  {
+    "observationID": "cookie-bars-instruction-01b",
+    "text": "or line with parchment paper.",
+    "boundingBox": { "x": 0.170139, "y": 0.154070, "width": 0.324653, "height": 0.024908 },
+    "confidence": 1.0,
+    "pageIndex": 0
+  },
+  {
+    "observationID": "cookie-bars-instruction-02a",
+    "text": "2. In a large bowl, mix melted butter and brown sugar until",
+    "boundingBox": { "x": 0.144097, "y": 0.125000, "width": 0.638889, "height": 0.024858 },
+    "confidence": 1.0,
+    "pageIndex": 0
+  },
+  {
+    "observationID": "cookie-bars-instruction-02b",
+    "text": "combined. Beat in egg and vanilla.",
+    "boundingBox": { "x": 0.170139, "y": 0.100142, "width": 0.369792, "height": 0.024858 },
+    "confidence": 1.0,
+    "pageIndex": 0
+  },
+  {
+    "observationID": "cookie-bars-instruction-03",
+    "text": "3. Stir in flour, baking powder, and salt, then fold in chocolate chips.",
+    "boundingBox": { "x": 0.144097, "y": 0.071023, "width": 0.732639, "height": 0.026361 },
+    "confidence": 1.0,
+    "pageIndex": 0
+  },
+  {
+    "observationID": "cookie-bars-instruction-04a",
+    "text": "4. Spread the dough evenly in the prepared pan and bake for",
+    "boundingBox": { "x": 0.140474, "y": 0.039959, "width": 0.658245, "height": 0.029907 },
+    "confidence": 1.0,
+    "pageIndex": 0
+  },
+  {
+    "observationID": "cookie-bars-instruction-04b",
+    "text": "20-25 minutes, until golden brown. Let cool before slicing.",
+    "boundingBox": { "x": 0.170139, "y": 0.017442, "width": 0.628472, "height": 0.024709 },
+    "confidence": 1.0,
+    "pageIndex": 0
+  }
+]

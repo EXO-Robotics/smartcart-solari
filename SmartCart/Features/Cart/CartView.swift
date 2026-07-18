@@ -770,7 +770,7 @@ struct RecipesView: View {
         InfoBanner(
             symbol: "clock.badge.exclamationmark.fill",
             title: "Estimated totals stay transparent",
-            message: "Retailer prices and availability can change. Walmart confirms taxes, fees, substitutions, tips, and final variable-weight prices.",
+            message: "Retailer prices and availability can change. \(appModel.retailerConfiguration.displayName) confirms taxes, fees, substitutions, tips, and final variable-weight prices.",
             color: SmartCartTheme.amber
         )
     }

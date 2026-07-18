@@ -73,8 +73,6 @@ struct RootView: View {
             switch destination {
             case .importer(let method):
                 RecipeComposerSheet(initialMethod: method)
-            case .walmartSetup:
-                WalmartSetupView()
             }
         }
         .onAppear {
@@ -104,17 +102,13 @@ struct RootView: View {
         case .preferences:
             ShoppingPreferencesView()
         case .storeSelection:
-            CommerceRouteSelectionView()
+            RetailerSelectionView()
         case .matching:
             ProductMatchingView()
         case .shoppingList:
             ShoppingListReviewView()
         case .guidedShopping:
-            if appModel.shoppingRoute == .walmartDirect {
-                WalmartWishlistGuideView()
-            } else {
-                GuidedShoppingView()
-            }
+            RetailerSafariHandoffView()
         case .shoppingReconciliation(let sessionID):
             ShoppingReconciliationView(sessionID: sessionID)
         }
@@ -138,9 +132,9 @@ struct IntroJourneyView: View {
         .init(symbol: "square.and.arrow.down.fill", title: "Import from anywhere", message: "Snap a cookbook photo, paste a link or text, or start from a sample recipe."),
         .init(symbol: "checklist", title: "Review every ingredient", message: "Confirm names and quantities before anything is matched to a product."),
         .init(symbol: "slider.horizontal.3", title: "Set your rules", message: "Dietary filters, organic, budget, and brand preferences shape every match."),
-        .init(symbol: "storefront.fill", title: "Choose your store", message: "Pick the store and a pickup window that fits your day."),
+        .init(symbol: "storefront.fill", title: "Choose a retailer", message: "Pick Walmart or Target for a retailer-specific shopping guide."),
         .init(symbol: "tag.fill", title: "Match real products", message: "SmartCart resolves exact retailer items, or clearly labeled searches."),
-        .init(symbol: "cart.fill", title: "Hand off and shop", message: "Open items at the retailer or share the list. Checkout always stays with you.")
+        .init(symbol: "safari.fill", title: "Finish with the retailer", message: "Open exact products in Safari, then use the retailer for lists, cart actions, fulfillment, payment, and checkout.")
     ]
 
     var body: some View {

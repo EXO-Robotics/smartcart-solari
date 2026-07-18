@@ -75,6 +75,9 @@ final class AppModel {
     var shoppingSessions: [ShoppingSession] {
         didSet { persistState() }
     }
+    var selectedRetailer: ShoppingRetailer {
+        didSet { commerceDefaults.set(selectedRetailer.rawValue, forKey: Self.selectedRetailerKey) }
+    }
     var shoppingRoute: ShoppingRoutePreference {
         didSet { commerceDefaults.set(shoppingRoute.rawValue, forKey: Self.shoppingRouteKey) }
     }
@@ -107,6 +110,7 @@ final class AppModel {
     }
 
     private static let recentRecipesKey = "smartcart.recentRecipeIDs"
+    private static let selectedRetailerKey = "smartcart.commerce.selectedRetailer"
     private static let shoppingRouteKey = "smartcart.commerce.shoppingRoute"
     private static let instacartRetailerKey = "smartcart.commerce.instacartRetailer"
     private static let commerceFulfillmentKey = "smartcart.commerce.fulfillment"
@@ -122,7 +126,7 @@ final class AppModel {
     @ObservationIgnored
     private let stateStore: any SmartCartStateStoring
     @ObservationIgnored
-    private let retailerService: any RetailerCatalogService
+    private let retailerEngine: RetailerGuideEngine
     @ObservationIgnored
     private let instacartHandoffService: any InstacartHandoffServicing
     @ObservationIgnored
@@ -134,18 +138,70 @@ final class AppModel {
 
     init(
         stateStore: any SmartCartStateStoring = JSONSmartCartStateStore(),
-        retailerService: any RetailerCatalogService = DemoWalmartCatalogService(),
+        retailerAdapters: [ShoppingRetailer: any RetailerGuideAdapter]? = nil,
         instacartHandoffService: any InstacartHandoffServicing = InstacartHandoffClient(),
         commerceDefaults: UserDefaults = .standard,
         seedDemoShoppingState: Bool = false
     ) {
+        var availableAdapters: [ShoppingRetailer: any RetailerGuideAdapter] = [
+            .walmart: DemoWalmartCatalogService(),
+            .target: DemoTargetCatalogService()
+        ]
+        retailerAdapters?.forEach {
+            guard $0.key == $0.value.retailer else { return }
+            availableAdapters[$0.key] = $0.value
+        }
+        let restoredState: SmartCartPersistedState?
+        let stateLoadError: Error?
+        do {
+            restoredState = try stateStore.load()
+            stateLoadError = nil
+        } catch {
+            restoredState = nil
+            stateLoadError = error
+        }
+
+        func supportedRetailer(rawValue: String?) -> ShoppingRetailer? {
+            guard let rawValue,
+                  let retailer = ShoppingRetailer(rawValue: rawValue),
+                  retailer.configuration.isAvailable,
+                  availableAdapters[retailer] != nil
+            else { return nil }
+            return retailer
+        }
+
+        let activeItemRetailerIDs = Set(
+            (restoredState?.shoppingItems ?? []).map(\.product.retailerID)
+        )
+        let activeItemRetailer = activeItemRetailerIDs.count == 1
+            ? supportedRetailer(rawValue: activeItemRetailerIDs.first)
+            : nil
+        let defaultsRetailer = supportedRetailer(
+            rawValue: commerceDefaults.string(forKey: Self.selectedRetailerKey)
+        )
+        let latestManifestRetailer = restoredState?.savedLists
+            .map(\.manifest)
+            .sorted { $0.updatedAt > $1.updatedAt }
+            .compactMap { supportedRetailer(rawValue: $0.retailerID) }
+            .first
+        let initialRetailer = activeItemRetailer
+            ?? (seedDemoShoppingState ? .walmart : nil)
+            ?? defaultsRetailer
+            ?? latestManifestRetailer
+            ?? .walmart
+
         self.stateStore = stateStore
-        self.retailerService = retailerService
+        self.retailerEngine = RetailerGuideEngine(adapters: availableAdapters)
         self.instacartHandoffService = instacartHandoffService
         self.commerceDefaults = commerceDefaults
 
+        selectedRetailer = initialRetailer
+
+        // Retailer guides are user-driven Safari handoffs. Hidden legacy
+        // preferences remain decodable so changing the visible MVP does not
+        // destroy an older user's local choices.
         shoppingRoute = commerceDefaults.string(forKey: Self.shoppingRouteKey)
-            .flatMap(ShoppingRoutePreference.init(rawValue:)) ?? .instacart
+            .flatMap(ShoppingRoutePreference.init(rawValue:)) ?? .walmartDirect
         instacartRetailerPreference = commerceDefaults.string(forKey: Self.instacartRetailerKey)
             .flatMap(InstacartRetailerPreference.init(rawValue:)) ?? .bestAvailable
         commerceFulfillmentPreference = commerceDefaults.string(forKey: Self.commerceFulfillmentKey)
@@ -181,6 +237,18 @@ final class AppModel {
                 address: "14441 Inglewood Ave, Hawthorne",
                 distance: 8.0,
                 pickupWindow: "Tomorrow, 9:00–10:00 AM"
+            ),
+            RetailerStore(
+                id: UUID(uuidString: "00000000-0000-0000-0000-000000000201")!,
+                retailerID: "target",
+                retailerStoreID: "target-online",
+                name: "Target",
+                format: "Online catalog",
+                address: "Choose and confirm your store in Target",
+                distance: 0,
+                pickupWindow: "Confirmed by Target",
+                supportsPickup: false,
+                supportsDelivery: false
             )
         ]
         stores = availableStores
@@ -207,22 +275,13 @@ final class AppModel {
         ]
 
         let sampleRecipes = SampleData.recipes
-        let restoredState: SmartCartPersistedState?
-        let stateLoadError: Error?
-        do {
-            restoredState = try stateStore.load()
-            stateLoadError = nil
-        } catch {
-            restoredState = nil
-            stateLoadError = error
-        }
         let initialRecipes = restoredState?.recipes ?? sampleRecipes
         let initialRecipe = restoredState?.activeRecipe ?? sampleRecipes[0]
         let initialServings = restoredState?.desiredServings ?? sampleRecipes[0].servings
         let initialPreferences = restoredState?.preferences ?? ShoppingPreferences()
         let initialFeatureFlags = restoredState?.featureFlags ?? AppFeatureFlags()
-        let initialStoreStrategy = restoredState?.storeStrategy ?? StoreStrategy.oneStore
-        let initialFulfillment = restoredState?.fulfillmentMode ?? FulfillmentMode.pickup
+        let initialStoreStrategy = restoredState?.storeStrategy ?? .oneStore
+        let initialFulfillment = restoredState?.fulfillmentMode ?? .pickup
 
         recipes = initialRecipes
         activeRecipe = initialRecipe
@@ -243,13 +302,20 @@ final class AppModel {
         walmartWishlistReference = restoredState?.walmartWishlistReference
         shoppingSessions = restoredState?.shoppingSessions ?? []
 
+        let retailerStores = availableStores.filter { $0.retailerID == initialRetailer.rawValue }
         let validStoreIDs = Set(availableStores.map(\.id))
         let restoredStoreIDs = restoredState?.selectedStoreIDs.intersection(validStoreIDs) ?? []
-        selectedStoreIDs = restoredStoreIDs.isEmpty ? [availableStores[0].id] : restoredStoreIDs
+        var initialStoreIDs = restoredStoreIDs
+        if !retailerStores.contains(where: { initialStoreIDs.contains($0.id) }),
+           let defaultStore = retailerStores.first {
+            initialStoreIDs.insert(defaultStore.id)
+        }
+        selectedStoreIDs = initialStoreIDs
 
-        if let restoredItems = restoredState?.shoppingItems {
+        if let restoredItems = restoredState?.shoppingItems,
+           restoredItems.allSatisfy({ $0.product.retailerID == initialRetailer.rawValue }) {
             shoppingItems = restoredItems
-        } else if seedDemoShoppingState {
+        } else if seedDemoShoppingState, initialRetailer == .walmart {
             shoppingItems = Self.makeShoppingItems(
                 recipe: initialRecipe,
                 desiredServings: initialServings,
@@ -263,11 +329,6 @@ final class AppModel {
             shoppingItems = []
         }
 
-        if !featureFlags.advancedToolsEnabled {
-            storeStrategy = .oneStore
-            fulfillmentMode = .pickup
-            selectedStoreIDs = [selectedStoreIDs.first ?? availableStores[0].id]
-        }
         guidedIndex = min(max(0, guidedIndex), max(0, shoppingItems.count - 1))
         recentRecipeIDs = (UserDefaults.standard.stringArray(forKey: Self.recentRecipesKey) ?? [])
             .compactMap(UUID.init(uuidString:))
@@ -276,7 +337,6 @@ final class AppModel {
             persistenceReady = false
         } else {
             persistenceReady = true
-            persistState()
         }
 
         #if DEBUG
@@ -324,11 +384,11 @@ final class AppModel {
                 homePath = [.shoppingList]
             case "guided":
                 homePath = [.guidedShopping]
-            case "walmart-setup":
-                shoppingRoute = .walmartDirect
-                presentedSheet = .walmartSetup
             case "walmart-guide":
-                shoppingRoute = .walmartDirect
+                startRetailerGuide(.walmart)
+                homePath = [.guidedShopping]
+            case "target-guide":
+                startRetailerGuide(.target)
                 homePath = [.guidedShopping]
             case "import":
                 presentedSheet = .importer(.sample)
@@ -340,7 +400,9 @@ final class AppModel {
     }
 
     var selectedStores: [RetailerStore] {
-        let selected = stores.filter { selectedStoreIDs.contains($0.id) }
+        let selected = stores.filter {
+            $0.retailerID == selectedRetailer.rawValue && selectedStoreIDs.contains($0.id)
+        }
         if featureFlags.advancedToolsEnabled, storeStrategy == .multipleStops {
             return selected
         }
@@ -348,7 +410,22 @@ final class AppModel {
     }
 
     var primaryStore: RetailerStore {
-        selectedStores.first ?? stores[0]
+        selectedStores.first ?? stores.first { $0.retailerID == selectedRetailer.rawValue } ?? stores[0]
+    }
+
+    var storesForSelectedRetailer: [RetailerStore] {
+        stores.filter { $0.retailerID == selectedRetailer.rawValue }
+    }
+
+    var retailerConfiguration: RetailerGuideConfiguration {
+        selectedRetailer.configuration
+    }
+
+    private var activeRetailerAdapter: any RetailerGuideAdapter {
+        if let adapter = retailerEngine.adapter(for: selectedRetailer) {
+            return adapter
+        }
+        preconditionFailure("Missing adapter for \(selectedRetailer.rawValue)")
     }
 
     var includedIngredientCount: Int {
@@ -376,11 +453,7 @@ final class AppModel {
     }
 
     var activeCommerceCapabilities: CommerceCapabilities {
-        switch shoppingRoute {
-        case .instacart: .instacart
-        case .walmartDirect: .walmartGuided
-        case .otherRetailerLinks: .linkOnly
-        }
+        .walmartGuided
     }
 
     var unresolvedAlternativeCount: Int {
@@ -475,25 +548,33 @@ final class AppModel {
         shoppingItems.filter { $0.status.isCompleted }.count
     }
 
-    var walmartWishlistSavedCount: Int {
+    var savedForLaterCount: Int {
         shoppingItems.filter { $0.status == .savedToWishlist || $0.status == .added }.count
     }
 
-    var walmartCartAddedCount: Int {
+    var retailerAddedCount: Int {
         shoppingItems.filter { $0.status == .addedToCart }.count
     }
 
-    var walmartUnavailableCount: Int {
+    var retailerUnavailableCount: Int {
         shoppingItems.filter { $0.status == .unavailable }.count
     }
 
-    var walmartSkippedCount: Int {
+    var retailerSkippedCount: Int {
         shoppingItems.filter { $0.status == .skipped }.count
     }
 
-    var walmartGuideIsComplete: Bool {
+    var retailerGuideIsComplete: Bool {
         !shoppingItems.isEmpty && shoppingItems.allSatisfy { $0.status.isCompleted }
     }
+
+    // Compatibility aliases keep schema-v3 tests and saved Walmart workflows
+    // readable while active UI uses retailer-neutral guide terminology.
+    var walmartWishlistSavedCount: Int { savedForLaterCount }
+    var walmartCartAddedCount: Int { retailerAddedCount }
+    var walmartUnavailableCount: Int { retailerUnavailableCount }
+    var walmartSkippedCount: Int { retailerSkippedCount }
+    var walmartGuideIsComplete: Bool { retailerGuideIsComplete }
 
     var currentGuidedItem: ShoppingListItem? {
         guard shoppingItems.indices.contains(guidedIndex) else { return nil }
@@ -509,7 +590,7 @@ final class AppModel {
     }
 
     var retailerCapabilities: RetailerCapabilities {
-        retailerService.capabilities
+        activeRetailerAdapter.capabilities
     }
 
     var shareText: String {
@@ -683,26 +764,54 @@ final class AppModel {
 
         storeStrategy = strategy
         if storeStrategy == .oneStore {
-            selectedStoreIDs = [primaryStore.id]
-        } else if selectedStoreIDs.count == 1, let second = stores.first(where: { !selectedStoreIDs.contains($0.id) }) {
+            retainOnlyStore(primaryStore.id, for: selectedRetailer)
+        } else if selectedStores.count == 1,
+                  let second = storesForSelectedRetailer.first(where: { !selectedStoreIDs.contains($0.id) }) {
             selectedStoreIDs.insert(second.id)
         }
         invalidateShoppingPlan()
     }
 
     func selectStore(_ store: RetailerStore) {
-        if storeStrategy == .oneStore || !featureFlags.advancedToolsEnabled {
-            selectedStoreIDs = [store.id]
-        } else if selectedStoreIDs.contains(store.id) {
-            guard selectedStoreIDs.count > 1 else {
-                showToast("Keep at least one stop selected")
-                return
-            }
-            selectedStoreIDs.remove(store.id)
-        } else {
-            selectedStoreIDs.insert(store.id)
-        }
+        guard store.retailerID == selectedRetailer.rawValue else { return }
+        retainOnlyStore(store.id, for: selectedRetailer)
         invalidateShoppingPlan()
+    }
+
+    func startRetailerGuide(_ retailer: ShoppingRetailer) {
+        let configuration = retailer.configuration
+        guard retailerEngine.supports(retailer) else {
+            showToast("\(configuration.displayName) support is coming soon")
+            return
+        }
+
+        let retailerChanged = selectedRetailer != retailer
+        selectedRetailer = retailer
+        if let store = stores.first(where: { $0.retailerID == retailer.rawValue }) {
+            retainOnlyStore(store.id, for: retailer)
+        }
+        if retailerChanged || shoppingItems.contains(where: { $0.product.retailerID != retailer.rawValue }) {
+            invalidateShoppingPlan()
+        }
+    }
+
+    func prepareRetailerSafariWorkflow() {
+        if selectedStores.isEmpty,
+           let store = storesForSelectedRetailer.first {
+            retainOnlyStore(store.id, for: selectedRetailer)
+        }
+    }
+
+    func prepareWalmartSafariWorkflow() {
+        startRetailerGuide(.walmart)
+    }
+
+    private func retainOnlyStore(_ storeID: UUID, for retailer: ShoppingRetailer) {
+        let retailerStoreIDs = Set(
+            stores.filter { $0.retailerID == retailer.rawValue }.map(\.id)
+        )
+        selectedStoreIDs.subtract(retailerStoreIDs)
+        selectedStoreIDs.insert(storeID)
     }
 
     func setAdvancedToolsEnabled(_ enabled: Bool) {
@@ -710,34 +819,11 @@ final class AppModel {
         guard !enabled else { return }
         storeStrategy = .oneStore
         fulfillmentMode = .pickup
-        selectedStoreIDs = [primaryStore.id]
+        retainOnlyStore(primaryStore.id, for: selectedRetailer)
     }
 
     func startMatching(force: Bool = false) async {
-        if shoppingRoute == .instacart {
-            isMatching = true
-            matchProgress = 0
-            shoppingItems = []
-            let stages = [
-                ("Reviewing pantry exclusions", 0.18),
-                ("Converting ingredient quantities", 0.40),
-                ("Applying organic and dietary preferences", 0.64),
-                ("Checking unresolved ingredients", 0.82),
-                ("Building the normalized shopping manifest", 1.0)
-            ]
-            for (stage, progress) in stages {
-                matchStage = stage
-                withAnimation(.easeInOut(duration: 0.24)) { matchProgress = progress }
-                try? await Task.sleep(for: .milliseconds(260))
-            }
-            matchStage = "\(ingredientsToBuy.count) ingredients ready for Instacart"
-            isMatching = false
-            track(.matchingCompleted, properties: [
-                "items": String(ingredientsToBuy.count),
-                "route": "instacart"
-            ])
-            return
-        }
+        prepareRetailerSafariWorkflow()
 
         if !shoppingItems.isEmpty && !force {
             matchProgress = 1
@@ -777,7 +863,8 @@ final class AppModel {
             properties: [
                 "items": String(shoppingItems.count),
                 "exact_links": String(matchedItemCount),
-                "fallbacks": String(searchFallbackCount)
+                "fallbacks": String(searchFallbackCount),
+                "retailer": selectedRetailer.rawValue
             ]
         )
     }
@@ -797,7 +884,10 @@ final class AppModel {
         let replacement = shoppingItems[itemIndex].alternatives.remove(at: candidateIndex)
         shoppingItems[itemIndex].alternatives.append(previous)
         shoppingItems[itemIndex].product = replacement
-        preferredProductIDsByIngredient[preferenceKey(for: shoppingItems[itemIndex].ingredient.name)] = replacement.retailerProductID
+        preferredProductIDsByIngredient[productPreferenceKey(
+            for: shoppingItems[itemIndex].ingredient.name,
+            retailerID: replacement.retailerID
+        )] = replacement.retailerProductID
         track(.productReplaced, properties: ["link_kind": replacement.linkKind.rawValue])
         showToast("Product replacement selected")
     }
@@ -831,8 +921,7 @@ final class AppModel {
     }
 
     func beginGuidedShopping() {
-        if shoppingRoute == .walmartDirect,
-           let firstWaiting = shoppingItems.firstIndex(where: { $0.status == .waiting }) {
+        if let firstWaiting = shoppingItems.firstIndex(where: { $0.status == .waiting }) {
             guidedIndex = firstWaiting
         } else {
             guidedIndex = 0
@@ -865,47 +954,59 @@ final class AppModel {
         showToast("Walmart Wishlist reference removed")
     }
 
-    func recordWalmartProductOpened(itemID: UUID) {
+    func recordRetailerProductOpened(itemID: UUID) {
         guard let item = shoppingItems.first(where: { $0.id == itemID }) else { return }
         let properties = [
-            "retailer": "walmart",
+            "retailer": item.product.retailerID,
             "link_kind": item.product.linkKind.rawValue
         ]
-        track(.walmartProductOpened, properties: properties)
+        if item.product.retailerID == ShoppingRetailer.walmart.rawValue {
+            track(.walmartProductOpened, properties: properties)
+        }
         track(.retailerLinkOpened, properties: properties)
     }
 
-    func recordWalmartOutcome(_ outcome: GuidedItemStatus, for itemID: UUID) {
+    func recordRetailerOutcome(_ outcome: GuidedItemStatus, for itemID: UUID) {
         guard outcome != .waiting,
               let itemIndex = shoppingItems.firstIndex(where: { $0.id == itemID })
         else { return }
 
-        let wasComplete = walmartGuideIsComplete
+        let retailerID = shoppingItems[itemIndex].product.retailerID
+        let wasComplete = retailerGuideIsComplete
         shoppingItems[itemIndex].status = outcome
-        track(.guidedItemCompleted, properties: ["status": outcome.rawValue, "retailer": "walmart"])
-        if outcome == .savedToWishlist {
+        track(.guidedItemCompleted, properties: ["status": outcome.rawValue, "retailer": retailerID])
+        if retailerID == ShoppingRetailer.walmart.rawValue, outcome == .savedToWishlist {
             track(.walmartProductSelfReportedSaved)
         }
 
-        if let nextIndex = nextWaitingWalmartItem(after: itemIndex) {
+        if let nextIndex = nextWaitingRetailerItem(after: itemIndex) {
             guidedIndex = nextIndex
             persistCurrentManifest(progress: .inProgress)
         } else {
             persistCurrentManifest(progress: .completed)
             if !wasComplete {
-                track(
-                    .walmartGuidedFlowCompleted,
-                    properties: [
-                        "saved": String(walmartWishlistSavedCount),
-                        "cart": String(walmartCartAddedCount),
-                        "unavailable": String(walmartUnavailableCount),
-                        "skipped": String(walmartSkippedCount)
-                    ]
-                )
-                track(.guidedShoppingCompleted, properties: ["items": String(shoppingItems.count)])
-                showToast("Walmart shopping guide complete")
+                let properties = [
+                    "retailer": retailerID,
+                    "saved": String(savedForLaterCount),
+                    "cart": String(retailerAddedCount),
+                    "unavailable": String(retailerUnavailableCount),
+                    "skipped": String(retailerSkippedCount)
+                ]
+                if retailerID == ShoppingRetailer.walmart.rawValue {
+                    track(.walmartGuidedFlowCompleted, properties: properties)
+                }
+                track(.guidedShoppingCompleted, properties: properties)
+                showToast("\(retailerConfiguration.displayName) shopping guide complete")
             }
         }
+    }
+
+    func recordWalmartProductOpened(itemID: UUID) {
+        recordRetailerProductOpened(itemID: itemID)
+    }
+
+    func recordWalmartOutcome(_ outcome: GuidedItemStatus, for itemID: UUID) {
+        recordRetailerOutcome(outcome, for: itemID)
     }
 
     func openSavedWalmartWishlist() -> URL? {
@@ -917,7 +1018,11 @@ final class AppModel {
     }
 
     func walmartListsURL() -> URL {
-        URL(string: "https://www.walmart.com/lists")!
+        ShoppingRetailer.walmart.configuration.listURL
+    }
+
+    func retailerListsURL() -> URL {
+        retailerConfiguration.listURL
     }
 
     func shoppingSession(id: UUID) -> ShoppingSession? {
@@ -999,7 +1104,10 @@ final class AppModel {
                substitution.preferNextTime,
                let retailerProductID = substitution.replacementRetailerProductID,
                !retailerProductID.isEmpty {
-                updatedPreferences[preferenceKey(for: item.ingredient.name)] = retailerProductID
+                updatedPreferences[productPreferenceKey(
+                    for: item.ingredient.name,
+                    retailerID: item.product.retailerID
+                )] = retailerProductID
             }
         }
 
@@ -1105,6 +1213,9 @@ final class AppModel {
         let brand = substitution?.replacementBrand ?? (product.linkKind == .exactProduct ? product.brand : "")
         let retailerProductID = substitution?.replacementRetailerProductID
             ?? (product.linkKind == .exactProduct ? product.retailerProductID : nil)
+        let scopedRetailerProductID = retailerProductID.map {
+            "\(product.retailerID):\($0)"
+        }
         let gtin14 = normalizedGTIN14(substitution?.replacementGTIN14 ?? product.gtin)
         let packageQuantity = substitution?.packageQuantity ?? product.packageQuantity
         let packageUnit = substitution?.packageUnit ?? product.packageUnit
@@ -1115,9 +1226,14 @@ final class AppModel {
                 let identities = Set((existing.barcodeGTINs ?? []) + [existing.gtin14].compactMap { $0 })
                 if identities.contains(gtin14) { return true }
             }
-            if let retailerProductID,
-               existing.preferredRetailerProductID == retailerProductID {
-                return true
+            if let scopedRetailerProductID {
+                if existing.preferredRetailerProductID == scopedRetailerProductID {
+                    return true
+                }
+                if product.retailerID == ShoppingRetailer.walmart.rawValue,
+                   existing.preferredRetailerProductID == retailerProductID {
+                    return true
+                }
             }
             let existingBrand = preferenceKey(for: existing.brand)
             let incomingBrand = preferenceKey(for: brand)
@@ -1140,7 +1256,7 @@ final class AppModel {
             )
             inventory[matchIndex].updatedAt = .now
             inventory[matchIndex].preferredRetailerProductID =
-                inventory[matchIndex].preferredRetailerProductID ?? retailerProductID
+                inventory[matchIndex].preferredRetailerProductID ?? scopedRetailerProductID
             inventory[matchIndex].packageSize = inventory[matchIndex].packageSize ?? packageQuantity
             inventory[matchIndex].packageUnit = inventory[matchIndex].packageUnit ?? packageUnit
             if let gtin14 {
@@ -1157,7 +1273,7 @@ final class AppModel {
             brand: brand,
             quantity: amount,
             unit: "package",
-            preferredRetailerProductID: retailerProductID,
+            preferredRetailerProductID: scopedRetailerProductID,
             source: .recipe,
             packageCount: amount,
             packageSize: packageQuantity,
@@ -1182,6 +1298,7 @@ final class AppModel {
                     item.id.uuidString,
                     item.requestedQuantity,
                     String(item.purchaseQuantity),
+                    item.product.retailerID,
                     item.product.retailerProductID,
                     item.product.gtin ?? "",
                     item.product.packageQuantity?.formatted() ?? "",
@@ -1228,7 +1345,7 @@ final class AppModel {
         return abs(existingSize - incomingSize) < 0.001
     }
 
-    private func nextWaitingWalmartItem(after index: Int) -> Int? {
+    private func nextWaitingRetailerItem(after index: Int) -> Int? {
         let later = shoppingItems.indices.first {
             $0 > index && shoppingItems[$0].status == .waiting
         }
@@ -1254,11 +1371,13 @@ final class AppModel {
     }
 
     func productHandoffLabel(for item: ShoppingListItem) -> String {
-        item.product.isExactProductLink ? "Open exact product" : "Search at Walmart"
+        item.product.isExactProductLink
+            ? "Open exact product"
+            : "Search at \(retailerConfiguration.displayName)"
     }
 
     func retailerURL() -> URL {
-        URL(string: "https://www.walmart.com/cp/grocery-pickup-and-delivery/9524000")!
+        retailerConfiguration.homeURL
     }
 
     func prepareInstacartHandoff() async -> InstacartHandoffResponse? {
@@ -1315,7 +1434,10 @@ final class AppModel {
         persistCurrentManifest(progress: .inProgress)
         guard let manifest = currentSavedManifest else { return nil }
         do {
-            let handoff = try await retailerService.createHandoff(manifest: manifest)
+            let handoff = try await retailerEngine.createHandoff(
+                for: selectedRetailer,
+                manifest: manifest
+            )
             track(.retailerLinkOpened, properties: ["retailer": handoff.retailerID, "mode": handoff.mode.rawValue])
             return handoff
         } catch {
@@ -1588,6 +1710,7 @@ final class AppModel {
     private var currentSavedManifest: ShoppingManifest? {
         savedLists.first {
             $0.manifest.recipeID == activeRecipe.id &&
+            $0.manifest.retailerID == selectedRetailer.rawValue &&
             $0.manifest.storeID == primaryStore.retailerStoreID
         }?.manifest
     }
@@ -1595,6 +1718,7 @@ final class AppModel {
     private func persistCurrentManifest(progress: ManifestHandoffProgress) {
         let existingIndex = savedLists.firstIndex {
             $0.manifest.recipeID == activeRecipe.id &&
+            $0.manifest.retailerID == selectedRetailer.rawValue &&
             $0.manifest.storeID == primaryStore.retailerStoreID
         }
         let existing = existingIndex.map { savedLists[$0].manifest }
@@ -1641,33 +1765,27 @@ final class AppModel {
             )
             let request = RetailerProductSearchRequest(
                 ingredient: ingredient,
+                retailerID: selectedRetailer.rawValue,
                 requestedQuantity: requestedQuantity,
                 requestedUnit: ingredient.unit,
                 storeID: store.retailerStoreID,
                 fulfillmentMethod: method
             )
-            let candidates = (try? await retailerService.searchProducts(for: request)) ?? []
-            var ranked = RetailerProductMatcher.rank(
-                candidates,
+            var ranked = await retailerEngine.rankedProducts(
                 for: request,
                 preferences: preferences
             )
-            if let preferredID = preferredProductIDsByIngredient[preferenceKey(for: ingredient.name)],
+            let retailerPreferenceKey = productPreferenceKey(
+                for: ingredient.name,
+                retailerID: selectedRetailer.rawValue
+            )
+            let legacyWalmartPreference = selectedRetailer == .walmart
+                ? preferredProductIDsByIngredient[preferenceKey(for: ingredient.name)]
+                : nil
+            if let preferredID = preferredProductIDsByIngredient[retailerPreferenceKey] ?? legacyWalmartPreference,
                let preferredIndex = ranked.firstIndex(where: { $0.product.retailerProductID == preferredID }) {
                 let preferred = ranked.remove(at: preferredIndex)
                 ranked.insert(preferred, at: 0)
-            }
-            if ranked.isEmpty {
-                let fallback = DemoWalmartCatalogService.searchFallback(
-                    for: ingredient,
-                    storeID: store.retailerStoreID,
-                    preferences: preferences
-                )
-                ranked = RetailerProductMatcher.rank(
-                    [fallback],
-                    for: request,
-                    preferences: preferences
-                )
             }
             guard let selected = ranked.first else { continue }
 
@@ -1805,6 +1923,10 @@ final class AppModel {
             .components(separatedBy: CharacterSet.alphanumerics.inverted)
             .filter { !$0.isEmpty }
             .joined(separator: " ")
+    }
+
+    private func productPreferenceKey(for ingredientName: String, retailerID: String) -> String {
+        "\(retailerID):\(preferenceKey(for: ingredientName))"
     }
 }
 
@@ -2078,6 +2200,13 @@ enum RecipeParser {
             if knownUnits.contains(candidate) {
                 unit = normalizedUnit(candidate)
                 remainingTokens.removeFirst()
+            } else if remainingTokens.count >= 2,
+                      ["small", "medium", "large"].contains(candidate),
+                      ["egg", "eggs"].contains(
+                        remainingTokens[1].lowercased().trimmingCharacters(in: .punctuationCharacters)
+                      ) {
+                unit = candidate
+                remainingTokens.removeFirst()
             }
         }
 
@@ -2251,6 +2380,10 @@ enum RecipeParser {
             height: sourceLine.boundingBox.height
         )
         evidence.ocrConfidence = sourceLine.confidence
+        evidence.ocrColumnIndex = sourceLine.columnIndex
+        evidence.sourceObservationIDs = sourceLine.sourceObservationIDs
+        evidence.continuationAttached = sourceLine.continuationAttached
+        evidence.reconstructionConfidence = sourceLine.reconstructionConfidence
 
         let credibleAlternatives = sourceLine.alternateCandidates.filter { alternative in
             let purchasingCritical = containsPurchasingCriticalMeasurement(sourceLine.text)

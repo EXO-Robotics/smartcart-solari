@@ -9,7 +9,7 @@ This document separates implemented product foundations from work that legally o
 | 3. Product matching | Hard dietary/organic rules, package sizing, deterministic ranking, match reasons, confidence, fallbacks, preferred replacements | Review poor matches from beta sessions |
 | 4. Barcode and pantry | VisionKit scanner, validated UPC/EAN/GTIN resolution, explicit package count/size/unit and remaining amount/unit, conservative identity merging, pantry-first suggestions, remainder math, overrides, fingerprinted shopping sessions, four-way reconciliation, explicit substitution learning, and idempotent schema-v5 persistence | Test camera scanning, remaining-stock edits, substitution feedback, and relaunch idempotency on a physical iPhone |
 | 5. Analytics and testing | Privacy-limited on-device funnel, feature flags, internal tester dashboard, OCR duration/retry metrics | Recruit 20–50 testers and export aggregate observations manually |
-| 6. Retail connectors | Credential-free contracts for Walmart, Instacart, Kroger, Target, Amazon Fresh, and generic affiliate handoff | Validate desired partners and request access |
+| 6. Retail connectors | Shared retailer-guide engine; bounded credential-free Walmart and Target product guides; Kroger and other adapters truthfully gated | Human-test Walmart and Target, then validate desired partners and request access |
 | 7. Backend and security | Local reference service plus bounded recipe-page fetch/extraction, mock sessions, OAuth PKCE primitives, manifest sync, analytics ingestion, cache, affiliate abstraction, rate limiting, and redacted logs | Validate publisher compatibility, then select hosting/database/auth vendors and supply secrets through a secure channel |
 | 8. Website and business assets | Local deploy-ready website, policies, support, FAQ, disclosures, architecture docs, and press kit | Legal review, buy domain, create support email, and deploy |
 | 9. Partner integrations | Adapter slots and capability boundaries are ready | Obtain partner approvals, client IDs, redirect URIs, and affiliate IDs |
@@ -17,8 +17,8 @@ This document separates implemented product foundations from work that legally o
 
 ## Product truth boundary
 
-- Walmart product records, prices, availability, stores, and pickup windows remain seeded demo data.
-- No connector programmatically creates a cart, modifies a Wishlist, places a delivery order, reserves pickup, submits a substitution, processes payment, or completes checkout. The Walmart lane is explicitly user-guided and can store only a shared-list reference.
+- Walmart product records, prices, availability, stores, and pickup windows remain seeded demo data. Target product records and prices are bounded last-known demo data; Target confirms the store and live state.
+- No connector programmatically creates a cart, modifies a Wishlist or Shopping List, places a delivery order, reserves pickup, submits a substitution, processes payment, or completes checkout. Walmart and Target are explicitly user-guided; Kroger remains Coming Soon.
 - The backend is a local reference implementation with in-memory/demo persistence, not a production service.
 - Website files are local and unpublished. Placeholder contact and legal details must be replaced before deployment.
 - Production analytics, crash reporting, accounts, cloud sync, and retailer credentials remain disabled.

@@ -2,6 +2,9 @@
 
 ## 0.3.0 — Human-validation candidate (unreleased)
 
+- Adds dedicated Walmart and Target retailer cards backed by one seeded retailer-guide engine, while Kroger and additional retailers remain clearly labeled Coming Soon.
+- Adds a bounded Target catalog with exact official product destinations, preference-aware Target searches, Target Shopping List guidance, retailer-scoped product preferences, persistent retailer selection, and the same purchase-confirmation/pantry loop used by Walmart.
+- Rejects cross-retailer and cross-store match candidates, treats empty fulfillment metadata as unverified rather than unsupported, and keeps search-fallback organic/dietary attributes unknown instead of manufacturing product claims.
 - Adds a truthful guided Walmart Wishlist lane: Walmart-owned sign-in and list creation, optional validated shared-list reference, exact-product in-app Safari, self-reported saved/cart/unavailable/skipped outcomes, persistent resume, final Wishlist opening, and privacy-limited local events.
 - Adds a one-question post-shopping check-in with `everything`, `most`, `few`, and `did not shop` defaults, exception-only selection, substitution scanning/search, explicit replacement preference, and atomic idempotent pantry updates.
 - Adds schema-v5 durable shopping sessions, schema-v4 migration, and forward-schema preservation so an older build cannot quarantine or overwrite newer state.
@@ -36,6 +39,8 @@
 - Website/legal text requires owner and legal review before deployment.
 - Partner approval, credentials, live catalogs, production services, TestFlight, and App Store submission remain human-gated.
 - The Walmart lane does not link accounts or automatically populate, read, or modify a Wishlist; each Walmart action remains user-controlled.
+- The Target lane does not link accounts or automatically populate, read, or modify Lists & Favorites; Target confirms the store, live availability, fulfillment eligibility, and transaction.
+- Kroger and additional retailer cards are presentation-only Coming Soon states with no active product guide.
 - Pantry purchases update remaining stock, but automatic recipe-consumption depletion remains a future feature; testers can edit remaining amount and unit directly.
 - The 25-recipe OCR/parser acceptance run and physical-device barcode/reconciliation checks remain required before closed-beta promotion.
 

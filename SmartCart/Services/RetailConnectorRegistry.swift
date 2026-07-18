@@ -27,8 +27,8 @@ enum RetailConnectorRegistry {
             displayName: "Walmart",
             homepage: URL(string: "https://www.walmart.com")!,
             state: .demoReady,
-            capabilities: [.catalogSearch, .exactProductLinks, .pickup, .delivery, .guidedProductHandoff],
-            integrationNote: "Seeded catalog, exact public product links, user-guided Wishlist saves, and an optional local shared-link reference. No account link, Wishlist API, live inventory, cart creation, or pickup reservation."
+            capabilities: [.catalogSearch, .exactProductLinks, .guidedProductHandoff],
+            integrationNote: "Seeded catalog and exact public product links with a user-driven Safari handoff. No account link, live inventory, cart creation, fulfillment scheduling, payment, or checkout integration."
         ),
         RetailConnectorProfile(
             id: "instacart",
@@ -42,17 +42,17 @@ enum RetailConnectorRegistry {
             id: "kroger",
             displayName: "Kroger",
             homepage: URL(string: "https://www.kroger.com")!,
-            state: .credentialsRequired,
-            capabilities: [.catalogSearch, .exactProductLinks, .pickup, .delivery],
-            integrationNote: "OAuth and API-key slots are defined; no live Kroger connection is enabled."
+            state: .researchOnly,
+            capabilities: [],
+            integrationNote: "A guided Kroger Shopping List adapter is planned, but no product guide or live connection is enabled."
         ),
         RetailConnectorProfile(
             id: "target",
             displayName: "Target",
             homepage: URL(string: "https://www.target.com")!,
-            state: .researchOnly,
-            capabilities: [.pickup, .delivery, .guidedProductHandoff],
-            integrationNote: "Public handoff research only; no catalog or cart API is represented as available."
+            state: .demoReady,
+            capabilities: [.catalogSearch, .exactProductLinks, .guidedProductHandoff],
+            integrationNote: "A bounded seeded catalog, exact public product links, search fallbacks, and a user-driven Safari guide are available. No account, list, cart, fulfillment, payment, or checkout integration is represented."
         ),
         RetailConnectorProfile(
             id: "amazon-fresh",

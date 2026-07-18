@@ -402,7 +402,7 @@ private struct SubstitutionPickerSheet: View {
                         TextField("Brand or product name", text: $query)
                             .textInputAutocapitalization(.words)
                             .smartField()
-                        Text("Search covers the retailer alternatives already matched for this ingredient; it is not a live Walmart catalog search.")
+                        Text("Search covers the retailer alternatives already matched for this ingredient; it is not a live retailer catalog search.")
                             .font(.caption2)
                             .foregroundStyle(SmartCartTheme.secondaryInk)
                     }

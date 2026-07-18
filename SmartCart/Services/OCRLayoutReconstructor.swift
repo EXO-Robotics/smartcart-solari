@@ -20,6 +20,7 @@ struct OCRNormalizedBoundingBox: Codable, Equatable, Hashable, Sendable {
 
 /// One OCR text observation. Callers can map Vision observations into this value at the boundary.
 struct OCRTextObservation: Codable, Equatable, Hashable, Sendable {
+    var observationID: String?
     var text: String
     var boundingBox: OCRNormalizedBoundingBox
     var confidence: Double
@@ -28,6 +29,7 @@ struct OCRTextObservation: Codable, Equatable, Hashable, Sendable {
     var alternateCandidates: [OCRTextAlternative]?
 
     init(
+        observationID: String? = nil,
         text: String,
         boundingBox: OCRNormalizedBoundingBox,
         confidence: Double,
@@ -35,6 +37,7 @@ struct OCRTextObservation: Codable, Equatable, Hashable, Sendable {
         bulletMarker: String? = nil,
         alternateCandidates: [OCRTextAlternative]? = nil
     ) {
+        self.observationID = observationID
         self.text = text
         self.boundingBox = boundingBox
         self.confidence = confidence
@@ -57,6 +60,32 @@ struct OCRSourceLine: Codable, Equatable, Hashable, Sendable {
     var boundingBox: OCRNormalizedBoundingBox
     var confidence: Double
     var alternateCandidates: [OCRTextAlternative]
+    var columnIndex: Int
+    var sourceObservationIDs: [String]
+    var continuationAttached: Bool
+    var reconstructionConfidence: Double
+
+    init(
+        text: String,
+        pageIndex: Int,
+        boundingBox: OCRNormalizedBoundingBox,
+        confidence: Double,
+        alternateCandidates: [OCRTextAlternative],
+        columnIndex: Int = 0,
+        sourceObservationIDs: [String] = [],
+        continuationAttached: Bool = false,
+        reconstructionConfidence: Double? = nil
+    ) {
+        self.text = text
+        self.pageIndex = pageIndex
+        self.boundingBox = boundingBox
+        self.confidence = confidence
+        self.alternateCandidates = alternateCandidates
+        self.columnIndex = columnIndex
+        self.sourceObservationIDs = sourceObservationIDs
+        self.continuationAttached = continuationAttached
+        self.reconstructionConfidence = reconstructionConfidence ?? confidence
+    }
 }
 
 enum OCRLayoutAmbiguity: String, Codable, Equatable, Hashable, Sendable {
@@ -75,6 +104,7 @@ struct OCRPageLayout: Codable, Equatable, Sendable {
 }
 
 struct OCRLayoutReconstruction: Codable, Equatable, Sendable {
+    var suggestedTitle: String?
     var ingredientLines: [String]
     var ingredientSourceLines: [OCRSourceLine]
     var ignoredInstructionLines: [String]
@@ -102,26 +132,24 @@ struct OCRLayoutReconstructor {
 
     func reconstruct(_ observations: [OCRTextObservation]) -> OCRLayoutReconstruction {
         var ambiguities = Set<OCRLayoutAmbiguity>()
-        let prepared = observations.compactMap { observation -> PreparedObservation? in
+        let prepared = observations.enumerated().flatMap { index, observation -> [PreparedObservation] in
             let text = observation.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !text.isEmpty else { return nil }
+            guard !text.isEmpty else { return [] }
             guard observation.boundingBox.isUsable else {
                 ambiguities.insert(.invalidBoundingBoxes)
-                return nil
+                return []
             }
-            return PreparedObservation(
+            return Self.prepareFragments(
+                from: observation,
                 text: text,
-                box: observation.boundingBox,
-                confidence: Self.clamp(observation.confidence),
-                pageIndex: observation.pageIndex,
-                bulletMarker: Self.cleanedBullet(observation.bulletMarker),
-                alternateCandidates: observation.alternateCandidates ?? []
+                fallbackID: "page-\(observation.pageIndex)-observation-\(index)"
             )
         }
 
         guard !prepared.isEmpty else {
             ambiguities.insert(.uncertainColumnDetection)
             return OCRLayoutReconstruction(
+                suggestedTitle: nil,
                 ingredientLines: [],
                 ingredientSourceLines: [],
                 ignoredInstructionLines: [],
@@ -133,6 +161,7 @@ struct OCRLayoutReconstructor {
 
         var ingredientLines: [String] = []
         var ingredientSourceLines: [OCRSourceLine] = []
+        var suggestedTitle: String?
         var ignoredInstructionLines: [String] = []
         var pageLayouts: [OCRPageLayout] = []
         var weightedConfidence = 0.0
@@ -142,6 +171,9 @@ struct OCRLayoutReconstructor {
         for pageIndex in pages.keys.sorted() {
             guard let pageObservations = pages[pageIndex] else { continue }
             let analysis = analyzePage(pageObservations)
+            if suggestedTitle == nil {
+                suggestedTitle = analysis.suggestedTitle
+            }
             ingredientLines.append(contentsOf: analysis.ingredientLines)
             ingredientSourceLines.append(contentsOf: analysis.ingredientSourceLines)
             ignoredInstructionLines.append(contentsOf: analysis.ignoredInstructionLines)
@@ -163,6 +195,7 @@ struct OCRLayoutReconstructor {
         }
 
         return OCRLayoutReconstruction(
+            suggestedTitle: suggestedTitle,
             ingredientLines: ingredientLines,
             ingredientSourceLines: ingredientSourceLines,
             ignoredInstructionLines: ignoredInstructionLines,
@@ -176,30 +209,149 @@ struct OCRLayoutReconstructor {
         OCRLayoutReconstructor().reconstruct(observations)
     }
 
+    /// Vision can return two side-by-side bullet items as one wide observation.
+    /// Split those fragments before column detection so a right-column wrap can
+    /// never be attached to the left column merely because their baselines align.
+    private static func prepareFragments(
+        from observation: OCRTextObservation,
+        text: String,
+        fallbackID: String
+    ) -> [PreparedObservation] {
+        let observationID = observation.observationID ?? fallbackID
+        let segments = embeddedBulletSegments(in: text)
+        guard segments.count > 1 else {
+            return [
+                PreparedObservation(
+                    text: text,
+                    box: observation.boundingBox,
+                    confidence: clamp(observation.confidence),
+                    pageIndex: observation.pageIndex,
+                    bulletMarker: cleanedBullet(observation.bulletMarker),
+                    alternateCandidates: observation.alternateCandidates ?? [],
+                    sourceObservationIDs: [observationID]
+                )
+            ]
+        }
+
+        let alternateSegments = (observation.alternateCandidates ?? []).map { alternative in
+            (alternative, embeddedBulletSegments(in: alternative.text))
+        }
+        return segments.enumerated().map { segmentIndex, segment in
+            let box = OCRNormalizedBoundingBox(
+                x: observation.boundingBox.x + (observation.boundingBox.width * segment.startRatio),
+                y: observation.boundingBox.y,
+                width: observation.boundingBox.width * (segment.endRatio - segment.startRatio),
+                height: observation.boundingBox.height
+            )
+            let alternatives = alternateSegments.compactMap { alternative, split -> OCRTextAlternative? in
+                guard split.indices.contains(segmentIndex) else { return nil }
+                let alternateText = split[segmentIndex].text
+                guard alternateText.caseInsensitiveCompare(segment.text) != .orderedSame else { return nil }
+                return OCRTextAlternative(text: alternateText, confidence: alternative.confidence)
+            }
+            return PreparedObservation(
+                text: segment.text,
+                box: box,
+                confidence: clamp(observation.confidence),
+                pageIndex: observation.pageIndex,
+                bulletMarker: segment.marker,
+                alternateCandidates: alternatives,
+                sourceObservationIDs: [observationID]
+            )
+        }
+    }
+
+    private static func embeddedBulletSegments(in text: String) -> [BulletSegment] {
+        guard let regex = try? NSRegularExpression(pattern: #"[•☐✓]"#) else { return [] }
+        let source = text as NSString
+        let matches = regex.matches(in: text, range: NSRange(location: 0, length: source.length))
+        guard matches.count > 1, source.length > 0 else { return [] }
+
+        return matches.enumerated().compactMap { index, match in
+            let start = match.range.location
+            let end = index + 1 < matches.count ? matches[index + 1].range.location : source.length
+            guard end > start else { return nil }
+            let raw = source.substring(with: NSRange(location: start, length: end - start))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !raw.isEmpty else { return nil }
+            return BulletSegment(
+                text: raw,
+                marker: source.substring(with: match.range),
+                startRatio: Double(start) / Double(source.length),
+                endRatio: Double(end) / Double(source.length)
+            )
+        }
+    }
+
+    private static func extractSuggestedTitle(
+        from observations: [PreparedObservation],
+        above heading: PreparedObservation
+    ) -> String? {
+        let candidates = observations.filter { observation in
+            observation.box.midY > heading.box.midY + 0.012
+                && observation.bulletMarker == nil
+                && !isIngredientHeading(observation.text)
+                && !isInstructionHeading(observation.text)
+                && !hasLeadingQuantity(observation.text)
+        }
+        guard let maximumHeight = candidates.map(\.box.height).max() else { return nil }
+        let titleLines = candidates
+            .filter { $0.box.height >= max(0.024, maximumHeight * 0.68) }
+            .sorted(by: physicalReadingOrder)
+            .prefix(3)
+            .map(\.text)
+        guard !titleLines.isEmpty else { return nil }
+        let joined = collapseWhitespace(titleLines.joined(separator: " "))
+        guard joined.count <= 90 else { return nil }
+        return joined.lowercased().split(separator: " ").map { token in
+            token.prefix(1).uppercased() + token.dropFirst()
+        }.joined(separator: " ")
+    }
+
     private func analyzePage(_ observations: [PreparedObservation]) -> PageAnalysis {
         let averageOCRConfidence = observations.map(\.confidence).reduce(0, +) / Double(observations.count)
-        let spanningInstructionBoundary = observations
-            .filter { $0.box.width >= 0.58 && Self.isInstructionHeading($0.text) }
-            .map { $0.box.midY }
+        let ingredientHeading = observations
+            .filter { Self.isIngredientHeading($0.text) }
+            .max { $0.box.midY < $1.box.midY }
+        let instructionBoundary = observations
+            .filter {
+                Self.isInstructionHeading($0.text)
+                    && (ingredientHeading == nil || $0.box.midY < ingredientHeading!.box.midY)
+            }
+            .map(\.box.midY)
             .max()
+        let suggestedTitle = ingredientHeading.flatMap { heading in
+            Self.extractSuggestedTitle(from: observations, above: heading)
+        }
 
         let globalIgnored: [PreparedObservation]
         let ingredientRegion: [PreparedObservation]
-        if let boundary = spanningInstructionBoundary {
+        if let heading = ingredientHeading {
+            globalIgnored = instructionBoundary.map { boundary in
+                observations.filter { $0.box.midY <= boundary + 0.004 }
+            } ?? []
+            ingredientRegion = observations.filter { observation in
+                observation.box.midY < heading.box.midY - 0.004
+                    && (instructionBoundary == nil || observation.box.midY > instructionBoundary! + 0.004)
+                    && !Self.isIngredientHeading(observation.text)
+                    && !Self.isInstructionHeading(observation.text)
+            }
+        } else if let boundary = instructionBoundary {
             globalIgnored = observations.filter { $0.box.midY <= boundary + 0.004 }
             ingredientRegion = observations.filter {
                 $0.box.midY > boundary + 0.004
-                    && !(Self.isIngredientHeading($0.text) && $0.box.width >= 0.58)
+                    && !Self.isIngredientHeading($0.text)
             }
         } else {
             globalIgnored = []
             ingredientRegion = observations.filter {
-                !(Self.isIngredientHeading($0.text) && $0.box.width >= 0.58)
+                !Self.isIngredientHeading($0.text)
             }
         }
 
         guard !ingredientRegion.isEmpty else {
             return PageAnalysis(
+                suggestedTitle: suggestedTitle,
                 ingredientLines: [],
                 ingredientSourceLines: [],
                 ignoredInstructionLines: globalIgnored
@@ -232,8 +384,8 @@ struct OCRLayoutReconstructor {
             .sorted(by: Self.physicalReadingOrder)
             .map(\.renderedText)
 
-        for column in columns {
-            let physicalLines = makePhysicalLines(from: column)
+        for (columnIndex, column) in columns.enumerated() {
+            let physicalLines = makePhysicalLines(from: column, columnIndex: columnIndex)
             let logicalLines = mergeBulletContinuations(in: physicalLines)
             var reachedInstructions = false
 
@@ -259,6 +411,7 @@ struct OCRLayoutReconstructor {
         }
 
         return PageAnalysis(
+            suggestedTitle: suggestedTitle,
             ingredientLines: ingredientLines,
             ingredientSourceLines: ingredientSourceLines,
             ignoredInstructionLines: ignoredInstructionLines,
@@ -340,7 +493,10 @@ struct OCRLayoutReconstructor {
         )
     }
 
-    private func makePhysicalLines(from observations: [PreparedObservation]) -> [PhysicalLine] {
+    private func makePhysicalLines(
+        from observations: [PreparedObservation],
+        columnIndex: Int
+    ) -> [PhysicalLine] {
         let sorted = observations.sorted {
             if abs($0.box.midY - $1.box.midY) > 0.006 {
                 return $0.box.midY > $1.box.midY
@@ -351,7 +507,8 @@ struct OCRLayoutReconstructor {
 
         for observation in sorted {
             if let index = rows.indices.last,
-               Self.belongsOnSameRow(observation, as: rows[index]) {
+               Self.belongsOnSameRow(observation, as: rows[index]),
+               !Self.crossesIngredientStart(observation, row: rows[index]) {
                 rows[index].append(observation)
             } else {
                 rows.append([observation])
@@ -366,7 +523,7 @@ struct OCRLayoutReconstructor {
                 if marker == nil { marker = split.marker }
                 return split.text.isEmpty ? nil : split.text
             }
-            let joined = Self.collapseWhitespace(primaryFragments.joined(separator: " "))
+            let joined = Self.normalizeOCRLine(primaryFragments.joined(separator: " "))
             var alternatives: [OCRTextAlternative] = []
             for (fragmentIndex, fragment) in fragments.enumerated() {
                 for alternative in fragment.alternateCandidates.prefix(2) {
@@ -377,9 +534,7 @@ struct OCRLayoutReconstructor {
                         from: alternative.text,
                         explicit: fragment.bulletMarker
                     ).text
-                    let variantText = Self.repairMeasurementUnitTokenJoins(
-                        in: Self.collapseWhitespace(variant.joined(separator: " "))
-                    )
+                    let variantText = Self.normalizeOCRLine(variant.joined(separator: " "))
                     guard !variantText.isEmpty,
                           variantText.caseInsensitiveCompare(joined) != .orderedSame,
                           !alternatives.contains(where: { $0.text.caseInsensitiveCompare(variantText) == .orderedSame })
@@ -390,15 +545,18 @@ struct OCRLayoutReconstructor {
                 }
             }
             return PhysicalLine(
-                text: Self.repairMeasurementUnitTokenJoins(in: joined),
+                text: joined,
                 bulletMarker: marker,
                 pageIndex: fragments.first?.pageIndex ?? 0,
+                columnIndex: columnIndex,
+                sourceObservationIDs: Self.unique(fragments.flatMap(\.sourceObservationIDs)),
                 minX: fragments.map { $0.box.minX }.min() ?? 0,
                 minY: fragments.map { $0.box.minY }.min() ?? 0,
                 maxX: fragments.map { $0.box.maxX }.max() ?? 0,
                 maxY: fragments.map { $0.box.maxY }.max() ?? 0,
                 averageHeight: fragments.map { $0.box.height }.reduce(0, +) / Double(fragments.count),
                 confidence: fragments.map(\.confidence).reduce(0, +) / Double(fragments.count),
+                reconstructionConfidence: fragments.map(\.confidence).reduce(0, +) / Double(fragments.count),
                 alternateCandidates: Array(alternatives.prefix(4))
             )
         }
@@ -412,7 +570,10 @@ struct OCRLayoutReconstructor {
             if let previous = result.last,
                previous.bulletMarker != nil,
                line.bulletMarker == nil,
+               !Self.hasLeadingQuantity(line.text),
+               line.columnIndex == previous.columnIndex,
                line.minX >= previous.minX + max(0.018, previous.averageHeight * 0.45),
+               line.maxY <= previous.minY + max(0.008, previous.averageHeight * 0.30),
                previous.minY - line.maxY <= max(0.065, previous.averageHeight * 2.2),
                !Self.isInstructionLine(line.text) {
                 let mergedText = Self.collapseWhitespace(previous.text + " " + line.text)
@@ -434,6 +595,14 @@ struct OCRLayoutReconstructor {
                 result[result.count - 1].maxX = max(previous.maxX, line.maxX)
                 result[result.count - 1].maxY = max(previous.maxY, line.maxY)
                 result[result.count - 1].confidence = (previous.confidence + line.confidence) / 2
+                result[result.count - 1].sourceObservationIDs = Self.unique(
+                    previous.sourceObservationIDs + line.sourceObservationIDs
+                )
+                result[result.count - 1].continuationAttached = true
+                result[result.count - 1].reconstructionConfidence = min(
+                    previous.reconstructionConfidence,
+                    line.reconstructionConfidence
+                ) * 0.97
                 result[result.count - 1].alternateCandidates = Array(
                     alternatives
                         .filter { $0.text.caseInsensitiveCompare(mergedText) != .orderedSame }
@@ -445,6 +614,10 @@ struct OCRLayoutReconstructor {
                         text: line.text,
                         bulletMarker: line.bulletMarker,
                         pageIndex: line.pageIndex,
+                        columnIndex: line.columnIndex,
+                        sourceObservationIDs: line.sourceObservationIDs,
+                        continuationAttached: false,
+                        reconstructionConfidence: line.reconstructionConfidence,
                         minX: line.minX,
                         minY: line.minY,
                         maxX: line.maxX,
@@ -467,6 +640,21 @@ struct OCRLayoutReconstructor {
         let rowMidY = row.map { $0.box.midY }.reduce(0, +) / Double(row.count)
         let rowHeight = row.map { $0.box.height }.reduce(0, +) / Double(row.count)
         return abs(observation.box.midY - rowMidY) <= max(0.012, min(rowHeight, observation.box.height) * 0.55)
+    }
+
+    private static func crossesIngredientStart(
+        _ observation: PreparedObservation,
+        row: [PreparedObservation]
+    ) -> Bool {
+        let rowHasBullet = row.contains { $0.bulletMarker != nil || extractBullet(from: $0.text, explicit: nil).marker != nil }
+        let observationHasBullet = observation.bulletMarker != nil
+            || extractBullet(from: observation.text, explicit: nil).marker != nil
+        if rowHasBullet && observationHasBullet { return true }
+
+        let rowMinX = row.map { $0.box.minX }.min() ?? observation.box.minX
+        return rowHasBullet
+            && !observationHasBullet
+            && observation.box.minX - rowMinX > 0.18
     }
 
     private static func extractBullet(from text: String, explicit: String?) -> (marker: String?, text: String) {
@@ -531,6 +719,39 @@ struct OCRLayoutReconstructor {
         }
 
         return tokens.joined(separator: " ")
+    }
+
+    private static func normalizeOCRLine(_ text: String) -> String {
+        var normalized = collapseWhitespace(text)
+        normalized = normalized.replacingOccurrences(
+            of: #"^(?:I|l)(?=\s+(?:large|medium|small|cups?|tbsp|tsp|tablespoons?|teaspoons?|oz|ounces?|lbs?|pounds?|grams?|kg|ml|cloves?|cans?|jars?|bags?|packages?)\b)"#,
+            with: "1",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        normalized = normalized.replacingOccurrences(
+            of: #"(?i)^(\s*(?:\d+(?:[./]\d+)?|\d+\s+\d+/\d+|[¼½¾⅓⅔⅛⅜⅝⅞⅙⅚])\s+)(cups?|tbsp|tbsps|tablespoons?|tsp|tsps|teaspoons?|oz|ounces?|lbs?|pounds?|grams?|kg|kilograms?|ml|milliliters?|liters?|cloves?|cans?|jars?|bags?|bunches?|packages?|pinches?|slices?|sticks?)(?=[A-Za-z])"#,
+            with: "$1$2 ",
+            options: .regularExpression
+        )
+        normalized = repairMeasurementUnitTokenJoins(in: normalized)
+        normalized = normalized.replacingOccurrences(
+            of: #"(?i)\bsa[mn]i-sweet(?=\s+chocolate)"#,
+            with: "semi-sweet",
+            options: .regularExpression
+        )
+        return collapseWhitespace(normalized)
+    }
+
+    private static func hasLeadingQuantity(_ text: String) -> Bool {
+        text.range(
+            of: #"^\s*(?:[-•*☐✓]\s*)?(?:\d|[¼½¾⅓⅔⅛⅜⅝⅞⅙⅚]|one\b|two\b|three\b|four\b|five\b|six\b|seven\b|eight\b|nine\b|ten\b|half\b|quarter\b)"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
+    }
+
+    private static func unique(_ values: [String]) -> [String] {
+        var seen = Set<String>()
+        return values.filter { seen.insert($0).inserted }
     }
 
     private static func hasQuantityPrefix(_ tokens: [String], endingBefore index: Int) -> Bool {
@@ -638,6 +859,7 @@ private struct PreparedObservation {
     var pageIndex: Int
     var bulletMarker: String?
     var alternateCandidates: [OCRTextAlternative]
+    var sourceObservationIDs: [String]
 
     var renderedText: String {
         guard let bulletMarker else { return text }
@@ -649,12 +871,15 @@ private struct PhysicalLine {
     var text: String
     var bulletMarker: String?
     var pageIndex: Int
+    var columnIndex: Int
+    var sourceObservationIDs: [String]
     var minX: Double
     var minY: Double
     var maxX: Double
     var maxY: Double
     var averageHeight: Double
     var confidence: Double
+    var reconstructionConfidence: Double
     var alternateCandidates: [OCRTextAlternative]
 }
 
@@ -662,6 +887,10 @@ private struct LogicalLine {
     var text: String
     var bulletMarker: String?
     var pageIndex: Int
+    var columnIndex: Int
+    var sourceObservationIDs: [String]
+    var continuationAttached: Bool
+    var reconstructionConfidence: Double
     var minX: Double
     var minY: Double
     var maxX: Double
@@ -686,9 +915,20 @@ private struct LogicalLine {
                 height: max(0, maxY - minY)
             ),
             confidence: confidence,
-            alternateCandidates: alternateCandidates
+            alternateCandidates: alternateCandidates,
+            columnIndex: columnIndex,
+            sourceObservationIDs: sourceObservationIDs,
+            continuationAttached: continuationAttached,
+            reconstructionConfidence: reconstructionConfidence
         )
     }
+}
+
+private struct BulletSegment {
+    var text: String
+    var marker: String
+    var startRatio: Double
+    var endRatio: Double
 }
 
 private struct ColumnDetection {
@@ -698,6 +938,7 @@ private struct ColumnDetection {
 }
 
 private struct PageAnalysis {
+    var suggestedTitle: String?
     var ingredientLines: [String]
     var ingredientSourceLines: [OCRSourceLine]
     var ignoredInstructionLines: [String]

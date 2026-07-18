@@ -35,7 +35,7 @@ struct ShoppingPreferencesView: View {
                     appModel.continueTo(.storeSelection)
                 } label: {
                     HStack {
-                        Text("Choose Walmart store")
+                        Text("Choose retailer")
                         Spacer()
                         Image(systemName: "arrow.right")
                     }

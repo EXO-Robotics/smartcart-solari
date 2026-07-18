@@ -1,12 +1,12 @@
 # SmartCart for iOS
 
-SmartCart converts a recipe into a persisted, retailer-aware shopping manifest. It applies saved shopping rules, resolves canonical Walmart products when available, labels retailer-search fallbacks, and guides the shopper into a retailer-owned shopping flow.
+SmartCart converts a recipe into a persisted, retailer-aware shopping manifest. It applies saved shopping rules, resolves seeded Walmart or Target products when available, labels retailer-search fallbacks, and guides the shopper into a retailer-owned shopping flow.
 
 ![SmartCart home screen](SmartCart-Beta2-Simulator.png)
 
-## Beta 3 validation candidate
+## Retailer guide branch
 
-Import recipe → review ingredients → adjust servings → check pantry → apply preferences → choose a shopping route → confirm the normalized manifest → open the provider handoff.
+Import recipe → review ingredients → adjust servings → check pantry → apply preferences → choose Walmart or Target → review exact products → open the retailer in Safari → confirm purchases → update pantry.
 
 The app currently supports:
 
@@ -16,36 +16,34 @@ The app currently supports:
 - Persisted pantry decisions, recipes, preferences, store choices, product matches, replacements, manifests, and guided-handoff progress.
 - Executable organic, dietary, budget, and store-brand matching rules.
 - Canonical `RetailerProductRecord` values with retailer/store identity, item IDs, URLs, package data, observed prices, availability, fulfillment eligibility, source, and observation timestamp.
-- Exact Walmart product links where a seeded retailer record exists.
-- Explicit, unpriced Walmart-search fallbacks where no eligible exact record exists.
-- Single-store pickup planning in the public-beta flow.
+- Exact Walmart and Target product links where a seeded retailer record exists.
+- Explicit, unpriced retailer-search fallbacks where no eligible exact record exists.
+- One Walmart location used as matching context; Target owns local-store selection after handoff.
 - Saved manifests, sharing, and guided product-by-product handoff.
 - Pantry-first import review with separate package count, package size/unit, and remaining amount/unit; full/partial/possible coverage now uses remaining stock, with buy-remainder math and an always-available buy-full override.
 - Persistent barcode/manual pantry inventory with checksum-valid UPC/EAN/GTIN handling, leading-zero preservation, offline fixtures, required naming for unknown products, and explicit duplicate actions.
 - Privacy-limited on-device funnel instrumentation and an internal tester dashboard.
-- Credential-free connector contracts for six retailer/affiliate integration shapes.
-- A capability-driven Instacart shopping-list route with advisory retailer and fulfillment preferences, manifest safety gates, backend URL caching, in-app Safari presentation, and explicitly self-reported return feedback.
-- A guided Walmart Wishlist route with secure Walmart-owned sign-in, exact-product Safari handoff, self-reported per-item outcomes, persistent resume, and an optional validated shared-Wishlist reference.
+- Dedicated Walmart and Target cards backed by one seeded retailer-guide engine, with Kroger and additional retailers clearly marked Coming Soon.
+- Retailer-specific Safari handoffs, clearly labeled search fallbacks, self-reported per-item outcomes, and persistent resume.
 - A low-friction post-shopping check-in that defaults purchased items from `all available`, `most`, `few`, or `did not shop`, lets excluded items be recovered as elsewhere/substituted purchases, updates pantry stock atomically, records substitutions, and learns a replacement only after explicit opt-in.
 
 The repository also includes a local reference backend in `backend/`, a local deploy-ready business website in `website/`, and explicit human handoff gates in `Docs/`.
 
 ## Capability boundary
 
-The demo Walmart adapter supports catalog search, exact product links, pickup and delivery eligibility metadata, and user-driven guided Wishlist handoff. SmartCart can remember a shared Wishlist URL, but it cannot inspect or modify the list.
-
-The Instacart route is wired to the backend-only Developer Platform adapter. Without an approved server-side `INSTACART_API_KEY`, it remains development-ready rather than live. SmartCart never embeds the provider key and never infers that an order was placed merely because the handoff page opened.
+The active app path supports bounded seeded Walmart and Target catalog matching, exact public product links, clearly labeled searches, and user-driven Safari handoffs. SmartCart does not expose delivery providers, pickup scheduling, multiple-store planning, account linking, list automation, or native cart routes in this branch. Kroger is presentation-only and clearly labeled Coming Soon. Deeper integrations remain deferred until approved retailer interfaces are available.
 
 It does **not** claim to:
 
-- Programmatically create, modify, or inspect a Walmart cart or Wishlist.
-- Link to a Walmart account or verify Walmart sign-in.
+- Programmatically create, modify, or inspect a retailer cart, Wishlist, Shopping List, or favorites collection.
+- Link to a retailer account or verify retailer sign-in.
 - Reserve a pickup window.
 - Refresh live prices or inventory.
-- Transfer a basket to a delivery provider.
+- Choose or schedule fulfillment.
+- Transfer a basket to a retailer or another provider.
 - Submit substitutions, payment, or checkout.
 
-Advanced testing tools can reveal experimental multi-stop, generic delivery-provider, and creator surfaces. These are intentionally outside the public-beta critical path.
+The selected retailer owns live location confirmation, product availability, final price, substitutions, list and cart state, fulfillment, payment, checkout, and order status.
 
 ## Persistence
 
@@ -57,9 +55,7 @@ Photo-import safety thresholds and the required human corpus are documented in
 [`Docs/PHOTO_PARSER_RELEASE_GATES.md`](Docs/PHOTO_PARSER_RELEASE_GATES.md).
 The executable 25-recipe closed-beta walkthrough and acceptance thresholds are documented in
 [`Docs/OCR_PARSER_HUMAN_TEST_PLAN.md`](Docs/OCR_PARSER_HUMAN_TEST_PLAN.md).
-Instacart configuration, ownership boundaries, and validation steps are documented in
-[`Docs/INSTACART_HANDOFF.md`](Docs/INSTACART_HANDOFF.md).
-The guided Walmart setup, data boundary, analytics, and human test matrix are documented in
+The earlier guided Walmart setup, data boundary, analytics, and human test matrix are documented in
 [`Docs/WALMART_WISHLIST_GUIDE.md`](Docs/WALMART_WISHLIST_GUIDE.md).
 
 See [CHANGELOG.md](CHANGELOG.md) for release history and [Docs/ROADMAP_STATUS.md](Docs/ROADMAP_STATUS.md) for the engineering/human boundary.
@@ -77,7 +73,7 @@ xcodebuild test \
   -destination 'platform=iOS Simulator,name=iPhone 17'
 ```
 
-The regression suite covers parsing and golden recipes, package conversion, preference constraints, ranking and fallback behavior, barcode lookup, connector truthfulness, product encoding and staleness, persistence/relaunch/migration/corruption, pantry state, local analytics, manifests, replacement persistence, and handoff capabilities.
+The regression suite covers parsing and golden recipes, package conversion, preference constraints, cross-retailer isolation, Walmart and Target adapter contracts, ranking and truthful fallback behavior, barcode lookup, connector truthfulness, product encoding and staleness, persistence/relaunch/migration/corruption, pantry state, local analytics, manifests, replacement persistence, and handoff capabilities.
 
 Before human beta work, follow [Docs/CLOSED_BETA_TEST_PLAN.md](Docs/CLOSED_BETA_TEST_PLAN.md). Partner and public launch work is gated by [Docs/PARTNER_INTEGRATION_CHECKLIST.md](Docs/PARTNER_INTEGRATION_CHECKLIST.md) and [Docs/APP_STORE_RELEASE_CHECKLIST.md](Docs/APP_STORE_RELEASE_CHECKLIST.md).
 

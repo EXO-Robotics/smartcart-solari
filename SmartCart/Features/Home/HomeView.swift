@@ -53,10 +53,10 @@ struct HomeView: View {
     private var promiseCard: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .center) {
-                Text("RECIPE IN · CART OUT")
+                Text("RECIPE IN · RETAILER READY")
                     .smartEyebrow()
                 Spacer()
-                Image(systemName: "cart.fill.badge.plus")
+                Image(systemName: "safari.fill")
                     .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(SmartCartTheme.green)
                     .frame(width: 42, height: 42)
@@ -75,7 +75,7 @@ struct HomeView: View {
                     .foregroundStyle(SmartCartTheme.ink)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text("Capture a recipe, confirm the ingredients, and hand off a product-matched list to your store.")
+                Text("Capture a recipe, confirm the ingredients, and open a product-matched retailer guide in Safari.")
                     .font(.subheadline)
                     .foregroundStyle(SmartCartTheme.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
@@ -151,10 +151,10 @@ struct HomeView: View {
                         .font(.caption.weight(.bold))
                         .foregroundStyle(SmartCartTheme.green)
                         .textCase(.uppercase)
-                    Text(appModel.primaryStore.name)
+                    Text(appModel.retailerConfiguration.displayName)
                         .font(.headline)
                         .foregroundStyle(SmartCartTheme.navy)
-                    Text("\(appModel.primaryStore.distance, specifier: "%.1f") mi · \(appModel.fulfillmentMode.rawValue) · \(appModel.pickupTime)")
+                    Text("\(appModel.retailerConfiguration.guideLabel) · Opens in Safari")
                         .font(.caption)
                         .foregroundStyle(SmartCartTheme.secondaryInk)
                         .lineLimit(1)
@@ -162,17 +162,8 @@ struct HomeView: View {
 
                 Spacer(minLength: 4)
 
-                if appModel.selectedStores.count > 1 {
-                    Text("+\(appModel.selectedStores.count - 1)")
-                        .font(.caption.bold())
-                        .foregroundStyle(SmartCartTheme.onAccent)
-                        .frame(width: 29, height: 29)
-                        .background(SmartCartTheme.green)
-                        .clipShape(Circle())
-                } else {
-                    Image(systemName: "chevron.right")
-                        .foregroundStyle(SmartCartTheme.secondaryInk.opacity(0.6))
-                }
+                Image(systemName: "chevron.right")
+                    .foregroundStyle(SmartCartTheme.secondaryInk.opacity(0.6))
             }
             .smartCartCard(padding: 14)
         }
@@ -189,7 +180,7 @@ struct HomeView: View {
                 Text("Your checkout stays with the retailer")
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(SmartCartTheme.navy)
-                Text("SmartCart never asks for Walmart credentials or payment.")
+                Text("SmartCart never asks for retailer credentials or payment.")
                     .font(.caption)
                     .foregroundStyle(SmartCartTheme.secondaryInk)
             }

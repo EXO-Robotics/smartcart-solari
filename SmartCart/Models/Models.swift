@@ -111,12 +111,10 @@ enum ImportMethod: String, CaseIterable, Identifiable, Hashable, Codable {
 
 enum SheetDestination: Identifiable {
     case importer(ImportMethod)
-    case walmartSetup
 
     var id: String {
         switch self {
         case .importer(let method): "importer-\(method.rawValue)"
-        case .walmartSetup: "walmart-setup"
         }
     }
 }
@@ -301,6 +299,10 @@ struct IngredientSourceEvidence: Hashable, Codable {
     var alternateQuantityCandidates: [Double]
     var alternateSourceTexts: [String]? = nil
     var sourceCropJPEGData: Data? = nil
+    var ocrColumnIndex: Int? = nil
+    var sourceObservationIDs: [String]? = nil
+    var continuationAttached: Bool? = nil
+    var reconstructionConfidence: Double? = nil
 }
 
 enum PantryCoverage: String, Hashable, Codable {
