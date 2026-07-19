@@ -75,8 +75,28 @@ final class AppModel {
     var shoppingSessions: [ShoppingSession] {
         didSet { persistState() }
     }
+    var activeShoppingSessionID: UUID? {
+        didSet { persistState() }
+    }
+    var shoppingScope: ShoppingScope? {
+        didSet { persistState() }
+    }
+    var mealPrepDraft: MealPrepDraft? {
+        didSet { persistState() }
+    }
+    var mealPrepPlan: MealPrepPlanSnapshot? {
+        didSet { persistState() }
+    }
     var selectedRetailer: ShoppingRetailer {
         didSet { commerceDefaults.set(selectedRetailer.rawValue, forKey: Self.selectedRetailerKey) }
+    }
+    var retailerSetupCompletedIDs: Set<String> = [] {
+        didSet {
+            commerceDefaults.set(
+                retailerSetupCompletedIDs.sorted(),
+                forKey: Self.retailerSetupCompletedKey
+            )
+        }
     }
     var shoppingRoute: ShoppingRoutePreference {
         didSet { commerceDefaults.set(shoppingRoute.rawValue, forKey: Self.shoppingRouteKey) }
@@ -111,6 +131,7 @@ final class AppModel {
 
     private static let recentRecipesKey = "smartcart.recentRecipeIDs"
     private static let selectedRetailerKey = "smartcart.commerce.selectedRetailer"
+    private static let retailerSetupCompletedKey = "smartcart.commerce.retailerSetupCompleted"
     private static let shoppingRouteKey = "smartcart.commerce.shoppingRoute"
     private static let instacartRetailerKey = "smartcart.commerce.instacartRetailer"
     private static let commerceFulfillmentKey = "smartcart.commerce.fulfillment"
@@ -153,12 +174,15 @@ final class AppModel {
         }
         let restoredState: SmartCartPersistedState?
         let stateLoadError: Error?
+        let stateLoadWarning: SmartCartStateStoreWarning?
         do {
             restoredState = try stateStore.load()
             stateLoadError = nil
+            stateLoadWarning = stateStore.lastLoadWarning
         } catch {
             restoredState = nil
             stateLoadError = error
+            stateLoadWarning = nil
         }
 
         func supportedRetailer(rawValue: String?) -> ShoppingRetailer? {
@@ -196,6 +220,9 @@ final class AppModel {
         self.commerceDefaults = commerceDefaults
 
         selectedRetailer = initialRetailer
+        retailerSetupCompletedIDs = Set(
+            commerceDefaults.stringArray(forKey: Self.retailerSetupCompletedKey) ?? []
+        )
 
         // Retailer guides are user-driven Safari handoffs. Hidden legacy
         // preferences remain decodable so changing the visible MVP does not
@@ -301,6 +328,10 @@ final class AppModel {
         analyticsEvents = restoredState?.analyticsEvents ?? []
         walmartWishlistReference = restoredState?.walmartWishlistReference
         shoppingSessions = restoredState?.shoppingSessions ?? []
+        activeShoppingSessionID = restoredState?.activeShoppingSessionID
+        shoppingScope = restoredState?.shoppingScope
+        mealPrepDraft = restoredState?.mealPrepDraft
+        mealPrepPlan = restoredState?.mealPrepPlan
 
         let retailerStores = availableStores.filter { $0.retailerID == initialRetailer.rawValue }
         let validStoreIDs = Set(availableStores.map(\.id))
@@ -337,6 +368,7 @@ final class AppModel {
             persistenceReady = false
         } else {
             persistenceReady = true
+            persistenceIssue = stateLoadWarning?.localizedDescription
         }
 
         #if DEBUG
@@ -386,9 +418,27 @@ final class AppModel {
                 homePath = [.guidedShopping]
             case "walmart-guide":
                 startRetailerGuide(.walmart)
+                if shoppingItems.isEmpty {
+                    shoppingItems = Self.makeShoppingItems(
+                        recipe: activeRecipe,
+                        desiredServings: desiredServings,
+                        store: primaryStore,
+                        fulfillmentMode: fulfillmentMode,
+                        preferences: preferences
+                    )
+                }
                 homePath = [.guidedShopping]
             case "target-guide":
                 startRetailerGuide(.target)
+                if shoppingItems.isEmpty {
+                    shoppingItems = Self.makeShoppingItems(
+                        recipe: activeRecipe,
+                        desiredServings: desiredServings,
+                        store: primaryStore,
+                        fulfillmentMode: fulfillmentMode,
+                        preferences: preferences
+                    )
+                }
                 homePath = [.guidedShopping]
             case "import":
                 presentedSheet = .importer(.sample)
@@ -429,27 +479,40 @@ final class AppModel {
     }
 
     var includedIngredientCount: Int {
-        activeRecipe.ingredients.filter(\.includeInList).count
+        if let plan = currentShoppingMealPrepSnapshot { return plan.lines.count }
+        return activeRecipe.ingredients.filter(\.includeInList).count
     }
 
     var unresolvedQuantityReviewCount: Int {
-        activeRecipe.ingredients.filter { $0.includeInList && $0.quantityReviewRequired == true }.count
+        if let plan = currentShoppingMealPrepSnapshot { return plan.unresolvedReviewCount }
+        return activeRecipe.ingredients.filter { $0.includeInList && $0.quantityReviewRequired == true }.count
     }
 
     var ingredientsToBuy: [Ingredient] {
-        activeRecipe.ingredients.filter {
+        if let plan = currentShoppingMealPrepSnapshot {
+            return plan.lines.compactMap(mealPrepIngredient)
+        }
+        return activeRecipe.ingredients.filter {
             quantityToBuy(for: $0) > 0
         }
     }
 
     var pantrySkipCount: Int {
-        activeRecipe.ingredients.filter {
+        if let plan = currentShoppingMealPrepSnapshot {
+            return plan.lines.filter {
+                $0.participatesInCurrentTrip && $0.quantityToBuy <= 0
+            }.count
+        }
+        return activeRecipe.ingredients.filter {
             $0.includeInList && quantityToBuy(for: $0) == 0
         }.count
     }
 
     var pantrySuggestionCount: Int {
-        activeRecipe.ingredients.filter { $0.pantrySuggestion != nil }.count
+        if let plan = currentShoppingMealPrepSnapshot {
+            return plan.lines.filter { !$0.pantryDeductions.isEmpty }.count
+        }
+        return activeRecipe.ingredients.filter { $0.pantrySuggestion != nil }.count
     }
 
     var activeCommerceCapabilities: CommerceCapabilities {
@@ -486,7 +549,7 @@ final class AppModel {
     var instacartManifestDraft: InstacartManifestDraft {
         let filters = instacartHealthFilters
         let items = ingredientsToBuy.map { ingredient in
-            let quantity = quantityToBuy(for: ingredient)
+            let quantity = isMealPrepShopping ? ingredient.quantity : quantityToBuy(for: ingredient)
             let quantityText = Ingredient.quantityText(quantity, unit: ingredient.unit)
             let preparation = ingredient.preparation.trimmingCharacters(in: .whitespacesAndNewlines)
             let displayName = preparation.isEmpty ? ingredient.name : "\(ingredient.name), \(preparation)"
@@ -506,10 +569,10 @@ final class AppModel {
             )
         }
         return InstacartManifestDraft(
-            localManifestID: currentSavedManifest?.id ?? activeRecipe.id,
-            recipeID: activeRecipe.id,
-            title: activeRecipe.title,
-            desiredServings: desiredServings,
+            localManifestID: currentSavedManifest?.id ?? currentShoppingScopeID,
+            recipeID: currentShoppingScopeID,
+            title: currentShoppingTitle,
+            desiredServings: isMealPrepShopping ? 0 : desiredServings,
             items: items,
             pantryItemsRemoved: pantrySkipCount
         )
@@ -568,6 +631,50 @@ final class AppModel {
         !shoppingItems.isEmpty && shoppingItems.allSatisfy { $0.status.isCompleted }
     }
 
+    var retailerSetupIsComplete: Bool {
+        retailerSetupCompletedIDs.contains(selectedRetailer.rawValue) ||
+            (selectedRetailer == .walmart && walmartWishlistReference != nil)
+    }
+
+    var retailerSessionIsInProgress: Bool {
+        currentSavedManifest?.handoffProgress == .inProgress && !retailerGuideIsComplete
+    }
+
+    var hasResumableRetailerSession: Bool {
+        guard !shoppingItems.isEmpty, !retailerGuideIsComplete else { return false }
+        return currentSavedManifest?.handoffProgress == .inProgress ||
+            currentSavedManifest?.handoffProgress == .paused
+    }
+
+    var pendingShoppingSessions: [ShoppingSession] {
+        let committed = shoppingSessions.filter(\.isCommitted)
+        let candidates = shoppingSessions
+            .filter { session in
+                !session.isCommitted &&
+                    !session.items.isEmpty &&
+                    !committed.contains { shoppingSessionsRepresentSameTrip($0, session) }
+            }
+            .sorted { lhs, rhs in
+                if lhs.id == activeShoppingSessionID { return true }
+                if rhs.id == activeShoppingSessionID { return false }
+                return lhs.startedAt > rhs.startedAt
+            }
+        return candidates.reduce(into: []) { result, session in
+            guard !result.contains(where: { shoppingSessionsRepresentSameTrip($0, session) }) else { return }
+            result.append(session)
+        }
+    }
+
+    var mostRecentPendingShoppingSession: ShoppingSession? { pendingShoppingSessions.first }
+
+    var retailerSessionRemainingCount: Int {
+        shoppingItems.filter { !$0.status.isCompleted }.count
+    }
+
+    var retailerSessionProgressText: String {
+        "\(guidedCompletedCount) of \(shoppingItems.count) answered"
+    }
+
     // Compatibility aliases keep schema-v3 tests and saved Walmart workflows
     // readable while active UI uses retailer-neutral guide terminology.
     var walmartWishlistSavedCount: Int { savedForLaterCount }
@@ -595,7 +702,7 @@ final class AppModel {
 
     var shareText: String {
         var lines = [
-            "SmartCart · \(activeRecipe.title)",
+            "SmartCart · \(currentShoppingTitle)",
             "\(shoppingItems.count) products at \(primaryStore.name)",
             "\(matchedItemCount) exact product links · \(searchFallbackCount) retailer searches",
             "Observed-price subtotal: \(estimatedTotal.formatted(.currency(code: "USD"))) (\(pricedItemCount)/\(shoppingItems.count) items priced)",
@@ -626,6 +733,8 @@ final class AppModel {
         desiredServings = recipe.servings
         applyPantrySuggestions(to: &recipe)
         activeRecipe = recipe
+        shoppingScope = .singleRecipe(recipe.id)
+        mealPrepPlan = nil
         if let index = recipes.firstIndex(where: { $0.id == recipe.id }) {
             recipes[index] = recipe
         } else {
@@ -633,6 +742,7 @@ final class AppModel {
         }
         recentRecipeIDs = ([recipe.id] + recentRecipeIDs.filter { $0 != recipe.id }).prefix(5).map { $0 }
         shoppingItems = []
+        activeShoppingSessionID = nil
         matchProgress = 0
         matchStage = "Ready to match"
         isMatching = false
@@ -647,6 +757,406 @@ final class AppModel {
                 "ingredient_count": String(recipe.ingredients.count)
             ]
         )
+    }
+
+    var currentShoppingTitle: String {
+        currentShoppingMealPrepSnapshot?.title ?? activeRecipe.title
+    }
+
+    var currentShoppingScopeID: UUID {
+        shoppingScope?.identifier ?? activeRecipe.id
+    }
+
+    var isMealPrepShopping: Bool {
+        shoppingScope?.kind == .mealPrepBeta && currentShoppingMealPrepSnapshot != nil
+    }
+
+    /// The reviewed plan that belongs to the current editable draft. Opening
+    /// a frozen historical trip never replaces this value.
+    var currentMealPrepPlan: MealPrepPlanSnapshot? {
+        guard let draftID = mealPrepDraft?.id,
+              mealPrepPlan?.id == draftID else { return nil }
+        return mealPrepPlan
+    }
+
+    /// Frozen provenance for the shopping trip currently being displayed or
+    /// reconciled. Historical session A wins over editable draft/plan B.
+    var currentShoppingMealPrepSnapshot: MealPrepPlanSnapshot? {
+        guard let scope = shoppingScope, scope.kind == .mealPrepBeta else { return nil }
+        if let sessionID = activeShoppingSessionID,
+           let session = shoppingSession(id: sessionID),
+           (session.shoppingScope ?? .singleRecipe(session.recipeID)) == scope,
+           let snapshot = session.mealPrepSnapshot {
+            return snapshot
+        }
+        if let editable = currentMealPrepPlan, editable.id == scope.identifier {
+            return editable
+        }
+        return savedLists
+            .map(\.manifest)
+            .first {
+                ($0.shoppingScope ?? .singleRecipe($0.recipeID)) == scope &&
+                    $0.retailerID == selectedRetailer.rawValue &&
+                    $0.storeID == primaryStore.retailerStoreID
+            }?
+            .mealPrepSnapshot
+    }
+
+    func startMealPrepDraft() {
+        let existingDraftWasCompleted = mealPrepDraft.map { draft in
+            shoppingSessions.contains {
+                ($0.shoppingScope ?? .singleRecipe($0.recipeID)) == draft.shoppingScope &&
+                ($0.isCommitted || $0.isGuideComplete)
+            } || savedLists.contains {
+                ($0.manifest.shoppingScope ?? .singleRecipe($0.manifest.recipeID)) == draft.shoppingScope &&
+                $0.manifest.handoffProgress == .completed
+            }
+        } ?? false
+        if mealPrepDraft == nil || mealPrepDraft?.selections.isEmpty == true || existingDraftWasCompleted {
+            let succeeded = performAtomicMealPrepTransition {
+                mealPrepDraft = MealPrepDraft()
+                mealPrepPlan = nil
+                shoppingScope = nil
+                invalidateShoppingPlan()
+            }
+            guard succeeded else {
+                showToast("Meal Prep draft could not be saved")
+                return
+            }
+        } else if let draft = mealPrepDraft,
+                  shoppingScope != draft.shoppingScope || activeShoppingSessionID != nil {
+            // Leave the historical trip frozen in shoppingSessions and return
+            // explicitly to the independently persisted editable work.
+            let succeeded = performAtomicMealPrepTransition {
+                shoppingScope = draft.shoppingScope
+                activeShoppingSessionID = nil
+                shoppingItems = []
+                guidedIndex = 0
+            }
+            guard succeeded else {
+                showToast("Meal Prep draft could not be opened")
+                return
+            }
+        }
+        selectedTab = .home
+        if let plan = currentMealPrepPlan {
+            homePath = [.mealPrepSelection, .mealPrepReview]
+            if plan.unresolvedReviewCount == 0 {
+                homePath.append(.mealPrepDashboard)
+            }
+        } else {
+            homePath = [.mealPrepSelection]
+        }
+    }
+
+    func isRecipeSelectedForMealPrep(_ recipeID: UUID) -> Bool {
+        mealPrepDraft?.selections.contains { $0.recipeSnapshot.id == recipeID } == true
+    }
+
+    func toggleMealPrepRecipe(_ recipe: Recipe) {
+        var draft = mealPrepDraft ?? MealPrepDraft()
+        if let index = draft.selections.firstIndex(where: { $0.recipeSnapshot.id == recipe.id }) {
+            draft.selections.remove(at: index)
+            draft.updatedAt = .now
+        } else if draft.selections.count < MealPrepDraft.selectionLimit {
+            draft.selections.append(
+                MealPrepSelection(recipe: recipe, targetServings: Double(max(1, recipe.servings)))
+            )
+            draft.updatedAt = .now
+        } else {
+            showToast("Meal Prep supports up to five recipes in this beta")
+            return
+        }
+        updateMealPrepDraftAndPlan(draft)
+    }
+
+    func updateMealPrepServings(selectionID: UUID, delta: Double) {
+        guard var draft = mealPrepDraft,
+              let index = draft.selections.firstIndex(where: { $0.id == selectionID }) else { return }
+        draft.selections[index].targetServings = min(48, max(1, draft.selections[index].targetServings + delta))
+        draft.updatedAt = .now
+        updateMealPrepDraftAndPlan(draft)
+    }
+
+    @discardableResult
+    func buildMealPrepPlan() -> Bool {
+        guard let draft = mealPrepDraft else { return false }
+        let succeeded = performAtomicMealPrepTransition {
+            let rebuilt = try rebuiltMealPrepPlan(
+                draft: draft,
+                preserving: currentMealPrepPlan,
+                pantryInventory: pantryInventory
+            )
+            mealPrepPlan = rebuilt
+            shoppingScope = draft.shoppingScope
+            invalidateShoppingPlan()
+        }
+        if succeeded {
+            homePath = [.mealPrepSelection, .mealPrepReview]
+            return true
+        }
+        showToast("Meal Prep plan could not be saved")
+        return false
+    }
+
+    func confirmMealPrepLineSeparate(_ lineID: String) {
+        guard var decisions = mealPrepPlan,
+              let index = decisions.lines.firstIndex(where: { $0.id == lineID }),
+              !decisions.lines[index].mergeReviewReasons.contains(.alternative),
+              !decisions.lines[index].mergeReviewReasons.contains(.uncertainQuantity) else { return }
+        decisions.lines[index].mergeReviewState = .confirmedSeparate
+        decisions.updatedAt = .now
+        rebuildMealPrepPlanPreservingDecisions(decisions)
+    }
+
+    func confirmMealPrepQuantity(_ lineID: String) {
+        guard var decisions = mealPrepPlan,
+              let index = decisions.lines.firstIndex(where: { $0.id == lineID }) else { return }
+        decisions.lines[index].mergeReviewReasons.remove(.uncertainQuantity)
+        if decisions.lines[index].mergeReviewReasons.isEmpty {
+            decisions.lines[index].mergeReviewState = .confirmedQuantity
+        } else if decisions.lines[index].mergeReviewReasons == [.alternative] {
+            decisions.lines[index].mergeReviewState = .alternativeChoice
+        } else {
+            decisions.lines[index].mergeReviewState = .reviewRequired
+        }
+        decisions.updatedAt = .now
+        rebuildMealPrepPlanPreservingDecisions(decisions)
+    }
+
+    func selectMealPrepAlternative(_ lineID: String) {
+        guard var decisions = mealPrepPlan,
+              let selectedIndex = decisions.lines.firstIndex(where: { $0.id == lineID }),
+              let group = decisions.lines[selectedIndex].uncertainDuplicateGroup,
+              decisions.lines[selectedIndex].mergeReviewReasons.contains(.alternative) else { return }
+        for index in decisions.lines.indices where decisions.lines[index].uncertainDuplicateGroup == group {
+            if index == selectedIndex {
+                decisions.lines[index].mergeReviewReasons.remove(.alternative)
+                decisions.lines[index].mergeReviewState = decisions.lines[index].mergeReviewReasons.isEmpty
+                    ? .selectedAlternative
+                    : .reviewRequired
+            } else {
+                decisions.lines[index].mergeReviewReasons.remove(.alternative)
+                decisions.lines[index].mergeReviewState = .excludedAlternative
+            }
+        }
+        decisions.updatedAt = .now
+        rebuildMealPrepPlanPreservingDecisions(decisions)
+    }
+
+    func keepMealPrepAlternativeGroup(_ lineID: String) {
+        updateMealPrepAlternativeGroup(lineID: lineID, state: .confirmedSeparate)
+    }
+
+    func excludeMealPrepAlternativeGroup(_ lineID: String) {
+        updateMealPrepAlternativeGroup(lineID: lineID, state: .excludedAlternative)
+    }
+
+    func deferMealPrepAlternativeGroup(_ lineID: String) {
+        updateMealPrepAlternativeGroup(lineID: lineID, state: .deferredAlternative)
+    }
+
+    func reopenMealPrepAlternativeGroup(lineID: String) {
+        guard var decisions = mealPrepPlan,
+              let selectedIndex = decisions.lines.firstIndex(where: { $0.id == lineID }),
+              let group = decisions.lines[selectedIndex].uncertainDuplicateGroup else { return }
+        for index in decisions.lines.indices
+        where decisions.lines[index].uncertainDuplicateGroup == group {
+            decisions.lines[index].mergeReviewReasons.insert(.alternative)
+            decisions.lines[index].mergeReviewState = .alternativeChoice
+        }
+        decisions.updatedAt = .now
+        rebuildMealPrepPlanPreservingDecisions(decisions)
+    }
+
+    func restoreDeferredMealPrepAlternativeGroup(_ lineID: String) {
+        reopenMealPrepAlternativeGroup(lineID: lineID)
+    }
+
+    func setMealPrepPantryOverride(lineID: String, buyFull: Bool) {
+        guard var decisions = mealPrepPlan,
+              let index = decisions.lines.firstIndex(where: { $0.id == lineID }) else { return }
+        decisions.lines[index].buyFullOverride = buyFull
+        decisions.updatedAt = .now
+        rebuildMealPrepPlanPreservingDecisions(decisions)
+    }
+
+    func openMealPrepDashboard() {
+        guard currentMealPrepPlan?.unresolvedReviewCount == 0 else {
+            showToast("Review every possible duplicate before shopping")
+            return
+        }
+        homePath.append(.mealPrepDashboard)
+    }
+
+    func beginMealPrepShopping() {
+        guard currentMealPrepPlan?.unresolvedReviewCount == 0 else {
+            showToast("Review every possible duplicate before shopping")
+            return
+        }
+        shoppingItems = []
+        matchProgress = 0
+        matchStage = "Ready to match"
+        selectedTab = .home
+        homePath.append(.storeSelection)
+    }
+
+    private func mealPrepIngredient(_ line: CombinedIngredientLine) -> Ingredient? {
+        guard line.participatesInCurrentTrip,
+              line.quantityToBuy > 0,
+              let source = line.sources.first else { return nil }
+        return Ingredient(
+            id: line.shoppingItemID ?? source.ingredient.id,
+            rawText: Ingredient.quantityText(line.quantityToBuy, unit: line.unit.symbol) + " " + line.name,
+            name: line.name,
+            quantity: line.quantityToBuy,
+            unit: line.unit.symbol == "count" ? "" : line.unit.symbol,
+            preparation: source.ingredient.preparation,
+            category: line.category,
+            confidence: source.ingredient.confidence,
+            includeInList: true,
+            pantryState: .needToBuy,
+            preferenceNote: source.ingredient.preferenceNote,
+            brandNote: source.ingredient.brandNote,
+            alternativeGroup: source.ingredient.alternativeGroup,
+            quantityReviewRequired: false
+        )
+    }
+
+    private func updateMealPrepAlternativeGroup(
+        lineID: String,
+        state: MergeReviewState
+    ) {
+        guard var decisions = mealPrepPlan,
+              let selectedIndex = decisions.lines.firstIndex(where: { $0.id == lineID }),
+              let group = decisions.lines[selectedIndex].uncertainDuplicateGroup else { return }
+        for index in decisions.lines.indices where decisions.lines[index].uncertainDuplicateGroup == group {
+            if state == .deferredAlternative {
+                decisions.lines[index].mergeReviewReasons.insert(.alternative)
+            } else {
+                decisions.lines[index].mergeReviewReasons.remove(.alternative)
+            }
+            if decisions.lines[index].mergeReviewReasons.isEmpty {
+                decisions.lines[index].mergeReviewState = state
+            } else if state == .excludedAlternative || state == .deferredAlternative {
+                decisions.lines[index].mergeReviewState = state
+            } else {
+                decisions.lines[index].mergeReviewState = .reviewRequired
+            }
+        }
+        decisions.updatedAt = .now
+        rebuildMealPrepPlanPreservingDecisions(decisions)
+    }
+
+    private func updateMealPrepDraftAndPlan(_ draft: MealPrepDraft) {
+        let succeeded = performAtomicMealPrepTransition {
+            let rebuilt = try mealPrepPlan.map {
+                try rebuiltMealPrepPlan(
+                    draft: draft,
+                    preserving: $0,
+                    pantryInventory: pantryInventory
+                )
+            }
+            mealPrepDraft = draft
+            mealPrepPlan = rebuilt
+            shoppingScope = rebuilt == nil ? nil : draft.shoppingScope
+            invalidateShoppingPlan()
+        }
+        if !succeeded {
+            showToast("Meal Prep changes could not be saved")
+        }
+    }
+
+    private func rebuildMealPrepPlanPreservingDecisions(
+        _ decisions: MealPrepPlanSnapshot
+    ) {
+        guard let draft = mealPrepDraft else { return }
+        let succeeded = performAtomicMealPrepTransition {
+            mealPrepPlan = try rebuiltMealPrepPlan(
+                draft: draft,
+                preserving: decisions,
+                pantryInventory: pantryInventory
+            )
+            shoppingScope = draft.shoppingScope
+            invalidateShoppingPlan()
+        }
+        if !succeeded {
+            showToast("Meal Prep review change could not be saved")
+        }
+    }
+
+    private func rebuiltMealPrepPlan(
+        draft: MealPrepDraft,
+        preserving previous: MealPrepPlanSnapshot?,
+        pantryInventory: [PantryInventoryItem]
+    ) throws -> MealPrepPlanSnapshot {
+        let aggregation = try MealPrepAggregationService.aggregate(
+            draft: draft,
+            pantryInventory: []
+        )
+        var rebuilt = MealPrepPlanSnapshot(draft: draft, lines: aggregation.lines)
+        let previousByID = Dictionary(uniqueKeysWithValues: (previous?.lines ?? []).map { ($0.id, $0) })
+
+        for index in rebuilt.lines.indices {
+            guard let old = previousByID[rebuilt.lines[index].id] else { continue }
+            rebuilt.lines[index].shoppingItemID = old.shoppingItemID ?? rebuilt.lines[index].shoppingItemID
+            rebuilt.lines[index].mergeReviewState = old.mergeReviewState
+            rebuilt.lines[index].mergeReviewReasons = old.mergeReviewReasons
+            rebuilt.lines[index].uncertainDuplicateGroup = old.uncertainDuplicateGroup
+            rebuilt.lines[index].buyFullOverride = old.buyFullOverride
+        }
+
+        MealPrepAggregationService.recomputePantry(pantryInventory, for: &rebuilt.lines)
+        rebuilt.updatedAt = .now
+        return rebuilt
+    }
+
+    private struct MealPrepTransitionBackup {
+        var activeRecipe: Recipe
+        var draft: MealPrepDraft?
+        var plan: MealPrepPlanSnapshot?
+        var scope: ShoppingScope?
+        var shoppingItems: [ShoppingListItem]
+        var guidedIndex: Int
+        var activeSessionID: UUID?
+        var pantryInventory: [PantryInventoryItem]
+    }
+
+    @discardableResult
+    private func performAtomicMealPrepTransition(
+        _ mutation: () throws -> Void
+    ) -> Bool {
+        guard persistenceReady else { return false }
+        let backup = MealPrepTransitionBackup(
+            activeRecipe: activeRecipe,
+            draft: mealPrepDraft,
+            plan: mealPrepPlan,
+            scope: shoppingScope,
+            shoppingItems: shoppingItems,
+            guidedIndex: guidedIndex,
+            activeSessionID: activeShoppingSessionID,
+            pantryInventory: pantryInventory
+        )
+        suppressPersistence = true
+        do {
+            try mutation()
+            try stateStore.save(stateSnapshot())
+            persistenceIssue = nil
+            suppressPersistence = false
+            return true
+        } catch {
+            activeRecipe = backup.activeRecipe
+            mealPrepDraft = backup.draft
+            mealPrepPlan = backup.plan
+            shoppingScope = backup.scope
+            shoppingItems = backup.shoppingItems
+            guidedIndex = backup.guidedIndex
+            activeShoppingSessionID = backup.activeSessionID
+            pantryInventory = backup.pantryInventory
+            persistenceIssue = error.localizedDescription
+            suppressPersistence = false
+            return false
+        }
     }
 
     func scaledQuantity(for ingredient: Ingredient) -> Double {
@@ -696,14 +1206,18 @@ final class AppModel {
         activeRecipe = recipe
     }
 
-    private func applyPantrySuggestions(to recipe: inout Recipe) {
+    private func applyPantrySuggestions(
+        to recipe: inout Recipe,
+        inventory: [PantryInventoryItem]? = nil
+    ) {
+        let inventory = inventory ?? pantryInventory
         let multiplier = Double(desiredServings) / Double(max(1, recipe.servings))
         for index in recipe.ingredients.indices {
             let previousItemID = recipe.ingredients[index].pantrySuggestion?.pantryItemID
             let suggestion = PantryMatchingService.bestSuggestion(
                 for: recipe.ingredients[index],
                 requiredQuantity: recipe.ingredients[index].quantity * multiplier,
-                inventory: pantryInventory
+                inventory: inventory
             )
             recipe.ingredients[index].pantrySuggestion = suggestion
             if suggestion == nil {
@@ -715,12 +1229,35 @@ final class AppModel {
         }
     }
 
+    @discardableResult
+    private func commitPantryInventoryChange(
+        _ updatedInventory: [PantryInventoryItem]
+    ) -> Bool {
+        var updatedRecipe = activeRecipe
+        applyPantrySuggestions(to: &updatedRecipe, inventory: updatedInventory)
+        return performAtomicMealPrepTransition {
+            pantryInventory = updatedInventory
+            activeRecipe = updatedRecipe
+            if let draft = mealPrepDraft, let plan = currentMealPrepPlan {
+                mealPrepPlan = try rebuiltMealPrepPlan(
+                    draft: draft,
+                    preserving: plan,
+                    pantryInventory: updatedInventory
+                )
+                shoppingScope = draft.shoppingScope
+                invalidateShoppingPlan()
+            }
+        }
+    }
+
     func continueTo(_ route: SmartRoute) {
         if route == .matching {
             // Preferences, pantry decisions, servings, or store selection may
             // have changed while navigating back. Rebuild from the confirmed
             // recipe instead of reusing product matches from an older plan.
-            synchronizeActiveRecipeRecord()
+            if !isMealPrepShopping {
+                synchronizeActiveRecipeRecord()
+            }
             invalidateShoppingPlan()
         }
         homePath.append(route)
@@ -749,6 +1286,7 @@ final class AppModel {
 
     private func invalidateShoppingPlan() {
         shoppingItems = []
+        activeShoppingSessionID = nil
         matchProgress = 0
         matchStage = "Ready to match"
         isMatching = false
@@ -870,29 +1408,96 @@ final class AppModel {
     }
 
     func updatePurchaseQuantity(for itemID: UUID, delta: Int) {
+        guard !activeShoppingSessionIsImmutable else {
+            showToast("Completed trips are read-only. Edit as a new trip instead.")
+            return
+        }
         guard let index = shoppingItems.firstIndex(where: { $0.id == itemID }) else { return }
         shoppingItems[index].purchaseQuantity = max(1, shoppingItems[index].purchaseQuantity + delta)
     }
 
     func selectAlternative(itemID: UUID, candidateID: UUID) {
-        guard
+        guard persistenceReady,
+            !activeShoppingSessionIsImmutable,
             let itemIndex = shoppingItems.firstIndex(where: { $0.id == itemID }),
             let candidateIndex = shoppingItems[itemIndex].alternatives.firstIndex(where: { $0.id == candidateID })
         else { return }
+        let candidate = shoppingItems[itemIndex].alternatives[candidateIndex]
+        guard let replacementPackageCount = resolvedReplacementPackageCount(
+            for: shoppingItems[itemIndex],
+            product: candidate
+        ) else {
+            showToast("Confirm a compatible package size before replacing this product")
+            return
+        }
+
+        let originalItems = shoppingItems
+        let originalSessions = shoppingSessions
+        let originalLists = savedLists
+        let originalPreferences = preferredProductIDsByIngredient
+        let originalEvents = analyticsEvents
+        let manifestProgress = currentSavedManifest?.handoffProgress
+        suppressPersistence = true
 
         let previous = shoppingItems[itemIndex].product
         let replacement = shoppingItems[itemIndex].alternatives.remove(at: candidateIndex)
         shoppingItems[itemIndex].alternatives.append(previous)
         shoppingItems[itemIndex].product = replacement
+        shoppingItems[itemIndex].purchaseQuantity = replacementPackageCount
+        if let activeShoppingSessionID {
+            synchronizeCurrentShoppingSessionItems(sessionID: activeShoppingSessionID)
+        }
         preferredProductIDsByIngredient[productPreferenceKey(
             for: shoppingItems[itemIndex].ingredient.name,
             retailerID: replacement.retailerID
         )] = replacement.retailerProductID
         track(.productReplaced, properties: ["link_kind": replacement.linkKind.rawValue])
-        showToast("Product replacement selected")
+        if let manifestProgress {
+            persistCurrentManifest(progress: manifestProgress)
+        }
+        do {
+            try stateStore.save(stateSnapshot())
+            persistenceIssue = nil
+            suppressPersistence = false
+            showToast("Product replacement selected")
+        } catch {
+            shoppingItems = originalItems
+            shoppingSessions = originalSessions
+            savedLists = originalLists
+            preferredProductIDsByIngredient = originalPreferences
+            analyticsEvents = originalEvents
+            suppressPersistence = false
+            persistenceIssue = error.localizedDescription
+            showToast("Product replacement could not be saved")
+        }
+    }
+
+    private func requestedQuantityForShoppingItem(_ item: ShoppingListItem) -> Double {
+        if let requestedAmount = item.requestedAmount,
+           requestedAmount.isFinite,
+           requestedAmount >= 0 {
+            return requestedAmount
+        }
+        if isMealPrepShopping { return item.ingredient.quantity }
+        return PantryMatchingService.quantityToBuy(
+            for: item.ingredient,
+            requiredQuantity: scaledQuantity(for: item.ingredient)
+        )
+    }
+
+    func resolvedReplacementPackageCount(
+        for item: ShoppingListItem,
+        product: RetailerProductRecord
+    ) -> Int? {
+        PackageMath.resolvedPackageCount(
+            product: product,
+            requestedQuantity: requestedQuantityForShoppingItem(item),
+            requestedUnit: item.ingredient.unit
+        )
     }
 
     func markCurrentGuidedItem(_ status: GuidedItemStatus) {
+        guard !activeShoppingSessionIsImmutable else { return }
         guard shoppingItems.indices.contains(guidedIndex) else { return }
         shoppingItems[guidedIndex].status = status
         track(.guidedItemCompleted, properties: ["status": status.rawValue])
@@ -900,6 +1505,7 @@ final class AppModel {
     }
 
     func advanceGuidedItem() {
+        guard !activeShoppingSessionIsImmutable else { return }
         guard !shoppingItems.isEmpty else { return }
         if guidedIndex < shoppingItems.count - 1 {
             guidedIndex += 1
@@ -921,17 +1527,222 @@ final class AppModel {
     }
 
     func beginGuidedShopping() {
-        if let firstWaiting = shoppingItems.firstIndex(where: { $0.status == .waiting }) {
-            guidedIndex = firstWaiting
-        } else {
-            guidedIndex = 0
-        }
-        persistCurrentManifest(progress: .inProgress)
         continueTo(.guidedShopping)
+    }
+
+    @discardableResult
+    func startOrResumeRetailerShoppingSession() -> Bool {
+        guard persistenceReady,
+              !shoppingItems.isEmpty,
+              retailerSetupIsComplete else {
+            showToast("Complete retailer setup before starting")
+            return false
+        }
+        guard !retailerGuideIsComplete, !activeShoppingSessionIsImmutable else {
+            showToast("Completed trips are read-only. Edit as a new trip instead.")
+            return false
+        }
+        let originalItems = shoppingItems
+        let originalIndex = guidedIndex
+        let originalLists = savedLists
+        let originalSessions = shoppingSessions
+        let originalEvents = analyticsEvents
+        let originalActiveSessionID = activeShoppingSessionID
+        let wasStarted = currentSavedManifest?.handoffProgress == .inProgress ||
+            currentSavedManifest?.handoffProgress == .paused
+
+        suppressPersistence = true
+        if !shoppingItems.indices.contains(guidedIndex) || shoppingItems[guidedIndex].status.isCompleted {
+            guidedIndex = shoppingItems.firstIndex(where: { !$0.status.isCompleted }) ?? 0
+        }
+
+        do {
+            let sessionID = try createOrReuseCurrentShoppingSession()
+            activeShoppingSessionID = sessionID
+            persistCurrentManifest(progress: .inProgress)
+            if let index = shoppingSessions.firstIndex(where: { $0.id == sessionID }) {
+                shoppingSessions[index].items = shoppingItems
+                shoppingSessions[index].manifestID = currentSavedManifest?.id
+                shoppingSessions[index].retailerID = selectedRetailer.rawValue
+                shoppingSessions[index].desiredServings = isMealPrepShopping ? nil : desiredServings
+                shoppingSessions[index].fulfillmentMode = fulfillmentMode
+                shoppingSessions[index].shoppingScope = shoppingScope ?? .singleRecipe(activeRecipe.id)
+                shoppingSessions[index].mealPrepSnapshot = currentShoppingMealPrepSnapshot
+            }
+            track(
+                wasStarted ? .shoppingSessionResumed : .shoppingSessionStarted,
+                properties: [
+                    "retailer": selectedRetailer.rawValue,
+                    "items": String(shoppingItems.count),
+                    "remaining": String(retailerSessionRemainingCount)
+                ]
+            )
+            try stateStore.save(stateSnapshot())
+            persistenceIssue = nil
+            suppressPersistence = false
+            return true
+        } catch {
+            shoppingItems = originalItems
+            guidedIndex = originalIndex
+            savedLists = originalLists
+            shoppingSessions = originalSessions
+            analyticsEvents = originalEvents
+            activeShoppingSessionID = originalActiveSessionID
+            suppressPersistence = false
+            persistenceIssue = error.localizedDescription
+            showToast("Shopping session could not be started")
+            return false
+        }
+    }
+
+    @discardableResult
+    func pauseRetailerShoppingSession() -> Bool {
+        guard persistenceReady,
+              !shoppingItems.isEmpty,
+              !retailerGuideIsComplete,
+              let sessionID = activeShoppingSessionID else { return false }
+        let originalLists = savedLists
+        let originalSessions = shoppingSessions
+        let originalEvents = analyticsEvents
+        suppressPersistence = true
+        persistCurrentManifest(progress: .paused)
+        synchronizeCurrentShoppingSessionItems(sessionID: sessionID)
+        track(
+            .shoppingSessionPaused,
+            properties: [
+                "retailer": selectedRetailer.rawValue,
+                "remaining": String(retailerSessionRemainingCount)
+            ]
+        )
+        do {
+            try stateStore.save(stateSnapshot())
+            persistenceIssue = nil
+            suppressPersistence = false
+            showToast("Shopping session saved")
+            return true
+        } catch {
+            savedLists = originalLists
+            shoppingSessions = originalSessions
+            analyticsEvents = originalEvents
+            suppressPersistence = false
+            persistenceIssue = error.localizedDescription
+            showToast("Shopping session could not be paused")
+            return false
+        }
+    }
+
+    func completeRetailerSetup() {
+        retailerSetupCompletedIDs.insert(selectedRetailer.rawValue)
+        track(.retailerSetupCompleted, properties: ["retailer": selectedRetailer.rawValue])
+        showToast("\(retailerConfiguration.displayName) setup saved")
+    }
+
+    func resetRetailerSetup() {
+        retailerSetupCompletedIDs.remove(selectedRetailer.rawValue)
+        showToast("\(retailerConfiguration.displayName) setup can be confirmed again")
+    }
+
+    func openShoppingSession(_ sessionID: UUID) {
+        guard let session = shoppingSession(id: sessionID), !session.items.isEmpty else { return }
+        let retailer = session.retailerID.flatMap(ShoppingRetailer.init(rawValue:)) ??
+            session.items.first.flatMap { ShoppingRetailer(rawValue: $0.product.retailerID) } ?? .walmart
+
+        suppressPersistence = true
+        activeShoppingSessionID = sessionID
+        shoppingScope = session.shoppingScope ?? .singleRecipe(session.recipeID)
+        selectedRetailer = retailer
+        if let store = stores.first(where: { $0.retailerStoreID == session.storeID }) {
+            retainOnlyStore(store.id, for: retailer)
+        }
+        if shoppingScope?.kind == .singleRecipe,
+           let recipe = recipes.first(where: { $0.id == session.recipeID }) {
+            activeRecipe = recipe
+            desiredServings = session.desiredServings ?? recipe.servings
+        }
+        fulfillmentMode = session.fulfillmentMode ?? fulfillmentMode
+        shoppingItems = session.items
+        guidedIndex = shoppingItems.firstIndex(where: { !$0.status.isCompleted }) ?? 0
+        suppressPersistence = false
+        persistState()
+
+        selectedTab = .home
+        homePath = [.guidedShopping]
+    }
+
+    func openSavedList(_ listID: UUID) {
+        guard let saved = savedLists.first(where: { $0.id == listID }) else { return }
+        let manifest = saved.manifest
+        let identitySession = manifest.logicalTripID.flatMap { logicalTripID in
+            shoppingSessions
+                .filter { $0.reconciliationIdentity == logicalTripID }
+                .max { $0.startedAt < $1.startedAt }
+        }
+        let manifestSession = shoppingSessions
+            .filter { $0.manifestID == manifest.id }
+            .max { $0.startedAt < $1.startedAt }
+        if let session = identitySession ?? manifestSession {
+            openShoppingSession(session.id)
+            homePath = [.shoppingList]
+            return
+        }
+        let retailer = ShoppingRetailer(rawValue: manifest.retailerID) ?? .walmart
+        let store = stores.first(where: { $0.retailerStoreID == manifest.storeID }) ?? primaryStore
+        let recipe = recipes.first(where: { $0.id == manifest.recipeID })
+
+        suppressPersistence = true
+        activeShoppingSessionID = nil
+        shoppingScope = manifest.shoppingScope ?? .singleRecipe(manifest.recipeID)
+        selectedRetailer = retailer
+        retainOnlyStore(store.id, for: retailer)
+        if shoppingScope?.kind == .singleRecipe, let recipe {
+            activeRecipe = recipe
+        }
+        desiredServings = manifest.desiredServings
+        fulfillmentMode = manifest.fulfillmentMode
+        shoppingItems = manifest.items.map { line in
+            let source = line.sourceContributions?.first
+            let ingredient = recipe?.ingredients.first(where: { $0.id == line.ingredientID }) ?? Ingredient(
+                id: line.ingredientID,
+                name: line.ingredientName,
+                quantity: source?.scaledQuantity ?? 1,
+                unit: source?.ingredient.unit ?? "",
+                category: source?.ingredient.category ?? .pantry
+            )
+            return ShoppingListItem(
+                id: line.id,
+                ingredient: ingredient,
+                requestedQuantity: line.requestedQuantity,
+                requestedAmount: line.requestedAmount,
+                purchaseQuantity: line.purchaseQuantity,
+                product: line.product,
+                alternatives: [],
+                storeID: store.id,
+                status: line.status,
+                matchScore: 0,
+                selectionReasons: ["Restored from saved manifest"]
+            )
+        }
+        guidedIndex = shoppingItems.firstIndex(where: { !$0.status.isCompleted }) ?? 0
+        suppressPersistence = false
+        persistState()
+
+        selectedTab = .home
+        homePath = [.shoppingList]
+    }
+
+    func retailerSetupURL() -> URL {
+        retailerConfiguration.listURL
     }
 
     func recordWalmartSetupStarted() {
         track(.walmartSetupStarted)
+    }
+
+    func recordRetailerSetupStarted() {
+        track(.retailerSetupStarted, properties: ["retailer": selectedRetailer.rawValue])
+        if selectedRetailer == .walmart {
+            recordWalmartSetupStarted()
+        }
     }
 
     func saveWalmartWishlistReference(displayName: String, rawURL: String) throws {
@@ -966,14 +1777,32 @@ final class AppModel {
         track(.retailerLinkOpened, properties: properties)
     }
 
-    func recordRetailerOutcome(_ outcome: GuidedItemStatus, for itemID: UUID) {
-        guard outcome != .waiting,
+    func recordRetailerOutcome(
+        _ outcome: GuidedItemStatus,
+        for itemID: UUID,
+        sessionID requestedSessionID: UUID? = nil
+    ) {
+        let sessionID = requestedSessionID ?? activeShoppingSessionID
+        guard persistenceReady,
+              outcome != .waiting,
+              let sessionID,
+              activeShoppingSessionID == sessionID,
+              shoppingSessions.contains(where: { $0.id == sessionID && $0.isReusable }),
               let itemIndex = shoppingItems.firstIndex(where: { $0.id == itemID })
         else { return }
 
+        let originalItems = shoppingItems
+        let originalIndex = guidedIndex
+        let originalLists = savedLists
+        let originalSessions = shoppingSessions
+        let originalEvents = analyticsEvents
         let retailerID = shoppingItems[itemIndex].product.retailerID
         let wasComplete = retailerGuideIsComplete
+        var completedNow = false
+
+        suppressPersistence = true
         shoppingItems[itemIndex].status = outcome
+        synchronizeCurrentShoppingSessionItems(sessionID: sessionID)
         track(.guidedItemCompleted, properties: ["status": outcome.rawValue, "retailer": retailerID])
         if retailerID == ShoppingRetailer.walmart.rawValue, outcome == .savedToWishlist {
             track(.walmartProductSelfReportedSaved)
@@ -985,6 +1814,7 @@ final class AppModel {
         } else {
             persistCurrentManifest(progress: .completed)
             if !wasComplete {
+                completedNow = true
                 let properties = [
                     "retailer": retailerID,
                     "saved": String(savedForLaterCount),
@@ -996,8 +1826,25 @@ final class AppModel {
                     track(.walmartGuidedFlowCompleted, properties: properties)
                 }
                 track(.guidedShoppingCompleted, properties: properties)
-                showToast("\(retailerConfiguration.displayName) shopping guide complete")
             }
+        }
+
+        do {
+            try stateStore.save(stateSnapshot())
+            persistenceIssue = nil
+            suppressPersistence = false
+            if completedNow {
+                showToast("\(retailerConfiguration.displayName) shopping session complete")
+            }
+        } catch {
+            shoppingItems = originalItems
+            guidedIndex = originalIndex
+            savedLists = originalLists
+            shoppingSessions = originalSessions
+            analyticsEvents = originalEvents
+            suppressPersistence = false
+            persistenceIssue = error.localizedDescription
+            showToast("That result could not be saved. Try again.")
         }
     }
 
@@ -1006,7 +1853,8 @@ final class AppModel {
     }
 
     func recordWalmartOutcome(_ outcome: GuidedItemStatus, for itemID: UUID) {
-        recordRetailerOutcome(outcome, for: itemID)
+        guard let sessionID = activeShoppingSessionID ?? ensureCurrentShoppingSession() else { return }
+        recordRetailerOutcome(outcome, for: itemID, sessionID: sessionID)
     }
 
     func openSavedWalmartWishlist() -> URL? {
@@ -1029,6 +1877,73 @@ final class AppModel {
         shoppingSessions.first { $0.id == id }
     }
 
+    var activeShoppingSessionIsImmutable: Bool {
+        guard let sessionID = activeShoppingSessionID,
+              let session = shoppingSession(id: sessionID) else { return false }
+        return session.isGuideComplete || session.isCommitted
+    }
+
+    /// Explicitly forks the displayed completed list into a new editable trip.
+    /// The historical session remains byte-for-byte unchanged.
+    @discardableResult
+    func forkCompletedShoppingTrip() -> Bool {
+        guard persistenceReady, activeShoppingSessionIsImmutable else { return false }
+        let originalItems = shoppingItems
+        let originalLists = savedLists
+        let originalActiveSessionID = activeShoppingSessionID
+        let originalGuidedIndex = guidedIndex
+        let newLogicalTripID = UUID()
+
+        suppressPersistence = true
+        shoppingItems = shoppingItems.map { item in
+            var editable = item
+            editable.status = .waiting
+            return editable
+        }
+        activeShoppingSessionID = nil
+        guidedIndex = 0
+        persistCurrentManifest(
+            progress: .notStarted,
+            logicalTripID: newLogicalTripID,
+            forceNewTrip: true
+        )
+
+        do {
+            try stateStore.save(stateSnapshot())
+            suppressPersistence = false
+            persistenceIssue = nil
+            showToast("New editable trip created")
+            return true
+        } catch {
+            shoppingItems = originalItems
+            savedLists = originalLists
+            activeShoppingSessionID = originalActiveSessionID
+            guidedIndex = originalGuidedIndex
+            suppressPersistence = false
+            persistenceIssue = error.localizedDescription
+            showToast("The new trip could not be saved")
+            return false
+        }
+    }
+
+    func saveShoppingReconciliationDraft(
+        sessionID: UUID,
+        outcome: ShoppingTripOutcome?,
+        purchasedItemIDs: Set<UUID>,
+        substitutions: [ShoppingSubstitutionFeedback]
+    ) {
+        guard let index = shoppingSessions.firstIndex(where: { $0.id == sessionID }),
+              shoppingSessions[index].reconciliation == nil
+        else { return }
+        let validIDs = Set(shoppingSessions[index].items.map(\.id))
+        shoppingSessions[index].reconciliationDraft = ShoppingReconciliationDraft(
+            outcome: outcome,
+            purchasedItemIDs: purchasedItemIDs.intersection(validIDs),
+            substitutions: substitutions.filter { validIDs.contains($0.originalItemID) },
+            updatedAt: .now
+        )
+    }
+
     func defaultPurchasedItemIDs(
         for outcome: ShoppingTripOutcome,
         sessionID: UUID
@@ -1047,7 +1962,34 @@ final class AppModel {
     @discardableResult
     func ensureCurrentShoppingSession() -> UUID? {
         do {
-            return try createOrReuseCurrentShoppingSession()
+            if let activeShoppingSessionID,
+               let activeSession = shoppingSession(id: activeShoppingSessionID),
+               !activeSession.isCommitted,
+               (activeSession.isReusable ||
+                    (retailerGuideIsComplete && activeSession.isGuideComplete)) {
+                if activeSession.isGuideComplete {
+                    return activeShoppingSessionID
+                }
+                let currentFingerprint = shoppingSessionFingerprint(
+                    scope: shoppingScope ?? .singleRecipe(activeRecipe.id),
+                    retailerID: selectedRetailer.rawValue,
+                    storeID: primaryStore.retailerStoreID,
+                    fulfillment: fulfillmentMode,
+                    plan: currentShoppingMealPrepSnapshot,
+                    items: shoppingItems
+                )
+                if activeSession.stateFingerprint == currentFingerprint {
+                    return activeShoppingSessionID
+                }
+            }
+            if retailerGuideIsComplete,
+               let recoveredSession = completedUncommittedSessionMatchingCurrentTrip() {
+                activeShoppingSessionID = recoveredSession.id
+                return recoveredSession.id
+            }
+            let sessionID = try createOrReuseCurrentShoppingSession()
+            activeShoppingSessionID = sessionID
+            return sessionID
         } catch {
             persistenceIssue = error.localizedDescription
             showToast("Shopping progress could not be saved")
@@ -1056,6 +1998,13 @@ final class AppModel {
     }
 
     func startShoppingReconciliation() {
+        if let activeShoppingSessionID,
+           let activeSession = shoppingSession(id: activeShoppingSessionID) {
+            guard !activeSession.isCommitted else {
+                showToast("This shopping trip already updated the pantry")
+                return
+            }
+        }
         guard let sessionID = ensureCurrentShoppingSession() else { return }
         track(.shoppingReconciliationStarted)
         continueTo(.shoppingReconciliation(sessionID))
@@ -1080,6 +2029,29 @@ final class AppModel {
         }
 
         let session = shoppingSessions[sessionIndex]
+        if let committedDuplicate = shoppingSessions.first(where: {
+            $0.id != session.id &&
+                $0.reconciliation != nil &&
+                shoppingSessionsRepresentSameTrip($0, session)
+        }), let reconciliation = committedDuplicate.reconciliation {
+            var deduplicatedSessions = shoppingSessions
+            deduplicatedSessions[sessionIndex].logicalTripID =
+                committedDuplicate.reconciliationIdentity ?? reconciliation.logicalTripID
+            deduplicatedSessions[sessionIndex].tripID = deduplicatedSessions[sessionIndex].logicalTripID
+            deduplicatedSessions[sessionIndex].reconciliation = remappedReconciliation(
+                reconciliation,
+                from: committedDuplicate,
+                to: session
+            )
+            deduplicatedSessions[sessionIndex].reconciliationDraft = nil
+            try stateStore.save(stateSnapshot(shoppingSessions: deduplicatedSessions))
+            suppressPersistence = true
+            shoppingSessions = deduplicatedSessions
+            suppressPersistence = false
+            persistenceIssue = nil
+            showToast("This shopping trip already updated the pantry")
+            return
+        }
         let validItemIDs = Set(session.items.map(\.id))
         let confirmedPurchasedIDs: Set<UUID> = outcome == .didNotShop
             ? []
@@ -1087,10 +2059,19 @@ final class AppModel {
         let validSubstitutions = substitutions.filter {
             confirmedPurchasedIDs.contains($0.originalItemID)
         }
+        if let unresolved = validSubstitutions.first(where: {
+            guard let amount = $0.replacementAmount else { return true }
+            return !amount.isFinite || amount <= 0
+        }) {
+            throw ShoppingReconciliationError.replacementQuantityConfirmationRequired(
+                unresolved.originalItemID
+            )
+        }
 
         var updatedPantry = pantryInventory
         var updatedPreferences = preferredProductIDsByIngredient
         var touchedPantryIDs = Set<UUID>()
+        var acquisitions: [PantryAcquisition] = []
         for item in session.items where confirmedPurchasedIDs.contains(item.id) {
             let substitution = validSubstitutions.first { $0.originalItemID == item.id }
             let pantryID = mergePurchasedItem(
@@ -1099,6 +2080,18 @@ final class AppModel {
                 into: &updatedPantry
             )
             touchedPantryIDs.insert(pantryID)
+            let sources = session.mealPrepSnapshot?.lines.first {
+                $0.shoppingItemID == item.ingredient.id ||
+                    $0.sources.first?.ingredient.id == item.ingredient.id
+            }?.sources ?? []
+            acquisitions.append(
+                PantryAcquisition(
+                    shoppingItemID: item.id,
+                    pantryItemID: pantryID,
+                    amount: substitution?.replacementAmount ?? Double(max(1, item.purchaseQuantity)),
+                    sourceContributions: sources
+                )
+            )
 
             if let substitution,
                substitution.preferNextTime,
@@ -1112,13 +2105,19 @@ final class AppModel {
         }
 
         var updatedSessions = shoppingSessions
+        let reconciliationTripID = session.reconciliationIdentity ?? session.id
+        updatedSessions[sessionIndex].logicalTripID = reconciliationTripID
+        updatedSessions[sessionIndex].tripID = reconciliationTripID
         updatedSessions[sessionIndex].reconciliation = ShoppingReconciliationRecord(
             outcome: outcome,
             purchasedItemIDs: confirmedPurchasedIDs,
             substitutions: validSubstitutions,
             pantryItemIDs: touchedPantryIDs,
-            committedAt: .now
+            committedAt: .now,
+            acquisitions: acquisitions,
+            logicalTripID: reconciliationTripID
         )
+        updatedSessions[sessionIndex].reconciliationDraft = nil
 
         // Persist the complete transaction before changing observable state.
         // A retry therefore cannot add the same purchase twice.
@@ -1166,15 +2165,28 @@ final class AppModel {
         guard !shoppingItems.isEmpty else { throw ShoppingReconciliationError.emptyShoppingList }
 
         let currentFingerprint = shoppingSessionFingerprint(
-            recipeID: activeRecipe.id,
+            scope: shoppingScope ?? .singleRecipe(activeRecipe.id),
+            retailerID: selectedRetailer.rawValue,
             storeID: primaryStore.retailerStoreID,
+            fulfillment: fulfillmentMode,
+            plan: currentShoppingMealPrepSnapshot,
             items: shoppingItems
         )
         if let existing = shoppingSessions.first(where: {
-            guard $0.recipeID == activeRecipe.id else { return false }
-            let existingFingerprint = $0.stateFingerprint ?? shoppingSessionFingerprint(
-                recipeID: $0.recipeID,
+            guard ($0.shoppingScope ?? .singleRecipe($0.recipeID)) == (shoppingScope ?? .singleRecipe(activeRecipe.id)),
+                  $0.storeID == primaryStore.retailerStoreID,
+                  $0.isReusable
+            else { return false }
+            if $0.stateFingerprint == currentFingerprint {
+                return true
+            }
+            guard $0.shoppingScope?.kind != .mealPrepBeta else { return false }
+            let existingFingerprint = shoppingSessionFingerprint(
+                scope: $0.shoppingScope ?? .singleRecipe($0.recipeID),
+                retailerID: $0.retailerID ?? $0.items.first?.product.retailerID ?? selectedRetailer.rawValue,
                 storeID: $0.storeID,
+                fulfillment: $0.fulfillmentMode ?? fulfillmentMode,
+                plan: $0.mealPrepSnapshot,
                 items: $0.items
             )
             return existingFingerprint == currentFingerprint
@@ -1182,22 +2194,77 @@ final class AppModel {
             return existing.id
         }
 
+        let logicalTripID = currentSavedManifest?.logicalTripID ?? UUID()
         let session = ShoppingSession(
-            recipeID: activeRecipe.id,
-            recipeTitle: activeRecipe.title,
+            logicalTripID: logicalTripID,
+            recipeID: currentShoppingScopeID,
+            recipeTitle: currentShoppingTitle,
             manifestID: currentSavedManifest?.id,
             storeID: primaryStore.retailerStoreID,
+            retailerID: selectedRetailer.rawValue,
+            desiredServings: isMealPrepShopping ? nil : desiredServings,
+            fulfillmentMode: fulfillmentMode,
+            shoppingScope: shoppingScope ?? .singleRecipe(activeRecipe.id),
+            mealPrepSnapshot: currentShoppingMealPrepSnapshot,
             items: shoppingItems,
             stateFingerprint: currentFingerprint
         )
         var updatedSessions = shoppingSessions
         updatedSessions.insert(session, at: 0)
-        try stateStore.save(stateSnapshot(shoppingSessions: updatedSessions))
-        suppressPersistence = true
-        shoppingSessions = updatedSessions
-        suppressPersistence = false
+        if suppressPersistence {
+            shoppingSessions = updatedSessions
+        } else {
+            try stateStore.save(stateSnapshot(shoppingSessions: updatedSessions))
+            suppressPersistence = true
+            shoppingSessions = updatedSessions
+            suppressPersistence = false
+        }
         persistenceIssue = nil
         return session.id
+    }
+
+    private func remappedReconciliation(
+        _ record: ShoppingReconciliationRecord,
+        from source: ShoppingSession,
+        to target: ShoppingSession
+    ) -> ShoppingReconciliationRecord {
+        var targetIDsBySemanticIdentity = Dictionary(
+            grouping: target.items,
+            by: shoppingItemSemanticIdentity
+        ).mapValues { $0.map(\.id).sorted { $0.uuidString < $1.uuidString } }
+        var itemIDMap: [UUID: UUID] = [:]
+
+        for item in source.items.sorted(by: { $0.id.uuidString < $1.id.uuidString }) {
+            let identity = shoppingItemSemanticIdentity(item)
+            guard var candidates = targetIDsBySemanticIdentity[identity],
+                  !candidates.isEmpty else { continue }
+            itemIDMap[item.id] = candidates.removeFirst()
+            targetIDsBySemanticIdentity[identity] = candidates
+        }
+
+        let purchasedItemIDs = Set(record.purchasedItemIDs.compactMap { itemIDMap[$0] })
+        let substitutions = record.substitutions.compactMap { substitution -> ShoppingSubstitutionFeedback? in
+            guard let targetID = itemIDMap[substitution.originalItemID] else { return nil }
+            var remapped = substitution
+            remapped.originalItemID = targetID
+            return remapped
+        }
+        let acquisitions = record.acquisitions?.compactMap { acquisition -> PantryAcquisition? in
+            guard let targetID = itemIDMap[acquisition.shoppingItemID] else { return nil }
+            var remapped = acquisition
+            remapped.shoppingItemID = targetID
+            return remapped
+        }
+
+        return ShoppingReconciliationRecord(
+            outcome: record.outcome,
+            purchasedItemIDs: purchasedItemIDs,
+            substitutions: substitutions,
+            pantryItemIDs: record.pantryItemIDs,
+            committedAt: record.committedAt,
+            acquisitions: acquisitions,
+            logicalTripID: target.reconciliationIdentity ?? source.reconciliationIdentity ?? record.logicalTripID
+        )
     }
 
     private func mergePurchasedItem(
@@ -1211,28 +2278,58 @@ final class AppModel {
             ? replacementName!
             : (product.linkKind == .exactProduct ? product.name : item.ingredient.name)
         let brand = substitution?.replacementBrand ?? (product.linkKind == .exactProduct ? product.brand : "")
-        let retailerProductID = substitution?.replacementRetailerProductID
-            ?? (product.linkKind == .exactProduct ? product.retailerProductID : nil)
+        let retailerProductID = substitution == nil
+            ? (product.linkKind == .exactProduct ? product.retailerProductID : nil)
+            : substitution?.replacementRetailerProductID
         let scopedRetailerProductID = retailerProductID.map {
             "\(product.retailerID):\($0)"
         }
-        let gtin14 = normalizedGTIN14(substitution?.replacementGTIN14 ?? product.gtin)
-        let packageQuantity = substitution?.packageQuantity ?? product.packageQuantity
-        let packageUnit = substitution?.packageUnit ?? product.packageUnit
-        let amount = max(0.01, substitution?.replacementAmount ?? Double(max(1, item.purchaseQuantity)))
+        let gtin14 = normalizedGTIN14(
+            substitution == nil ? product.gtin : substitution?.replacementGTIN14
+        )
+        let packageQuantity = substitution == nil
+            ? (product.variableWeight ? nil : product.packageQuantity)
+            : substitution?.packageQuantity
+        let packageUnit = substitution == nil
+            ? (product.variableWeight ? nil : product.packageUnit)
+            : substitution?.packageUnit
+        let hasUnknownPackageMass = packageQuantity == nil || packageUnit?.isEmpty != false
+        let amount = max(
+            0.01,
+            substitution == nil
+                ? Double(max(1, item.purchaseQuantity))
+                : (substitution?.replacementAmount ?? 0)
+        )
 
         let matchIndex = inventory.firstIndex { existing in
             if let gtin14 {
                 let identities = Set((existing.barcodeGTINs ?? []) + [existing.gtin14].compactMap { $0 })
-                if identities.contains(gtin14) { return true }
+                if identities.contains(gtin14) {
+                    return packagesAreCompatible(
+                        existingSize: existing.packageSize,
+                        existingUnit: existing.packageUnit,
+                        incomingSize: packageQuantity,
+                        incomingUnit: packageUnit
+                    )
+                }
             }
             if let scopedRetailerProductID {
                 if existing.preferredRetailerProductID == scopedRetailerProductID {
-                    return true
+                    return packagesAreCompatible(
+                        existingSize: existing.packageSize,
+                        existingUnit: existing.packageUnit,
+                        incomingSize: packageQuantity,
+                        incomingUnit: packageUnit
+                    )
                 }
                 if product.retailerID == ShoppingRetailer.walmart.rawValue,
                    existing.preferredRetailerProductID == retailerProductID {
-                    return true
+                    return packagesAreCompatible(
+                        existingSize: existing.packageSize,
+                        existingUnit: existing.packageUnit,
+                        incomingSize: packageQuantity,
+                        incomingUnit: packageUnit
+                    )
                 }
             }
             let existingBrand = preferenceKey(for: existing.brand)
@@ -1259,6 +2356,8 @@ final class AppModel {
                 inventory[matchIndex].preferredRetailerProductID ?? scopedRetailerProductID
             inventory[matchIndex].packageSize = inventory[matchIndex].packageSize ?? packageQuantity
             inventory[matchIndex].packageUnit = inventory[matchIndex].packageUnit ?? packageUnit
+            inventory[matchIndex].hasUnknownPackageMass =
+                inventory[matchIndex].hasUnknownPackageMass == true || hasUnknownPackageMass
             if let gtin14 {
                 inventory[matchIndex].gtin14 = inventory[matchIndex].gtin14 ?? gtin14
                 var identities = inventory[matchIndex].barcodeGTINs ?? []
@@ -1280,15 +2379,19 @@ final class AppModel {
             packageUnit: packageUnit,
             requiresUserNaming: false,
             gtin14: gtin14,
-            barcodeGTINs: gtin14.map { [$0] }
+            barcodeGTINs: gtin14.map { [$0] },
+            hasUnknownPackageMass: hasUnknownPackageMass
         )
         inventory.insert(pantryItem, at: 0)
         return pantryItem.id
     }
 
     private func shoppingSessionFingerprint(
-        recipeID: UUID,
+        scope: ShoppingScope,
+        retailerID: String,
         storeID: String,
+        fulfillment: FulfillmentMode,
+        plan: MealPrepPlanSnapshot?,
         items: [ShoppingListItem]
     ) -> String {
         let itemState = items
@@ -1301,13 +2404,31 @@ final class AppModel {
                     item.product.retailerID,
                     item.product.retailerProductID,
                     item.product.gtin ?? "",
-                    item.product.packageQuantity?.formatted() ?? "",
-                    item.product.packageUnit ?? "",
-                    item.status.rawValue
+                    item.product.packageQuantity.map { String($0.bitPattern) } ?? "",
+                    item.product.packageUnit ?? ""
                 ].joined(separator: "|")
             }
             .joined(separator: "\n")
-        let canonical = "\(recipeID.uuidString)|\(storeID)\n\(itemState)"
+        let planState = plan.map { plan in
+            let selections = plan.selections
+                .sorted { $0.id.uuidString < $1.id.uuidString }
+                .map { "\($0.recipeSnapshot.id.uuidString)|\($0.id.uuidString)|\($0.targetServings)" }
+                .joined(separator: "\n")
+            let lines = plan.lines
+                .sorted { $0.id < $1.id }
+                .map { line in
+                    let sources = line.sources.map(\.id).sorted().joined(separator: ",")
+                    let pantry = line.pantryDeductions
+                        .sorted { $0.pantryItemID.uuidString < $1.pantryItemID.uuidString }
+                        .map { "\($0.pantryItemID.uuidString):\($0.quantity):\($0.unit)" }
+                        .joined(separator: ",")
+                    let pantryOverride = line.buyFullOverride == true ? "buy-full" : "use-pantry"
+                    return "\(line.id)|\(line.quantityToBuy)|\(line.unit.symbol)|\(line.mergeReviewState.rawValue)|\(pantryOverride)|\(sources)|\(pantry)"
+                }
+                .joined(separator: "\n")
+            return "\(selections)\n\(lines)"
+        } ?? "single:\(desiredServings)"
+        let canonical = "v4|\(scope.fingerprintInput)|\(retailerID)|\(storeID)|\(fulfillment.rawValue)\n\(planState)\n\(itemState)"
 
         // Swift's Hasher is intentionally randomized between launches. FNV-1a
         // keeps this local identity stable without introducing account data.
@@ -1316,7 +2437,156 @@ final class AppModel {
             hash ^= UInt64(byte)
             hash &*= 1_099_511_628_211
         }
-        return String(format: "%016llx", hash)
+        return "v4:" + String(format: "%016llx", hash)
+    }
+
+    private func synchronizeCurrentShoppingSessionItems(sessionID: UUID) {
+        let currentFingerprint = shoppingSessionFingerprint(
+            scope: shoppingScope ?? .singleRecipe(activeRecipe.id),
+            retailerID: selectedRetailer.rawValue,
+            storeID: primaryStore.retailerStoreID,
+            fulfillment: fulfillmentMode,
+            plan: currentShoppingMealPrepSnapshot,
+            items: shoppingItems
+        )
+        guard let index = shoppingSessions.firstIndex(where: {
+            $0.id == sessionID && $0.isReusable
+        }) else { return }
+        shoppingSessions[index].items = shoppingItems
+        shoppingSessions[index].stateFingerprint = currentFingerprint
+        shoppingSessions[index].shoppingScope = shoppingScope ?? .singleRecipe(activeRecipe.id)
+        shoppingSessions[index].mealPrepSnapshot = currentShoppingMealPrepSnapshot
+    }
+
+    private func completedUncommittedSessionMatchingCurrentTrip() -> ShoppingSession? {
+        let manifestID = currentSavedManifest?.id
+        let currentSignature = shoppingTripSemanticSignature(
+            scope: shoppingScope ?? .singleRecipe(activeRecipe.id),
+            retailerID: selectedRetailer.rawValue,
+            storeID: primaryStore.retailerStoreID,
+            fulfillment: fulfillmentMode,
+            items: shoppingItems
+        )
+        return shoppingSessions.first { session in
+            guard !session.isCommitted,
+                  session.isGuideComplete,
+                  manifestID == nil || session.manifestID == manifestID else { return false }
+            return shoppingTripSemanticSignature(for: session) == currentSignature
+        }
+    }
+
+    private func shoppingSessionsRepresentSameTrip(
+        _ lhs: ShoppingSession,
+        _ rhs: ShoppingSession
+    ) -> Bool {
+        if let leftTripID = lhs.logicalTripID,
+           let rightTripID = rhs.logicalTripID {
+            return leftTripID == rightTripID
+        }
+
+        // A nil manifest is compatible with one manifest-backed legacy alias,
+        // but it must never bridge two distinct manifests. Resolve legacy
+        // equivalence across the full collection so compatibility remains
+        // transitive and a real repeat trip cannot be reconciled as an alias.
+        let clusterIDs = legacyShoppingSessionClusterIDs()
+        guard let leftClusterID = clusterIDs[lhs.id],
+              let rightClusterID = clusterIDs[rhs.id] else { return false }
+        return leftClusterID == rightClusterID
+    }
+
+    private func legacyShoppingSessionClusterIDs() -> [UUID: Int] {
+        let orderedIndices = shoppingSessions.indices.sorted { lhs, rhs in
+            if shoppingSessions[lhs].startedAt == shoppingSessions[rhs].startedAt {
+                return shoppingSessions[lhs].id.uuidString < shoppingSessions[rhs].id.uuidString
+            }
+            return shoppingSessions[lhs].startedAt < shoppingSessions[rhs].startedAt
+        }
+        var clusters: [[Int]] = []
+
+        for index in orderedIndices {
+            let candidate = shoppingSessions[index]
+            let matchingClusterIndex = clusters.indices.reversed().first { clusterIndex in
+                guard let representativeIndex = clusters[clusterIndex].first,
+                      shoppingTripSemanticSignature(for: shoppingSessions[representativeIndex]) ==
+                        shoppingTripSemanticSignature(for: candidate) else { return false }
+
+                let manifestIDs = Set(
+                    clusters[clusterIndex].compactMap { shoppingSessions[$0].manifestID }
+                )
+                if let manifestID = candidate.manifestID,
+                   !manifestIDs.isEmpty,
+                   !manifestIDs.contains(manifestID) {
+                    return false
+                }
+
+                let logicalTripIDs = Set(
+                    clusters[clusterIndex].compactMap { shoppingSessions[$0].logicalTripID }
+                )
+                if let logicalTripID = candidate.logicalTripID,
+                   !logicalTripIDs.isEmpty,
+                   !logicalTripIDs.contains(logicalTripID) {
+                    return false
+                }
+
+                let committedThrough = clusters[clusterIndex]
+                    .compactMap { shoppingSessions[$0].reconciliation?.committedAt }
+                    .max()
+                guard let committedThrough else {
+                    return true
+                }
+                return candidate.startedAt <= committedThrough
+            }
+
+            if let matchingClusterIndex {
+                clusters[matchingClusterIndex].append(index)
+            } else {
+                clusters.append([index])
+            }
+        }
+
+        var clusterIDs: [UUID: Int] = [:]
+        for (clusterID, cluster) in clusters.enumerated() {
+            for index in cluster {
+                clusterIDs[shoppingSessions[index].id] = clusterID
+            }
+        }
+        return clusterIDs
+    }
+
+    private func shoppingTripSemanticSignature(for session: ShoppingSession) -> String {
+        shoppingTripSemanticSignature(
+            scope: session.shoppingScope ?? .singleRecipe(session.recipeID),
+            retailerID: session.retailerID ?? session.items.first?.product.retailerID ?? "",
+            storeID: session.storeID,
+            fulfillment: session.fulfillmentMode ?? .pickup,
+            items: session.items
+        )
+    }
+
+    private func shoppingTripSemanticSignature(
+        scope: ShoppingScope,
+        retailerID: String,
+        storeID: String,
+        fulfillment: FulfillmentMode,
+        items: [ShoppingListItem]
+    ) -> String {
+        let itemState = items.map(shoppingItemSemanticIdentity)
+        .sorted()
+        .joined(separator: "\n")
+        return "\(scope.fingerprintInput)|\(retailerID)|\(storeID)|\(fulfillment.rawValue)\n\(itemState)"
+    }
+
+    private func shoppingItemSemanticIdentity(_ item: ShoppingListItem) -> String {
+        [
+            preferenceKey(for: item.ingredient.name),
+            preferenceKey(for: item.requestedQuantity),
+            String(item.purchaseQuantity),
+            preferenceKey(for: item.product.retailerID),
+            preferenceKey(for: item.product.retailerProductID),
+            item.product.exactURL.absoluteString.lowercased(),
+            item.product.packageQuantity.map { String($0.bitPattern) } ?? "",
+            preferenceKey(for: item.product.packageUnit ?? "")
+        ].joined(separator: "|")
     }
 
     private func normalizedGTIN14(_ value: String?) -> String? {
@@ -1499,23 +2769,24 @@ final class AppModel {
             normalizedBarcode = nil
         }
         let record = OfflineBarcodeCatalog.lookup(upc: normalizedUPC)
-        if let index = pantryInventory.firstIndex(where: { item in
+        var updatedInventory = pantryInventory
+        if let index = updatedInventory.firstIndex(where: { item in
             if let normalizedBarcode {
                 return item.matches(barcode: normalizedBarcode)
             }
             return item.upc == normalizedUPC
         }) {
-            pantryInventory[index].addPackages(1)
-            pantryInventory[index].updatedAt = .now
+            updatedInventory[index].addPackages(1)
+            updatedInventory[index].updatedAt = .now
             if let normalizedBarcode {
-                pantryInventory[index].register(
+                updatedInventory[index].register(
                     barcode: normalizedBarcode,
                     rawValue: upc,
                     symbology: nil
                 )
             }
         } else {
-            pantryInventory.insert(
+            updatedInventory.insert(
                 PantryInventoryItem(
                     upc: normalizedUPC,
                     name: record?.name ?? "Unknown Product",
@@ -1529,43 +2800,50 @@ final class AppModel {
                 at: 0
             )
         }
+        guard commitPantryInventoryChange(updatedInventory) else {
+            showToast("Pantry change could not be saved")
+            return
+        }
         track(.barcodeScanned, properties: ["matched": record == nil ? "false" : "true"])
         track(.pantryItemAdded, properties: ["source": PantryItemSource.barcode.rawValue])
         showToast(record == nil ? "UPC saved for later matching" : "\(record!.name) added to pantry")
-        refreshPantrySuggestions()
     }
 
     func addPantryItem(
         submission: PantryBarcodeSubmission,
         duplicateAction: BarcodeDuplicateResolutionAction = .increment
     ) {
-        if let index = pantryInventory.firstIndex(where: { $0.matches(barcode: submission.barcode) }) {
+        var updatedInventory = pantryInventory
+        if let index = updatedInventory.firstIndex(where: { $0.matches(barcode: submission.barcode) }) {
             switch duplicateAction {
             case .increment:
-                pantryInventory[index].addPackages(1)
-                pantryInventory[index].updatedAt = .now
-                pantryInventory[index].register(
+                updatedInventory[index].addPackages(1)
+                updatedInventory[index].updatedAt = .now
+                updatedInventory[index].register(
                     barcode: submission.barcode,
                     rawValue: submission.scan.rawBarcode,
                     symbology: submission.scan.rawSymbology
                 )
             case .replace:
-                let existingQuantity = pantryInventory[index].packageCount
-                let knownBarcodes = pantryInventory[index].barcodeGTINs ?? []
-                pantryInventory[index] = pantryItem(from: submission, quantity: existingQuantity)
-                pantryInventory[index].barcodeGTINs = Array(
+                let existingQuantity = updatedInventory[index].packageCount
+                let knownBarcodes = updatedInventory[index].barcodeGTINs ?? []
+                updatedInventory[index] = pantryItem(from: submission, quantity: existingQuantity)
+                updatedInventory[index].barcodeGTINs = Array(
                     Set(knownBarcodes + [submission.barcode.canonicalGTIN14])
                 ).sorted()
             case .cancel:
                 return
             }
         } else {
-            pantryInventory.insert(pantryItem(from: submission), at: 0)
+            updatedInventory.insert(pantryItem(from: submission), at: 0)
+        }
+        guard commitPantryInventoryChange(updatedInventory) else {
+            showToast("Pantry change could not be saved")
+            return
         }
         track(.barcodeScanned, properties: ["matched": submission.requiresUserNaming ? "false" : "true"])
         track(.pantryItemAdded, properties: ["source": PantryItemSource.barcode.rawValue])
         showToast(submission.requiresUserNaming ? "Barcode saved — product name required" : "\(submission.name) added to pantry")
-        refreshPantrySuggestions()
     }
 
     private func pantryItem(from submission: PantryBarcodeSubmission, quantity: Double = 1) -> PantryInventoryItem {
@@ -1586,21 +2864,31 @@ final class AppModel {
     func addManualPantryItem(name: String) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        pantryInventory.insert(PantryInventoryItem(name: trimmed, source: .manual), at: 0)
+        var updatedInventory = pantryInventory
+        updatedInventory.insert(PantryInventoryItem(name: trimmed, source: .manual), at: 0)
+        guard commitPantryInventoryChange(updatedInventory) else {
+            showToast("Pantry change could not be saved")
+            return
+        }
         track(.pantryItemAdded, properties: ["source": PantryItemSource.manual.rawValue])
-        refreshPantrySuggestions()
     }
 
     func updatePantryItem(_ item: PantryInventoryItem) {
-        guard let index = pantryInventory.firstIndex(where: { $0.id == item.id }) else { return }
-        pantryInventory[index] = item
-        pantryInventory[index].updatedAt = .now
-        refreshPantrySuggestions()
+        var updatedInventory = pantryInventory
+        guard let index = updatedInventory.firstIndex(where: { $0.id == item.id }) else { return }
+        updatedInventory[index] = item
+        updatedInventory[index].updatedAt = .now
+        if !commitPantryInventoryChange(updatedInventory) {
+            showToast("Pantry change could not be saved")
+        }
     }
 
     func removePantryItems(at offsets: IndexSet) {
-        pantryInventory.remove(atOffsets: offsets)
-        refreshPantrySuggestions()
+        var updatedInventory = pantryInventory
+        updatedInventory.remove(atOffsets: offsets)
+        if !commitPantryInventoryChange(updatedInventory) {
+            showToast("Pantry change could not be saved")
+        }
     }
 
     /// Existing pantry items whose names match a partial query, prefix
@@ -1652,24 +2940,26 @@ final class AppModel {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, amount > 0 else { return }
 
+        var updatedInventory = pantryInventory
+        let successMessage: String
         if let existing = pantryMergeTarget(named: trimmed, submission: submission),
-           let index = pantryInventory.firstIndex(where: { $0.id == existing.id }) {
-            pantryInventory[index].addPackages(amount)
-            pantryInventory[index].updatedAt = .now
+           let index = updatedInventory.firstIndex(where: { $0.id == existing.id }) {
+            updatedInventory[index].addPackages(amount)
+            updatedInventory[index].updatedAt = .now
             if let submission {
-                pantryInventory[index].register(
+                updatedInventory[index].register(
                     barcode: submission.barcode,
                     rawValue: submission.scan.rawBarcode,
                     symbology: submission.scan.rawSymbology
                 )
-                if pantryInventory[index].requiresUserNaming == true {
-                    pantryInventory[index].name = trimmed
-                    pantryInventory[index].requiresUserNaming = false
+                if updatedInventory[index].requiresUserNaming == true {
+                    updatedInventory[index].name = trimmed
+                    updatedInventory[index].requiresUserNaming = false
                 }
             }
-            showToast("Added \(amount.formatted()) to \(pantryInventory[index].name)")
+            successMessage = "Added \(amount.formatted()) to \(updatedInventory[index].name)"
         } else {
-            pantryInventory.insert(
+            updatedInventory.insert(
                 PantryInventoryItem(
                     upc: submission?.barcode.digits,
                     name: trimmed,
@@ -1684,8 +2974,14 @@ final class AppModel {
                 ),
                 at: 0
             )
-            showToast("\(trimmed) added to pantry")
+            successMessage = "\(trimmed) added to pantry"
         }
+
+        guard commitPantryInventoryChange(updatedInventory) else {
+            showToast("Pantry change could not be saved")
+            return
+        }
+        showToast(successMessage)
 
         if submission != nil {
             track(.barcodeScanned, properties: ["matched": "named"])
@@ -1693,7 +2989,6 @@ final class AppModel {
         track(.pantryItemAdded, properties: [
             "source": (submission == nil ? PantryItemSource.manual : PantryItemSource.barcode).rawValue
         ])
-        refreshPantrySuggestions()
     }
 
     func track(_ name: AnalyticsEventName, properties: [String: String] = [:]) {
@@ -1708,42 +3003,86 @@ final class AppModel {
     }
 
     private var currentSavedManifest: ShoppingManifest? {
-        savedLists.first {
-            $0.manifest.recipeID == activeRecipe.id &&
+        if let sessionID = activeShoppingSessionID,
+           let session = shoppingSession(id: sessionID) {
+            if let manifestID = session.manifestID,
+               let exact = savedLists.first(where: { $0.manifest.id == manifestID })?.manifest {
+                return exact
+            }
+            if let logicalTripID = session.reconciliationIdentity,
+               let exact = savedLists.first(where: {
+                   $0.manifest.logicalTripID == logicalTripID
+               })?.manifest {
+                return exact
+            }
+        }
+        return savedLists.first {
+            ($0.manifest.shoppingScope ?? .singleRecipe($0.manifest.recipeID)) == (shoppingScope ?? .singleRecipe(activeRecipe.id)) &&
             $0.manifest.retailerID == selectedRetailer.rawValue &&
-            $0.manifest.storeID == primaryStore.retailerStoreID
+            $0.manifest.storeID == primaryStore.retailerStoreID &&
+            $0.manifest.handoffProgress != .completed
         }?.manifest
     }
 
-    private func persistCurrentManifest(progress: ManifestHandoffProgress) {
-        let existingIndex = savedLists.firstIndex {
-            $0.manifest.recipeID == activeRecipe.id &&
-            $0.manifest.retailerID == selectedRetailer.rawValue &&
-            $0.manifest.storeID == primaryStore.retailerStoreID
-        }
+    private func persistCurrentManifest(
+        progress: ManifestHandoffProgress,
+        logicalTripID requestedLogicalTripID: UUID? = nil,
+        forceNewTrip: Bool = false
+    ) {
+        let activeSession = activeShoppingSessionID.flatMap(shoppingSession(id:))
+        let existingIndex: Int? = forceNewTrip ? nil : {
+            if let manifestID = activeSession?.manifestID,
+               let index = savedLists.firstIndex(where: { $0.manifest.id == manifestID }) {
+                return index
+            }
+            let logicalTripID = requestedLogicalTripID ?? activeSession?.reconciliationIdentity
+            if let logicalTripID,
+               let index = savedLists.firstIndex(where: {
+                   $0.manifest.logicalTripID == logicalTripID
+               }) {
+                return index
+            }
+            return savedLists.firstIndex {
+                ($0.manifest.shoppingScope ?? .singleRecipe($0.manifest.recipeID)) == (shoppingScope ?? .singleRecipe(activeRecipe.id)) &&
+                $0.manifest.retailerID == selectedRetailer.rawValue &&
+                $0.manifest.storeID == primaryStore.retailerStoreID &&
+                $0.manifest.handoffProgress != .completed
+            }
+        }()
         let existing = existingIndex.map { savedLists[$0].manifest }
+        let logicalTripID = requestedLogicalTripID ??
+            activeSession?.reconciliationIdentity ??
+            existing?.logicalTripID ??
+            existing?.id ??
+            UUID()
         let manifest = ShoppingManifest(
             id: existing?.id ?? UUID(),
-            recipeID: activeRecipe.id,
-            recipeTitle: activeRecipe.title,
+            logicalTripID: logicalTripID,
+            recipeID: currentShoppingScopeID,
+            recipeTitle: currentShoppingTitle,
             retailerID: primaryStore.retailerID,
             storeID: primaryStore.retailerStoreID,
             storeName: primaryStore.name,
-            desiredServings: desiredServings,
+            desiredServings: isMealPrepShopping ? 0 : desiredServings,
             fulfillmentMode: fulfillmentMode,
             items: shoppingItems.map {
                 ManifestLineItem(
+                    id: $0.id,
                     ingredientID: $0.ingredient.id,
                     ingredientName: $0.ingredient.name,
                     requestedQuantity: $0.requestedQuantity,
+                    requestedAmount: $0.requestedAmount,
                     purchaseQuantity: $0.purchaseQuantity,
                     product: $0.product,
-                    status: $0.status
+                    status: $0.status,
+                    sourceContributions: currentMealPrepSources(for: $0.ingredient.id)
                 )
             },
             createdAt: existing?.createdAt ?? .now,
             updatedAt: .now,
-            handoffProgress: progress
+            handoffProgress: progress,
+            shoppingScope: shoppingScope ?? .singleRecipe(activeRecipe.id),
+            mealPrepSnapshot: currentShoppingMealPrepSnapshot
         )
 
         if let existingIndex {
@@ -1753,16 +3092,18 @@ final class AppModel {
     }
 
     private func buildShoppingItems() async -> [ShoppingListItem] {
-        let multiplier = Double(desiredServings) / Double(max(1, activeRecipe.servings))
+        let multiplier = isMealPrepShopping ? 1 : Double(desiredServings) / Double(max(1, activeRecipe.servings))
         let method: FulfillmentMethod = fulfillmentMode == .pickup ? .pickup : .delivery
         let store = primaryStore
         var results: [ShoppingListItem] = []
 
         for ingredient in ingredientsToBuy {
-            let requestedQuantity = PantryMatchingService.quantityToBuy(
-                for: ingredient,
-                requiredQuantity: ingredient.quantity * multiplier
-            )
+            let requestedQuantity = isMealPrepShopping
+                ? ingredient.quantity
+                : PantryMatchingService.quantityToBuy(
+                    for: ingredient,
+                    requiredQuantity: ingredient.quantity * multiplier
+                )
             let request = RetailerProductSearchRequest(
                 ingredient: ingredient,
                 retailerID: selectedRetailer.rawValue,
@@ -1791,11 +3132,13 @@ final class AppModel {
 
             results.append(
                 ShoppingListItem(
+                    id: ingredient.id,
                     ingredient: ingredient,
                     requestedQuantity: Ingredient.quantityText(
                         requestedQuantity,
                         unit: ingredient.unit
                     ),
+                    requestedAmount: requestedQuantity,
                     purchaseQuantity: PackageMath.packageCount(
                         product: selected.product,
                         requestedQuantity: requestedQuantity,
@@ -1810,6 +3153,13 @@ final class AppModel {
             )
         }
         return results
+    }
+
+    private func currentMealPrepSources(for ingredientID: UUID) -> [CombinedIngredientSource] {
+        currentShoppingMealPrepSnapshot?.lines.first {
+            $0.shoppingItemID == ingredientID ||
+                $0.sources.first?.ingredient.id == ingredientID
+        }?.sources ?? []
     }
 
     private static func makeShoppingItems(
@@ -1859,11 +3209,13 @@ final class AppModel {
             guard let selected = ranked.first else { return nil }
 
             return ShoppingListItem(
+                id: ingredient.id,
                 ingredient: ingredient,
                 requestedQuantity: Ingredient.quantityText(
                     requestedQuantity,
                     unit: ingredient.unit
                 ),
+                requestedAmount: requestedQuantity,
                 purchaseQuantity: PackageMath.packageCount(
                     product: selected.product,
                     requestedQuantity: requestedQuantity,
@@ -1913,7 +3265,11 @@ final class AppModel {
             preferredProductIDsByIngredient: preferenceOverride ?? preferredProductIDsByIngredient,
             analyticsEvents: analyticsEvents,
             walmartWishlistReference: walmartWishlistReference,
-            shoppingSessions: sessionOverride ?? shoppingSessions
+            shoppingSessions: sessionOverride ?? shoppingSessions,
+            activeShoppingSessionID: activeShoppingSessionID,
+            shoppingScope: shoppingScope,
+            mealPrepDraft: mealPrepDraft,
+            mealPrepPlan: mealPrepPlan
         )
     }
 
@@ -1934,6 +3290,7 @@ enum ShoppingReconciliationError: LocalizedError, Equatable {
     case sessionNotFound
     case emptyShoppingList
     case persistenceUnavailable(String)
+    case replacementQuantityConfirmationRequired(UUID)
 
     var errorDescription: String? {
         switch self {
@@ -1943,6 +3300,8 @@ enum ShoppingReconciliationError: LocalizedError, Equatable {
             "There are no shopping items to reconcile."
         case .persistenceUnavailable(let message):
             "SmartCart cannot safely update the pantry: \(message)"
+        case .replacementQuantityConfirmationRequired:
+            "Confirm how many replacement packages you bought before updating the pantry."
         }
     }
 }

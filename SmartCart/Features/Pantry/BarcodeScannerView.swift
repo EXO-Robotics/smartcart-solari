@@ -7,6 +7,7 @@ struct BarcodeScannerSheet: View {
 
     let embedded: Bool
     let title: String
+    let amountLabel: String
     let onComplete: (() -> Void)?
     let onSubmission: ((String, Double, PantryBarcodeSubmission) -> Void)?
 
@@ -23,11 +24,13 @@ struct BarcodeScannerSheet: View {
     init(
         embedded: Bool = false,
         title: String = "Scan pantry item",
+        amountLabel: String = "Amount",
         onSubmission: ((String, Double, PantryBarcodeSubmission) -> Void)? = nil,
         onComplete: (() -> Void)? = nil
     ) {
         self.embedded = embedded
         self.title = title
+        self.amountLabel = amountLabel
         self.onComplete = onComplete
         self.onSubmission = onSubmission
     }
@@ -298,12 +301,12 @@ struct BarcodeScannerSheet: View {
             }
 
             VStack(alignment: .leading, spacing: 7) {
-                Text("AMOUNT")
+                Text(amountLabel.uppercased())
                     .smartEyebrow(SmartCartTheme.mutedInk)
                 HStack(spacing: 10) {
                     amountButton("minus") { stockAmount = max(1, stockAmount - 1) }
                     TextField(
-                        "Amount",
+                        amountLabel,
                         value: $stockAmount,
                         format: .number.precision(.fractionLength(0...2))
                     )
@@ -352,7 +355,9 @@ struct BarcodeScannerSheet: View {
                 .clipShape(Circle())
         }
         .buttonStyle(PressableButtonStyle())
+        .smartCartMinimumHitTarget()
         .accessibilityLabel(symbol == "plus" ? "Increase amount" : "Decrease amount")
+        .accessibilityValue(stockAmount.formatted(.number.precision(.fractionLength(0...2))))
     }
 
     private func barcodeProvenance(_ barcode: NormalizedBarcode, raw: String) -> some View {

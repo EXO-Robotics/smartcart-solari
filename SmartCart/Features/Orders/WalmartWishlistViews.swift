@@ -2,9 +2,11 @@ import SafariServices
 import SwiftUI
 
 struct RetailerSafariHandoffView: View {
+    @Environment(\.dismiss) private var dismiss
     @Environment(AppModel.self) private var appModel
 
     @State private var sheetDestination: RetailerGuideSheetDestination?
+    @State private var pendingFeedbackSessionID: UUID?
     @State private var pendingFeedbackItemID: UUID?
     @State private var expectsReturnFeedback = false
 
@@ -17,8 +19,14 @@ struct RetailerSafariHandoffView: View {
                         title: "Nothing to guide yet",
                         message: "Match products before starting the \(retailerName) guide."
                     )
+                } else if !appModel.retailerSetupIsComplete {
+                    retailerSetupView
                 } else if appModel.retailerGuideIsComplete {
                     completionView
+                } else if appModel.activeShoppingSessionIsImmutable {
+                    immutableTripView
+                } else if !appModel.retailerSessionIsInProgress {
+                    sessionStartView
                 } else if let item = appModel.currentGuidedItem {
                     guideHeader
                     productCard(item)
@@ -33,17 +41,31 @@ struct RetailerSafariHandoffView: View {
         .smartCartBackground()
         .navigationTitle("Shop at \(retailerName)")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if appModel.retailerSessionIsInProgress,
+               !appModel.activeShoppingSessionIsImmutable {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Pause") {
+                        if appModel.pauseRetailerShoppingSession() {
+                            dismiss()
+                        }
+                    }
+                    .accessibilityIdentifier("retailer-session-pause")
+                }
+            }
+        }
         .sheet(item: $sheetDestination, onDismiss: sheetDidDismiss) { destination in
             switch destination {
-            case .product(_, let url), .retailer(let url):
+            case .product(_, _, let url), .retailer(let url):
                 RetailerSafariSheet(
                     url: url,
                     configuration: appModel.retailerConfiguration
                 )
                     .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
-            case .feedback(let itemID):
+            case .feedback(let sessionID, let itemID):
                 RetailerReturnFeedbackSheet(
+                    sessionID: sessionID,
                     itemID: itemID,
                     configuration: appModel.retailerConfiguration
                 )
@@ -57,6 +79,160 @@ struct RetailerSafariHandoffView: View {
         appModel.retailerConfiguration.displayName
     }
 
+    private var safeReplacementCandidates: [RetailerProductRecord] {
+        guard let item = appModel.currentGuidedItem else { return [] }
+        return ReplacementOptionPolicy.resolvedCandidates(from: item.alternatives) { candidate in
+            appModel.resolvedReplacementPackageCount(for: item, product: candidate)
+        }
+    }
+
+    private var immutableTripView: some View {
+        VStack(spacing: 18) {
+            Image(systemName: "lock.fill")
+                .font(.system(size: 52))
+                .foregroundStyle(SmartCartTheme.green)
+            Text("Completed trip · read only")
+                .font(.system(size: 27, weight: .bold, design: .rounded))
+                .foregroundStyle(SmartCartTheme.navy)
+                .multilineTextAlignment(.center)
+            Text("This trip’s products, quantities, and outcomes are frozen. Create a new trip before making changes.")
+                .font(.subheadline)
+                .foregroundStyle(SmartCartTheme.secondaryInk)
+                .multilineTextAlignment(.center)
+            Button {
+                _ = appModel.forkCompletedShoppingTrip()
+            } label: {
+                Label("Edit as new trip", systemImage: "doc.on.doc.fill")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .accessibilityHint("Creates an editable copy and preserves this completed trip")
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 24)
+        .smartCartCard()
+        .smartCartShadow()
+    }
+
+    private var retailerSetupView: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 7) {
+                Text("RETAILER SETUP")
+                    .smartEyebrow()
+                Text("Prepare \(retailerName)")
+                    .font(.system(size: 27, weight: .bold, design: .rounded))
+                    .foregroundStyle(SmartCartTheme.navy)
+                Text("SmartCart never asks for your retailer password. Sign in and prepare your list directly with \(retailerName), then come back.")
+                    .font(.subheadline)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
+            }
+
+            VStack(alignment: .leading, spacing: 14) {
+                setupStep("1", "Open \(retailerName) and sign in.")
+                setupStep("2", "Create or choose \(appModel.retailerConfiguration.savedListName).")
+                setupStep("3", "Return here. SmartCart can remember your confirmation on this device.")
+            }
+
+            Button {
+                appModel.recordRetailerSetupStarted()
+                sheetDestination = .retailer(appModel.retailerSetupURL())
+            } label: {
+                HStack {
+                    Text("Open \(retailerName) setup")
+                    Spacer()
+                    Image(systemName: "arrow.up.right")
+                }
+            }
+            .buttonStyle(BlueButtonStyle())
+            .accessibilityIdentifier("retailer-setup-open")
+
+            Button {
+                appModel.completeRetailerSetup()
+            } label: {
+                Label("I’m signed in and my list is ready", systemImage: "checkmark.circle.fill")
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .accessibilityIdentifier("retailer-setup-complete")
+
+            InfoBanner(
+                symbol: "hand.raised.fill",
+                title: "You stay in control",
+                message: "This only records your confirmation. SmartCart cannot see your account, verify sign-in, or create a retailer list.",
+                color: SmartCartTheme.amber
+            )
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .smartCartCard()
+        .smartCartShadow()
+    }
+
+    private func setupStep(_ number: String, _ text: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text(number)
+                .font(.caption.bold())
+                .foregroundStyle(SmartCartTheme.onAccent)
+                .frame(width: 27, height: 27)
+                .background(SmartCartTheme.green)
+                .clipShape(Circle())
+            Text(text)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(SmartCartTheme.navy)
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var sessionStartView: some View {
+        VStack(spacing: 20) {
+            Image(systemName: appModel.guidedCompletedCount > 0 ? "location.fill.viewfinder" : "location.north.circle.fill")
+                .font(.system(size: 58))
+                .foregroundStyle(SmartCartTheme.green)
+
+            VStack(spacing: 7) {
+                Text(appModel.guidedCompletedCount > 0 ? "Resume shopping" : "Your shopping session is ready")
+                    .font(.system(size: 27, weight: .bold, design: .rounded))
+                    .foregroundStyle(SmartCartTheme.navy)
+                    .multilineTextAlignment(.center)
+                Text("SmartCart will guide you through one product at a time and remember your place.")
+                    .font(.subheadline)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
+                    .multilineTextAlignment(.center)
+            }
+
+            HStack(spacing: 10) {
+                summaryMetric("Products", value: appModel.shoppingItems.count, symbol: "basket.fill")
+                summaryMetric("Remaining", value: appModel.retailerSessionRemainingCount, symbol: "arrow.right.circle.fill")
+            }
+
+            Button {
+                appModel.startOrResumeRetailerShoppingSession()
+            } label: {
+                HStack {
+                    Text(appModel.guidedCompletedCount > 0 ? "Continue shopping" : "Start shopping")
+                    Spacer()
+                    Image(systemName: "arrow.right")
+                }
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .accessibilityIdentifier("retailer-session-start")
+
+            Button("Redo \(retailerName) setup") {
+                appModel.resetRetailerSetup()
+            }
+            .font(.subheadline.weight(.bold))
+            .foregroundStyle(SmartCartTheme.green)
+            .accessibilityIdentifier("retailer-setup-reset")
+
+            Text("Each product opens on the retailer’s secure page. When you return, report what happened and SmartCart advances to the next item.")
+                .font(.caption)
+                .foregroundStyle(SmartCartTheme.secondaryInk)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+        .smartCartCard()
+        .smartCartShadow()
+    }
+
     private var guideHeader: some View {
         VStack(spacing: 10) {
             HStack {
@@ -64,7 +240,7 @@ struct RetailerSafariHandoffView: View {
                     .font(.caption.weight(.bold))
                     .foregroundStyle(SmartCartTheme.green)
                 Spacer()
-                Text("\(appModel.guidedCompletedCount) answered")
+                Text(appModel.retailerSessionProgressText)
                     .font(.caption)
                     .foregroundStyle(SmartCartTheme.secondaryInk)
             }
@@ -170,7 +346,9 @@ struct RetailerSafariHandoffView: View {
     private var replacementAndSkip: some View {
         ViewThatFits {
             HStack(spacing: 9) {
-                replacementMenu
+                if !safeReplacementCandidates.isEmpty {
+                    replacementMenu
+                }
                 Button {
                     recordOutcome(.skipped)
                 } label: {
@@ -180,7 +358,9 @@ struct RetailerSafariHandoffView: View {
             }
 
             VStack(spacing: 9) {
-                replacementMenu
+                if !safeReplacementCandidates.isEmpty {
+                    replacementMenu
+                }
                 Button {
                     recordOutcome(.skipped)
                 } label: {
@@ -194,7 +374,7 @@ struct RetailerSafariHandoffView: View {
     private var replacementMenu: some View {
         Menu {
             if let item = appModel.currentGuidedItem {
-                ForEach(item.alternatives) { candidate in
+                ForEach(safeReplacementCandidates) { candidate in
                     Button("\(candidate.brand) \(candidate.name)") {
                         appModel.selectAlternative(itemID: item.id, candidateID: candidate.id)
                     }
@@ -213,7 +393,7 @@ struct RetailerSafariHandoffView: View {
                         .stroke(SmartCartTheme.border, lineWidth: 1)
                 }
         }
-        .disabled(appModel.currentGuidedItem?.alternatives.isEmpty != false)
+        .disabled(safeReplacementCandidates.isEmpty)
     }
 
     private var navigationControls: some View {
@@ -257,14 +437,26 @@ struct RetailerSafariHandoffView: View {
             }
 
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                summaryMetric("Added", value: appModel.savedForLaterCount + appModel.retailerAddedCount, symbol: "checkmark.circle.fill")
-                summaryMetric("Total", value: appModel.shoppingItems.count, symbol: "basket.fill")
+                summaryMetric("Saved to list", value: appModel.savedForLaterCount, symbol: "bookmark.fill")
+                summaryMetric("Added to cart", value: appModel.retailerAddedCount, symbol: "cart.fill")
                 summaryMetric("Unavailable", value: appModel.retailerUnavailableCount, symbol: "exclamationmark.triangle.fill")
                 summaryMetric("Skipped", value: appModel.retailerSkippedCount, symbol: "forward.fill")
             }
 
+            HStack {
+                Text("Original seeded plan · not live")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
+                Spacer()
+                Text(appModel.estimatedTotal, format: .currency(code: "USD"))
+                    .font(.title3.bold())
+                    .foregroundStyle(SmartCartTheme.navy)
+            }
+            .padding(14)
+            .background(SmartCartTheme.canvasRaise)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
             Button {
-                guard appModel.ensureCurrentShoppingSession() != nil else { return }
                 sheetDestination = .retailer(appModel.retailerListsURL())
             } label: {
                 HStack {
@@ -291,9 +483,9 @@ struct RetailerSafariHandoffView: View {
             .buttonStyle(PrimaryButtonStyle())
 
             Button {
-                appModel.resetFlow()
+                dismiss()
             } label: {
-                Label("Do this later", systemImage: "clock.fill")
+                Label("Finish later", systemImage: "clock.fill")
             }
             .buttonStyle(SecondaryButtonStyle())
         }
@@ -307,6 +499,7 @@ struct RetailerSafariHandoffView: View {
         VStack(spacing: 5) {
             Image(systemName: symbol)
                 .foregroundStyle(SmartCartTheme.green)
+                .accessibilityHidden(true)
             Text("\(value)")
                 .font(.title2.bold())
                 .foregroundStyle(SmartCartTheme.navy)
@@ -318,34 +511,42 @@ struct RetailerSafariHandoffView: View {
         .padding(.vertical, 13)
         .background(SmartCartTheme.canvasRaise)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title), \(value)")
     }
 
     private func openProduct(_ item: ShoppingListItem) {
+        guard let sessionID = appModel.activeShoppingSessionID else { return }
         appModel.recordRetailerProductOpened(itemID: item.id)
+        pendingFeedbackSessionID = sessionID
         pendingFeedbackItemID = item.id
         expectsReturnFeedback = true
-        sheetDestination = .product(item.id, appModel.productURL(for: item))
+        sheetDestination = .product(sessionID, item.id, appModel.productURL(for: item))
     }
 
     private func sheetDidDismiss() {
-        guard expectsReturnFeedback, let itemID = pendingFeedbackItemID else { return }
+        guard expectsReturnFeedback,
+              let sessionID = pendingFeedbackSessionID,
+              let itemID = pendingFeedbackItemID else { return }
         expectsReturnFeedback = false
+        pendingFeedbackSessionID = nil
         pendingFeedbackItemID = nil
         Task { @MainActor in
             await Task.yield()
-            sheetDestination = .feedback(itemID)
+            sheetDestination = .feedback(sessionID, itemID)
         }
     }
 
     private func recordOutcome(_ outcome: GuidedItemStatus) {
-        guard let item = appModel.currentGuidedItem else { return }
-        appModel.recordRetailerOutcome(outcome, for: item.id)
+        guard let sessionID = appModel.activeShoppingSessionID,
+              let item = appModel.currentGuidedItem else { return }
+        appModel.recordRetailerOutcome(outcome, for: item.id, sessionID: sessionID)
     }
 
     private func outcomeLabel(_ status: GuidedItemStatus) -> String {
         switch status {
         case .waiting: "Awaiting answer"
-        case .added, .savedToWishlist: "Reported saved for later"
+        case .added, .savedToWishlist: "Reported added to \(appModel.retailerConfiguration.savedListName)"
         case .addedToCart: "Reported added at \(retailerName)"
         case .unavailable: "Reported unavailable"
         case .skipped: "Skipped"
@@ -367,6 +568,7 @@ private struct RetailerReturnFeedbackSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AppModel.self) private var appModel
 
+    let sessionID: UUID
     let itemID: UUID
     let configuration: RetailerGuideConfiguration
 
@@ -397,7 +599,7 @@ private struct RetailerReturnFeedbackSheet: View {
                         outcome: .addedToCart,
                         primary: true
                     )
-                    feedbackButton("Saved for later", symbol: "bookmark.fill", outcome: .savedToWishlist)
+                    feedbackButton(savedListOutcomeLabel, symbol: "bookmark.fill", outcome: .savedToWishlist)
                     feedbackButton("Product unavailable", symbol: "exclamationmark.triangle.fill", outcome: .unavailable)
                     feedbackButton("Skip this item", symbol: "forward.fill", outcome: .skipped)
 
@@ -428,7 +630,7 @@ private struct RetailerReturnFeedbackSheet: View {
         primary: Bool = false
     ) -> some View {
         Button {
-            appModel.recordRetailerOutcome(outcome, for: itemID)
+            appModel.recordRetailerOutcome(outcome, for: itemID, sessionID: sessionID)
             dismiss()
         } label: {
             Label(title, systemImage: symbol)
@@ -436,6 +638,14 @@ private struct RetailerReturnFeedbackSheet: View {
         }
         .buttonStyle(primary ? AnyRetailerButtonStyle.primary : AnyRetailerButtonStyle.secondary)
         .accessibilityIdentifier("retailer-feedback-\(outcome.rawValue)")
+    }
+
+    private var savedListOutcomeLabel: String {
+        switch configuration.retailer {
+        case .walmart: "Added to Walmart Wishlist"
+        case .target: "Added to Target Shopping List"
+        case .kroger: "Added to Kroger Shopping List"
+        }
     }
 }
 
@@ -464,14 +674,14 @@ private enum AnyRetailerButtonStyle: ButtonStyle {
 }
 
 private enum RetailerGuideSheetDestination: Identifiable {
-    case product(UUID, URL)
-    case feedback(UUID)
+    case product(UUID, UUID, URL)
+    case feedback(UUID, UUID)
     case retailer(URL)
 
     var id: String {
         switch self {
-        case .product(let itemID, _): "product-\(itemID.uuidString)"
-        case .feedback(let itemID): "feedback-\(itemID.uuidString)"
+        case .product(let sessionID, let itemID, _): "product-\(sessionID.uuidString)-\(itemID.uuidString)"
+        case .feedback(let sessionID, let itemID): "feedback-\(sessionID.uuidString)-\(itemID.uuidString)"
         case .retailer(let url): "retailer-\(url.absoluteString)"
         }
     }

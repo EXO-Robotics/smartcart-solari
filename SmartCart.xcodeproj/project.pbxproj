@@ -32,7 +32,13 @@
 		A10000000000000000000017 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000018 /* Assets.xcassets */; };
 		A10000000000000000000018 /* WalmartWishlistViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000019 /* WalmartWishlistViews.swift */; };
 		A10000000000000000000019 /* ShoppingReconciliationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001A /* ShoppingReconciliationView.swift */; };
+		A1000000000000000000001B /* MealPrepModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001B /* MealPrepModels.swift */; };
+		A1000000000000000000001C /* MealPrepAggregationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001C /* MealPrepAggregationService.swift */; };
+		A1000000000000000000001D /* MealPrepViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001D /* MealPrepViews.swift */; };
 		A20000000000000000000001 /* SmartCartTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000001 /* SmartCartTests.swift */; };
+		A20000000000000000000002 /* MealPrepAggregationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000003 /* MealPrepAggregationTests.swift */; };
+		A20000000000000000000003 /* ReleaseBlockerMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000004 /* ReleaseBlockerMigrationTests.swift */; };
+		A20000000000000000000004 /* ReleaseBlockerPackageMathTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000005 /* ReleaseBlockerPackageMathTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -72,8 +78,14 @@
 		B10000000000000000000018 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B10000000000000000000019 /* WalmartWishlistViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalmartWishlistViews.swift; sourceTree = "<group>"; };
 		B1000000000000000000001A /* ShoppingReconciliationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingReconciliationView.swift; sourceTree = "<group>"; };
+		B1000000000000000000001B /* MealPrepModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealPrepModels.swift; sourceTree = "<group>"; };
+		B1000000000000000000001C /* MealPrepAggregationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealPrepAggregationService.swift; sourceTree = "<group>"; };
+		B1000000000000000000001D /* MealPrepViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealPrepViews.swift; sourceTree = "<group>"; };
 		B20000000000000000000001 /* SmartCartTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartCartTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000002 /* SmartCartTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SmartCartTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B20000000000000000000003 /* MealPrepAggregationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealPrepAggregationTests.swift; sourceTree = "<group>"; };
+		B20000000000000000000004 /* ReleaseBlockerMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReleaseBlockerMigrationTests.swift; sourceTree = "<group>"; };
+		B20000000000000000000005 /* ReleaseBlockerPackageMathTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReleaseBlockerPackageMathTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -118,6 +130,7 @@
 				D10000000000000000000008 /* Orders */,
 				D10000000000000000000009 /* Preferences */,
 				D1000000000000000000000C /* Pantry */,
+				D1000000000000000000000D /* MealPrep */,
 				D1000000000000000000000B /* Services */,
 			);
 			path = SmartCart;
@@ -129,6 +142,7 @@
 				B10000000000000000000002 /* Models.swift */,
 				B10000000000000000000003 /* AppModel.swift */,
 				B1000000000000000000000D /* RetailerModels.swift */,
+				B1000000000000000000001B /* MealPrepModels.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -195,6 +209,7 @@
 				B10000000000000000000015 /* BarcodeResolutionService.swift */,
 				B10000000000000000000016 /* OCRLayoutReconstructor.swift */,
 				B10000000000000000000017 /* RecipePageClient.swift */,
+				B1000000000000000000001C /* MealPrepAggregationService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -205,6 +220,14 @@
 				B10000000000000000000012 /* BarcodeScannerView.swift */,
 			);
 			path = Features/Pantry;
+			sourceTree = "<group>";
+		};
+		D1000000000000000000000D /* MealPrep */ = {
+			isa = PBXGroup;
+			children = (
+				B1000000000000000000001D /* MealPrepViews.swift */,
+			);
+			path = Features/MealPrep;
 			sourceTree = "<group>";
 		};
 		D1000000000000000000000A /* Products */ = {
@@ -220,6 +243,9 @@
 			isa = PBXGroup;
 			children = (
 				B20000000000000000000001 /* SmartCartTests.swift */,
+				B20000000000000000000003 /* MealPrepAggregationTests.swift */,
+				B20000000000000000000004 /* ReleaseBlockerMigrationTests.swift */,
+				B20000000000000000000005 /* ReleaseBlockerPackageMathTests.swift */,
 			);
 			path = SmartCartTests;
 			sourceTree = "<group>";
@@ -352,6 +378,9 @@
 				A10000000000000000000016 /* RecipePageClient.swift in Sources */,
 				A10000000000000000000018 /* WalmartWishlistViews.swift in Sources */,
 				A10000000000000000000019 /* ShoppingReconciliationView.swift in Sources */,
+				A1000000000000000000001B /* MealPrepModels.swift in Sources */,
+				A1000000000000000000001C /* MealPrepAggregationService.swift in Sources */,
+				A1000000000000000000001D /* MealPrepViews.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -360,6 +389,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				A20000000000000000000001 /* SmartCartTests.swift in Sources */,
+				A20000000000000000000002 /* MealPrepAggregationTests.swift in Sources */,
+				A20000000000000000000003 /* ReleaseBlockerMigrationTests.swift in Sources */,
+				A20000000000000000000004 /* ReleaseBlockerPackageMathTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

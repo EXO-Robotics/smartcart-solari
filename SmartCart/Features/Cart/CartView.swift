@@ -578,6 +578,8 @@ struct RecipesView: View {
     private var savedPage: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
+                mealPrepLaunchCard
+
                 if appModel.shoppingItems.isEmpty {
                     EmptyStateView(
                         symbol: "book.fill",
@@ -599,6 +601,40 @@ struct RecipesView: View {
             .padding(.bottom, 34)
         }
         .scrollIndicators(.hidden)
+    }
+
+    private var mealPrepLaunchCard: some View {
+        Button {
+            appModel.startMealPrepDraft()
+        } label: {
+            HStack(spacing: 15) {
+                Image(systemName: "calendar.badge.plus")
+                    .font(.title2.bold())
+                    .foregroundStyle(SmartCartTheme.onAccent)
+                    .frame(width: 54, height: 54)
+                    .background(SmartCartTheme.green)
+                    .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Meal Prep Mode")
+                        .font(.headline)
+                        .foregroundStyle(SmartCartTheme.navy)
+                    Text("Select up to five saved recipes and build one pantry-aware shopping trip.")
+                        .font(.caption)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
+                        .multilineTextAlignment(.leading)
+                }
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right")
+                    .font(.caption.bold())
+                    .foregroundStyle(SmartCartTheme.green)
+            }
+            .smartCartCard()
+            .smartCartShadow()
+        }
+        .buttonStyle(PressableButtonStyle())
+        .accessibilityLabel("Meal Prep Mode")
+        .accessibilityHint("Select up to five saved recipes and shop once")
     }
 
     private var recentPage: some View {
@@ -686,7 +722,7 @@ struct RecipesView: View {
                 }
 
                 HStack(spacing: 14) {
-                    Image(systemName: appModel.activeRecipe.heroSymbol)
+                    Image(systemName: appModel.isMealPrepShopping ? "calendar.badge.checkmark" : appModel.activeRecipe.heroSymbol)
                         .font(.title.bold())
                         .foregroundStyle(SmartCartTheme.onAccent)
                         .frame(width: 62, height: 62)
@@ -695,7 +731,7 @@ struct RecipesView: View {
                         .shadow(color: SmartCartTheme.mintGlow, radius: 12)
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(appModel.activeRecipe.title)
+                        Text(appModel.currentShoppingTitle)
                             .font(.title3.bold())
                             .foregroundStyle(SmartCartTheme.navy)
                             .lineLimit(2)
@@ -739,28 +775,37 @@ struct RecipesView: View {
                 .smartCartCard(padding: 14)
             } else {
                 ForEach(appModel.savedLists) { list in
-                    HStack(spacing: 12) {
-                        Image(systemName: "bookmark.fill")
-                            .foregroundStyle(SmartCartTheme.green)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(list.recipeTitle)
-                                .font(.subheadline.weight(.bold))
-                                .foregroundStyle(SmartCartTheme.navy)
-                            Text("\(list.itemCount) items · \(list.storeName)")
-                                .font(.caption)
-                                .foregroundStyle(SmartCartTheme.secondaryInk)
+                    Button {
+                        appModel.openSavedList(list.id)
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "bookmark.fill")
+                                .foregroundStyle(SmartCartTheme.green)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(list.recipeTitle)
+                                    .font(.subheadline.weight(.bold))
+                                    .foregroundStyle(SmartCartTheme.navy)
+                                Text("\(list.itemCount) items · \(list.storeName)")
+                                    .font(.caption)
+                                    .foregroundStyle(SmartCartTheme.secondaryInk)
+                            }
+                            Spacer()
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text(list.total, format: .currency(code: "USD"))
+                                    .font(.subheadline.weight(.bold))
+                                    .foregroundStyle(SmartCartTheme.navy)
+                                Text("Demo · not live")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundStyle(SmartCartTheme.amber)
+                            }
+                            Image(systemName: "chevron.right")
+                                .font(.caption.bold())
+                                .foregroundStyle(SmartCartTheme.green)
                         }
-                        Spacer()
-                        VStack(alignment: .trailing, spacing: 2) {
-                            Text(list.total, format: .currency(code: "USD"))
-                                .font(.subheadline.weight(.bold))
-                                .foregroundStyle(SmartCartTheme.navy)
-                            Text("Demo · not live")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(SmartCartTheme.amber)
-                        }
+                        .smartCartCard(padding: 14)
                     }
-                    .smartCartCard(padding: 14)
+                    .buttonStyle(PressableButtonStyle())
+                    .accessibilityIdentifier("saved-list-\(list.id.uuidString)")
                 }
             }
         }

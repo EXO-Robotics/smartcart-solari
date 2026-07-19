@@ -1,0 +1,172 @@
+{
+  "schemaVersion": 0,
+  "recipes": [
+    {
+      "id": "00000000-0000-4000-8000-000000000001",
+      "title": "V0 Lentil Soup",
+      "source": "Pasted text",
+      "sourceDetail": "Fixed shipped-state schema v0",
+      "heroSymbol": "text.quote",
+      "servings": 4,
+      "prepMinutes": 12,
+      "cookMinutes": 35,
+      "ingredients": [
+        {
+          "id": "00000000-0000-4000-8000-000000000010",
+          "rawText": "2 cups green lentils, rinsed",
+          "name": "Green Lentils",
+          "quantity": 2,
+          "unit": "cups",
+          "preparation": "rinsed",
+          "category": "Pantry",
+          "confidence": "Review suggested",
+          "includeInList": true,
+          "pantryState": "Need to buy",
+          "preferenceNote": "User corrected from red lentils"
+        }
+      ]
+    }
+  ],
+  "activeRecipe": {
+    "id": "00000000-0000-4000-8000-000000000001",
+    "title": "V0 Lentil Soup",
+    "source": "Pasted text",
+    "sourceDetail": "Fixed shipped-state schema v0",
+    "heroSymbol": "text.quote",
+    "servings": 4,
+    "prepMinutes": 12,
+    "cookMinutes": 35,
+    "ingredients": [
+      {
+        "id": "00000000-0000-4000-8000-000000000010",
+        "rawText": "2 cups green lentils, rinsed",
+        "name": "Green Lentils",
+        "quantity": 2,
+        "unit": "cups",
+        "preparation": "rinsed",
+        "category": "Pantry",
+        "confidence": "Review suggested",
+        "includeInList": true,
+        "pantryState": "Need to buy",
+        "preferenceNote": "User corrected from red lentils"
+      }
+    ]
+  },
+  "desiredServings": 5,
+  "storeStrategy": "One store",
+  "fulfillmentMode": "Pickup",
+  "selectedStoreIDs": ["00000000-0000-4000-8000-000000000040"],
+  "zipCode": "10000",
+  "pickupDay": "Tuesday",
+  "pickupTime": "9:00 AM - 10:00 AM",
+  "shoppingItems": [
+    {
+      "id": "00000000-0000-4000-8000-000000000020",
+      "ingredient": {
+        "id": "00000000-0000-4000-8000-000000000010",
+        "rawText": "2 cups green lentils, rinsed",
+        "name": "Green Lentils",
+        "quantity": 2,
+        "unit": "cups",
+        "preparation": "rinsed",
+        "category": "Pantry",
+        "confidence": "Review suggested",
+        "includeInList": true,
+        "pantryState": "Need to buy",
+        "preferenceNote": "User corrected from red lentils"
+      },
+      "requestedQuantity": "2.5 cups for 5 servings",
+      "purchaseQuantity": 2,
+      "product": {
+        "id": "00000000-0000-4000-8000-000000000030",
+        "retailerID": "walmart",
+        "storeID": "walmart-v0-100",
+        "retailerProductID": "legacy-product-v0",
+        "title": "V0 Dry Green Lentils",
+        "brand": "Fixed Legacy Brand v0",
+        "exactURL": "https://www.walmart.com/ip/v0-lentils/1000",
+        "packageDescription": "16 oz bag",
+        "packageQuantity": 16,
+        "packageUnit": "oz",
+        "observedPrice": 2.48,
+        "unitPriceValue": 0.155,
+        "unitPriceText": "$0.16/oz",
+        "priceType": "exact",
+        "availability": "inStock",
+        "fulfillmentMethods": ["pickup"],
+        "organicStatus": "notOrganic",
+        "dietaryAttributes": ["vegan"],
+        "dataSource": "manualVerification",
+        "observedAt": "2024-01-02T03:04:05Z",
+        "linkKind": "exactProduct",
+        "symbol": "leaf.fill",
+        "confidence": "High confidence",
+        "variableWeight": false,
+        "matchKeywords": ["lentils"],
+        "isStoreBrand": false
+      },
+      "alternatives": [],
+      "storeID": "00000000-0000-4000-8000-000000000040",
+      "status": "added",
+      "matchScore": 0.88,
+      "selectionReasons": ["User-selected legacy product"]
+    }
+  ],
+  "guidedIndex": 1,
+  "savedLists": [
+    {
+      "id": "00000000-0000-4000-8000-000000000050",
+      "manifest": {
+        "id": "00000000-0000-4000-8000-000000000060",
+        "recipeID": "00000000-0000-4000-8000-000000000001",
+        "recipeTitle": "V0 Lentil Soup",
+        "retailerID": "walmart",
+        "storeID": "walmart-v0-100",
+        "storeName": "V0 Neighborhood Market",
+        "desiredServings": 5,
+        "fulfillmentMode": "Pickup",
+        "items": [
+          {
+            "id": "00000000-0000-4000-8000-000000000070",
+            "ingredientID": "00000000-0000-4000-8000-000000000010",
+            "ingredientName": "Green Lentils",
+            "requestedQuantity": "2.5 cups for 5 servings",
+            "purchaseQuantity": 2,
+            "product": {
+              "id": "00000000-0000-4000-8000-000000000030",
+              "retailerID": "walmart",
+              "storeID": "walmart-v0-100",
+              "retailerProductID": "legacy-product-v0",
+              "title": "V0 Dry Green Lentils",
+              "brand": "Fixed Legacy Brand v0",
+              "exactURL": "https://www.walmart.com/ip/v0-lentils/1000",
+              "packageDescription": "16 oz bag",
+              "packageQuantity": 16,
+              "packageUnit": "oz",
+              "observedPrice": 2.48,
+              "unitPriceValue": 0.155,
+              "unitPriceText": "$0.16/oz",
+              "priceType": "exact",
+              "availability": "inStock",
+              "fulfillmentMethods": ["pickup"],
+              "organicStatus": "notOrganic",
+              "dietaryAttributes": ["vegan"],
+              "dataSource": "manualVerification",
+              "observedAt": "2024-01-02T03:04:05Z",
+              "linkKind": "exactProduct",
+              "symbol": "leaf.fill",
+              "confidence": "High confidence",
+              "variableWeight": false,
+              "matchKeywords": ["lentils"],
+              "isStoreBrand": false
+            },
+            "status": "added"
+          }
+        ],
+        "createdAt": "2024-01-02T03:04:05Z",
+        "updatedAt": "2024-01-03T03:04:05Z",
+        "handoffProgress": "inProgress"
+      }
+    }
+  ]
+}

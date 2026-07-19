@@ -22,7 +22,13 @@ enum PantryMatchingService {
             let coverage: PantryCoverage
             let available: Double
 
-            if let converted {
+            if item.hasUnknownPackageMass == true {
+                // Package count is useful display information, but it is not
+                // an exact mass. Keep it review-only even if a future caller
+                // happens to request a superficially compatible unit.
+                available = stockQuantity
+                coverage = .possible
+            } else if let converted {
                 available = converted
                 coverage = converted + 0.0001 >= requested ? .full : .partial
             } else {
@@ -61,8 +67,12 @@ enum PantryMatchingService {
               let suggestion = ingredient.pantrySuggestion else { return requiredQuantity }
 
         switch suggestion.coverage {
-        case .full, .possible:
+        case .full:
             return 0
+        case .possible:
+            // Cross-domain or otherwise unmeasured pantry stock cannot safely
+            // reduce an exact shopping quantity.
+            return requiredQuantity
         case .partial:
             return max(0, requiredQuantity - suggestion.availableQuantity)
         }

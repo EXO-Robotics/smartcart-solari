@@ -77,6 +77,7 @@ struct ShoppingReconciliationView: View {
         .sheet(item: $replacementTarget) { target in
             SubstitutionPickerSheet(item: target.item) { feedback in
                 substitutions[target.item.id] = feedback
+                persistDraft()
             }
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
@@ -119,6 +120,8 @@ struct ShoppingReconciliationView: View {
                 }
                 .buttonStyle(PressableButtonStyle())
                 .accessibilityIdentifier("shopping-outcome-\(candidate.rawValue)")
+                .accessibilityAddTraits(outcome == candidate ? .isSelected : [])
+                .accessibilityValue(outcome == candidate ? "Selected" : "Not selected")
             }
         }
     }
@@ -190,6 +193,7 @@ struct ShoppingReconciliationView: View {
                         } else {
                             purchasedItemIDs.insert(item.id)
                         }
+                        persistDraft()
                     } label: {
                         HStack(spacing: 11) {
                             Image(systemName: selected ? "checkmark.circle.fill" : "circle")
@@ -253,14 +257,31 @@ struct ShoppingReconciliationView: View {
                                 Text("Replacement for \(originalIngredientName(feedback.originalItemID))")
                                     .font(.caption)
                                     .foregroundStyle(SmartCartTheme.secondaryInk)
+                                if let amount = feedback.replacementAmount {
+                                    Text("\(amount.formatted(.number.precision(.fractionLength(0...2)))) package\(amount == 1 ? "" : "s") confirmed")
+                                        .font(.caption2.weight(.semibold))
+                                        .foregroundStyle(SmartCartTheme.green)
+                                    if let packageQuantity = feedback.packageQuantity,
+                                       let packageUnit = feedback.packageUnit {
+                                        Text("Recorded total: \((amount * packageQuantity).formatted(.number.precision(.fractionLength(0...2)))) \(packageUnit)")
+                                            .font(.caption2)
+                                            .foregroundStyle(SmartCartTheme.secondaryInk)
+                                    } else {
+                                        Text("Exact package weight not recorded")
+                                            .font(.caption2)
+                                            .foregroundStyle(SmartCartTheme.amber)
+                                    }
+                                }
                             }
                             Spacer()
                             Button {
                                 substitutions.removeValue(forKey: feedback.originalItemID)
+                                persistDraft()
                             } label: {
                                 Image(systemName: "xmark.circle.fill")
                                     .foregroundStyle(SmartCartTheme.secondaryInk)
                             }
+                            .smartCartMinimumHitTarget()
                             .accessibilityLabel("Remove substitution")
                         }
 
@@ -268,7 +289,10 @@ struct ShoppingReconciliationView: View {
                             "Prefer this product next time",
                             isOn: Binding(
                                 get: { substitutions[feedback.originalItemID]?.preferNextTime ?? false },
-                                set: { substitutions[feedback.originalItemID]?.preferNextTime = $0 }
+                                set: {
+                                    substitutions[feedback.originalItemID]?.preferNextTime = $0
+                                    persistDraft()
+                                }
                             )
                         )
                         .font(.caption.weight(.semibold))
@@ -321,6 +345,7 @@ struct ShoppingReconciliationView: View {
                 .map { ($0.key, $0.value) }
         )
         errorMessage = nil
+        persistDraft()
     }
 
     private func commit(_ outcome: ShoppingTripOutcome) {
@@ -338,12 +363,25 @@ struct ShoppingReconciliationView: View {
     }
 
     private func restoreDraftDefaults() {
-        guard outcome == nil,
-              let committed = session?.reconciliation
-        else { return }
-        outcome = committed.outcome
-        purchasedItemIDs = committed.purchasedItemIDs
-        substitutions = Dictionary(uniqueKeysWithValues: committed.substitutions.map { ($0.originalItemID, $0) })
+        guard outcome == nil else { return }
+        if let draft = session?.reconciliationDraft {
+            outcome = draft.outcome
+            purchasedItemIDs = draft.purchasedItemIDs
+            substitutions = Dictionary(uniqueKeysWithValues: draft.substitutions.map { ($0.originalItemID, $0) })
+        } else if let committed = session?.reconciliation {
+            outcome = committed.outcome
+            purchasedItemIDs = committed.purchasedItemIDs
+            substitutions = Dictionary(uniqueKeysWithValues: committed.substitutions.map { ($0.originalItemID, $0) })
+        }
+    }
+
+    private func persistDraft() {
+        appModel.saveShoppingReconciliationDraft(
+            sessionID: sessionID,
+            outcome: outcome,
+            purchasedItemIDs: purchasedItemIDs,
+            substitutions: Array(substitutions.values)
+        )
     }
 
     private func originalIngredientName(_ itemID: UUID) -> String {
@@ -358,6 +396,7 @@ private struct ReplacementTarget: Identifiable {
 
 private struct SubstitutionPickerSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppModel.self) private var appModel
 
     let item: ShoppingListItem
     let onSelect: (ShoppingSubstitutionFeedback) -> Void
@@ -365,6 +404,8 @@ private struct SubstitutionPickerSheet: View {
     @State private var query = ""
     @State private var preferNextTime = false
     @State private var showScanner = false
+    @State private var quantityConfirmationProduct: RetailerProductRecord?
+    @State private var quantityConfirmedFeedback: ShoppingSubstitutionFeedback?
 
     private var candidates: [RetailerProductRecord] {
         item.alternatives.filter { product in
@@ -463,18 +504,18 @@ private struct SubstitutionPickerSheet: View {
         .sheet(isPresented: $showScanner) {
             BarcodeScannerSheet(
                 title: "Scan substituted product",
+                amountLabel: "Packages bought",
                 onSubmission: { name, amount, submission in
-                    onSelect(
-                        ShoppingSubstitutionFeedback(
-                            originalItemID: item.id,
-                            replacementName: name,
-                            replacementBrand: submission.brand,
-                            replacementRetailerProductID: submission.externalProductID,
-                            replacementGTIN14: submission.barcode.canonicalGTIN14,
-                            replacementAmount: amount,
-                            preferNextTime: preferNextTime
-                        )
-                    )
+                    guard let feedback = ReplacementFeedbackFactory.scannedProduct(
+                        originalItemID: item.id,
+                        name: name,
+                        brand: submission.brand,
+                        retailerProductID: submission.externalProductID,
+                        gtin14: submission.barcode.canonicalGTIN14,
+                        packageCount: amount,
+                        preferNextTime: preferNextTime
+                    ) else { return }
+                    onSelect(feedback)
                     showScanner = false
                     Task { @MainActor in
                         await Task.yield()
@@ -484,21 +525,205 @@ private struct SubstitutionPickerSheet: View {
             )
             .presentationDetents([.large])
         }
+        .sheet(
+            item: $quantityConfirmationProduct,
+            onDismiss: finishQuantityConfirmation
+        ) { product in
+            ReplacementQuantityConfirmationSheet(product: product) { amount in
+                quantityConfirmedFeedback = feedback(for: product, facts: amount)
+            }
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+        }
     }
 
     private func select(_ product: RetailerProductRecord) {
-        onSelect(
-            ShoppingSubstitutionFeedback(
-                originalItemID: item.id,
-                replacementName: product.name,
-                replacementBrand: product.brand,
-                replacementRetailerProductID: product.retailerProductID,
-                replacementGTIN14: product.gtin,
-                packageQuantity: product.packageQuantity,
-                packageUnit: product.packageUnit,
-                preferNextTime: preferNextTime
+        let route = ReplacementCompletionPolicy.route(
+            for: product,
+            resolvedPackageCount: appModel.resolvedReplacementPackageCount(
+                for: item,
+                product: product
             )
         )
+        switch route {
+        case .direct(let facts):
+            onSelect(feedback(for: product, facts: facts))
+            dismiss()
+        case .packageConfirmation, .variableWeightConfirmation:
+            quantityConfirmationProduct = product
+        }
+    }
+
+    private func feedback(
+        for product: RetailerProductRecord,
+        facts: ReplacementPurchaseFacts
+    ) -> ShoppingSubstitutionFeedback {
+        ReplacementFeedbackFactory.matchedProduct(
+            originalItemID: item.id,
+            product: product,
+            facts: facts,
+            preferNextTime: preferNextTime
+        )
+    }
+
+    private func finishQuantityConfirmation() {
+        guard let feedback = quantityConfirmedFeedback else { return }
+        quantityConfirmedFeedback = nil
+        onSelect(feedback)
         dismiss()
+    }
+}
+
+private struct ReplacementQuantityConfirmationSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let product: RetailerProductRecord
+    let onConfirm: (ReplacementPurchaseFacts) -> Void
+
+    @State private var packageCount = 1
+    @State private var actualWeightText = ""
+    @State private var actualWeightUnit = "lb"
+
+    init(
+        product: RetailerProductRecord,
+        onConfirm: @escaping (ReplacementPurchaseFacts) -> Void
+    ) {
+        self.product = product
+        self.onConfirm = onConfirm
+        let candidateUnit = product.packageUnit?.lowercased() ?? ""
+        _actualWeightUnit = State(
+            initialValue: ReplacementPurchaseFacts.supportedWeightUnits.contains(candidateUnit)
+                ? candidateUnit
+                : "lb"
+        )
+    }
+
+    private var requiresActualWeight: Bool {
+        ReplacementPurchaseFacts.requiresActualWeight(product)
+    }
+
+    private var actualWeight: Double? {
+        let normalized = actualWeightText
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: ",", with: ".")
+        guard let value = Double(normalized), value.isFinite, value > 0 else { return nil }
+        return value
+    }
+
+    private var exactFacts: ReplacementPurchaseFacts? {
+        guard let actualWeight else { return nil }
+        return ReplacementPurchaseFacts.exactVariableWeight(
+            packageCount: packageCount,
+            actualTotalWeight: actualWeight,
+            unit: actualWeightUnit
+        )
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(requiresActualWeight ? "Confirm actual replacement weight" : "Confirm replacement quantity")
+                            .font(.title2.bold())
+                            .foregroundStyle(SmartCartTheme.navy)
+                        Text(requiresActualWeight
+                            ? "The catalog size is only a variable-weight estimate. Enter the actual total from the package label or receipt."
+                            : "SmartCart cannot safely derive a package count from this product’s saved size and unit.")
+                            .font(.subheadline)
+                            .foregroundStyle(SmartCartTheme.secondaryInk)
+                    }
+
+                    HStack(spacing: 12) {
+                        ProductIcon(product: product, size: 54)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(product.name)
+                                .font(.headline)
+                                .foregroundStyle(SmartCartTheme.navy)
+                            Text(product.package)
+                                .font(.caption)
+                                .foregroundStyle(SmartCartTheme.secondaryInk)
+                        }
+                    }
+                    .smartCartCard(padding: 12)
+
+                    Stepper(value: $packageCount, in: 1...99) {
+                        HStack {
+                            Text("Packages bought")
+                            Spacer()
+                            Text(packageCount, format: .number)
+                                .font(.headline.monospacedDigit())
+                        }
+                    }
+                    .smartCartCard(padding: 14)
+                    .accessibilityValue("\(packageCount) packages")
+
+                    if requiresActualWeight {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("ACTUAL TOTAL WEIGHT")
+                                .smartEyebrow(SmartCartTheme.mutedInk)
+                            TextField("Weight from label or receipt", text: $actualWeightText)
+                                .keyboardType(.decimalPad)
+                                .smartField()
+                                .accessibilityLabel("Actual total weight")
+
+                            Picker("Weight unit", selection: $actualWeightUnit) {
+                                ForEach(ReplacementPurchaseFacts.supportedWeightUnits, id: \.self) { unit in
+                                    Text(unit).tag(unit)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .smartCartMinimumHitTarget()
+                        }
+                        .smartCartCard(padding: 14)
+
+                        Button("Confirm exact weight") {
+                            guard let exactFacts else { return }
+                            onConfirm(exactFacts)
+                            dismiss()
+                        }
+                        .buttonStyle(PrimaryButtonStyle())
+                        .disabled(exactFacts == nil)
+                        .accessibilityIdentifier("replacement-actual-weight-confirm")
+
+                        Button("Weight unknown — save packages only") {
+                            guard let facts = ReplacementPurchaseFacts.packagesWithUnknownMass(
+                                packageCount: packageCount
+                            ) else { return }
+                            onConfirm(facts)
+                            dismiss()
+                        }
+                        .buttonStyle(SecondaryButtonStyle())
+                        .accessibilityHint("Does not use the catalog weight estimate as exact pantry mass")
+
+                        InfoBanner(
+                            symbol: "scalemass.fill",
+                            title: "No estimated mass",
+                            message: "If the actual weight is unavailable, SmartCart records package count only. The nominal range will not count as exact pantry coverage.",
+                            color: SmartCartTheme.amber
+                        )
+                    } else {
+                        Button("Confirm replacement") {
+                            guard let facts = ReplacementPurchaseFacts.confirmedPackages(
+                                packageCount,
+                                product: product
+                            ) else { return }
+                            onConfirm(facts)
+                            dismiss()
+                        }
+                        .buttonStyle(PrimaryButtonStyle())
+                        .accessibilityIdentifier("replacement-quantity-confirm")
+                    }
+                }
+                .padding(18)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .smartCartBackground()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+        }
     }
 }

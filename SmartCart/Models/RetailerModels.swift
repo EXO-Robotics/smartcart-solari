@@ -762,6 +762,7 @@ struct RetailerHandoff: Codable, Identifiable, Hashable {
 enum ManifestHandoffProgress: String, Codable, Hashable {
     case notStarted
     case inProgress
+    case paused
     case completed
 }
 
@@ -770,31 +771,40 @@ struct ManifestLineItem: Codable, Identifiable, Hashable {
     var ingredientID: UUID
     var ingredientName: String
     var requestedQuantity: String
+    var requestedAmount: Double?
     var purchaseQuantity: Int
     var product: RetailerProductRecord
     var status: GuidedItemStatus
+    var sourceContributions: [CombinedIngredientSource]?
 
     init(
         id: UUID = UUID(),
         ingredientID: UUID,
         ingredientName: String,
         requestedQuantity: String,
+        requestedAmount: Double? = nil,
         purchaseQuantity: Int,
         product: RetailerProductRecord,
-        status: GuidedItemStatus
+        status: GuidedItemStatus,
+        sourceContributions: [CombinedIngredientSource] = []
     ) {
         self.id = id
         self.ingredientID = ingredientID
         self.ingredientName = ingredientName
         self.requestedQuantity = requestedQuantity
+        self.requestedAmount = requestedAmount
         self.purchaseQuantity = purchaseQuantity
         self.product = product
         self.status = status
+        self.sourceContributions = sourceContributions
     }
 }
 
 struct ShoppingManifest: Codable, Identifiable, Hashable {
     let id: UUID
+    /// Created once for a logical shopping trip, then carried unchanged into
+    /// its session, frozen completion snapshot, and pantry reconciliation.
+    var logicalTripID: UUID?
     var recipeID: UUID
     var recipeTitle: String
     var retailerID: String
@@ -806,9 +816,12 @@ struct ShoppingManifest: Codable, Identifiable, Hashable {
     var createdAt: Date
     var updatedAt: Date
     var handoffProgress: ManifestHandoffProgress
+    var shoppingScope: ShoppingScope?
+    var mealPrepSnapshot: MealPrepPlanSnapshot?
 
     init(
         id: UUID = UUID(),
+        logicalTripID: UUID? = nil,
         recipeID: UUID,
         recipeTitle: String,
         retailerID: String,
@@ -819,9 +832,12 @@ struct ShoppingManifest: Codable, Identifiable, Hashable {
         items: [ManifestLineItem],
         createdAt: Date = .now,
         updatedAt: Date = .now,
-        handoffProgress: ManifestHandoffProgress = .notStarted
+        handoffProgress: ManifestHandoffProgress = .notStarted,
+        shoppingScope: ShoppingScope? = nil,
+        mealPrepSnapshot: MealPrepPlanSnapshot? = nil
     ) {
         self.id = id
+        self.logicalTripID = logicalTripID
         self.recipeID = recipeID
         self.recipeTitle = recipeTitle
         self.retailerID = retailerID
@@ -833,6 +849,8 @@ struct ShoppingManifest: Codable, Identifiable, Hashable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.handoffProgress = handoffProgress
+        self.shoppingScope = shoppingScope
+        self.mealPrepSnapshot = mealPrepSnapshot
     }
 
     var total: Double {

@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 2,
+  "recipes": [{
+    "id": "00000000-0000-4000-8000-000000000201", "title": "V2 Brown Rice Bowl", "source": "Recipe link",
+    "sourceDetail": "Fixed shipped-state schema v2", "heroSymbol": "link", "servings": 4, "prepMinutes": 10, "cookMinutes": 42,
+    "ingredients": [{"id": "00000000-0000-4000-8000-000000000210", "rawText": "3 cups long grain brown rice", "name": "Long Grain Brown Rice", "quantity": 3, "unit": "cups", "preparation": "uncooked", "category": "Pantry", "confidence": "Review suggested", "includeInList": true, "pantryState": "Need to buy", "preferenceNote": "User corrected package variety"}]
+  }],
+  "activeRecipe": {
+    "id": "00000000-0000-4000-8000-000000000201", "title": "V2 Brown Rice Bowl", "source": "Recipe link",
+    "sourceDetail": "Fixed shipped-state schema v2", "heroSymbol": "link", "servings": 4, "prepMinutes": 10, "cookMinutes": 42,
+    "ingredients": [{"id": "00000000-0000-4000-8000-000000000210", "rawText": "3 cups long grain brown rice", "name": "Long Grain Brown Rice", "quantity": 3, "unit": "cups", "preparation": "uncooked", "category": "Pantry", "confidence": "Review suggested", "includeInList": true, "pantryState": "Need to buy", "preferenceNote": "User corrected package variety"}]
+  },
+  "desiredServings": 8,
+  "preferences": {"organicPolicy": "only", "budgetPriority": "qualityFirst", "dietaryRestrictions": ["glutenFree"], "storeBrandPreference": "prefer", "preferredBrands": ["Fixed Legacy Brand v2"]},
+  "featureFlags": {"advancedToolsEnabled": true, "internalTesterModeEnabled": true, "localAnalyticsEnabled": true},
+  "storeStrategy": "One store", "fulfillmentMode": "Pickup",
+  "selectedStoreIDs": ["00000000-0000-4000-8000-000000000240"],
+  "zipCode": "30002", "pickupDay": "Saturday", "pickupTime": "11:00 AM - 12:00 PM",
+  "shoppingItems": [{
+    "id": "00000000-0000-4000-8000-000000000220",
+    "ingredient": {"id": "00000000-0000-4000-8000-000000000210", "rawText": "3 cups long grain brown rice", "name": "Long Grain Brown Rice", "quantity": 3, "unit": "cups", "preparation": "uncooked", "category": "Pantry", "confidence": "Review suggested", "includeInList": true, "pantryState": "Need to buy", "preferenceNote": "User corrected package variety"},
+    "requestedQuantity": "6 cups for 8 servings", "purchaseQuantity": 1,
+    "product": {"id": "00000000-0000-4000-8000-000000000230", "retailerID": "walmart", "storeID": "walmart-v2-300", "retailerProductID": "legacy-product-v2", "title": "V2 Long Grain Brown Rice", "brand": "Fixed Legacy Brand v2", "exactURL": "https://www.walmart.com/ip/v2-rice/1002", "packageDescription": "32 oz bag", "packageQuantity": 32, "packageUnit": "oz", "observedPrice": 3.98, "unitPriceValue": 0.124, "unitPriceText": "$0.12/oz", "priceType": "exact", "availability": "limited", "fulfillmentMethods": ["pickup"], "organicStatus": "notOrganic", "dietaryAttributes": ["glutenFree", "vegan"], "dataSource": "manualVerification", "observedAt": "2024-03-02T03:04:05Z", "linkKind": "exactProduct", "symbol": "bag.fill", "confidence": "High confidence", "variableWeight": false, "matchKeywords": ["brown", "rice"], "isStoreBrand": false},
+    "alternatives": [], "storeID": "00000000-0000-4000-8000-000000000240", "status": "skipped", "matchScore": 0.91, "selectionReasons": ["Package variety correction"]
+  }],
+  "guidedIndex": 1,
+  "savedLists": [{"id": "00000000-0000-4000-8000-000000000250", "manifest": {
+    "id": "00000000-0000-4000-8000-000000000260", "recipeID": "00000000-0000-4000-8000-000000000201", "recipeTitle": "V2 Brown Rice Bowl",
+    "retailerID": "walmart", "storeID": "walmart-v2-300", "storeName": "V2 Pickup Store", "desiredServings": 8, "fulfillmentMode": "Pickup",
+    "items": [{"id": "00000000-0000-4000-8000-000000000270", "ingredientID": "00000000-0000-4000-8000-000000000210", "ingredientName": "Long Grain Brown Rice", "requestedQuantity": "6 cups for 8 servings", "purchaseQuantity": 1, "product": {"id": "00000000-0000-4000-8000-000000000230", "retailerID": "walmart", "storeID": "walmart-v2-300", "retailerProductID": "legacy-product-v2", "title": "V2 Long Grain Brown Rice", "brand": "Fixed Legacy Brand v2", "exactURL": "https://www.walmart.com/ip/v2-rice/1002", "packageDescription": "32 oz bag", "packageQuantity": 32, "packageUnit": "oz", "observedPrice": 3.98, "unitPriceValue": 0.124, "unitPriceText": "$0.12/oz", "priceType": "exact", "availability": "limited", "fulfillmentMethods": ["pickup"], "organicStatus": "notOrganic", "dietaryAttributes": ["glutenFree", "vegan"], "dataSource": "manualVerification", "observedAt": "2024-03-02T03:04:05Z", "linkKind": "exactProduct", "symbol": "bag.fill", "confidence": "High confidence", "variableWeight": false, "matchKeywords": ["brown", "rice"], "isStoreBrand": false}, "status": "skipped"}],
+    "createdAt": "2024-03-02T03:04:05Z", "updatedAt": "2024-03-05T03:04:05Z", "handoffProgress": "paused"
+  }}],
+  "preferredDeliveryPartnerName": "Legacy Partner v2",
+  "pantryInventory": [{"id": "00000000-0000-4000-8000-000000000280", "upc": "000222333444", "name": "V2 Pantry Reserve", "brand": "Legacy Pantry Brand", "quantity": 2, "unit": "bags", "preferredRetailerProductID": "legacy-pantry-v2", "source": "barcode", "updatedAt": "2024-03-06T03:04:05Z"}],
+  "preferredProductIDsByIngredient": {"fixture ingredient v2": "legacy-product-v2"},
+  "analyticsEvents": [{"id": "00000000-0000-4000-8000-000000000290", "name": "pantry_item_added", "timestamp": "2024-03-06T03:04:05Z", "properties": {"fixture": "v2", "source": "fixed legacy bytes"}}]
+}

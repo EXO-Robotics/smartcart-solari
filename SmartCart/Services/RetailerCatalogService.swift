@@ -739,16 +739,32 @@ enum PackageMath {
         requestedQuantity: Double,
         requestedUnit: String
     ) -> Int {
+        resolvedPackageCount(
+            product: product,
+            requestedQuantity: requestedQuantity,
+            requestedUnit: requestedUnit
+        ) ?? 1
+    }
+
+    static func resolvedPackageCount(
+        product: RetailerProductRecord,
+        requestedQuantity: Double,
+        requestedUnit: String
+    ) -> Int? {
         guard
+            !product.variableWeight,
             let packageQuantity = product.packageQuantity,
+            packageQuantity.isFinite,
             packageQuantity > 0,
+            requestedQuantity.isFinite,
+            requestedQuantity >= 0,
             let converted = convertedQuantity(
                 requestedQuantity,
                 from: requestedUnit,
                 to: product.packageUnit ?? ""
             )
         else {
-            return 1
+            return nil
         }
         return max(1, Int(ceil(converted / packageQuantity)))
     }
@@ -759,16 +775,37 @@ enum PackageMath {
         requestedUnit: String
     ) -> Bool {
         guard
+            !product.variableWeight,
             let packageQuantity = product.packageQuantity,
+            packageQuantity.isFinite,
+            packageQuantity > 0,
+            requestedQuantity.isFinite,
+            requestedQuantity >= 0,
             let converted = convertedQuantity(
                 requestedQuantity,
                 from: requestedUnit,
                 to: product.packageUnit ?? ""
             )
         else {
-            return true
+            return false
         }
         return packageQuantity >= converted
+    }
+
+    private enum QuantityDomain: Equatable {
+        case count
+        case mass
+        case volume
+    }
+
+    private enum QuantityUnitRole: Equatable {
+        case source
+        case destination
+    }
+
+    private struct QuantityUnit {
+        let domain: QuantityDomain
+        let unitsInBaseUnit: Double
     }
 
     private static func convertedQuantity(
@@ -778,25 +815,41 @@ enum PackageMath {
     ) -> Double? {
         let source = normalizedUnit(sourceUnit)
         let destination = normalizedUnit(destinationUnit)
-        if source.isEmpty || destination.isEmpty || source == destination {
-            return quantity
+        guard
+            let sourceUnit = quantityUnit(for: source, role: .source),
+            let destinationUnit = quantityUnit(for: destination, role: .destination),
+            sourceUnit.domain == destinationUnit.domain
+        else {
+            return nil
         }
 
-        switch (source, destination) {
-        case ("lb", "oz"):
-            return quantity * 16
-        case ("oz", "lb"):
-            return quantity / 16
-        case ("cup", "fl oz"):
-            return quantity * 8
-        case ("fl oz", "cup"):
-            return quantity / 8
-        case ("tbsp", "fl oz"):
-            return quantity / 2
-        case ("tsp", "fl oz"):
-            return quantity / 6
-        case ("clove", "count"), ("lemon", "count"), ("bunch", "count"):
-            return quantity
+        return quantity * sourceUnit.unitsInBaseUnit / destinationUnit.unitsInBaseUnit
+    }
+
+    private static func quantityUnit(
+        for unit: String,
+        role: QuantityUnitRole
+    ) -> QuantityUnit? {
+        switch unit {
+        case "count":
+            return QuantityUnit(domain: .count, unitsInBaseUnit: 1)
+        case "", "clove", "lemon", "bunch":
+            // These recipe aliases are trusted only when converting into an
+            // explicitly count-based product package.
+            guard role == .source else { return nil }
+            return QuantityUnit(domain: .count, unitsInBaseUnit: 1)
+        case "oz":
+            return QuantityUnit(domain: .mass, unitsInBaseUnit: 1)
+        case "lb":
+            return QuantityUnit(domain: .mass, unitsInBaseUnit: 16)
+        case "fl oz":
+            return QuantityUnit(domain: .volume, unitsInBaseUnit: 1)
+        case "cup":
+            return QuantityUnit(domain: .volume, unitsInBaseUnit: 8)
+        case "tbsp":
+            return QuantityUnit(domain: .volume, unitsInBaseUnit: 0.5)
+        case "tsp":
+            return QuantityUnit(domain: .volume, unitsInBaseUnit: 1.0 / 6.0)
         default:
             return nil
         }
@@ -816,6 +869,177 @@ enum PackageMath {
         case "each", "ea": "count"
         default: unit.lowercased()
         }
+    }
+}
+
+/// Keeps visible pre-trip replacement actions aligned with the package-math
+/// guard used by the mutation path. A candidate that cannot produce a safe
+/// package count is omitted instead of becoming a selectable toast-only path.
+enum ReplacementOptionPolicy {
+    static func resolvedCandidates(
+        from candidates: [RetailerProductRecord],
+        resolvingPackageCount: (RetailerProductRecord) -> Int?
+    ) -> [RetailerProductRecord] {
+        candidates.filter { candidate in
+            guard let count = resolvingPackageCount(candidate) else { return false }
+            return count > 0
+        }
+    }
+}
+
+enum ReplacementCompletionRoute: Equatable {
+    case direct(ReplacementPurchaseFacts)
+    case packageConfirmation
+    case variableWeightConfirmation
+}
+
+/// Single routing policy shared by the reconciliation picker and its tests.
+/// Every visible product must either produce complete feedback immediately or
+/// open a confirmation surface that can produce it; there is no toast-only
+/// selectable branch.
+enum ReplacementCompletionPolicy {
+    static func route(
+        for product: RetailerProductRecord,
+        resolvedPackageCount: Int?
+    ) -> ReplacementCompletionRoute {
+        if let resolvedPackageCount,
+           let facts = ReplacementPurchaseFacts.confirmedPackages(
+            resolvedPackageCount,
+            product: product
+           ) {
+            return .direct(facts)
+        }
+        return ReplacementPurchaseFacts.requiresActualWeight(product)
+            ? .variableWeightConfirmation
+            : .packageConfirmation
+    }
+}
+
+/// The existing reconciliation model stores package count plus a single
+/// per-package quantity. Variable-weight purchases therefore need either an
+/// actual total weight (converted to an exact average per package) or no mass
+/// metadata at all. Nominal catalog ranges are never copied into these facts.
+struct ReplacementPurchaseFacts: Equatable {
+    var packageCount: Double
+    var packageQuantity: Double?
+    var packageUnit: String?
+
+    static let supportedWeightUnits = ["lb", "oz", "g", "kg"]
+
+    static func exactVariableWeight(
+        packageCount: Int,
+        actualTotalWeight: Double,
+        unit: String
+    ) -> ReplacementPurchaseFacts? {
+        guard
+            packageCount > 0,
+            actualTotalWeight.isFinite,
+            actualTotalWeight > 0,
+            let unit = normalizedWeightUnit(unit)
+        else {
+            return nil
+        }
+
+        return ReplacementPurchaseFacts(
+            packageCount: Double(packageCount),
+            packageQuantity: actualTotalWeight / Double(packageCount),
+            packageUnit: unit
+        )
+    }
+
+    static func packagesWithUnknownMass(
+        packageCount: Int
+    ) -> ReplacementPurchaseFacts? {
+        guard packageCount > 0 else { return nil }
+        return ReplacementPurchaseFacts(
+            packageCount: Double(packageCount),
+            packageQuantity: nil,
+            packageUnit: nil
+        )
+    }
+
+    static func confirmedPackages(
+        _ packageCount: Int,
+        product: RetailerProductRecord
+    ) -> ReplacementPurchaseFacts? {
+        guard packageCount > 0 else { return nil }
+
+        if product.variableWeight, isWeightUnit(product.packageUnit) {
+            return nil
+        }
+
+        let quantity = product.packageQuantity.flatMap { value in
+            value.isFinite && value > 0 ? value : nil
+        }
+        let unit = product.packageUnit?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasCompletePackageMetadata = quantity != nil && unit?.isEmpty == false
+
+        return ReplacementPurchaseFacts(
+            packageCount: Double(packageCount),
+            packageQuantity: hasCompletePackageMetadata ? quantity : nil,
+            packageUnit: hasCompletePackageMetadata ? unit : nil
+        )
+    }
+
+    static func requiresActualWeight(_ product: RetailerProductRecord) -> Bool {
+        product.variableWeight && isWeightUnit(product.packageUnit)
+    }
+
+    private static func isWeightUnit(_ unit: String?) -> Bool {
+        guard let unit else { return false }
+        return normalizedWeightUnit(unit) != nil
+    }
+
+    private static func normalizedWeightUnit(_ unit: String) -> String? {
+        switch unit.lowercased().trimmingCharacters(in: .whitespacesAndNewlines) {
+        case "lb", "lbs", "pound", "pounds": "lb"
+        case "oz", "ounce", "ounces": "oz"
+        case "g", "gram", "grams": "g"
+        case "kg", "kilogram", "kilograms": "kg"
+        default: nil
+        }
+    }
+}
+
+enum ReplacementFeedbackFactory {
+    static func matchedProduct(
+        originalItemID: UUID,
+        product: RetailerProductRecord,
+        facts: ReplacementPurchaseFacts,
+        preferNextTime: Bool
+    ) -> ShoppingSubstitutionFeedback {
+        ShoppingSubstitutionFeedback(
+            originalItemID: originalItemID,
+            replacementName: product.name,
+            replacementBrand: product.brand,
+            replacementRetailerProductID: product.retailerProductID,
+            replacementGTIN14: product.gtin,
+            packageQuantity: facts.packageQuantity,
+            packageUnit: facts.packageUnit,
+            replacementAmount: facts.packageCount,
+            preferNextTime: preferNextTime
+        )
+    }
+
+    static func scannedProduct(
+        originalItemID: UUID,
+        name: String,
+        brand: String,
+        retailerProductID: String?,
+        gtin14: String?,
+        packageCount: Double,
+        preferNextTime: Bool
+    ) -> ShoppingSubstitutionFeedback? {
+        guard packageCount.isFinite, packageCount > 0 else { return nil }
+        return ShoppingSubstitutionFeedback(
+            originalItemID: originalItemID,
+            replacementName: name,
+            replacementBrand: brand,
+            replacementRetailerProductID: retailerProductID,
+            replacementGTIN14: gtin14,
+            replacementAmount: packageCount,
+            preferNextTime: preferNextTime
+        )
     }
 }
 

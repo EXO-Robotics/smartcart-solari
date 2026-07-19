@@ -44,6 +44,29 @@ For every recipe, record:
 10. Whether a substitution was recorded and learned only after explicit opt-in.
 11. One sentence describing the largest source of friction.
 
+## Meal Prep matrix
+
+Meal Prep is the final major beta feature. Each tester should complete at least
+two plans using only reviewed saved recipes:
+
+1. One recipe with a changed serving count, proving the single-recipe shopping
+   workflow still behaves the same.
+2. Three to five recipes with at least one safe merge, one intentionally
+   separate subtype (for example red and yellow onion), one incompatible
+   measurement pair, and one partially covered pantry item.
+3. Terminate and relaunch once during combined-ingredient review and once during
+   Retailer Assistant; verify the exact plan and item position restore.
+4. Change a serving count after a trip exists and verify SmartCart starts a new
+   compatible trip rather than resuming stale quantities.
+5. Delete or edit a source recipe after starting a plan and verify the active
+   trip retains its frozen title and ingredient provenance.
+6. Complete pantry reconciliation twice and verify the second attempt cannot
+   increment stock again.
+
+Record incorrect merges, missed safe merges, pantry deduction errors, and any
+case where the source recipe for a combined line is unclear. Any automatic
+cross-dimension merge or incompatible session resume blocks beta promotion.
+
 ## Metrics and decision thresholds
 
 | Metric | Beta target | Stop/repair threshold |

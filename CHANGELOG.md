@@ -2,6 +2,13 @@
 
 ## 0.3.0 — Human-validation candidate (unreleased)
 
+- Hardens the release candidate against eight audited blockers: recoverable v5 migration rewrite failures, atomic Meal Prep state transitions, immutable completed trips, exact session-ID feedback, reachable alternative decisions, deterministic pantry recomputation, quantity-domain-safe package math, and lossless reviewed-plan resume.
+- Closes the second release-blocker audit: semantically reconstructs shipped v5 sessions whose manifest and shopping-item UUIDs differ, preserves one durable trip through completion and reconciliation, excludes deferred alternatives from the current manifest, makes Buy Full reversible, requires trustworthy replacement package quantities, and extends rewrite-failure recovery to every supported v0-v5 migration.
+- Closes the third release-blocker repair boundary: reconciles by durable logical-trip identity even across disjoint legacy UUIDs, freezes completed snapshots behind an explicit editable fork, keeps historical Meal Prep trips separate from the current draft, makes every alternative resolution reversible, routes every offered replacement to confirmation, records variable-weight purchases from actual weight or package-only unknown mass, enforces 44-point correction controls, removes out-of-scope persisted fields, and validates fixed shipped-state v0-v4 fixtures.
+- Adds beta-scoped Meal Prep Mode for 1–5 reviewed saved recipes: independent servings, conservative ingredient aggregation, explicit uncertain-merge review, pantry subtraction after aggregation, a combined-trip dashboard, and one shared Retailer Assistant session.
+- Introduces `ShoppingScope` so single recipes and Meal Prep plans feed the same manifest, product matching, pause/resume, replacement, completion, and pantry-reconciliation pipeline without manufacturing a synthetic active recipe.
+- Preserves frozen Meal Prep recipe and ingredient provenance in manifests and shopping sessions, fingerprints recipe selection, servings, merge decisions, pantry deductions, products, retailer, store, and fulfillment, and prevents incompatible sessions from resuming.
+- Reframes retailer handoff as a persistent Shopping Session: one-time retailer setup confirmation, one product at a time, self-reported saved/cart/unavailable/skipped outcomes, pause and home-screen resume, stable per-trip snapshots, completion totals, retailer-list opening, and the existing pantry reconciliation loop.
 - Adds dedicated Walmart and Target retailer cards backed by one seeded retailer-guide engine, while Kroger and additional retailers remain clearly labeled Coming Soon.
 - Adds a bounded Target catalog with exact official product destinations, preference-aware Target searches, Target Shopping List guidance, retailer-scoped product preferences, persistent retailer selection, and the same purchase-confirmation/pantry loop used by Walmart.
 - Rejects cross-retailer and cross-store match candidates, treats empty fulfillment metadata as unverified rather than unsupported, and keeps search-fallback organic/dietary attributes unknown instead of manufacturing product claims.
@@ -10,7 +17,7 @@
 - Adds schema-v5 durable shopping sessions, schema-v4 migration, and forward-schema preservation so an older build cannot quarantine or overwrite newer state.
 - Separates pantry package count/size/unit from remaining amount/unit, migrates legacy items during decode, and bases recipe coverage on actual remaining stock rather than unopened package capacity.
 - Makes automatic reconciliation merges conservative: GTIN and retailer IDs remain authoritative, while name fallback requires an exact non-empty brand and compatible package identity.
-- Renames the broad outcome to `Bought all available items`, allows unavailable/skipped items to be recovered as elsewhere or substituted purchases, and fingerprints quantity/product/status state so changed trips cannot reuse an old session.
+- Renames the broad outcome to `Bought all available items`, allows unavailable/skipped items to be recovered as elsewhere or substituted purchases, and fingerprints quantity/product identity so outcome updates remain in one stable trip while quantity or product changes create a new session.
 - Adds the capability-driven SmartCart → Instacart workflow: shopping-route selection, advisory retailer/fulfillment preferences, normalized manifest review, safe backend handoff preparation and fingerprint caching, full-height in-app Safari, external-open fallback, and self-reported shopping outcomes.
 - Removes invented fallback groceries from failed imports, preserves per-line OCR geometry and credible quantity alternatives through ingredient review, adds local source crops, applies page-level spanning instruction boundaries, bounds Vision recipe vocabulary, and replaces the fast retry with an accurate orientation-normalized contrast pass.
 - Cancels overlapping OCR imports, rejects stale results, downscales oversized photos, retries low-quality-but-readable pages, preserves conservative ranges and package quantities, and keeps unambiguous user-corrected text attached to its original OCR evidence without guessing between similar lines.
@@ -31,6 +38,7 @@
 
 ### Known limitations
 
+- Meal Prep Mode accepts up to five already-reviewed saved recipes, supports one retailer per trip, and never automatically combines uncertain ingredient identities or ingredient-specific volume-to-weight conversions.
 - Barcode camera scanning requires a supported physical iPhone; the Simulator uses manual UPC entry.
 - Pantry quantity coverage is exact only when saved and recipe units are convertible. Name-only or cross-dimension matches are labeled as possible and require a user decision.
 - Recipe URL import requires the local `backend/` service in this validation build; publisher blocks and unsupported pages fall back to pasted text or screenshots.

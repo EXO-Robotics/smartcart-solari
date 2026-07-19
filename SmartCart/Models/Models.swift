@@ -32,6 +32,9 @@ enum AppTab: String, CaseIterable, Identifiable, Codable, Hashable {
 }
 
 enum SmartRoute: Hashable {
+    case mealPrepSelection
+    case mealPrepReview
+    case mealPrepDashboard
     case ingredientReview
     case servingAdjustment
     case pantryCheck
@@ -547,6 +550,9 @@ struct PantryInventoryItem: Identifiable, Hashable, Codable {
     /// older persisted states migration-safe; `gtin14` remains the primary
     /// legacy identity while this array records additional package barcodes.
     var barcodeGTINs: [String]?
+    /// True when packages are known to exist but their physical mass was not
+    /// confirmed. Such inventory must never satisfy exact mass deductions.
+    var hasUnknownPackageMass: Bool?
 
     init(
         id: UUID = UUID(),
@@ -567,7 +573,8 @@ struct PantryInventoryItem: Identifiable, Hashable, Codable {
         rawBarcode: String? = nil,
         barcodeSymbology: String? = nil,
         gtin14: String? = nil,
-        barcodeGTINs: [String]? = nil
+        barcodeGTINs: [String]? = nil,
+        hasUnknownPackageMass: Bool? = nil
     ) {
         self.id = id
         self.upc = upc
@@ -598,13 +605,14 @@ struct PantryInventoryItem: Identifiable, Hashable, Codable {
         } else {
             self.barcodeGTINs = nil
         }
+        self.hasUnknownPackageMass = hasUnknownPackageMass
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, upc, name, brand, quantity, unit, preferredRetailerProductID
         case source, updatedAt, packageCount, packageSize, packageUnit
         case remainingAmount, remainingUnit, requiresUserNaming, rawBarcode
-        case barcodeSymbology, gtin14, barcodeGTINs
+        case barcodeSymbology, gtin14, barcodeGTINs, hasUnknownPackageMass
     }
 
     init(from decoder: Decoder) throws {
@@ -645,6 +653,7 @@ struct PantryInventoryItem: Identifiable, Hashable, Codable {
         barcodeSymbology = try values.decodeIfPresent(String.self, forKey: .barcodeSymbology)
         gtin14 = try values.decodeIfPresent(String.self, forKey: .gtin14)
         barcodeGTINs = try values.decodeIfPresent([String].self, forKey: .barcodeGTINs)
+        hasUnknownPackageMass = try values.decodeIfPresent(Bool.self, forKey: .hasUnknownPackageMass)
     }
 
     mutating func setPackageCount(_ value: Double) {
@@ -727,6 +736,11 @@ enum AnalyticsEventName: String, CaseIterable, Codable, Hashable {
     case handoffFeedbackRecorded = "handoff_feedback_recorded"
     case guidedItemCompleted = "guided_item_completed"
     case guidedShoppingCompleted = "guided_shopping_completed"
+    case retailerSetupStarted = "retailer_setup_started"
+    case retailerSetupCompleted = "retailer_setup_completed"
+    case shoppingSessionStarted = "shopping_session_started"
+    case shoppingSessionResumed = "shopping_session_resumed"
+    case shoppingSessionPaused = "shopping_session_paused"
     case barcodeScanned = "barcode_scanned"
     case pantryItemAdded = "pantry_item_added"
     case walmartSetupStarted = "walmart_setup_started"
@@ -777,6 +791,7 @@ struct ShoppingListItem: Identifiable, Hashable, Codable {
     let id: UUID
     var ingredient: Ingredient
     var requestedQuantity: String
+    var requestedAmount: Double?
     var purchaseQuantity: Int
     var product: RetailerProductRecord
     var alternatives: [RetailerProductRecord]
@@ -789,6 +804,7 @@ struct ShoppingListItem: Identifiable, Hashable, Codable {
         id: UUID = UUID(),
         ingredient: Ingredient,
         requestedQuantity: String,
+        requestedAmount: Double? = nil,
         purchaseQuantity: Int = 1,
         product: RetailerProductRecord,
         alternatives: [RetailerProductRecord],
@@ -800,6 +816,7 @@ struct ShoppingListItem: Identifiable, Hashable, Codable {
         self.id = id
         self.ingredient = ingredient
         self.requestedQuantity = requestedQuantity
+        self.requestedAmount = requestedAmount
         self.purchaseQuantity = purchaseQuantity
         self.product = product
         self.alternatives = alternatives
@@ -896,42 +913,84 @@ struct ShoppingReconciliationRecord: Codable, Hashable {
     var substitutions: [ShoppingSubstitutionFeedback]
     var pantryItemIDs: Set<UUID>
     var committedAt: Date
+    var acquisitions: [PantryAcquisition]? = nil
+    /// Durable idempotency key for the logical trip that produced this
+    /// transaction. Optional only so pre-v6 records remain decodable.
+    var logicalTripID: UUID? = nil
+}
+
+struct ShoppingReconciliationDraft: Codable, Hashable {
+    var outcome: ShoppingTripOutcome?
+    var purchasedItemIDs: Set<UUID>
+    var substitutions: [ShoppingSubstitutionFeedback]
+    var updatedAt: Date
 }
 
 struct ShoppingSession: Identifiable, Codable, Hashable {
     let id: UUID
+    /// Retained for decoding repair-candidate state written before the
+    /// logical-trip identity was carried by manifests and reconciliation.
+    var tripID: UUID?
+    var logicalTripID: UUID?
     var recipeID: UUID
     var recipeTitle: String
     var manifestID: UUID?
     var storeID: String
+    var retailerID: String?
+    var desiredServings: Int?
+    var fulfillmentMode: FulfillmentMode?
+    var shoppingScope: ShoppingScope?
+    var mealPrepSnapshot: MealPrepPlanSnapshot?
     var startedAt: Date
     var items: [ShoppingListItem]
     var stateFingerprint: String?
+    var reconciliationDraft: ShoppingReconciliationDraft?
     var reconciliation: ShoppingReconciliationRecord?
 
     init(
         id: UUID = UUID(),
+        tripID: UUID? = nil,
+        logicalTripID: UUID? = nil,
         recipeID: UUID,
         recipeTitle: String,
         manifestID: UUID? = nil,
         storeID: String,
+        retailerID: String? = nil,
+        desiredServings: Int? = nil,
+        fulfillmentMode: FulfillmentMode? = nil,
+        shoppingScope: ShoppingScope? = nil,
+        mealPrepSnapshot: MealPrepPlanSnapshot? = nil,
         startedAt: Date = .now,
         items: [ShoppingListItem],
         stateFingerprint: String? = nil,
+        reconciliationDraft: ShoppingReconciliationDraft? = nil,
         reconciliation: ShoppingReconciliationRecord? = nil
     ) {
         self.id = id
+        self.tripID = tripID ?? logicalTripID
+        self.logicalTripID = logicalTripID ?? tripID
         self.recipeID = recipeID
         self.recipeTitle = recipeTitle
         self.manifestID = manifestID
         self.storeID = storeID
+        self.retailerID = retailerID
+        self.desiredServings = desiredServings
+        self.fulfillmentMode = fulfillmentMode
+        self.shoppingScope = shoppingScope
+        self.mealPrepSnapshot = mealPrepSnapshot
         self.startedAt = startedAt
         self.items = items
         self.stateFingerprint = stateFingerprint
+        self.reconciliationDraft = reconciliationDraft
         self.reconciliation = reconciliation
     }
 
     var isCommitted: Bool { reconciliation != nil }
+    var reconciliationIdentity: UUID? { logicalTripID ?? tripID }
+    var isGuideComplete: Bool {
+        !items.isEmpty && items.allSatisfy { $0.status.isCompleted }
+    }
+    var isReusable: Bool { !isCommitted && !isGuideComplete }
 }
 
 struct SavedShoppingList: Identifiable, Hashable, Codable {

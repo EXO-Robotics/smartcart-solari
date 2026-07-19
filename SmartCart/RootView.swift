@@ -93,6 +93,12 @@ struct RootView: View {
     @ViewBuilder
     private func destination(for route: SmartRoute) -> some View {
         switch route {
+        case .mealPrepSelection:
+            MealPrepSelectionView()
+        case .mealPrepReview:
+            MealPrepReviewView()
+        case .mealPrepDashboard:
+            MealPrepDashboardView()
         case .ingredientReview:
             IngredientReviewView()
         case .servingAdjustment:

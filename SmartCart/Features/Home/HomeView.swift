@@ -13,6 +13,9 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: 24) {
                 header
                 promiseCard
+                if !appModel.pendingShoppingSessions.isEmpty {
+                    pendingShoppingSection
+                }
                 importSection
                 sampleSection
                 storeCard
@@ -120,6 +123,57 @@ struct HomeView: View {
                         appModel.openImporter(method)
                     }
                 }
+            }
+        }
+    }
+
+    private func pendingShoppingCard(_ session: ShoppingSession) -> some View {
+        let completed = session.items.filter { $0.status.isCompleted }.count
+        let isGuideComplete = !session.items.isEmpty && completed == session.items.count
+        let retailerName = session.items.first
+            .flatMap { ShoppingRetailer(rawValue: $0.product.retailerID) }?
+            .configuration.displayName ?? "Retailer"
+
+        return Button {
+            appModel.openShoppingSession(session.id)
+        } label: {
+            HStack(spacing: 15) {
+                Image(systemName: "location.north.circle.fill")
+                    .font(.system(size: 34))
+                    .foregroundStyle(SmartCartTheme.green)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(isGuideComplete ? "PANTRY UPDATE PENDING" : "RESUME SHOPPING")
+                        .smartEyebrow()
+                    Text(isGuideComplete ? "Finish \(session.recipeTitle)" : "Continue \(session.recipeTitle)")
+                        .font(.headline)
+                        .foregroundStyle(SmartCartTheme.navy)
+                    Text("\(retailerName) · \(isGuideComplete ? "shopping results ready" : "\(session.items.count - completed) remaining")")
+                        .font(.caption)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
+                }
+
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right")
+                    .foregroundStyle(SmartCartTheme.green)
+            }
+            .smartCartCard(padding: 16)
+            .smartCartShadow()
+        }
+        .buttonStyle(PressableButtonStyle())
+        .accessibilityIdentifier(isGuideComplete ? "home-pantry-update-pending" : "home-resume-shopping")
+    }
+
+    private var pendingShoppingSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if appModel.pendingShoppingSessions.count > 1 {
+                SectionHeader(
+                    title: "Shopping trips",
+                    subtitle: "Resume a trip or finish its pantry update"
+                )
+            }
+            ForEach(appModel.pendingShoppingSessions) { session in
+                pendingShoppingCard(session)
             }
         }
     }

@@ -64,6 +64,10 @@ final class SmartCartAppearanceController {
 /// Midnight Market remains the default dark palette. Clean Garden is the
 /// warm white, forest-green option inspired by the supplied product board.
 enum SmartCartTheme {
+    /// Apple platform controls must expose at least a 44-point effective hit
+    /// region, even when their visible artwork is intentionally smaller.
+    static let minimumHitTargetDimension: CGFloat = 44
+
     // Native semantic and named asset colors keep a stable ShapeStyle identity
     // while resolving correctly when the app-wide color scheme changes.
     static let canvas = Color(uiColor: .systemGroupedBackground)
@@ -241,6 +245,17 @@ extension View {
                 RoundedRectangle(cornerRadius: 13, style: .continuous)
                     .stroke(SmartCartTheme.border, lineWidth: 1)
             }
+    }
+
+    /// Expands the effective interaction geometry without forcing the visible
+    /// control artwork to grow. Apply this to the control itself, after styling
+    /// its label, so each control remains independently focusable.
+    func smartCartMinimumHitTarget() -> some View {
+        frame(
+            minWidth: SmartCartTheme.minimumHitTargetDimension,
+            minHeight: SmartCartTheme.minimumHitTargetDimension
+        )
+        .contentShape(Rectangle())
     }
 
     /// Uppercase mono micro-label, the design system's "eyebrow" voice.

@@ -214,14 +214,28 @@ struct ShoppingListReviewView: View {
             VStack(alignment: .leading, spacing: 20) {
                 listHeader
 
+                if appModel.activeShoppingSessionIsImmutable {
+                    InfoBanner(
+                        symbol: "lock.fill",
+                        title: "Completed trip · read only",
+                        message: "Products, quantities, and shopping outcomes are frozen for reconciliation. Choose Edit as new trip before making any changes.",
+                        color: SmartCartTheme.green
+                    )
+                }
+
                 VStack(alignment: .leading, spacing: 11) {
                     SectionHeader(
                         title: "Matched products",
-                        subtitle: "\(appModel.shoppingItems.count) items · change any match"
+                        subtitle: appModel.activeShoppingSessionIsImmutable
+                            ? "\(appModel.shoppingItems.count) items · frozen completed snapshot"
+                            : "\(appModel.shoppingItems.count) items · change any match"
                     )
 
                     ForEach(appModel.shoppingItems) { item in
-                        ShoppingProductRow(item: item)
+                        ShoppingProductRow(
+                            item: item,
+                            isReadOnly: appModel.activeShoppingSessionIsImmutable
+                        )
                     }
                 }
 
@@ -237,18 +251,49 @@ struct ShoppingListReviewView: View {
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
             BottomActionBar {
-                Button {
-                    appModel.beginGuidedShopping()
-                } label: {
-                    HStack {
-                        Label(retailerGuideButtonTitle, systemImage: "safari.fill")
-                        Spacer()
-                        Image(systemName: "arrow.right")
+                if appModel.activeShoppingSessionIsImmutable {
+                    VStack(spacing: 9) {
+                        if !activeSessionIsCommitted {
+                            Button {
+                                appModel.beginGuidedShopping()
+                            } label: {
+                                HStack {
+                                    Label("Review shopping results", systemImage: "checkmark.seal.fill")
+                                    Spacer()
+                                    Image(systemName: "arrow.right")
+                                }
+                            }
+                            .buttonStyle(PrimaryButtonStyle())
+                        }
+
+                        Button {
+                            _ = appModel.forkCompletedShoppingTrip()
+                        } label: {
+                            Label("Edit as new trip", systemImage: "doc.on.doc.fill")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(SecondaryButtonStyle())
+                        .accessibilityHint("Creates an editable copy and preserves this completed trip")
                     }
+                } else {
+                    Button {
+                        appModel.beginGuidedShopping()
+                    } label: {
+                        HStack {
+                            Label(retailerGuideButtonTitle, systemImage: "safari.fill")
+                            Spacer()
+                            Image(systemName: "arrow.right")
+                        }
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
                 }
-                .buttonStyle(PrimaryButtonStyle())
             }
         }
+    }
+
+    private var activeSessionIsCommitted: Bool {
+        guard let sessionID = appModel.activeShoppingSessionID else { return false }
+        return appModel.shoppingSession(id: sessionID)?.isCommitted == true
     }
 
     private var retailerGuideButtonTitle: String {
@@ -264,7 +309,7 @@ struct ShoppingListReviewView: View {
     private var listHeader: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 14) {
-                Image(systemName: appModel.activeRecipe.heroSymbol)
+                Image(systemName: appModel.isMealPrepShopping ? "calendar.badge.checkmark" : appModel.activeRecipe.heroSymbol)
                     .font(.title.bold())
                     .foregroundStyle(SmartCartTheme.onAccent)
                     .frame(width: 62, height: 62)
@@ -273,10 +318,12 @@ struct ShoppingListReviewView: View {
                     .shadow(color: SmartCartTheme.mintGlow, radius: 12)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(appModel.activeRecipe.title)
+                    Text(appModel.currentShoppingTitle)
                         .font(.system(size: 24, weight: .bold, design: .rounded))
                         .foregroundStyle(SmartCartTheme.navy)
-                    Text("\(appModel.desiredServings) servings · \(appModel.primaryStore.name)")
+                    Text(appModel.isMealPrepShopping
+                        ? "\(appModel.currentShoppingMealPrepSnapshot?.recipeCount ?? 0) recipes · \(appModel.primaryStore.name)"
+                        : "\(appModel.desiredServings) servings · \(appModel.primaryStore.name)")
                         .font(.caption)
                         .foregroundStyle(SmartCartTheme.secondaryInk)
                 }
@@ -335,9 +382,17 @@ struct ShoppingListReviewView: View {
         }
     }
 
+    @ViewBuilder
     private var shareActions: some View {
-        ViewThatFits {
-            HStack(spacing: 9) {
+        if appModel.activeShoppingSessionIsImmutable {
+            ShareLink(item: appModel.shareText) {
+                Label("Share read-only list", systemImage: "square.and.arrow.up")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(SecondaryButtonStyle())
+        } else {
+            ViewThatFits {
+                HStack(spacing: 9) {
                 ShareLink(item: appModel.shareText) {
                     Label("Share list", systemImage: "square.and.arrow.up")
                 }
@@ -351,7 +406,7 @@ struct ShoppingListReviewView: View {
                 .buttonStyle(SecondaryButtonStyle())
             }
 
-            VStack(spacing: 9) {
+                VStack(spacing: 9) {
                 ShareLink(item: appModel.shareText) {
                     Label("Share list", systemImage: "square.and.arrow.up")
                 }
@@ -363,6 +418,7 @@ struct ShoppingListReviewView: View {
                     Label("Save list", systemImage: "bookmark.fill")
                 }
                 .buttonStyle(SecondaryButtonStyle())
+            }
             }
         }
     }
@@ -380,6 +436,13 @@ struct ShoppingListReviewView: View {
 private struct ShoppingProductRow: View {
     @Environment(AppModel.self) private var appModel
     let item: ShoppingListItem
+    let isReadOnly: Bool
+
+    private var selectableAlternatives: [RetailerProductRecord] {
+        ReplacementOptionPolicy.resolvedCandidates(from: item.alternatives) { candidate in
+            appModel.resolvedReplacementPackageCount(for: item, product: candidate)
+        }
+    }
 
     var body: some View {
         VStack(spacing: 13) {
@@ -449,33 +512,44 @@ private struct ShoppingProductRow: View {
 
                 Spacer()
 
-                Menu {
-                    ForEach(item.alternatives) { candidate in
-                        Button {
-                            appModel.selectAlternative(itemID: item.id, candidateID: candidate.id)
-                        } label: {
-                            Text(alternativeLabel(candidate))
+                if !isReadOnly, !selectableAlternatives.isEmpty {
+                    Menu {
+                        ForEach(selectableAlternatives) { candidate in
+                            Button {
+                                appModel.selectAlternative(itemID: item.id, candidateID: candidate.id)
+                            } label: {
+                                Text(alternativeLabel(candidate))
+                            }
                         }
+                    } label: {
+                        Text("Change")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(SmartCartTheme.walmartBlue)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .background(SmartCartTheme.walmartLight)
+                            .clipShape(Capsule())
                     }
-                } label: {
-                    Text("Change")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(SmartCartTheme.walmartBlue)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 7)
-                        .background(SmartCartTheme.walmartLight)
-                        .clipShape(Capsule())
+                    .smartCartMinimumHitTarget()
                 }
 
                 VStack(spacing: 3) {
-                    Text("PLANNED QTY")
+                    Text(isReadOnly ? "FROZEN QTY" : "PLANNED QTY")
                         .smartEyebrow(SmartCartTheme.mutedInk)
-                    HStack(spacing: 8) {
-                        quantityButton("minus", delta: -1)
+                    if isReadOnly {
                         Text("\(item.purchaseQuantity)")
                             .font(.caption.bold())
                             .frame(minWidth: 12)
-                        quantityButton("plus", delta: 1)
+                            .accessibilityLabel("Frozen quantity")
+                            .accessibilityValue("\(item.purchaseQuantity) packages")
+                    } else {
+                        HStack(spacing: 8) {
+                            quantityButton("minus", delta: -1)
+                            Text("\(item.purchaseQuantity)")
+                                .font(.caption.bold())
+                                .frame(minWidth: 12)
+                            quantityButton("plus", delta: 1)
+                        }
                     }
                 }
             }
@@ -510,6 +584,9 @@ private struct ShoppingProductRow: View {
                 .background(SmartCartTheme.canvas)
                 .clipShape(Circle())
         }
+        .smartCartMinimumHitTarget()
+        .accessibilityLabel(symbol == "plus" ? "Increase planned quantity" : "Decrease planned quantity")
+        .accessibilityValue("\(item.purchaseQuantity) packages")
     }
 }
 
