@@ -9,7 +9,7 @@ struct RootView: View {
         @Bindable var appModel = appModel
 
         ZStack(alignment: .top) {
-            WoodGrainBackground()
+            SmartCartFoodBackground()
                 .ignoresSafeArea()
 
             TabView(selection: $appModel.selectedTab) {

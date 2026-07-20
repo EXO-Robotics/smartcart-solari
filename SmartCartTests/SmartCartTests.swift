@@ -4679,11 +4679,28 @@ final class SmartCartTests: XCTestCase {
             ),
             encoding: .utf8
         )
+        let rootSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("SmartCart/RootView.swift"),
+            encoding: .utf8
+        )
+        let themeSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "SmartCart/Theme/SmartCartTheme.swift"
+            ),
+            encoding: .utf8
+        )
 
         XCTAssertTrue(recipesSource.contains("TextField(\"Search saved recipes\""))
         XCTAssertTrue(recipesSource.contains("Label(\"Recent Recipes\", systemImage: \"clock.fill\")"))
         XCTAssertTrue(recipesSource.contains("accessibilityIdentifier(\"recipes-recent-drawer\")"))
         XCTAssertTrue(recipesSource.contains("recentDragGesture"))
+        XCTAssertTrue(recipesSource.contains(".background {\n            WoodGrainBackground()"))
+        XCTAssertTrue(rootSource.contains("SmartCartFoodBackground()"))
+        XCTAssertFalse(rootSource.contains("WoodGrainBackground()"))
+        XCTAssertTrue(themeSource.contains("struct SmartCartFoodBackground: View"))
+        XCTAssertTrue(themeSource.contains("Image(\"SmartCartHomeBackground\")"))
+        XCTAssertTrue(themeSource.contains("func smartCartBackground() -> some View"))
+        XCTAssertTrue(themeSource.contains("SmartCartFoodBackground()"))
         XCTAssertFalse(recipesSource.contains("enum RecipesPage"))
         XCTAssertFalse(recipesSource.contains("Text(\"Recently opened\")"))
         XCTAssertFalse(recipesSource.contains("private var mealPrepLaunchCard"))

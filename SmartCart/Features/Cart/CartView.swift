@@ -1227,7 +1227,9 @@ struct RecipesView: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: height, alignment: .top)
-        .background(SmartCartTheme.paper)
+        .background {
+            WoodGrainBackground()
+        }
         .clipShape(RecipesPullUpShape())
         .overlay {
             RecipesPullUpShape()

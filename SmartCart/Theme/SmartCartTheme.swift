@@ -130,6 +130,54 @@ struct WoodGrainBackground: View {
     }
 }
 
+/// Shared full-screen food photography for primary app surfaces. The adaptive
+/// veil preserves semantic label contrast in both supported appearance modes.
+struct SmartCartFoodBackground: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                colorScheme == .light ? Color.white : Color.black
+
+                Image("SmartCartHomeBackground")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .clipped()
+
+                if colorScheme == .light {
+                    Color.white.opacity(0.62)
+
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.34),
+                            Color.clear,
+                            Color.white.opacity(0.24)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                } else {
+                    Color.black.opacity(0.46)
+
+                    LinearGradient(
+                        colors: [
+                            Color.black.opacity(0.34),
+                            Color.clear,
+                            Color.black.opacity(0.24)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
 /// A restrained physical edge for cards on both wood backgrounds. The darker
 /// lower rim, fine top highlight, and compact shadow create depth
 /// without turning the interface into a skeuomorphic stack of panels.
@@ -202,10 +250,10 @@ private struct SmartCartCardEdgeModifier: ViewModifier {
 }
 
 extension View {
-    /// Screen-level background using the adaptive light/dark wood image.
+    /// Screen-level background using SmartCart's shared food photography.
     func smartCartBackground() -> some View {
         background {
-            WoodGrainBackground()
+            SmartCartFoodBackground()
                 .ignoresSafeArea()
         }
     }
