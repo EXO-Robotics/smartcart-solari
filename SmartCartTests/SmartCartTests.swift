@@ -1544,7 +1544,7 @@ final class SmartCartTests: XCTestCase {
         XCTAssertEqual(model.selectedRetailer, .target)
         XCTAssertEqual(model.primaryStore.retailerID, "target")
         XCTAssertTrue(model.shoppingItems.isEmpty)
-        XCTAssertEqual(model.retailerConfiguration.guideLabel, "Shopping List")
+        XCTAssertEqual(model.retailerConfiguration.guideLabel, "Shopping Trip")
 
         let recipe = Recipe(
             title: "Target Adapter Test",
@@ -3822,6 +3822,486 @@ final class SmartCartTests: XCTestCase {
             completedSnapshot
         )
         XCTAssertTrue(completedModel.shoppingItems.allSatisfy { $0.status == .waiting })
+    }
+
+    func testPhase4RecipeLinksRequireHTTPSAndClassifyPinterestHosts() throws {
+        let trimmed = try XCTUnwrap(
+            RecipeLinkInput.validHTTPSURL(from: "  https://example.com/recipes/pasta  ")
+        )
+        XCTAssertEqual(trimmed.absoluteString, "https://example.com/recipes/pasta")
+
+        for invalid in [
+            "", "www.example.com/recipe", "http://example.com/recipe",
+            "ftp://example.com/recipe", "https:///recipe"
+        ] {
+            XCTAssertNil(RecipeLinkInput.validHTTPSURL(from: invalid), invalid)
+        }
+
+        for address in [
+            "https://pin.it/abc123",
+            "https://pinterest.com/pin/1",
+            "https://www.pinterest.com/pin/2",
+            "https://uk.pinterest.com/pin/3"
+        ] {
+            let url = try XCTUnwrap(RecipeLinkInput.validHTTPSURL(from: address))
+            XCTAssertEqual(RecipeLinkInput.source(for: url), .pinterest, address)
+        }
+
+        for address in [
+            "https://example.com/recipe",
+            "https://notpinterest.com/recipe",
+            "https://pinterest.com.evil.example/recipe"
+        ] {
+            let url = try XCTUnwrap(RecipeLinkInput.validHTTPSURL(from: address))
+            XCTAssertEqual(RecipeLinkInput.source(for: url), .link, address)
+        }
+
+        let destination = SheetDestination.importer(.pinterest, trimmed.absoluteString)
+        guard case let .importer(method, initialText) = destination else {
+            return XCTFail("Expected importer destination")
+        }
+        XCTAssertEqual(method, .pinterest)
+        XCTAssertEqual(initialText, trimmed.absoluteString)
+        XCTAssertEqual(destination.id, "importer-pinterest")
+    }
+
+    @MainActor
+    func testPhase4EmptyRecipeRejectionPreservesFlowAndActiveRecipe() {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        let active = phase4Recipe(title: "Active recipe")
+        XCTAssertTrue(model.beginRecipe(active))
+        model.selectedTab = .pantry
+        model.homePath = [.recipeReady, .preferences]
+        model.openImporter(.recipeText, initialText: "draft ingredients")
+
+        let originalPath = model.homePath
+        let originalRecents = model.recentRecipeIDs
+        let originalRecipes = model.recipes
+        let originalActiveSessionID = model.activeShoppingSessionID
+        let empty = Recipe(
+            title: "Empty recipe",
+            source: .text,
+            sourceDetail: "Tests",
+            heroSymbol: "fork.knife",
+            servings: 2,
+            prepMinutes: 0,
+            cookMinutes: 0,
+            ingredients: []
+        )
+
+        XCTAssertFalse(model.beginRecipe(empty))
+
+        XCTAssertEqual(model.selectedTab, .pantry)
+        XCTAssertEqual(model.homePath, originalPath)
+        XCTAssertEqual(model.recentRecipeIDs, originalRecents)
+        XCTAssertEqual(model.recipes, originalRecipes)
+        XCTAssertEqual(model.activeRecipe, active)
+        XCTAssertEqual(model.activeShoppingSessionID, originalActiveSessionID)
+        guard case let .importer(method, initialText) = model.presentedSheet else {
+            return XCTFail("Recipe rejection should leave the importer presented")
+        }
+        XCTAssertEqual(method, .recipeText)
+        XCTAssertEqual(initialText, "draft ingredients")
+    }
+
+    @MainActor
+    func testPhase4SuccessfulBeginRecipeRoutesAndOrdersRecents() {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        let first = phase4Recipe(title: "First")
+        let second = phase4Recipe(title: "Second")
+
+        XCTAssertTrue(model.beginRecipe(first))
+        XCTAssertTrue(model.beginRecipe(second))
+        model.selectedTab = .lists
+        model.openImporter(.recipeLink, initialText: "https://example.com/first")
+        XCTAssertTrue(model.beginRecipe(first))
+
+        XCTAssertEqual(model.selectedTab, .home)
+        XCTAssertEqual(model.homePath, [.recipeReady])
+        XCTAssertNil(model.presentedSheet)
+        XCTAssertEqual(model.activeRecipe.id, first.id)
+        XCTAssertEqual(model.recentRecipeIDs, [first.id, second.id])
+        XCTAssertEqual(model.recentRecipes.map(\.id), [first.id, second.id])
+    }
+
+    @MainActor
+    func testPhase4ExperiencedAndCompletedUserSignalsStayDistinct() throws {
+        let fresh = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        XCTAssertFalse(fresh.hasExperiencedUserState)
+        XCTAssertFalse(fresh.hasCompletedShoppingTrip)
+        XCTAssertNil(fresh.mostRecentShoppedRecipe)
+
+        XCTAssertTrue(fresh.beginRecipe(phase4Recipe(title: "Imported", source: .link)))
+        XCTAssertTrue(fresh.hasExperiencedUserState)
+        XCTAssertFalse(fresh.hasCompletedShoppingTrip)
+        XCTAssertNil(fresh.mostRecentShoppedRecipe)
+
+        let completed = try completePhase4Trip(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        XCTAssertTrue(completed.model.hasExperiencedUserState)
+        XCTAssertTrue(completed.model.hasCompletedShoppingTrip)
+        XCTAssertEqual(completed.model.mostRecentShoppedRecipe?.id, completed.model.activeRecipe.id)
+    }
+
+    @MainActor
+    func testPhase4RecentRecipesUseInjectedIsolatedDefaults() {
+        let store = InMemorySmartCartStateStore()
+        let defaults = isolatedCommerceDefaults()
+        let first = phase4Recipe(title: "First recent")
+        let second = phase4Recipe(title: "Second recent")
+        let model = AppModel(stateStore: store, commerceDefaults: defaults)
+
+        XCTAssertTrue(model.beginRecipe(first))
+        XCTAssertTrue(model.beginRecipe(second))
+        XCTAssertTrue(model.beginRecipe(first))
+
+        let restored = AppModel(stateStore: store, commerceDefaults: defaults)
+        XCTAssertEqual(restored.recentRecipeIDs, [first.id, second.id])
+        XCTAssertEqual(restored.recentRecipes.map(\.title), [first.title, second.title])
+
+        let separatelyIsolated = AppModel(
+            stateStore: store,
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        XCTAssertTrue(separatelyIsolated.recentRecipeIDs.isEmpty)
+    }
+
+    @MainActor
+    func testPhase4NotYetLeavesCompletedTripPendingAcrossRelaunch() throws {
+        let store = InMemorySmartCartStateStore()
+        let defaults = isolatedCommerceDefaults()
+        let completed = try completePhase4Trip(
+            stateStore: store,
+            commerceDefaults: defaults
+        )
+
+        XCTAssertTrue(
+            completed.model.shoppingSession(id: completed.sessionID)?.hasPendingPantryUpdateReminder == true
+        )
+        XCTAssertEqual(completed.model.pendingShoppingSessions.map(\.id), [completed.sessionID])
+        XCTAssertNil(completed.model.shoppingSession(id: completed.sessionID)?.reconciliation)
+        XCTAssertNil(
+            completed.model.shoppingSession(id: completed.sessionID)?.pantryUpdateReminderArchivedAt
+        )
+
+        let restored = AppModel(stateStore: store, commerceDefaults: defaults)
+        let restoredSession = try XCTUnwrap(restored.shoppingSession(id: completed.sessionID))
+        XCTAssertTrue(restoredSession.isGuideComplete)
+        XCTAssertFalse(restoredSession.isCommitted)
+        XCTAssertTrue(restoredSession.hasPendingPantryUpdateReminder)
+        XCTAssertNil(restoredSession.reconciliation)
+        XCTAssertNil(restoredSession.pantryUpdateReminderArchivedAt)
+        XCTAssertEqual(restored.pendingShoppingSessions.map(\.id), [completed.sessionID])
+        XCTAssertTrue(restored.pantryInventory.isEmpty)
+    }
+
+    @MainActor
+    func testPhase4ArchiveSuppressesOnlyReminderAndPersists() throws {
+        let store = InMemorySmartCartStateStore()
+        let defaults = isolatedCommerceDefaults()
+        let completed = try completePhase4Trip(
+            stateStore: store,
+            commerceDefaults: defaults
+        )
+        let model = completed.model
+        model.pantryInventory = [PantryInventoryItem(name: "Rice", quantity: 1, unit: "bag")]
+        model.preferredProductIDsByIngredient = ["rice|walmart": "preferred-product"]
+        model.saveShoppingReconciliationDraft(
+            sessionID: completed.sessionID,
+            outcome: .boughtFew,
+            purchasedItemIDs: [completed.itemID],
+            substitutions: []
+        )
+        let sessionBefore = try XCTUnwrap(model.shoppingSession(id: completed.sessionID))
+        let pantryBefore = model.pantryInventory
+        let shoppingPreferencesBefore = model.preferences
+        let productPreferencesBefore = model.preferredProductIDsByIngredient
+        let itemsBefore = model.shoppingItems
+        let listsBefore = model.savedLists
+
+        XCTAssertTrue(model.archivePantryUpdateReminder(sessionID: completed.sessionID))
+
+        let archived = try XCTUnwrap(model.shoppingSession(id: completed.sessionID))
+        let archivedAt = try XCTUnwrap(archived.pantryUpdateReminderArchivedAt)
+        var expectedSession = sessionBefore
+        expectedSession.pantryUpdateReminderArchivedAt = archivedAt
+        XCTAssertEqual(archived, expectedSession)
+        XCTAssertFalse(archived.hasPendingPantryUpdateReminder)
+        XCTAssertNil(archived.reconciliation)
+        XCTAssertEqual(archived.reconciliationDraft, sessionBefore.reconciliationDraft)
+        XCTAssertEqual(model.pantryInventory, pantryBefore)
+        XCTAssertEqual(model.preferences, shoppingPreferencesBefore)
+        XCTAssertEqual(model.preferredProductIDsByIngredient, productPreferencesBefore)
+        XCTAssertEqual(model.shoppingItems, itemsBefore)
+        XCTAssertEqual(model.savedLists, listsBefore)
+        XCTAssertFalse(model.pendingShoppingSessions.contains { $0.id == completed.sessionID })
+
+        let restored = AppModel(stateStore: store, commerceDefaults: defaults)
+        XCTAssertEqual(restored.shoppingSession(id: completed.sessionID), archived)
+        XCTAssertEqual(restored.pantryInventory, pantryBefore)
+        XCTAssertEqual(restored.preferences, shoppingPreferencesBefore)
+        XCTAssertEqual(restored.preferredProductIDsByIngredient, productPreferencesBefore)
+        XCTAssertEqual(restored.shoppingItems, itemsBefore)
+        XCTAssertEqual(restored.savedLists, listsBefore)
+        XCTAssertFalse(restored.pendingShoppingSessions.contains { $0.id == completed.sessionID })
+    }
+
+    @MainActor
+    func testPhase4ArchiveSaveFailureRollsBackReminderState() throws {
+        let store = ControllableSmartCartStateStore()
+        let completed = try completePhase4Trip(
+            stateStore: store,
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        let sessionsBefore = completed.model.shoppingSessions
+        let itemsBefore = completed.model.shoppingItems
+        let listsBefore = completed.model.savedLists
+        let persistedBefore = store.state
+        store.failNextSave = true
+
+        XCTAssertFalse(
+            completed.model.archivePantryUpdateReminder(sessionID: completed.sessionID)
+        )
+
+        XCTAssertEqual(completed.model.shoppingSessions, sessionsBefore)
+        XCTAssertEqual(completed.model.shoppingItems, itemsBefore)
+        XCTAssertEqual(completed.model.savedLists, listsBefore)
+        XCTAssertEqual(store.state, persistedBefore)
+        XCTAssertTrue(
+            completed.model.shoppingSession(id: completed.sessionID)?.hasPendingPantryUpdateReminder == true
+        )
+        XCTAssertNotNil(completed.model.persistenceIssue)
+    }
+
+    @MainActor
+    func testPhase4ArchivedTripReopensFromSavedListAndCanReconcileLater() throws {
+        let store = InMemorySmartCartStateStore()
+        let defaults = isolatedCommerceDefaults()
+        let completed = try completePhase4Trip(
+            stateStore: store,
+            commerceDefaults: defaults
+        )
+        let model = completed.model
+        XCTAssertTrue(model.archivePantryUpdateReminder(sessionID: completed.sessionID))
+        let archivedAt = try XCTUnwrap(
+            model.shoppingSession(id: completed.sessionID)?.pantryUpdateReminderArchivedAt
+        )
+        XCTAssertTrue(model.beginRecipe(phase4Recipe(title: "Later recipe")))
+
+        model.openSavedList(completed.listID)
+
+        XCTAssertEqual(model.activeShoppingSessionID, completed.sessionID)
+        XCTAssertEqual(model.homePath, [.shoppingList])
+        XCTAssertEqual(
+            model.shoppingSession(id: completed.sessionID)?.pantryUpdateReminderArchivedAt,
+            archivedAt
+        )
+        model.startShoppingReconciliation()
+        XCTAssertEqual(model.homePath.last, .shoppingReconciliation(completed.sessionID))
+
+        try model.commitShoppingReconciliation(
+            sessionID: completed.sessionID,
+            outcome: .didNotShop,
+            purchasedItemIDs: [],
+            substitutions: []
+        )
+        XCTAssertTrue(model.shoppingSession(id: completed.sessionID)?.isCommitted == true)
+        XCTAssertEqual(
+            model.shoppingSession(id: completed.sessionID)?.pantryUpdateReminderArchivedAt,
+            archivedAt
+        )
+        XCTAssertTrue(model.pantryInventory.isEmpty)
+    }
+
+    @MainActor
+    func testPhase4ArchiveSuppressesEveryAliasOfSameLogicalTrip() throws {
+        let completed = try completePhase4Trip(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        let source = try XCTUnwrap(completed.model.shoppingSession(id: completed.sessionID))
+        let alias = phase4Alias(of: source)
+        completed.model.shoppingSessions.append(alias)
+        XCTAssertEqual(completed.model.pendingShoppingSessions.count, 1)
+
+        XCTAssertTrue(
+            completed.model.archivePantryUpdateReminder(sessionID: completed.sessionID)
+        )
+
+        let sourceArchiveDate = try XCTUnwrap(
+            completed.model.shoppingSession(id: completed.sessionID)?
+                .pantryUpdateReminderArchivedAt
+        )
+        XCTAssertEqual(
+            completed.model.shoppingSession(id: alias.id)?.pantryUpdateReminderArchivedAt,
+            sourceArchiveDate
+        )
+        XCTAssertTrue(completed.model.pendingShoppingSessions.isEmpty)
+    }
+
+    func testPhase4ShoppingSessionArchiveFieldRoundTripsAndDecodesWhenMissing() throws {
+        let state = try makeState()
+        let item = try state.shoppingItems.firstUnwrapped()
+        let archivedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let session = ShoppingSession(
+            recipeID: state.activeRecipe.id,
+            recipeTitle: state.activeRecipe.title,
+            storeID: try XCTUnwrap(item.product.storeID),
+            items: [item],
+            pantryUpdateReminderArchivedAt: archivedAt
+        )
+        let data = try JSONEncoder().encode(session)
+        let roundTripped = try JSONDecoder().decode(ShoppingSession.self, from: data)
+        XCTAssertEqual(roundTripped, session)
+        XCTAssertEqual(roundTripped.pantryUpdateReminderArchivedAt, archivedAt)
+
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        XCTAssertNotNil(object.removeValue(forKey: "pantryUpdateReminderArchivedAt"))
+        let legacyData = try JSONSerialization.data(withJSONObject: object)
+        let decodedLegacy = try JSONDecoder().decode(ShoppingSession.self, from: legacyData)
+        XCTAssertNil(decodedLegacy.pantryUpdateReminderArchivedAt)
+        XCTAssertEqual(decodedLegacy.id, session.id)
+        XCTAssertEqual(decodedLegacy.items, session.items)
+    }
+
+    func testPhase4RecipeSourceTextRoundTripsAndDecodesWhenMissing() throws {
+        var recipe = phase4Recipe(title: "Source-preserving recipe", source: .photo)
+        recipe.rawSourceText = "INGREDIENTS\n1 cup rice\n\nDIRECTIONS\nSimmer until tender."
+
+        let data = try JSONEncoder().encode(recipe)
+        let roundTripped = try JSONDecoder().decode(Recipe.self, from: data)
+        XCTAssertEqual(roundTripped, recipe)
+        XCTAssertEqual(roundTripped.rawSourceText, recipe.rawSourceText)
+
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        XCTAssertNotNil(object.removeValue(forKey: "rawSourceText"))
+        let legacyData = try JSONSerialization.data(withJSONObject: object)
+        let decodedLegacy = try JSONDecoder().decode(Recipe.self, from: legacyData)
+        XCTAssertNil(decodedLegacy.rawSourceText)
+        XCTAssertEqual(decodedLegacy.id, recipe.id)
+        XCTAssertEqual(decodedLegacy.ingredients, recipe.ingredients)
+    }
+
+    @MainActor
+    func testPhase4ShopAgainUsesCurrentPantryRetailerStoreAndPreferencesWithoutOutcomes() throws {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedCommerceDefaults(),
+            seedDemoShoppingState: true
+        )
+        var staleOutcome = try model.shoppingItems.firstUnwrapped()
+        staleOutcome.status = .addedToCart
+
+        model.startRetailerGuide(.target)
+        model.preferences.organicPolicy = .only
+        model.preferences.dietaryRestrictions = [.glutenFree]
+        model.fulfillmentMode = .delivery
+        let expectedStoreID = model.primaryStore.id
+        model.pantryInventory = [
+            PantryInventoryItem(
+                name: "Rice",
+                quantity: 1,
+                unit: "cup",
+                remainingAmount: 0.5,
+                remainingUnit: "cup"
+            )
+        ]
+        model.shoppingItems = [staleOutcome]
+
+        XCTAssertTrue(model.beginRecipe(phase4Recipe(title: "Shop Again")))
+
+        XCTAssertEqual(model.selectedRetailer, .target)
+        XCTAssertEqual(model.primaryStore.id, expectedStoreID)
+        XCTAssertEqual(model.fulfillmentMode, .delivery)
+        XCTAssertEqual(model.preferences.organicPolicy, .only)
+        XCTAssertEqual(model.preferences.dietaryRestrictions, [.glutenFree])
+        XCTAssertEqual(model.activeRecipe.ingredients.first?.pantrySuggestion?.coverage, .partial)
+        XCTAssertEqual(model.activeRecipe.ingredients.first?.pantryDecision, .review)
+        XCTAssertTrue(model.shoppingItems.isEmpty)
+        XCTAssertNil(model.activeShoppingSessionID)
+        XCTAssertEqual(model.homePath, [.recipeReady])
+    }
+
+    private func phase4Recipe(
+        title: String,
+        source: RecipeSource = .text
+    ) -> Recipe {
+        Recipe(
+            title: title,
+            source: source,
+            sourceDetail: "Phase 4 tests",
+            heroSymbol: "fork.knife",
+            servings: 2,
+            prepMinutes: 0,
+            cookMinutes: 0,
+            ingredients: [Ingredient(name: "Rice", quantity: 1, unit: "cup")]
+        )
+    }
+
+    @MainActor
+    private func completePhase4Trip(
+        stateStore: any SmartCartStateStoring,
+        commerceDefaults: UserDefaults
+    ) throws -> (model: AppModel, sessionID: UUID, itemID: UUID, listID: UUID) {
+        let model = AppModel(
+            stateStore: stateStore,
+            commerceDefaults: commerceDefaults,
+            seedDemoShoppingState: true
+        )
+        model.completeRetailerSetup()
+        model.shoppingItems = [try model.shoppingItems.firstUnwrapped()]
+        XCTAssertTrue(model.startOrResumeRetailerShoppingSession())
+        let sessionID = try XCTUnwrap(model.activeShoppingSessionID)
+        let itemID = try model.shoppingItems.firstUnwrapped().id
+        XCTAssertTrue(
+            model.recordRetailerOutcome(
+                .savedToWishlist,
+                for: itemID,
+                sessionID: sessionID
+            )
+        )
+        let manifestID = try XCTUnwrap(model.shoppingSession(id: sessionID)?.manifestID)
+        let listID = try XCTUnwrap(
+            model.savedLists.first(where: { $0.manifest.id == manifestID })?.id
+        )
+        return (model, sessionID, itemID, listID)
+    }
+
+    private func phase4Alias(of source: ShoppingSession) -> ShoppingSession {
+        ShoppingSession(
+            tripID: source.tripID,
+            logicalTripID: source.logicalTripID,
+            recipeID: source.recipeID,
+            recipeTitle: source.recipeTitle,
+            manifestID: source.manifestID,
+            storeID: source.storeID,
+            retailerID: source.retailerID,
+            desiredServings: source.desiredServings,
+            fulfillmentMode: source.fulfillmentMode,
+            shoppingScope: source.shoppingScope,
+            mealPrepSnapshot: source.mealPrepSnapshot,
+            startedAt: source.startedAt.addingTimeInterval(1),
+            items: source.items,
+            stateFingerprint: source.stateFingerprint,
+            reconciliationDraft: source.reconciliationDraft,
+            reconciliation: source.reconciliation,
+            pantryUpdateReminderArchivedAt: source.pantryUpdateReminderArchivedAt
+        )
     }
 
     private func phase2Recipe(ingredients: [Ingredient]) -> Recipe {

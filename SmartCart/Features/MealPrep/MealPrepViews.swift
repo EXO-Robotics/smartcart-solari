@@ -92,18 +92,24 @@ struct MealPrepSelectionView: View {
 
             if let selection {
                 Divider()
-                HStack {
-                    Text("Target servings")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(SmartCartTheme.secondaryInk)
-                    Spacer()
-                    servingButton(symbol: "minus", recipeTitle: recipe.title, selectionID: selection.id, delta: -1)
-                    Text(Int(selection.targetServings), format: .number)
-                        .font(.headline.monospacedDigit())
-                        .foregroundStyle(SmartCartTheme.navy)
-                        .frame(minWidth: 36)
-                        .accessibilityLabel("\(Int(selection.targetServings)) servings")
-                    servingButton(symbol: "plus", recipeTitle: recipe.title, selectionID: selection.id, delta: 1)
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Target servings")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(SmartCartTheme.secondaryInk)
+                        HStack {
+                            servingControls(recipe: recipe, selection: selection)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    }
+                } else {
+                    HStack {
+                        Text("Target servings")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(SmartCartTheme.secondaryInk)
+                        Spacer()
+                        servingControls(recipe: recipe, selection: selection)
+                    }
                 }
             }
         }
@@ -112,6 +118,17 @@ struct MealPrepSelectionView: View {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .stroke(selected ? SmartCartTheme.green : Color.clear, lineWidth: 2)
         }
+    }
+
+    @ViewBuilder
+    private func servingControls(recipe: Recipe, selection: MealPrepSelection) -> some View {
+        servingButton(symbol: "minus", recipeTitle: recipe.title, selectionID: selection.id, delta: -1)
+        Text(Int(selection.targetServings), format: .number)
+            .font(.headline.monospacedDigit())
+            .foregroundStyle(SmartCartTheme.navy)
+            .frame(minWidth: 36)
+            .accessibilityLabel("\(Int(selection.targetServings)) servings")
+        servingButton(symbol: "plus", recipeTitle: recipe.title, selectionID: selection.id, delta: 1)
     }
 
     @ViewBuilder
@@ -314,12 +331,15 @@ struct MealPrepReviewView: View {
                     Button("Keep every option separately") {
                         appModel.keepMealPrepAlternativeGroup(line.id)
                     }
+                    .accessibilityIdentifier("meal-prep-alternative-keep-all-\(line.id)")
                     Button("Exclude this ingredient", role: .destructive) {
                         appModel.excludeMealPrepAlternativeGroup(line.id)
                     }
+                    .accessibilityIdentifier("meal-prep-alternative-exclude-\(line.id)")
                     Button("Decide later — don’t add this trip") {
                         appModel.deferMealPrepAlternativeGroup(line.id)
                     }
+                    .accessibilityIdentifier("meal-prep-alternative-defer-\(line.id)")
                 } label: {
                     Label("More alternative choices", systemImage: "ellipsis.circle")
                         .font(.subheadline.weight(.bold))
@@ -328,6 +348,7 @@ struct MealPrepReviewView: View {
                 }
                 .buttonStyle(SecondaryButtonStyle())
                 .smartCartMinimumHitTarget()
+                .accessibilityIdentifier("meal-prep-alternative-more-\(line.id)")
                 .accessibilityHint("Keep all alternatives, exclude them from this trip, or defer the decision")
             }
         }
@@ -435,7 +456,7 @@ struct MealPrepReviewView: View {
     }
 
     private var continueButton: some View {
-        Button("Review Meal Prep Summary") {
+        Button("Continue to Recipe Ready") {
             appModel.openMealPrepDashboard()
         }
         .font(.headline)
@@ -446,7 +467,7 @@ struct MealPrepReviewView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .disabled(!unresolved.isEmpty)
         .opacity(unresolved.isEmpty ? 1 : 0.45)
-        .accessibilityHint(unresolved.isEmpty ? "Opens the combined shopping summary" : "Confirm all possible duplicates first")
+        .accessibilityHint(unresolved.isEmpty ? "Opens the combined Recipe Ready review" : "Confirm all possible duplicates first")
     }
 
     private func quantity(_ line: CombinedIngredientLine) -> String {
@@ -602,7 +623,7 @@ struct MealPrepDashboardView: View {
         }
         .scrollIndicators(.hidden)
         .smartCartBackground()
-        .navigationTitle("Meal Prep Summary")
+        .navigationTitle("Recipe Ready")
         .navigationBarTitleDisplayMode(.inline)
     }
 

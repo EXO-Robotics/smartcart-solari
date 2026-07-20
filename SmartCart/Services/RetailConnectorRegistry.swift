@@ -28,7 +28,7 @@ enum RetailConnectorRegistry {
             homepage: URL(string: "https://www.walmart.com")!,
             state: .demoReady,
             capabilities: [.catalogSearch, .exactProductLinks, .guidedProductHandoff],
-            integrationNote: "Seeded catalog and exact public product links with a user-driven Safari handoff. No account link, live inventory, cart creation, fulfillment scheduling, payment, or checkout integration."
+            integrationNote: "Seeded catalog and exact public product links with a user-driven Safari Shopping Trip. No account link, live inventory, cart creation, fulfillment scheduling, payment, or checkout integration."
         ),
         RetailConnectorProfile(
             id: "instacart",
@@ -36,7 +36,7 @@ enum RetailConnectorRegistry {
             homepage: URL(string: "https://www.instacart.com")!,
             state: .credentialsRequired,
             capabilities: [.catalogSearch, .pickup, .delivery, .manifestTransfer],
-            integrationNote: "Shopping-list adapter, cache, and in-app handoff are ready; approved server-side credentials are required before live calls."
+            integrationNote: "Shopping-list transfer, cache, and in-app Safari opening are ready; approved server-side credentials are required before live calls."
         ),
         RetailConnectorProfile(
             id: "kroger",
@@ -44,7 +44,7 @@ enum RetailConnectorRegistry {
             homepage: URL(string: "https://www.kroger.com")!,
             state: .researchOnly,
             capabilities: [],
-            integrationNote: "A guided Kroger Shopping List adapter is planned, but no product guide or live connection is enabled."
+            integrationNote: "A Kroger Shopping Trip adapter is planned, but no product flow or live connection is enabled."
         ),
         RetailConnectorProfile(
             id: "target",
@@ -52,7 +52,7 @@ enum RetailConnectorRegistry {
             homepage: URL(string: "https://www.target.com")!,
             state: .demoReady,
             capabilities: [.catalogSearch, .exactProductLinks, .guidedProductHandoff],
-            integrationNote: "A bounded seeded catalog, exact public product links, search fallbacks, and a user-driven Safari guide are available. No account, list, cart, fulfillment, payment, or checkout integration is represented."
+            integrationNote: "A bounded seeded catalog, exact public product links, search fallbacks, and a user-driven Safari Shopping Trip are available. No account, list, cart, fulfillment, payment, or checkout integration is represented."
         ),
         RetailConnectorProfile(
             id: "amazon-fresh",
@@ -60,7 +60,7 @@ enum RetailConnectorRegistry {
             homepage: URL(string: "https://www.amazon.com/fresh")!,
             state: .researchOnly,
             capabilities: [.delivery, .guidedProductHandoff],
-            integrationNote: "Homepage handoff only until an approved partner interface exists."
+            integrationNote: "Homepage opening only until an approved partner interface exists."
         ),
         RetailConnectorProfile(
             id: "generic-affiliate",
@@ -122,7 +122,7 @@ struct CredentialFreeRetailConnector: RetailerCatalogService {
     func createHandoff(manifest: ShoppingManifest) async throws -> RetailerHandoff {
         guard profile.homepage.scheme == "https", profile.homepage.host != "example.invalid" else {
             throw RetailerServiceError.unsupportedCapability(
-                "Affiliate handoff before an approved destination is configured"
+                "Affiliate retailer opening before an approved destination is configured"
             )
         }
         return RetailerHandoff(

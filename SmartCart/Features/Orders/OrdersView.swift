@@ -95,12 +95,16 @@ struct ProductExceptionReviewSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AppModel.self) private var appModel
     @State private var activeSheet: ProductExceptionSheetDestination?
+    @State private var sheetReturnFocusItemID: UUID?
+    @AccessibilityFocusState private var focusedExceptionItemID: UUID?
 
     private var unresolvedItems: [ShoppingListItem] {
         appModel.unresolvedMatchingExceptionItems
     }
 
     var body: some View {
+        let reviewItems = unresolvedItems
+
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
@@ -117,18 +121,22 @@ struct ProductExceptionReviewSheet: View {
                     .accessibilityHint("Opens the complete prepared product list without resolving these decisions")
 
                     LazyVStack(spacing: 14) {
-                        ForEach(unresolvedItems) { item in
+                        ForEach(reviewItems) { item in
                             ProductExceptionCard(
                                 item: item,
                                 reasons: appModel.matchingExceptionReasons(for: item),
                                 onSearchManually: {
+                                    sheetReturnFocusItemID = item.id
                                     activeSheet = .manualSearch(
                                         itemID: item.id,
                                         url: manualSearchURL(for: item)
                                     )
                                 },
-                                onDecision: continueIfResolved
+                                onDecision: {
+                                    focusAfterResolving(item.id, previousItems: reviewItems)
+                                }
                             )
+                            .accessibilityFocused($focusedExceptionItemID, equals: item.id)
                         }
                     }
                 }
@@ -150,7 +158,7 @@ struct ProductExceptionReviewSheet: View {
             }
             .accessibilityIdentifier("product-exception-review")
         }
-        .sheet(item: $activeSheet, onDismiss: continueIfResolved) { sheet in
+        .sheet(item: $activeSheet, onDismiss: restoreFocusAfterSheet) { sheet in
             switch sheet {
             case .allProducts:
                 AllPreparedProductsSheet()
@@ -191,6 +199,47 @@ struct ProductExceptionReviewSheet: View {
             dismiss()
         } else {
             returnToRecipeReady()
+        }
+    }
+
+    private func focusAfterResolving(
+        _ resolvedItemID: UUID,
+        previousItems: [ShoppingListItem]
+    ) {
+        let remainingItems = appModel.unresolvedMatchingExceptionItems
+        guard !remainingItems.isEmpty else {
+            continueIfResolved()
+            return
+        }
+
+        let remainingIDs = Set(remainingItems.map(\.id))
+        let nextItemID: UUID
+        if let resolvedIndex = previousItems.firstIndex(where: { $0.id == resolvedItemID }) {
+            let candidates = Array(previousItems.dropFirst(resolvedIndex + 1))
+                + Array(previousItems.prefix(resolvedIndex).reversed())
+            nextItemID = candidates.first(where: { remainingIDs.contains($0.id) })?.id
+                ?? remainingItems[0].id
+        } else {
+            nextItemID = remainingItems[0].id
+        }
+
+        Task { @MainActor in
+            await Task.yield()
+            focusedExceptionItemID = nextItemID
+        }
+    }
+
+    private func restoreFocusAfterSheet() {
+        continueIfResolved()
+        guard let itemID = sheetReturnFocusItemID,
+              unresolvedItems.contains(where: { $0.id == itemID }) else {
+            sheetReturnFocusItemID = nil
+            return
+        }
+        sheetReturnFocusItemID = nil
+        Task { @MainActor in
+            await Task.yield()
+            focusedExceptionItemID = itemID
         }
     }
 
@@ -257,7 +306,7 @@ private struct ProductExceptionCard: View {
     }
 
     private var acceptTitle: String {
-        item.product.isExactProductLink ? "Accept selection" : "Accept fallback"
+        item.product.isExactProductLink ? "Use this product" : "Use retailer search"
     }
 
     var body: some View {
@@ -329,6 +378,7 @@ private struct ProductExceptionCard: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(SmartCartTheme.amber.opacity(0.55), lineWidth: 1)
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("product-exception-item-\(item.id.uuidString)")
     }
 
@@ -343,21 +393,23 @@ private struct ProductExceptionCard: View {
                     }
                 }
             } label: {
-                Label("Safe alternative", systemImage: "arrow.triangle.2.circlepath")
+                Label("Choose alternative", systemImage: "arrow.triangle.2.circlepath")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(SecondaryButtonStyle())
             .accessibilityIdentifier("product-exception-alternative-\(item.id.uuidString)")
+            .accessibilityHint("Shows compatible alternatives with a resolved package quantity")
         }
     }
 
     private var manualSearchButton: some View {
         Button(action: onSearchManually) {
-            Label("Search manually", systemImage: "safari.fill")
+            Label("Search at \(appModel.retailerConfiguration.displayName)", systemImage: "safari.fill")
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(SecondaryButtonStyle())
         .accessibilityIdentifier("product-exception-search-\(item.id.uuidString)")
+        .accessibilityHint("Opens the retailer search. Returning does not resolve this product decision.")
     }
 
     private var skipButton: some View {
@@ -365,11 +417,12 @@ private struct ProductExceptionCard: View {
             guard appModel.skipMatchingException(itemID: item.id) else { return }
             onDecision()
         } label: {
-            Label("Skip", systemImage: "forward.fill")
+            Label("Skip this item", systemImage: "forward.fill")
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(SecondaryButtonStyle())
         .accessibilityIdentifier("product-exception-skip-\(item.id.uuidString)")
+        .accessibilityHint("Excludes this item from the current shopping trip")
     }
 
     private func alternativeLabel(_ candidate: RetailerProductRecord) -> String {
@@ -516,9 +569,9 @@ struct ShoppingListReviewView: View {
             return "Review shopping results"
         }
         if appModel.guidedCompletedCount > 0 {
-            return "Resume \(appModel.retailerConfiguration.displayName) guide"
+            return "Resume \(appModel.retailerConfiguration.displayName) Shopping Trip"
         }
-        return "Start \(appModel.retailerConfiguration.displayName) guide"
+        return "Start \(appModel.retailerConfiguration.displayName) Shopping Trip"
     }
 
     private var listHeader: some View {
@@ -641,7 +694,7 @@ struct ShoppingListReviewView: View {
     private var transparencyDisclosure: some View {
         InfoBanner(
             symbol: "checkmark.shield.fill",
-            title: "Browser handoff, not account linking",
+            title: "Opens in Safari, not account linking",
             message: "SmartCart opens selected \(appModel.retailerConfiguration.displayName) products and remembers only what you report. The retailer owns sign-in, live availability, list or cart actions, fulfillment, payment, and checkout.",
             color: SmartCartTheme.green
         )
@@ -898,7 +951,7 @@ struct AccountView: View {
     private var preferenceCard: some View {
         VStack(alignment: .leading, spacing: 15) {
             SectionHeader(
-                title: "Executable preferences",
+                title: "Shopping preferences",
                 subtitle: appModel.preferences.summary
             )
             ShoppingPreferenceControls()
@@ -958,7 +1011,7 @@ struct AccountView: View {
                 testerMetric("Imports", value: importCount)
                 testerMetric("Extracted", value: extractionCount)
                 testerMetric("Matched", value: matchCount)
-                testerMetric("Handoffs", value: handoffCount)
+                testerMetric("Retailer opens", value: handoffCount)
             }
 
             if let report = appModel.lastImportReport {

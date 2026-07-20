@@ -292,9 +292,9 @@ enum ShoppingRetailer: String, CaseIterable, Identifiable, Codable, Hashable {
             RetailerGuideConfiguration(
                 retailer: self,
                 displayName: "Walmart",
-                guideLabel: "Guided Wishlist",
+                guideLabel: "Shopping Trip",
                 cardHighlights: [
-                    "Guided Wishlist",
+                    "Walmart Shopping Trip",
                     "Walmart confirms pickup or delivery",
                     "Broad nationwide coverage"
                 ],
@@ -304,17 +304,17 @@ enum ShoppingRetailer: String, CaseIterable, Identifiable, Codable, Hashable {
                 savedListName: "Walmart Wishlist",
                 instructions: [
                     "Review the product, live price, and availability.",
-                    "Add it to your Walmart Wishlist and set the quantity there.",
-                    "Return to SmartCart and report the result."
+                    "Walmart owns every list, cart, and quantity action.",
+                    "When ready, use Next Item in SmartCart. It records only that you advanced."
                 ]
             )
         case .target:
             RetailerGuideConfiguration(
                 retailer: self,
                 displayName: "Target",
-                guideLabel: "Shopping List",
+                guideLabel: "Shopping Trip",
                 cardHighlights: [
-                    "Target Shopping Lists",
+                    "Target Shopping Trip",
                     "Target confirms Drive Up eligibility",
                     "Strong grocery and household coverage"
                 ],
@@ -324,17 +324,17 @@ enum ShoppingRetailer: String, CaseIterable, Identifiable, Codable, Hashable {
                 savedListName: "Target Shopping List",
                 instructions: [
                     "Review the product, live price, and store availability.",
-                    "Save the item in Target, then add or adjust it in Lists & Favorites.",
-                    "Return to SmartCart and report the result."
+                    "Target owns every list, cart, and quantity action.",
+                    "When ready, use Next Item in SmartCart. It records only that you advanced."
                 ]
             )
         case .kroger:
             RetailerGuideConfiguration(
                 retailer: self,
                 displayName: "Kroger",
-                guideLabel: "Shopping List",
+                guideLabel: "Shopping Trip",
                 cardHighlights: [
-                    "Kroger Shopping List",
+                    "Kroger Shopping Trip",
                     "Kroger-family rollout planned",
                     "Local grocery focus"
                 ],
@@ -373,7 +373,7 @@ enum ShoppingRoutePreference: String, CaseIterable, Identifiable, Codable, Hasha
     var title: String {
         switch self {
         case .instacart: "Shop through Instacart"
-        case .walmartDirect: "Guided Walmart shopping"
+        case .walmartDirect: "Walmart Shopping Trip"
         case .otherRetailerLinks: "Other retailer links"
         }
     }
@@ -571,7 +571,7 @@ enum InstacartHandoffError: LocalizedError {
         switch self {
         case .blocked(let issues): issues.joined(separator: " ")
         case .backendUnavailable: "The SmartCart commerce service is unavailable. Start the backend or configure its reachable URL."
-        case .timeout: "Instacart handoff preparation took too long. Try again."
+        case .timeout: "Instacart list preparation took too long. Try again."
         case .unreadableResponse: "The SmartCart commerce service returned an unreadable response."
         case .server(let message): message
         }

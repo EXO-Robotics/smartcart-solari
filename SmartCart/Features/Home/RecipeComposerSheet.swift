@@ -23,7 +23,7 @@ struct RecipeComposerSheet: View {
     1/2 cup parmesan cheese
     1 bunch fresh parsley
     """
-    @State private var linkText = "https://"
+    @State private var linkText = ""
     @State private var selectedSampleIndex = 0
     @State private var photoItems: [PhotosPickerItem] = []
     @State private var selectedImages: [UIImage] = []
@@ -49,10 +49,14 @@ struct RecipeComposerSheet: View {
         case link
     }
 
-    init(initialMethod: ImportMethod) {
-        self.initialMethod = initialMethod
-        _selectedMethod = State(initialValue: initialMethod)
-        if initialMethod == .sample {
+    init(initialMethod: ImportMethod, initialText: String? = nil) {
+        let visibleInitialMethod = initialMethod == .pinterest ? .recipeLink : initialMethod
+        self.initialMethod = visibleInitialMethod
+        _selectedMethod = State(initialValue: visibleInitialMethod)
+        _linkText = State(
+            initialValue: initialText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        )
+        if visibleInitialMethod == .sample {
             _title = State(initialValue: "Lemon Herb Chicken Pasta")
         } else {
             _title = State(initialValue: "Imported Recipe")
@@ -77,6 +81,10 @@ struct RecipeComposerSheet: View {
                 }
                 recipe.ingredients[index].sourceEvidence?.layoutConfidence = lastVisionLayoutConfidence
             }
+        }
+        if selectedMethod == .camera || selectedMethod == .photoLibrary || selectedMethod == .recipeText {
+            let sourceText = recipeText.trimmingCharacters(in: .whitespacesAndNewlines)
+            recipe.rawSourceText = sourceText.isEmpty ? nil : recipeText
         }
         return recipe
     }
@@ -150,15 +158,7 @@ struct RecipeComposerSheet: View {
     }
 
     private var validURL: URL? {
-        let cleaned = linkText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: cleaned),
-              url.scheme?.lowercased() == "https",
-              let host = url.host,
-              !host.isEmpty
-        else {
-            return nil
-        }
-        return url
+        RecipeLinkInput.validHTTPSURL(from: linkText)
     }
 
     var body: some View {
@@ -252,7 +252,7 @@ struct RecipeComposerSheet: View {
 
             ScrollView(.horizontal) {
                 HStack(spacing: 8) {
-                    ForEach(ImportMethod.allCases) { method in
+                    ForEach(visibleImportMethods) { method in
                         Button {
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 switchImportMethod(to: method)
@@ -272,6 +272,10 @@ struct RecipeComposerSheet: View {
             }
             .scrollIndicators(.hidden)
         }
+    }
+
+    private var visibleImportMethods: [ImportMethod] {
+        [.camera, .photoLibrary, .recipeLink, .recipeText, .sample]
     }
 
     @ViewBuilder
@@ -318,7 +322,7 @@ struct RecipeComposerSheet: View {
                         .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
 
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(selectedMethod == .pinterest ? "Import a recipe pin" : "Import from a recipe page")
+                        Text("Import from a recipe page")
                             .font(.headline)
                             .foregroundStyle(SmartCartTheme.navy)
                         Text("SmartCart looks for standard recipe ingredients embedded in the page.")
@@ -333,17 +337,26 @@ struct RecipeComposerSheet: View {
                     .autocorrectionDisabled()
                     .focused($focusedField, equals: .link)
                     .smartField()
+                    .accessibilityIdentifier("recipe-import-link-field")
 
-                if linkText != "https://", validURL == nil {
+                if !linkText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                   validURL == nil {
                     Label("Enter a complete HTTPS recipe link", systemImage: "exclamationmark.circle.fill")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(SmartCartTheme.coral)
                 }
 
+                if let validURL,
+                   RecipeLinkInput.source(for: validURL) == .pinterest {
+                    Label("Pinterest recipe link detected", systemImage: "link.badge.plus")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(SmartCartTheme.green)
+                }
+
                 InfoBanner(
                     symbol: "lock.shield.fill",
                     title: "No account sign-in",
-                    message: "SmartCart reads public recipe metadata only. Pinterest may block some pages; photo and text import remain available.",
+                    message: "SmartCart reads public recipe metadata only. Some sites may block access; photo and text import remain available.",
                     color: SmartCartTheme.green
                 )
             }
@@ -646,8 +659,8 @@ struct RecipeComposerSheet: View {
     private func source(for method: ImportMethod) -> RecipeSource {
         switch method {
         case .camera, .photoLibrary: .photo
-        case .recipeLink: .link
-        case .pinterest: .pinterest
+        case .recipeLink, .pinterest:
+            validURL.map(RecipeLinkInput.source(for:)) ?? .link
         case .recipeText: .text
         case .sample: .sample
         }
@@ -791,11 +804,16 @@ struct RecipeComposerSheet: View {
             appModel.lastImportReport?.quantityAlternativeReviewCount = recipe.ingredients.filter {
                 !($0.sourceEvidence?.alternateQuantityCandidates.isEmpty ?? true)
             }.count
-            if recipe.ingredients.isEmpty {
-                errorMessage = "No ingredients were detected. Keep the photo and try a tighter crop, a clearer image, pasted text, or manual ingredient entry. SmartCart will never invent replacement groceries."
-            }
             recognizedImageSetID = imageSetID
-            try? await Task.sleep(for: .milliseconds(220))
+            guard hasCredibleIngredients(recipe) else {
+                errorMessage = "No ingredients were detected. Keep the photo and try a tighter crop, a clearer image, pasted text, or manual ingredient entry. SmartCart will never invent replacement groceries."
+                return
+            }
+            processingMessage = "Opening Recipe Ready…"
+            guard appModel.beginRecipe(addingSourceCrops(to: draftRecipe)) else {
+                errorMessage = "The ingredient list is empty. Review the recognized text or try another image."
+                return
+            }
         } catch {
             guard !Task.isCancelled, selectedImageSetID == imageSetID else { return }
             recipeText = ""
@@ -821,7 +839,9 @@ struct RecipeComposerSheet: View {
         switch selectedMethod {
         case .sample:
             guard appModel.recipes.indices.contains(selectedSampleIndex) else { return }
-            appModel.beginRecipe(appModel.recipes[selectedSampleIndex])
+            if !appModel.beginRecipe(appModel.recipes[selectedSampleIndex]) {
+                errorMessage = "That sample has no ingredients. Choose another recipe."
+            }
 
         case .recipeLink, .pinterest:
             guard let validURL else {
@@ -834,24 +854,38 @@ struct RecipeComposerSheet: View {
             do {
                 let imported = try await RecipeLinkImporter.importRecipe(
                     from: validURL,
-                    source: selectedMethod == .pinterest ? .pinterest : .link
+                    source: RecipeLinkInput.source(for: validURL)
                 )
-                appModel.beginRecipe(imported)
+                guard hasCredibleIngredients(imported) else {
+                    errorMessage = "No ingredient list was found on that page. Check the link, paste the recipe text, or import a screenshot."
+                    return
+                }
+                if !appModel.beginRecipe(imported) {
+                    errorMessage = "No ingredient list was found on that page. Check the link, paste the recipe text, or import a screenshot."
+                }
             } catch {
                 errorMessage = error.localizedDescription
             }
 
         case .camera, .photoLibrary, .recipeText:
             let parsedRecipe = draftRecipe
-            guard !parsedRecipe.ingredients.isEmpty else {
+            guard hasCredibleIngredients(parsedRecipe) else {
                 errorMessage = "No ingredients detected. Retry the image, edit or paste the ingredient text, or add ingredients manually before continuing."
                 return
             }
             let recipe = selectedMethod == .camera || selectedMethod == .photoLibrary
                 ? addingSourceCrops(to: parsedRecipe)
                 : parsedRecipe
-            appModel.beginRecipe(recipe)
+            if !appModel.beginRecipe(recipe) {
+                errorMessage = "No ingredients detected. Review the text or try another import method."
+            }
         }
+    }
+
+    private func hasCredibleIngredients(_ recipe: Recipe) -> Bool {
+        // Reuse the parser's existing usable-state boundary. Any ingredient-level
+        // blockers remain visible and actionable on Recipe Ready.
+        !recipe.ingredients.isEmpty
     }
 }
 

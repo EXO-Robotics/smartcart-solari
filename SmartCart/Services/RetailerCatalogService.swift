@@ -176,7 +176,7 @@ struct RetailerGuideEngine {
     ) async throws -> RetailerHandoff {
         guard let adapter = adapters[retailer] else {
             throw RetailerServiceError.unsupportedCapability(
-                "\(retailer.configuration.displayName) retailer guide"
+                "\(retailer.configuration.displayName) Shopping Trip"
             )
         }
         return try await adapter.createHandoff(manifest: manifest)

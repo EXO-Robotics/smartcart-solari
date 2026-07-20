@@ -115,12 +115,30 @@ enum ImportMethod: String, CaseIterable, Identifiable, Hashable, Codable {
 }
 
 enum SheetDestination: Identifiable {
-    case importer(ImportMethod)
+    case importer(ImportMethod, String? = nil)
 
     var id: String {
         switch self {
-        case .importer(let method): "importer-\(method.rawValue)"
+        case .importer(let method, _): "importer-\(method.rawValue)"
         }
+    }
+}
+
+enum RecipeLinkInput {
+    static func validHTTPSURL(from text: String) -> URL? {
+        let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: cleaned),
+              url.scheme?.lowercased() == "https",
+              let host = url.host?.lowercased(),
+              !host.isEmpty else { return nil }
+        return url
+    }
+
+    static func source(for url: URL) -> RecipeSource {
+        guard let host = url.host?.lowercased() else { return .link }
+        return host == "pin.it" || host == "pinterest.com" || host.hasSuffix(".pinterest.com")
+            ? .pinterest
+            : .link
     }
 }
 
@@ -142,6 +160,9 @@ struct Recipe: Identifiable, Hashable, Codable {
     var prepMinutes: Int
     var cookMinutes: Int
     var ingredients: [Ingredient]
+    /// Original recognized or pasted text retained for explicit source review.
+    /// Optional decoding keeps pre-existing schema-v0 through schema-v6 recipes compatible.
+    var rawSourceText: String?
 
     init(
         id: UUID = UUID(),
@@ -152,7 +173,8 @@ struct Recipe: Identifiable, Hashable, Codable {
         servings: Int,
         prepMinutes: Int,
         cookMinutes: Int,
-        ingredients: [Ingredient]
+        ingredients: [Ingredient],
+        rawSourceText: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -163,6 +185,7 @@ struct Recipe: Identifiable, Hashable, Codable {
         self.prepMinutes = prepMinutes
         self.cookMinutes = cookMinutes
         self.ingredients = ingredients
+        self.rawSourceText = rawSourceText
     }
 
     var totalMinutes: Int { prepMinutes + cookMinutes }
@@ -964,6 +987,9 @@ struct ShoppingSession: Identifiable, Codable, Hashable {
     var stateFingerprint: String?
     var reconciliationDraft: ShoppingReconciliationDraft?
     var reconciliation: ShoppingReconciliationRecord?
+    /// Suppresses only the Home pantry-update reminder. The completed trip
+    /// and its later reconciliation route remain intact.
+    var pantryUpdateReminderArchivedAt: Date?
 
     init(
         id: UUID = UUID(),
@@ -982,7 +1008,8 @@ struct ShoppingSession: Identifiable, Codable, Hashable {
         items: [ShoppingListItem],
         stateFingerprint: String? = nil,
         reconciliationDraft: ShoppingReconciliationDraft? = nil,
-        reconciliation: ShoppingReconciliationRecord? = nil
+        reconciliation: ShoppingReconciliationRecord? = nil,
+        pantryUpdateReminderArchivedAt: Date? = nil
     ) {
         self.id = id
         self.tripID = tripID ?? logicalTripID
@@ -1001,6 +1028,7 @@ struct ShoppingSession: Identifiable, Codable, Hashable {
         self.stateFingerprint = stateFingerprint
         self.reconciliationDraft = reconciliationDraft
         self.reconciliation = reconciliation
+        self.pantryUpdateReminderArchivedAt = pantryUpdateReminderArchivedAt
     }
 
     var isCommitted: Bool { reconciliation != nil }
@@ -1009,6 +1037,9 @@ struct ShoppingSession: Identifiable, Codable, Hashable {
         !items.isEmpty && items.allSatisfy { $0.status.isCompleted }
     }
     var isReusable: Bool { !isCommitted && !isGuideComplete }
+    var hasPendingPantryUpdateReminder: Bool {
+        isGuideComplete && !isCommitted && pantryUpdateReminderArchivedAt == nil
+    }
 }
 
 struct SavedShoppingList: Identifiable, Hashable, Codable {

@@ -125,7 +125,7 @@ final class AppModel {
     /// (not the JSON state schema) because it is pure UI ordering data.
     var recentRecipeIDs: [UUID] = [] {
         didSet {
-            UserDefaults.standard.set(recentRecipeIDs.map(\.uuidString), forKey: Self.recentRecipesKey)
+            commerceDefaults.set(recentRecipeIDs.map(\.uuidString), forKey: Self.recentRecipesKey)
         }
     }
 
@@ -139,6 +139,29 @@ final class AppModel {
 
     var recentRecipes: [Recipe] {
         recentRecipeIDs.compactMap { id in recipes.first { $0.id == id } }
+    }
+
+    var hasCompletedShoppingTrip: Bool {
+        shoppingSessions.contains { $0.isGuideComplete || $0.isCommitted }
+    }
+
+    var hasExperiencedUserState: Bool {
+        hasCompletedShoppingTrip ||
+            recipes.contains { $0.source != .sample } ||
+            !shoppingItems.isEmpty ||
+            !savedLists.isEmpty ||
+            !shoppingSessions.isEmpty ||
+            !pantryInventory.isEmpty ||
+            !retailerSetupCompletedIDs.isEmpty
+    }
+
+    var mostRecentShoppedRecipe: Recipe? {
+        shoppingSessions
+            .filter { $0.isGuideComplete || $0.isCommitted }
+            .sorted { $0.startedAt > $1.startedAt }
+            .lazy
+            .compactMap { session in self.recipes.first { $0.id == session.recipeID } }
+            .first
     }
 
     let stores: [RetailerStore]
@@ -361,7 +384,7 @@ final class AppModel {
         }
 
         guidedIndex = min(max(0, guidedIndex), max(0, shoppingItems.count - 1))
-        recentRecipeIDs = (UserDefaults.standard.stringArray(forKey: Self.recentRecipesKey) ?? [])
+        recentRecipeIDs = (commerceDefaults.stringArray(forKey: Self.recentRecipesKey) ?? [])
             .compactMap(UUID.init(uuidString:))
         if let stateLoadError {
             persistenceIssue = stateLoadError.localizedDescription
@@ -692,6 +715,7 @@ final class AppModel {
             .filter { session in
                 !session.isCommitted &&
                     !session.items.isEmpty &&
+                    (session.isReusable || session.hasPendingPantryUpdateReminder) &&
                     !committed.contains { shoppingSessionsRepresentSameTrip($0, session) }
             }
             .sorted { lhs, rhs in
@@ -712,7 +736,7 @@ final class AppModel {
     }
 
     var retailerSessionProgressText: String {
-        "\(guidedCompletedCount) of \(shoppingItems.count) reviewed"
+        "\(guidedCompletedCount) of \(shoppingItems.count) advanced"
     }
 
     // Compatibility aliases keep schema-v3 tests and saved Walmart workflows
@@ -763,12 +787,17 @@ final class AppModel {
         return lines.joined(separator: "\n")
     }
 
-    func openImporter(_ method: ImportMethod) {
+    func openImporter(_ method: ImportMethod, initialText: String? = nil) {
         track(.importStarted, properties: ["method": method.rawValue])
-        presentedSheet = .importer(method)
+        presentedSheet = .importer(method, initialText)
     }
 
-    func beginRecipe(_ recipe: Recipe) {
+    @discardableResult
+    func beginRecipe(_ recipe: Recipe) -> Bool {
+        guard !recipe.ingredients.isEmpty else {
+            showToast("Add at least one ingredient before continuing")
+            return false
+        }
         var recipe = recipe
         desiredServings = recipe.servings
         applyPantrySuggestions(to: &recipe)
@@ -797,6 +826,7 @@ final class AppModel {
                 "ingredient_count": String(recipe.ingredients.count)
             ]
         )
+        return true
     }
 
     var currentShoppingTitle: String {
@@ -1703,7 +1733,7 @@ final class AppModel {
 
     func saveCurrentList() {
         persistCurrentManifest(progress: currentSavedManifest?.handoffProgress ?? .notStarted)
-        showToast("Shopping manifest saved")
+        showToast("Shopping list saved")
     }
 
     func beginGuidedShopping() {
@@ -1773,7 +1803,7 @@ final class AppModel {
             activeShoppingSessionID = originalActiveSessionID
             suppressPersistence = false
             persistenceIssue = error.localizedDescription
-            showToast("Shopping session could not be started")
+            showToast("Shopping trip could not be started")
             return false
         }
     }
@@ -1805,7 +1835,7 @@ final class AppModel {
             try stateStore.save(stateSnapshot())
             persistenceIssue = nil
             suppressPersistence = false
-            showToast("Shopping session saved")
+            showToast("Shopping trip saved")
             return true
         } catch {
             savedLists = originalLists
@@ -1813,7 +1843,7 @@ final class AppModel {
             analyticsEvents = originalEvents
             suppressPersistence = false
             persistenceIssue = error.localizedDescription
-            showToast("Shopping session could not be paused")
+            showToast("Shopping trip could not be paused")
             return false
         }
     }
@@ -1952,7 +1982,7 @@ final class AppModel {
                 storeID: store.id,
                 status: line.status,
                 matchScore: 0,
-                selectionReasons: ["Restored from saved manifest"]
+                selectionReasons: ["Restored from saved list"]
             )
         }
         guidedIndex = shoppingItems.firstIndex(where: { !$0.status.isCompleted }) ?? 0
@@ -2249,6 +2279,56 @@ final class AppModel {
         guard let sessionID = ensureCurrentShoppingSession() else { return }
         track(.shoppingReconciliationStarted)
         continueTo(.shoppingReconciliation(sessionID))
+    }
+
+    /// Hides only the repeated pantry-update reminder. It does not create a
+    /// shopping outcome, change pantry or product preferences, or remove the
+    /// frozen trip from local history.
+    @discardableResult
+    func archivePantryUpdateReminder(sessionID: UUID) -> Bool {
+        guard persistenceReady else {
+            showToast(persistenceIssue ?? "SmartCart storage is unavailable")
+            return false
+        }
+        guard let target = shoppingSession(id: sessionID),
+              target.isGuideComplete,
+              !target.isCommitted,
+              let manifestID = target.manifestID,
+              savedLists.contains(where: { $0.manifest.id == manifestID }) else {
+            showToast("This completed shopping trip is not available in history")
+            return false
+        }
+
+        let relatedIndices = shoppingSessions.indices.filter { index in
+            let candidate = shoppingSessions[index]
+            return candidate.isGuideComplete &&
+                !candidate.isCommitted &&
+                shoppingSessionsRepresentSameTrip(candidate, target)
+        }
+        guard !relatedIndices.isEmpty else { return false }
+        if relatedIndices.allSatisfy({ shoppingSessions[$0].pantryUpdateReminderArchivedAt != nil }) {
+            return true
+        }
+
+        var updatedSessions = shoppingSessions
+        let archivedAt = Date.now
+        for index in relatedIndices {
+            updatedSessions[index].pantryUpdateReminderArchivedAt = archivedAt
+        }
+
+        do {
+            try stateStore.save(stateSnapshot(shoppingSessions: updatedSessions))
+            suppressPersistence = true
+            shoppingSessions = updatedSessions
+            suppressPersistence = false
+            persistenceIssue = nil
+            showToast("Pantry update reminder archived")
+            return true
+        } catch {
+            persistenceIssue = error.localizedDescription
+            showToast("Pantry update reminder could not be archived")
+            return false
+        }
     }
 
     func commitShoppingReconciliation(
@@ -3665,7 +3745,7 @@ enum ShoppingReconciliationError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .sessionNotFound:
-            "That shopping session is no longer available. Start from the current shopping guide."
+            "That shopping trip is no longer available. Return to the current Shopping Trip or start a new one."
         case .emptyShoppingList:
             "There are no shopping items to reconcile."
         case .persistenceUnavailable(let message):

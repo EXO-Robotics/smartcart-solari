@@ -261,7 +261,7 @@ extension View {
     /// Uppercase mono micro-label, the design system's "eyebrow" voice.
     func smartEyebrow(_ color: Color = SmartCartTheme.green) -> some View {
         self
-            .font(.system(size: 11, weight: .bold, design: .monospaced))
+            .font(.system(.caption2, design: .monospaced, weight: .bold))
             .tracking(1.4)
             .textCase(.uppercase)
             .foregroundStyle(color)
@@ -282,7 +282,7 @@ struct PrimaryButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 16, weight: .bold, design: .rounded))
+            .font(.system(.headline, design: .rounded, weight: .bold))
             .foregroundStyle(isEnabled ? SmartCartTheme.onAccent : SmartCartTheme.mutedInk)
             .padding(.horizontal, 16)
             .frame(maxWidth: .infinity)
@@ -311,7 +311,7 @@ struct PrimaryButtonStyle: ButtonStyle {
 struct SecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 15, weight: .bold, design: .rounded))
+            .font(.system(.subheadline, design: .rounded, weight: .bold))
             .foregroundStyle(SmartCartTheme.ink)
             .padding(.horizontal, 14)
             .frame(maxWidth: .infinity)
@@ -331,7 +331,7 @@ struct SecondaryButtonStyle: ButtonStyle {
 struct BlueButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 16, weight: .bold, design: .rounded))
+            .font(.system(.headline, design: .rounded, weight: .bold))
             .foregroundStyle(SmartCartTheme.onWalmartBlue)
             .padding(.horizontal, 16)
             .frame(maxWidth: .infinity)

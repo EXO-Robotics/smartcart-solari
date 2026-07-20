@@ -362,9 +362,11 @@ private struct RecipeReadyPantryIngredientRow: View {
                 ingredient.pantryDecision = .useAvailable
                 ingredient.pantryState = .haveEnough
             }
+            .accessibilityIdentifier("recipe-ready-pantry-have-enough-\(ingredient.id.uuidString)")
             Button("Ask me later") {
                 appModel.setPantryDecision(.review, for: ingredient.id)
             }
+            .accessibilityIdentifier("recipe-ready-pantry-ask-later-\(ingredient.id.uuidString)")
         } label: {
             Label("More", systemImage: "ellipsis.circle")
                 .font(.caption.weight(.bold))
@@ -372,6 +374,7 @@ private struct RecipeReadyPantryIngredientRow: View {
         }
         .buttonStyle(.bordered)
         .accessibilityLabel("More pantry choices for \(ingredient.name)")
+        .accessibilityIdentifier("recipe-ready-pantry-more-\(ingredient.id.uuidString)")
     }
 
     private func decisionButton(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
@@ -414,6 +417,7 @@ private struct RecipeReadyPantryIngredientRow: View {
 struct RecipeReadyTripSettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AppModel.self) private var appModel
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var showRetailerSetupSafari = false
     let onConfirm: () -> Void
 
@@ -523,13 +527,28 @@ struct RecipeReadyTripSettingsSheet: View {
     private func fulfillmentChoice(appModel: Bindable<AppModel>) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionHeader(title: "Fulfillment", subtitle: "The retailer confirms live availability and final options")
-            Picker("Fulfillment mode", selection: appModel.fulfillmentMode) {
-                ForEach(FulfillmentMode.allCases) { mode in
-                    Text(mode.rawValue).tag(mode)
+            if dynamicTypeSize.isAccessibilitySize {
+                Picker("Fulfillment mode", selection: appModel.fulfillmentMode) {
+                    ForEach(FulfillmentMode.allCases) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
                 }
+                .pickerStyle(.menu)
+                .frame(
+                    maxWidth: .infinity,
+                    minHeight: SmartCartTheme.minimumHitTargetDimension,
+                    alignment: .leading
+                )
+                .accessibilityIdentifier("recipe-ready-fulfillment")
+            } else {
+                Picker("Fulfillment mode", selection: appModel.fulfillmentMode) {
+                    ForEach(FulfillmentMode.allCases) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("recipe-ready-fulfillment")
             }
-            .pickerStyle(.segmented)
-            .accessibilityIdentifier("recipe-ready-fulfillment")
         }
         .smartCartCard()
     }
@@ -537,9 +556,10 @@ struct RecipeReadyTripSettingsSheet: View {
     private var retailerSetup: some View {
         VStack(alignment: .leading, spacing: 12) {
             if appModel.retailerSetupIsComplete {
-                Label("\(appModel.retailerConfiguration.displayName) setup is ready", systemImage: "checkmark.circle.fill")
+                Label("\(appModel.retailerConfiguration.displayName) setup marked ready", systemImage: "checkmark.circle.fill")
                     .font(.headline)
                     .foregroundStyle(SmartCartTheme.green)
+                    .accessibilityHint("This is your saved confirmation. SmartCart cannot verify retailer sign-in or list setup.")
             } else {
                 SectionHeader(
                     title: "One-time retailer setup",
@@ -568,6 +588,7 @@ struct RecipeReadyTripSettingsSheet: View {
                 }
                 .buttonStyle(PrimaryButtonStyle())
                 .accessibilityIdentifier("recipe-ready-retailer-setup-complete")
+                .accessibilityHint("Records your confirmation on this device. SmartCart cannot verify retailer sign-in or list setup.")
             }
 
             Text("SmartCart cannot see retailer credentials, verify sign-in, create a list or cart, or know what happens on a retailer page.")
@@ -688,9 +709,9 @@ struct RetailerSelectionView: View {
                 WorkflowHeader(
                     step: 5,
                     total: 6,
-                    eyebrow: "Retailer guide",
+                    eyebrow: "Shopping Trip",
                     title: "Choose where to shop",
-                    message: "Pick a retailer-specific guide. SmartCart uses the same matching and pantry workflow underneath."
+                    message: "Choose a retailer. SmartCart uses the same matching and pantry workflow for each trip."
                 )
 
                 retailerCards
@@ -761,7 +782,7 @@ struct RetailerSelectionView: View {
             InfoBanner(
                 symbol: "location.viewfinder",
                 title: "Choose your store in Target",
-                message: "SmartCart matches Target catalog records now. Target confirms your local store, live availability, and fulfillment options after the guide opens.",
+                message: "SmartCart matches Target catalog records now. Target confirms your local store, live availability, and fulfillment options after the Shopping Trip opens.",
                 color: .red
             )
         }
@@ -853,8 +874,15 @@ private struct RetailerChoiceCard: View {
         .buttonStyle(PressableButtonStyle())
         .disabled(!configuration.isAvailable)
         .accessibilityIdentifier("retailer-card-\(retailer.rawValue)")
-        .accessibilityValue(selected ? "Selected" : "Not selected")
+        .accessibilityLabel(retailerAccessibilityLabel)
+        .accessibilityValue(configuration.isAvailable ? (selected ? "Selected" : "Not selected") : "Unavailable")
+        .accessibilityHint(configuration.isAvailable ? "Selects this retailer for the Shopping Trip. SmartCart does not connect to or inspect your retailer account." : "This retailer is coming soon.")
         .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    private var retailerAccessibilityLabel: String {
+        let status = configuration.isAvailable ? configuration.guideLabel : "Coming Soon"
+        return ([configuration.displayName, status] + configuration.cardHighlights).joined(separator: ", ")
     }
 
     @ViewBuilder
@@ -1459,7 +1487,7 @@ struct StoreDashboardView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 21) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Retailer guides")
+                    Text("Retailers")
                         .font(.system(size: 29, weight: .bold, design: .rounded))
                         .foregroundStyle(SmartCartTheme.navy)
                     Text("Choose where SmartCart should match this trip")
@@ -1538,7 +1566,7 @@ struct StoreDashboardView: View {
 
                 VStack(alignment: .leading, spacing: 14) {
                     SectionHeader(
-                        title: "Browser handoff",
+                        title: "Open in Safari",
                         subtitle: "SmartCart does not connect to a retailer account"
                     )
 

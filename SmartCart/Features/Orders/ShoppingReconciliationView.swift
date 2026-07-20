@@ -63,8 +63,8 @@ struct ShoppingReconciliationView: View {
                 } else {
                     EmptyStateView(
                         symbol: "exclamationmark.triangle.fill",
-                        title: "Shopping session unavailable",
-                        message: "Return to the current shopping guide and try again."
+                        title: "Shopping trip unavailable",
+                        message: "Return to the current Shopping Trip and try again."
                     )
                 }
             }

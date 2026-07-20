@@ -2,7 +2,7 @@
 
 This is the first hands-on acceptance run for SmartCart's critical path:
 
-`import → review → pantry decision → match → guided shopping → pantry update`
+`import → Recipe Ready → Shopping Trip → optional pantry update`
 
 It is intentionally small enough to finish with real devices before the larger
 promotion corpus in `PHOTO_PARSER_RELEASE_GATES.md`. Passing this run permits a
@@ -54,7 +54,7 @@ At least five recipes must contain a purchasing-critical ambiguity such as
 8. Apply the assigned shopping preferences. An unsatisfied organic or dietary
    constraint must remain visible instead of silently selecting a conflicting
    product.
-9. Complete the guided Walmart product flow. Walmart sign-in, list changes,
+9. Complete the continuous Walmart Shopping Trip. Walmart sign-in, list changes,
    prices, availability, checkout, and pickup remain retailer-controlled.
 10. Choose one shopping outcome:
     - Bought all available items: confirm once, or select an unavailable/skipped
@@ -65,8 +65,8 @@ At least five recipes must contain a purchasing-critical ambiguity such as
 11. On five runs, record a substitution by matched alternative or barcode. The
     preferred-product rule may change only when `Prefer this product next time`
     is explicitly enabled.
-12. Force-quit and relaunch. Verify the recipe, review choices, manifest,
-    shopping session, substitution, and pantry quantities restore exactly.
+12. Force-quit and relaunch. Verify the recipe, review choices, shopping list,
+    Shopping Trip, substitution, and pantry quantities restore exactly.
 13. Repeat the pantry-update confirmation once. Quantities must not increment a
     second time.
 
@@ -85,7 +85,7 @@ Record one local row per recipe:
 - crop/evidence correctness;
 - pantry suggestion and override correctness;
 - match constraint correctness;
-- guided-shopping completion;
+- Shopping Trip completion;
 - reconciliation outcome, selected count, substitution count, and idempotency;
 - relaunch restoration result;
 - crash, freeze, or material scroll hitch;
@@ -125,4 +125,4 @@ aggregate score.
 
 Keep the completed receipt locally with the candidate commit SHA and a final
 `PASS` or `BLOCKED` verdict. List every blocking fixture ID and assign it to OCR,
-layout, parser, pantry, matching, handoff, persistence, or accessibility.
+layout, parser, pantry, matching, retailer trip, persistence, or accessibility.

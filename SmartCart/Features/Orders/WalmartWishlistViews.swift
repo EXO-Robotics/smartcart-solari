@@ -1,9 +1,11 @@
 import SafariServices
 import SwiftUI
+import UIKit
 
 struct RetailerSafariHandoffView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AppModel.self) private var appModel
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var sheetDestination: RetailerGuideSheetDestination?
     @State private var presentedProductSessionID: UUID?
@@ -18,8 +20,8 @@ struct RetailerSafariHandoffView: View {
                 if appModel.shoppingItems.isEmpty {
                     EmptyStateView(
                         symbol: "cart",
-                        title: "Nothing to guide yet",
-                        message: "Match products before starting the \(retailerName) guide."
+                        title: "No shopping trip yet",
+                        message: "Match products before starting the \(retailerName) Shopping Trip."
                     )
                 } else if !appModel.retailerSetupIsComplete {
                     retailerSetupView
@@ -64,6 +66,7 @@ struct RetailerSafariHandoffView: View {
                     configuration: appModel.retailerConfiguration,
                     position: appModel.guidedIndex + 1,
                     total: appModel.shoppingItems.count,
+                    productIdentity: productIdentity(for: itemID),
                     replacementCandidates: safeReplacementCandidates,
                     onInitialLoad: { didLoadSuccessfully in
                         if didLoadSuccessfully {
@@ -104,6 +107,13 @@ struct RetailerSafariHandoffView: View {
 
     private var retailerName: String {
         appModel.retailerConfiguration.displayName
+    }
+
+    private func productIdentity(for itemID: UUID) -> String {
+        guard let item = appModel.shoppingItems.first(where: { $0.id == itemID }) else {
+            return "Current product"
+        }
+        return "\(item.ingredient.name), \(item.product.brand) \(item.product.name)"
     }
 
     private var safeReplacementCandidates: [RetailerProductRecord] {
@@ -184,6 +194,7 @@ struct RetailerSafariHandoffView: View {
             }
             .buttonStyle(PrimaryButtonStyle())
             .accessibilityIdentifier("retailer-setup-complete")
+            .accessibilityHint("Records your confirmation on this device. SmartCart cannot verify retailer sign-in or list setup.")
 
             InfoBanner(
                 symbol: "hand.raised.fill",
@@ -387,7 +398,7 @@ struct RetailerSafariHandoffView: View {
             }
         } label: {
             Label("Replace", systemImage: "arrow.triangle.2.circlepath")
-                .font(.system(size: 15, weight: .bold, design: .rounded))
+                .font(.system(.subheadline, design: .rounded, weight: .bold))
                 .foregroundStyle(SmartCartTheme.navy)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
@@ -441,10 +452,10 @@ struct RetailerSafariHandoffView: View {
                     .multilineTextAlignment(.center)
             }
 
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+            LazyVGrid(columns: completionMetricColumns, spacing: 10) {
                 summaryMetric("Advanced only", value: appModel.retailerVisitedCount, symbol: "safari.fill")
-                summaryMetric("Saved to list", value: appModel.savedForLaterCount, symbol: "bookmark.fill")
-                summaryMetric("Added to cart", value: appModel.retailerAddedCount, symbol: "cart.fill")
+                summaryMetric("Reported saved to list", value: appModel.savedForLaterCount, symbol: "bookmark.fill")
+                summaryMetric("Reported added to cart", value: appModel.retailerAddedCount, symbol: "cart.fill")
                 summaryMetric("Unavailable", value: appModel.retailerUnavailableCount, symbol: "exclamationmark.triangle.fill")
                 summaryMetric("Skipped", value: appModel.retailerSkippedCount, symbol: "forward.fill")
             }
@@ -481,24 +492,60 @@ struct RetailerSafariHandoffView: View {
                 color: appModel.selectedRetailer == .walmart ? SmartCartTheme.walmartBlue : .red
             )
 
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Did you place this order?")
+                    .font(.headline)
+                    .foregroundStyle(SmartCartTheme.navy)
+                Text("Your pantry changes only after you choose to review and confirm what you bought.")
+                    .font(.subheadline)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
             Button {
                 appModel.startShoppingReconciliation()
             } label: {
-                Label("I’m back — update pantry", systemImage: "cabinet.fill")
+                Label("Yes, update pantry", systemImage: "cabinet.fill")
             }
             .buttonStyle(PrimaryButtonStyle())
+            .accessibilityIdentifier("shopping-completion-update-pantry")
+            .accessibilityHint("Opens a review so you can report what was bought before pantry stock changes")
 
             Button {
-                dismiss()
+                appModel.resetFlow()
             } label: {
-                Label("Finish later", systemImage: "clock.fill")
+                Label("Not yet", systemImage: "clock.fill")
             }
             .buttonStyle(SecondaryButtonStyle())
+            .accessibilityIdentifier("shopping-completion-not-yet")
+            .accessibilityHint("Closes this screen and keeps the pantry update reminder")
+
+            Button {
+                archivePantryUpdateReminder()
+            } label: {
+                Label("Archive without pantry update", systemImage: "archivebox.fill")
+            }
+            .buttonStyle(SecondaryButtonStyle())
+            .accessibilityIdentifier("shopping-completion-archive")
+            .accessibilityHint("Closes the reminder without changing pantry stock")
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 24)
         .smartCartCard()
         .smartCartShadow()
+    }
+
+    private var completionMetricColumns: [GridItem] {
+        dynamicTypeSize.isAccessibilitySize
+            ? [GridItem(.flexible())]
+            : [GridItem(.flexible()), GridItem(.flexible())]
+    }
+
+    private func archivePantryUpdateReminder() {
+        guard let sessionID = appModel.activeShoppingSessionID,
+              appModel.archivePantryUpdateReminder(sessionID: sessionID) else { return }
+        appModel.resetFlow()
     }
 
     private func summaryMetric(_ title: String, value: Int, symbol: String) -> some View {
@@ -679,10 +726,19 @@ enum RetailerTripPageLoadState: Equatable {
     case failed
 
     var canRecordVisited: Bool { self == .loaded }
+
+    var accessibilityDescription: String {
+        switch self {
+        case .loading: "Retailer page loading"
+        case .loaded: "Retailer page loaded"
+        case .failed: "Retailer page failed to load"
+        }
+    }
 }
 
 private struct RetailerTripSafariSheet: View {
     @Environment(\.openURL) private var openURL
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     let sessionID: UUID
     let itemID: UUID
@@ -690,6 +746,7 @@ private struct RetailerTripSafariSheet: View {
     let configuration: RetailerGuideConfiguration
     let position: Int
     let total: Int
+    let productIdentity: String
     let replacementCandidates: [RetailerProductRecord]
     let onInitialLoad: (Bool) -> Void
     let onNext: () -> Void
@@ -729,42 +786,42 @@ private struct RetailerTripSafariSheet: View {
         } message: {
             Text("SmartCart cannot inspect this retailer page or verify list, cart, order, purchase, price, or availability. Next Item records only that you chose to advance after viewing the page.")
         }
+        .onChange(of: loadState) { _, newState in
+            announceLoadState(newState)
+        }
     }
 
     private var tripBar: some View {
         VStack(spacing: 4) {
-            HStack(spacing: 8) {
-                Button("Pause", action: onPause)
-                    .frame(minWidth: 44, minHeight: 44)
-                    .accessibilityHint("Saves this shopping trip without advancing the current item")
-                    .accessibilityIdentifier("retailer-trip-pause")
-
-                Spacer(minLength: 4)
-
-                Text("Item \(position) of \(total)")
-                    .font(.subheadline.bold())
-                    .foregroundStyle(SmartCartTheme.navy)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                    .accessibilityAddTraits(.isHeader)
-
-                Spacer(minLength: 4)
-
-                Button("Next Item", action: onNext)
-                    .font(.subheadline.bold())
-                    .frame(minHeight: 44)
-                    .accessibilityHint("Records only that you advanced after viewing this page. No list, cart, order, or purchase result is inferred.")
-                    .accessibilityIdentifier("retailer-trip-next")
-                    .disabled(!loadState.canRecordVisited)
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: 4) {
+                    tripPositionLabel
+                    pauseButton
+                        .frame(maxWidth: .infinity)
+                    nextButton
+                        .frame(maxWidth: .infinity)
+                }
+            } else {
+                HStack(spacing: 8) {
+                    pauseButton
+                    Spacer(minLength: 4)
+                    tripPositionLabel
+                    Spacer(minLength: 4)
+                    nextButton
+                }
             }
 
-            HStack {
-                Label("Shopping stays with \(configuration.displayName)", systemImage: "lock.shield.fill")
-                    .font(.caption2)
-                    .foregroundStyle(SmartCartTheme.secondaryInk)
-                    .lineLimit(1)
-                Spacer(minLength: 8)
-                moreMenu
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 2) {
+                    retailerOwnershipLabel
+                    moreMenu
+                }
+            } else {
+                HStack {
+                    retailerOwnershipLabel
+                    Spacer(minLength: 8)
+                    moreMenu
+                }
             }
         }
         .foregroundStyle(SmartCartTheme.green)
@@ -773,9 +830,46 @@ private struct RetailerTripSafariSheet: View {
         .background(SmartCartTheme.paper)
     }
 
+    private var tripPositionLabel: some View {
+        Text("Item \(position) of \(total)")
+            .font(.subheadline.bold())
+            .foregroundStyle(SmartCartTheme.navy)
+            .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+            .minimumScaleFactor(0.8)
+            .multilineTextAlignment(.center)
+            .accessibilityLabel("Item \(position) of \(total), \(productIdentity)")
+            .accessibilityValue(loadState.accessibilityDescription)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    private var pauseButton: some View {
+        Button("Pause", action: onPause)
+            .frame(minWidth: 44, minHeight: 44)
+            .accessibilityHint("Saves this shopping trip without advancing the current item")
+            .accessibilityIdentifier("retailer-trip-pause")
+    }
+
+    private var nextButton: some View {
+        Button("Next Item", action: onNext)
+            .font(.subheadline.bold())
+            .frame(minHeight: 44)
+            .accessibilityHint("Records only that you advanced after viewing this page. No list, cart, order, or purchase result is inferred.")
+            .accessibilityValue(loadState.accessibilityDescription)
+            .accessibilityIdentifier("retailer-trip-next")
+            .disabled(!loadState.canRecordVisited)
+    }
+
+    private var retailerOwnershipLabel: some View {
+        Label("Shopping stays with \(configuration.displayName)", systemImage: "lock.shield.fill")
+            .font(.caption2)
+            .foregroundStyle(SmartCartTheme.secondaryInk)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
     private var moreMenu: some View {
         Menu {
             Button("Report product unavailable", systemImage: "exclamationmark.triangle.fill", action: onUnavailable)
+                .accessibilityIdentifier("retailer-trip-report-unavailable")
 
             if !replacementCandidates.isEmpty {
                 Menu("Choose replacement in SmartCart", systemImage: "arrow.triangle.2.circlepath") {
@@ -783,18 +877,23 @@ private struct RetailerTripSafariSheet: View {
                         Button("\(candidate.brand) \(candidate.name)") {
                             onReplacement(candidate.id)
                         }
+                        .accessibilityIdentifier("retailer-trip-replacement-\(candidate.id.uuidString)")
                     }
                 }
+                .accessibilityIdentifier("retailer-trip-choose-replacement")
             }
 
             Button("Skip item in SmartCart", systemImage: "forward.fill", action: onSkip)
+                .accessibilityIdentifier("retailer-trip-skip")
             Button("Reload retailer page", systemImage: "arrow.clockwise") {
                 loadState = .loading
                 loadAttempt += 1
             }
+            .accessibilityIdentifier("retailer-trip-reload")
             Button("Help and retailer disclaimer", systemImage: "questionmark.circle") {
                 showsHelp = true
             }
+            .accessibilityIdentifier("retailer-trip-help")
         } label: {
             Label("More", systemImage: "ellipsis.circle")
                 .font(.caption.bold())
@@ -805,42 +904,59 @@ private struct RetailerTripSafariSheet: View {
     }
 
     private var loadFailureView: some View {
-        VStack(spacing: 18) {
-            Image(systemName: "wifi.exclamationmark")
-                .font(.system(size: 46))
-                .foregroundStyle(SmartCartTheme.amber)
-                .accessibilityHidden(true)
-            Text("This retailer page did not load")
-                .font(.title3.bold())
-                .foregroundStyle(SmartCartTheme.navy)
-            Text("The item is still waiting. Retry here, open the page externally, skip it, or pause the trip.")
-                .font(.subheadline)
-                .foregroundStyle(SmartCartTheme.secondaryInk)
-                .multilineTextAlignment(.center)
+        ScrollView {
+            VStack(spacing: 18) {
+                Image(systemName: "wifi.exclamationmark")
+                    .font(.system(size: 46))
+                    .foregroundStyle(SmartCartTheme.amber)
+                    .accessibilityHidden(true)
+                Text("This retailer page did not load")
+                    .font(.title3.bold())
+                    .foregroundStyle(SmartCartTheme.navy)
+                    .accessibilityAddTraits(.isHeader)
+                Text("The item is still waiting. Retry here, open the page externally, skip it, or pause the trip.")
+                    .font(.subheadline)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
+                    .multilineTextAlignment(.center)
 
-            Button("Retry") {
-                loadState = .loading
-                loadAttempt += 1
+                Button("Retry") {
+                    loadState = .loading
+                    loadAttempt += 1
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .accessibilityIdentifier("retailer-trip-retry")
+
+                Button("Open externally") { openURL(url) }
+                    .buttonStyle(SecondaryButtonStyle())
+                    .accessibilityIdentifier("retailer-trip-open-externally")
+
+                Button("Skip item in SmartCart", action: onSkip)
+                    .buttonStyle(SecondaryButtonStyle())
+                    .accessibilityIdentifier("retailer-trip-load-failure-skip")
+
+                Button("Pause shopping", action: onPause)
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("retailer-trip-load-failure-pause")
             }
-            .buttonStyle(PrimaryButtonStyle())
-            .accessibilityIdentifier("retailer-trip-retry")
-
-            Button("Open externally") { openURL(url) }
-                .buttonStyle(SecondaryButtonStyle())
-                .accessibilityIdentifier("retailer-trip-open-externally")
-
-            Button("Skip item in SmartCart", action: onSkip)
-                .buttonStyle(SecondaryButtonStyle())
-                .accessibilityIdentifier("retailer-trip-load-failure-skip")
-
-            Button("Pause shopping", action: onPause)
-                .frame(minHeight: 44)
-                .accessibilityIdentifier("retailer-trip-load-failure-pause")
+            .frame(maxWidth: 520)
+            .frame(maxWidth: .infinity)
+            .padding(24)
         }
-        .frame(maxWidth: 520)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(24)
         .background(SmartCartTheme.canvas)
+    }
+
+    private func announceLoadState(_ state: RetailerTripPageLoadState) {
+        let message: String
+        switch state {
+        case .loading:
+            message = "Loading retailer page for \(productIdentity)."
+        case .loaded:
+            message = "Retailer page loaded for \(productIdentity). Next Item is available."
+        case .failed:
+            message = "Retailer page for \(productIdentity) did not load. Retry or choose another action."
+        }
+        UIAccessibility.post(notification: .announcement, argument: message)
     }
 
 }

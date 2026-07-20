@@ -1,23 +1,27 @@
 import SwiftUI
+import UIKit
 
 struct HomeView: View {
     @Environment(AppModel.self) private var appModel
-
-    private let importColumns = [
-        GridItem(.flexible(), spacing: 10),
-        GridItem(.flexible(), spacing: 10)
-    ]
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var clipboardContainsProbableWebURL = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 header
-                promiseCard
+                if !appModel.hasCompletedShoppingTrip {
+                    promiseCard
+                }
                 if !appModel.pendingShoppingSessions.isEmpty {
                     pendingShoppingSection
                 }
+                if appModel.hasCompletedShoppingTrip,
+                   let recipe = appModel.mostRecentShoppedRecipe {
+                    shopAgainCard(recipe)
+                }
                 importSection
-                sampleSection
                 storeCard
                 trustStrip
             }
@@ -27,6 +31,12 @@ struct HomeView: View {
         .scrollIndicators(.hidden)
         .smartCartBackground()
         .toolbar(.hidden, for: .navigationBar)
+        .onAppear(perform: refreshClipboardDetection)
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                refreshClipboardDetection()
+            }
+        }
     }
 
     private var header: some View {
@@ -78,16 +88,23 @@ struct HomeView: View {
                     .foregroundStyle(SmartCartTheme.ink)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text("Capture a recipe, confirm the ingredients, and open a product-matched retailer guide in Safari.")
+                Text("Capture a recipe, confirm the ingredients, and open a product-matched shopping trip in Safari.")
                     .font(.subheadline)
                     .foregroundStyle(SmartCartTheme.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            HStack(spacing: 8) {
-                promisePill("Photo or link", symbol: "camera.fill")
-                promisePill("Smart match", symbol: "tag.fill")
-                promisePill("Share or shop", symbol: "square.and.arrow.up.fill")
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    promisePill("Photo or link", symbol: "camera.fill")
+                    promisePill("Smart match", symbol: "tag.fill")
+                    promisePill("Share or shop", symbol: "square.and.arrow.up.fill")
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    promisePill("Photo or link", symbol: "camera.fill")
+                    promisePill("Smart match", symbol: "tag.fill")
+                    promisePill("Share or shop", symbol: "square.and.arrow.up.fill")
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -99,7 +116,7 @@ struct HomeView: View {
 
     private func promisePill(_ title: String, symbol: String) -> some View {
         Label(title, systemImage: symbol)
-            .font(.system(size: 10, weight: .bold))
+            .font(.caption2.weight(.bold))
             .foregroundStyle(SmartCartTheme.green)
             .padding(.horizontal, 9)
             .padding(.vertical, 7)
@@ -113,18 +130,211 @@ struct HomeView: View {
     private var importSection: some View {
         VStack(alignment: .leading, spacing: 13) {
             SectionHeader(
-                title: "Import a recipe",
-                subtitle: "Start from wherever you found dinner"
+                title: "Start with a recipe",
+                subtitle: "Take a photo or choose one you already have"
             )
 
-            LazyVGrid(columns: importColumns, spacing: 10) {
-                ForEach(ImportMethod.allCases) { method in
-                    ImportActionTile(method: method) {
-                        appModel.openImporter(method)
-                    }
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: 10) {
+                    primaryImportButton(.camera)
+                    primaryImportButton(.photoLibrary)
+                }
+            } else {
+                HStack(alignment: .top, spacing: 10) {
+                    primaryImportButton(.camera)
+                    primaryImportButton(.photoLibrary)
+                }
+            }
+
+            if clipboardContainsProbableWebURL {
+                pasteCopiedLinkButton
+            }
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) {
+                    pasteLinkButton
+                    moreImportMenu
+                }
+                VStack(spacing: 10) {
+                    pasteLinkButton
+                    moreImportMenu
                 }
             }
         }
+    }
+
+    private func primaryImportButton(_ method: ImportMethod) -> some View {
+        Button {
+            appModel.openImporter(method)
+        } label: {
+            VStack(alignment: .leading, spacing: 12) {
+                Image(systemName: method.symbol)
+                    .font(.title2.bold())
+                    .foregroundStyle(SmartCartTheme.onAccent)
+                    .frame(width: 48, height: 48)
+                    .background(method.tint)
+                    .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(method == .camera ? "Camera" : "Photos")
+                        .font(.headline)
+                        .foregroundStyle(SmartCartTheme.navy)
+                    Text(method == .camera ? "Snap a cookbook or card" : "Choose a saved recipe image")
+                        .font(.caption)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .smartCartCard(padding: 16)
+            .smartCartShadow()
+        }
+        .buttonStyle(PressableButtonStyle())
+        .accessibilityIdentifier(method == .camera ? "home-import-camera" : "home-import-photos")
+        .accessibilityHint(method == .camera ? "Opens the camera recipe importer" : "Opens the photo recipe importer")
+    }
+
+    private var pasteLinkButton: some View {
+        Button {
+            appModel.openImporter(.recipeLink)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "link")
+                Text("Paste Link")
+                Spacer(minLength: 0)
+            }
+        }
+        .buttonStyle(SecondaryButtonStyle())
+        .accessibilityIdentifier("home-import-paste-link")
+        .accessibilityHint("Opens the recipe link importer without reading the clipboard")
+    }
+
+    private var pasteCopiedLinkButton: some View {
+        Button(action: pasteLinkFromClipboard) {
+            HStack(spacing: 10) {
+                Image(systemName: "link.badge.plus")
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Paste Copied Link")
+                    Text("A web link is ready")
+                        .font(.caption2.weight(.semibold))
+                }
+                Spacer(minLength: 0)
+            }
+        }
+        .buttonStyle(SecondaryButtonStyle())
+        .accessibilityIdentifier("home-paste-copied-link")
+        .accessibilityHint("Reads the copied web link and opens the recipe link importer")
+    }
+
+    private var moreImportMenu: some View {
+        Menu {
+            Button {
+                appModel.openImporter(.recipeText)
+            } label: {
+                Label("Paste Recipe Text", systemImage: "doc.on.clipboard.fill")
+            }
+            .accessibilityIdentifier("home-import-text")
+
+            Button {
+                appModel.selectedTab = .lists
+            } label: {
+                Label("Saved Recipes", systemImage: "book.fill")
+            }
+            .accessibilityIdentifier("home-open-saved-recipes")
+
+            Button {
+                appModel.openImporter(.sample)
+            } label: {
+                Label("Try a Sample", systemImage: "takeoutbag.and.cup.and.straw.fill")
+            }
+            .accessibilityIdentifier("home-import-sample")
+        } label: {
+            HStack {
+                Label("More", systemImage: "ellipsis.circle.fill")
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.down")
+                    .font(.caption.bold())
+            }
+        }
+        .buttonStyle(SecondaryButtonStyle())
+        .accessibilityIdentifier("home-import-more")
+        .accessibilityHint("Shows recipe text, saved recipe, and sample options")
+    }
+
+    private func shopAgainCard(_ recipe: Recipe) -> some View {
+        Button {
+            appModel.beginRecipe(recipe)
+        } label: {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 15) {
+                    shopAgainIdentity(recipe)
+                    Spacer(minLength: 8)
+                    Label("Shop Again", systemImage: "arrow.clockwise")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(SmartCartTheme.onAccent)
+                        .padding(.horizontal, 13)
+                        .padding(.vertical, 10)
+                        .background(SmartCartTheme.green)
+                        .clipShape(Capsule())
+                }
+                VStack(alignment: .leading, spacing: 14) {
+                    shopAgainIdentity(recipe)
+                    Label("Shop Again", systemImage: "arrow.clockwise")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(SmartCartTheme.onAccent)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 11)
+                        .background(SmartCartTheme.green)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+            }
+            .smartCartCard(padding: 16)
+            .smartCartShadow()
+        }
+        .buttonStyle(PressableButtonStyle())
+        .accessibilityIdentifier("home-shop-again")
+        .accessibilityLabel("Shop \(recipe.title) again")
+        .accessibilityHint("Opens a fresh Recipe Ready review for this recipe")
+    }
+
+    private func shopAgainIdentity(_ recipe: Recipe) -> some View {
+        HStack(spacing: 13) {
+            Image(systemName: recipe.heroSymbol)
+                .font(.title2.bold())
+                .foregroundStyle(SmartCartTheme.green)
+                .frame(width: 48, height: 48)
+                .background(SmartCartTheme.herbLight)
+                .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("SHOP AGAIN")
+                    .smartEyebrow()
+                Text(recipe.title)
+                    .font(.headline)
+                    .foregroundStyle(SmartCartTheme.navy)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func refreshClipboardDetection() {
+        let probableWebURL: PartialKeyPath<UIPasteboard.DetectedValues> = \.probableWebURL
+        UIPasteboard.general.detectPatterns(for: [probableWebURL]) { result in
+            let containsWebURL = (try? result.get())?.contains(probableWebURL) == true
+            DispatchQueue.main.async {
+                clipboardContainsProbableWebURL = containsWebURL
+            }
+        }
+    }
+
+    private func pasteLinkFromClipboard() {
+        // Reading pasteboard contents is intentionally confined to this explicit tap.
+        let pasteboard = UIPasteboard.general
+        let copiedText = pasteboard.url?.absoluteString ?? pasteboard.string
+        let validatedText = copiedText.flatMap(RecipeLinkInput.validHTTPSURL(from:))?.absoluteString
+        appModel.openImporter(.recipeLink, initialText: validatedText)
     }
 
     private func pendingShoppingCard(_ session: ShoppingSession) -> some View {
@@ -178,21 +388,6 @@ struct HomeView: View {
         }
     }
 
-    private var sampleSection: some View {
-        VStack(alignment: .leading, spacing: 13) {
-            SectionHeader(
-                title: "Perfect for testing",
-                subtitle: "Walk through a complete product match"
-            )
-
-            if let recipe = appModel.recipes.first {
-                RecipeHeroCard(recipe: recipe) {
-                    appModel.beginRecipe(recipe)
-                }
-            }
-        }
-    }
-
     private var storeCard: some View {
         Button {
             appModel.selectedTab = .store
@@ -208,7 +403,7 @@ struct HomeView: View {
                     Text(appModel.retailerConfiguration.displayName)
                         .font(.headline)
                         .foregroundStyle(SmartCartTheme.navy)
-                    Text("\(appModel.retailerConfiguration.guideLabel) · Opens in Safari")
+                    Text("Shopping Trip · Opens in Safari")
                         .font(.caption)
                         .foregroundStyle(SmartCartTheme.secondaryInk)
                         .lineLimit(1)

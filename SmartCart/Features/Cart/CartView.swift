@@ -114,6 +114,27 @@ struct RecipeReadyView: View {
                     .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
                     .interactiveDismissDisabled()
+            case .sourceText:
+                NavigationStack {
+                    ScrollView {
+                        Text(appModel.activeRecipe.rawSourceText ?? "")
+                            .font(.body.monospaced())
+                            .foregroundStyle(SmartCartTheme.ink)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(18)
+                    }
+                    .smartCartBackground()
+                    .navigationTitle("Source Text")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Done") { activeSheet = nil }
+                        }
+                    }
+                }
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
             }
         }
     }
@@ -142,9 +163,26 @@ struct RecipeReadyView: View {
                     servingControls
                 }
             }
+
+            if hasRawSourceText {
+                Button {
+                    activeSheet = .sourceText
+                } label: {
+                    Label("View Source Text", systemImage: "doc.text.magnifyingglass")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(SecondaryButtonStyle())
+                .accessibilityIdentifier("recipe-ready-view-source-text")
+                .accessibilityHint("Opens the original recognized recipe text")
+            }
         }
         .smartCartCard()
         .smartCartShadow()
+    }
+
+    private var hasRawSourceText: Bool {
+        guard let rawSourceText = appModel.activeRecipe.rawSourceText else { return false }
+        return !rawSourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var servingIdentity: some View {
@@ -577,6 +615,7 @@ private enum RecipeReadySheet: String, Identifiable {
     case pantry
     case shoppingSettings
     case productExceptions
+    case sourceText
 
     var id: String { rawValue }
 }
@@ -921,7 +960,7 @@ struct RecipesView: View {
         var title: String {
             switch self {
             case .saved: "Saved"
-            case .recent: "Recent"
+            case .recent: "Opened"
             }
         }
 
@@ -952,18 +991,18 @@ struct RecipesView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Recipes")
-                        .font(.system(size: 29, weight: .bold, design: .rounded))
-                        .foregroundStyle(SmartCartTheme.navy)
-                    Text("Saved lists and recent imports")
-                        .font(.subheadline)
-                        .foregroundStyle(SmartCartTheme.secondaryInk)
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    recipesTitle
+                    Spacer()
+                    SmartCartLogo(compact: true)
+                        .accessibilityHidden(true)
                 }
-                Spacer()
-                SmartCartLogo(compact: true)
-                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 8) {
+                    recipesTitle
+                    SmartCartLogo(compact: true)
+                        .accessibilityHidden(true)
+                }
             }
 
             HStack(spacing: 4) {
@@ -987,6 +1026,8 @@ struct RecipesView: View {
                             .clipShape(Capsule())
                     }
                     .buttonStyle(PressableButtonStyle())
+                    .accessibilityAddTraits(page == candidate ? .isSelected : [])
+                    .accessibilityIdentifier(candidate == .saved ? "recipes-page-saved" : "recipes-page-opened")
                 }
             }
             .padding(4)
@@ -996,6 +1037,17 @@ struct RecipesView: View {
         }
         .padding(.top, 8)
         .padding(.bottom, 12)
+    }
+
+    private var recipesTitle: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("Recipes")
+                .font(.system(.title, design: .rounded, weight: .bold))
+                .foregroundStyle(SmartCartTheme.navy)
+            Text("Saved lists and recently opened recipes")
+                .font(.subheadline)
+                .foregroundStyle(SmartCartTheme.secondaryInk)
+        }
     }
 
     private var savedPage: some View {
@@ -1064,15 +1116,15 @@ struct RecipesView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 SectionHeader(
-                    title: "Recently shopped",
-                    subtitle: "Your last \(min(5, max(1, appModel.recentRecipes.count))) recipes, newest first"
+                    title: "Recently opened",
+                    subtitle: recentlyOpenedSubtitle
                 )
 
                 if appModel.recentRecipes.isEmpty {
                     EmptyStateView(
                         symbol: "clock.fill",
                         title: "Nothing recent yet",
-                        message: "Recipes you import or shop show up here so you can run them again in one tap."
+                        message: "Recipes you import or open will appear here."
                     )
                 } else {
                     ForEach(appModel.recentRecipes.prefix(5)) { recipe in
@@ -1087,6 +1139,27 @@ struct RecipesView: View {
     }
 
     private func recentRecipeCard(_ recipe: Recipe) -> some View {
+        let canShopAgain = appModel.hasCompletedShoppingTrip &&
+            appModel.mostRecentShoppedRecipe?.id == recipe.id
+        let actionTitle = canShopAgain ? "Shop Again" : "Open"
+
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: 13) {
+                recentRecipeIdentity(recipe)
+                Spacer(minLength: 6)
+                recentRecipeAction(recipe, title: actionTitle, fillsWidth: false)
+            }
+            VStack(alignment: .leading, spacing: 12) {
+                recentRecipeIdentity(recipe)
+                recentRecipeAction(recipe, title: actionTitle, fillsWidth: true)
+            }
+        }
+        .smartCartCard(padding: 13)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("recently-opened-recipe-\(recipe.id.uuidString)")
+    }
+
+    private func recentRecipeIdentity(_ recipe: Recipe) -> some View {
         HStack(spacing: 13) {
             Image(systemName: recipe.heroSymbol)
                 .font(.title3.bold())
@@ -1094,6 +1167,7 @@ struct RecipesView: View {
                 .frame(width: 48, height: 48)
                 .background(SmartCartTheme.herbLight)
                 .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(recipe.title)
@@ -1103,26 +1177,40 @@ struct RecipesView: View {
                 Text("\(recipe.ingredients.count) ingredients · \(recipe.servings) servings · \(recipe.source.rawValue)")
                     .font(.caption)
                     .foregroundStyle(SmartCartTheme.secondaryInk)
-                    .lineLimit(1)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-
-            Spacer(minLength: 6)
-
-            Button {
-                appModel.beginRecipe(recipe)
-            } label: {
-                Label("Shop", systemImage: "arrow.right")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(SmartCartTheme.onAccent)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 9)
-                    .background(SmartCartTheme.green)
-                    .clipShape(Capsule())
-            }
-            .buttonStyle(PressableButtonStyle())
-            .accessibilityLabel("Shop \(recipe.title) again")
         }
-        .smartCartCard(padding: 13)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func recentRecipeAction(
+        _ recipe: Recipe,
+        title: String,
+        fillsWidth: Bool
+    ) -> some View {
+        Button {
+            appModel.beginRecipe(recipe)
+        } label: {
+            Label(title, systemImage: "arrow.right")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(SmartCartTheme.onAccent)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+                .frame(maxWidth: fillsWidth ? .infinity : nil)
+                .background(SmartCartTheme.green)
+                .clipShape(fillsWidth ? AnyShape(RoundedRectangle(cornerRadius: 13, style: .continuous)) : AnyShape(Capsule()))
+        }
+        .buttonStyle(PressableButtonStyle())
+        .smartCartMinimumHitTarget()
+        .accessibilityLabel(title == "Shop Again" ? "Shop \(recipe.title) again" : "Open \(recipe.title)")
+        .accessibilityIdentifier(title == "Shop Again" ? "recipe-shop-again" : "recipe-open")
+    }
+
+    private var recentlyOpenedSubtitle: String {
+        let count = min(5, appModel.recentRecipes.count)
+        return count == 0
+            ? "Recipes you open will appear here"
+            : "\(count) most recently opened recipe\(count == 1 ? "" : "s"), newest first"
     }
 
     private var currentListCard: some View {
@@ -1191,7 +1279,7 @@ struct RecipesView: View {
                         .frame(width: 40, height: 40)
                         .background(SmartCartTheme.walmartLight)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    Text("Save the current manifest to keep its products, quantities, observed-price subtotal, and handoff progress here.")
+                    Text("Save the current shopping list to keep its products, quantities, observed-price subtotal, and Shopping Trip progress here.")
                         .font(.caption)
                         .foregroundStyle(SmartCartTheme.secondaryInk)
                 }

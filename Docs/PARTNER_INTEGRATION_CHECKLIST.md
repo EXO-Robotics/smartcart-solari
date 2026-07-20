@@ -29,7 +29,7 @@ No production partner is connected in this repository. Complete one section at a
 
 ## Kroger
 
-- [ ] Keep the in-app Kroger card labeled Coming Soon until its guided-list adapter and contract tests are complete.
+- [ ] Keep the in-app Kroger card labeled Coming Soon until its Shopping Trip adapter and contract tests are complete.
 - [ ] Developer application approved.
 - [ ] OAuth client ID/secret, scopes, redirect URIs, and location strategy supplied.
 - [ ] Implement token refresh and consent revocation.
@@ -37,7 +37,7 @@ No production partner is connected in this repository. Complete one section at a
 
 ## Target
 
-- [x] Credential-free demo guide uses a bounded seeded catalog, exact public product pages, labeled searches, and Target Shopping Lists instructions.
+- [x] Credential-free demo Shopping Trip uses a bounded seeded catalog, exact public product pages, labeled searches, and truthful Target-owned list instructions.
 - [x] Demo copy states that SmartCart cannot link an account, edit a list, confirm fulfillment, create a cart, or check out.
 - [ ] Identify an approved public or partner integration before adding live catalog, price, inventory, account, list, cart, Drive Up, or delivery capabilities.
 - [ ] Replace demo records only after live contract tests and branding/data-use review pass.
