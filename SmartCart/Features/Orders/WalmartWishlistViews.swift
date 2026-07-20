@@ -48,8 +48,10 @@ struct RetailerSafariHandoffView: View {
             if appModel.retailerSessionIsInProgress,
                !appModel.activeShoppingSessionIsImmutable {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Pause") {
+                    Button {
                         pauseTripAndReturnHome()
+                    } label: {
+                        Label("Pause Trip", systemImage: "pause.fill")
                     }
                     .accessibilityIdentifier("retailer-session-pause")
                 }
@@ -866,20 +868,65 @@ private struct RetailerTripSafariSheet: View {
     }
 
     private var pauseButton: some View {
-        Button("Pause", action: onPause)
-            .frame(minWidth: 44, minHeight: 44)
-            .accessibilityHint("Saves this shopping trip without advancing the current item")
-            .accessibilityIdentifier("retailer-trip-pause")
+        Button(action: onPause) {
+            Label("Pause", systemImage: "pause.fill")
+                .font(.subheadline.bold())
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .foregroundStyle(SmartCartTheme.green)
+                .padding(.horizontal, 12)
+                .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil)
+                .frame(minWidth: 44, minHeight: 44)
+                .background(SmartCartTheme.herbLight)
+                .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .stroke(SmartCartTheme.borderStrong, lineWidth: 1)
+                }
+        }
+        .buttonStyle(PressableButtonStyle())
+        .accessibilityLabel("Pause shopping trip")
+        .accessibilityHint("Saves this shopping trip without advancing the current item")
+        .accessibilityIdentifier("retailer-trip-pause")
     }
 
     private var nextButton: some View {
-        Button("Next Item", action: onNext)
-            .font(.subheadline.bold())
-            .frame(minHeight: 44)
-            .accessibilityHint("Records only that you advanced after viewing this page. No list, cart, order, or purchase result is inferred.")
-            .accessibilityValue(loadState.accessibilityDescription)
-            .accessibilityIdentifier("retailer-trip-next")
-            .disabled(!loadState.canRecordVisited)
+        Button(action: onNext) {
+            Label("Next Item", systemImage: "arrow.right.circle.fill")
+                .font(.subheadline.bold())
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .foregroundStyle(
+                    loadState.canRecordVisited
+                        ? SmartCartTheme.onAccent
+                        : SmartCartTheme.mutedInk
+                )
+                .padding(.horizontal, 14)
+                .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil)
+                .frame(minWidth: 44, minHeight: 44)
+                .background(
+                    loadState.canRecordVisited
+                        ? SmartCartTheme.green
+                        : SmartCartTheme.paperElevated
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .overlay {
+                    if !loadState.canRecordVisited {
+                        RoundedRectangle(cornerRadius: 13, style: .continuous)
+                            .stroke(SmartCartTheme.border, lineWidth: 1)
+                    }
+                }
+                .shadow(
+                    color: loadState.canRecordVisited ? SmartCartTheme.mintGlow : .clear,
+                    radius: 10,
+                    y: 3
+                )
+        }
+        .buttonStyle(PressableButtonStyle())
+        .accessibilityHint("Records only that you advanced after viewing this page. No list, cart, order, or purchase result is inferred.")
+        .accessibilityValue(loadState.accessibilityDescription)
+        .accessibilityIdentifier("retailer-trip-next")
+        .disabled(!loadState.canRecordVisited)
     }
 
     private var retailerOwnershipLabel: some View {

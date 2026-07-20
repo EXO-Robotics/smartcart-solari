@@ -3492,6 +3492,31 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(source[pauseStart..<prewarmStart].contains("appModel.homePath = []"))
     }
 
+    func testRetailerTripPrimaryActionsUseClearLabelsAndDistinctStyles() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let ordersSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "SmartCart/Features/Orders/OrdersView.swift"
+            ),
+            encoding: .utf8
+        )
+        let tripSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "SmartCart/Features/Orders/WalmartWishlistViews.swift"
+            ),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(ordersSource.contains("Add Search to Shopping Trip"))
+        XCTAssertFalse(ordersSource.contains("Use retailer search"))
+        XCTAssertTrue(tripSource.contains("Label(\"Pause\", systemImage: \"pause.fill\")"))
+        XCTAssertTrue(tripSource.contains("Label(\"Next Item\", systemImage: \"arrow.right.circle.fill\")"))
+        XCTAssertTrue(tripSource.contains("loadState.canRecordVisited\n                        ? SmartCartTheme.green"))
+        XCTAssertTrue(tripSource.contains(".background(SmartCartTheme.herbLight)"))
+    }
+
     @MainActor
     func testAllHighConfidenceExactMatchesHaveNoExceptions() async throws {
         let model = AppModel(

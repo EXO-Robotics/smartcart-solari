@@ -306,7 +306,11 @@ private struct ProductExceptionCard: View {
     }
 
     private var acceptTitle: String {
-        item.product.isExactProductLink ? "Use this product" : "Use retailer search"
+        item.product.isExactProductLink ? "Use this product" : "Add Search to Shopping Trip"
+    }
+
+    private var acceptSymbol: String {
+        item.product.isExactProductLink ? "checkmark.circle.fill" : "plus.circle.fill"
     }
 
     var body: some View {
@@ -352,11 +356,16 @@ private struct ProductExceptionCard: View {
                 guard appModel.acceptMatchingException(itemID: item.id) else { return }
                 onDecision()
             } label: {
-                Label(acceptTitle, systemImage: "checkmark.circle.fill")
+                Label(acceptTitle, systemImage: acceptSymbol)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(PrimaryButtonStyle())
             .accessibilityIdentifier("product-exception-accept-\(item.id.uuidString)")
+            .accessibilityHint(
+                item.product.isExactProductLink
+                    ? "Uses this product for the current shopping trip"
+                    : "Adds this retailer search as the product page for this ingredient in the current shopping trip"
+            )
 
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 9) {
