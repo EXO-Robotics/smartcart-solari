@@ -11,10 +11,21 @@ New durable state includes:
 - frozen plan snapshots on internal `ShoppingManifest` and `ShoppingSession` records;
 - matching fingerprints used by exception-only product review;
 - `GuidedItemStatus.visited`, meaning only that the user explicitly advanced after viewing a successfully loaded retailer page;
-- optional `ShoppingSession.pantryUpdateReminderArchivedAt`, which suppresses only the Home pantry-update reminder.
-- optional `Recipe.rawSourceText`, which preserves recognized or pasted source text for an explicit Recipe Ready review sheet.
+- optional `ShoppingSession.pantryUpdateReminderArchivedAt`, which suppresses the pantry-update-pending Home card without removing the frozen completed trip;
+- optional `Recipe.rawSourceText`, which preserves recognized or pasted source text for an explicit Recipe Ready review sheet;
+- optional `Recipe.sourceDocument`, which preserves raw OCR observations separately from reconstructed text, layout-filtered ingredient lines, and ignored source lines; accepted parser output remains in `Recipe.ingredients`; and
+- optional `savedRecipeIDs`, which records Saved Recipes library membership independently from retained recipe records.
 
-These fields are backward-compatible additions within schema v6, not a schema-v7 boundary. A v6 trip written before the reminder or recipe source-text fields existed decodes them as `nil`. Legacy status cases (`added`, `saved_to_wishlist`, and `added_to_cart`) remain decodable; new normal-flow advancement writes `visited` instead.
+These fields are backward-compatible additions within schema v6, not a schema-v7 boundary. A schema-v6 state payload written before these optional fields existed decodes their missing values as `nil`. Legacy status cases (`added`, `saved_to_wishlist`, and `added_to_cart`) remain decodable; new normal-flow advancement writes `visited` instead.
+
+`savedRecipeIDs` has presence-sensitive compatibility semantics:
+
+- absent in an older schema-v6 payload: infer Saved Recipes membership for retained, valid non-sample recipes;
+- present and empty: preserve an intentionally empty library;
+- present with unknown IDs: intersect with retained recipe IDs and discard the unknown values; and
+- present with valid IDs: expose only those retained recipes in Saved Recipes and Meal Prep selection.
+
+The same inference applies after v0-v5 decoding because those legacy migrations produce no membership field. A fresh install still begins with empty membership even though the dedicated sample catalog is available. The first import of a new non-sample recipe saves it by default; samples are never auto-saved, and reopening a retained unsaved recipe does not silently resave it.
 
 The legacy decoders remain isolated by schema version. Loading a valid v0-v5 file creates a v6 state in memory and then attempts an atomic rewrite. If that rewrite fails after a successful decode, SmartCart continues from the migrated in-memory state, preserves the original legacy bytes at the state path or a migration-recovery path, and surfaces a recoverable persistence warning. Rewrite failure alone must never quarantine valid legacy data or replace it with defaults.
 
@@ -24,10 +35,13 @@ Legacy v5 trip recovery uses durable semantic identity rather than assuming inte
 
 - A newer schema is never quarantined or overwritten by an older build.
 - Legacy single-recipe internal manifests and sessions remain valid and infer a single-recipe scope from their recipe identifier.
-- Meal Prep internal manifests and sessions carry frozen source snapshots, so recipe edits or deletion do not mutate historical trips.
+- Meal Prep internal manifests and sessions carry frozen source snapshots, so recipe edits or removal from Saved Recipes do not mutate historical trips.
 - A completed trip is immutable. Editing a completed recipe or plan creates a new trip with a new fingerprint.
 - `visited` is completed trip progress, but never evidence of a saved item, cart action, order, checkout, or purchase. The later pantry update remains user-confirmed.
-- Archiving a pantry-update reminder sets only the optional timestamp on every alias of the same logical completed trip. It does not create reconciliation, change pantry or product preferences, or delete the frozen trip.
+- Archiving a pantry-update reminder sets only the optional timestamp on every alias of the same logical completed trip. It hides the pending Home card but does not create reconciliation, change pantry or product preferences, or delete the frozen trip.
+- Removing Saved Recipes membership preserves the retained recipe record, Shopping Trips, saved manifests, pantry, shopping and product preferences, analytics, and frozen Meal Prep state. After the JSON membership write succeeds, the separately stored Recent Recipes entry is pruned; a failed write rolls membership back and leaves recency unchanged.
+- Recent Recipes is timestamped UI history in app defaults, not a schema-v6 JSON field. Only an import or intentional whole-recipe open adds or reorders entries; retailer pages, Shopping Trip resume, replacement, and reconciliation do not. Successful Saved Recipes membership removal may prune its matching entry.
+- Photo provenance keeps raw observation text/page/normalized geometry/confidence/alternatives and source IDs in `Recipe.sourceDocument`, distinct from its reconstructed, layout-filtered, and ignored text streams. Accepted ingredients separately retain `IngredientSourceEvidence`, including their column/continuation metadata, reconstruction confidence, original line, and any removed suffix. `filteredIngredientLines` means layout-filtered input, not parser-sanitized output.
 - Draft, reviewed-line, internal manifest/session, and reconciliation writes use the existing atomic state-store boundary; observable transactional state changes only after a successful save.
 
 ## Validation
@@ -36,4 +50,10 @@ Fixed repository fixtures preserve representative v0-v4 JSON bytes without regen
 
 For every fixed v0-v4 fixture, tests inject rewrite failure, verify migrated in-memory fields and byte-exact source preservation, retry the current-schema rewrite, and relaunch from the rewritten file before checking the same durable fields again. Separate v5 regressions cover realistic trip recovery, including manifests whose line UUIDs are disjoint from shopping-item UUIDs. Forward-schema tests verify unsupported newer versions remain untouched and report `unsupportedSchema`.
 
-Current-schema regressions must also round-trip `visited`, decode an absent reminder timestamp as `nil`, persist reminder archival across relaunch, keep archived trips available for later reconciliation/history, and roll back visible archive state if persistence fails.
+Current-schema regressions must also:
+
+- round-trip `visited`, decode an absent reminder timestamp as `nil`, persist reminder archival across relaunch, keep archived trips available for later reconciliation/history, and roll back visible archive state if persistence fails;
+- decode an absent `savedRecipeIDs` as inferred valid non-sample membership, preserve a present empty set, discard dangling IDs, and keep a fresh sample-backed install's membership empty;
+- auto-save only a new non-sample import, keep the sample catalog dedicated, and require explicit save after reopening a retained unsaved recipe;
+- remove membership atomically while preserving retained records, historical trips, pantry, preferences, and frozen Meal Prep state and pruning only successful recency removal; and
+- round-trip raw OCR observations and reconstructed/layout-filtered/ignored source-document streams, decode missing optional source fields, and exercise accepted parser evidence separately in the OCR/parser regressions without collapsing those provenance roles.

@@ -1,12 +1,38 @@
 # Closed beta validation plan
 
+## Current verdict
+
+**NO-GO. Do not recruit the cohort or distribute this candidate as a closed
+beta.** Development-focused automated gates pass, but the separately invoked
+frozen held-out aggregate gate failed on the latest frozen code candidate with
+exit 65 and case-level output suppressed. The contextual classifier remains a `DEBUG`
+shadow comparison, while the legacy `RecipeParser` path remains authoritative
+for app output.
+
+Before changing this verdict, freeze one candidate and record all of the
+following against that same commit:
+
+1. The eligible development suite passes with
+   `SmartCartTests/ContextualIngredientFilterTests/testFrozenHeldOutCorpusDoesNotRegressAgainstLegacy`
+   explicitly skipped.
+2. That frozen held-out selector passes in a separate `xcodebuild test`
+   invocation.
+3. `OCR_PARSER_HUMAN_TEST_PLAN.md` passes, including its physical-iPhone and
+   provenance checks.
+4. The Home/Recipes, Shopping Trip, barcode, Meal Prep, Dynamic Type, and
+   VoiceOver walkthroughs below pass.
+
+Never report the eligible result as a complete-suite pass while the frozen
+held-out selector is excluded. Keep its receipts aggregate-only and do not place
+held-out case content in beta artifacts.
+
 ## Cohort
 
-Recruit 20–50 testers who shop for groceries at least twice per month. Include a mix of iPhone models, Dynamic Type sizes, VoiceOver experience, household sizes, dietary preferences, and shopping styles. Do not promise live prices, retailer automation, account linkage, purchase detection, cart creation, or pickup reservations.
+After all prerequisites pass and the verdict changes to `GO`, recruit 20–50 testers who shop for groceries at least twice per month. Include a mix of iPhone models, Dynamic Type sizes, VoiceOver experience, household sizes, dietary preferences, and shopping styles. Do not promise live prices, retailer automation, account linkage, purchase detection, cart creation, or pickup reservations.
 
 ## Tester setup
 
-1. Install the TestFlight build after Apple review.
+1. Install the TestFlight build only after Apple review and a recorded closed-beta `GO` for the exact build.
 2. In Account, enable **Internal tester mode** and keep local anonymous events enabled.
 3. Choose realistic organic, dietary, budget, and store-brand preferences.
 4. Complete at least three recipes from different source types and one Meal Prep plan.
@@ -39,9 +65,71 @@ For every recipe, record:
 9. Whether a substitution was learned only after explicit opt-in.
 10. One sentence describing the largest source of friction.
 
+## Ingredient deletion stabilization matrix
+
+Before the Home/library walkthrough, exercise Recipe Ready with a recipe whose
+ingredients have stable, known IDs:
+
+1. Delete the first, a middle, the last, and the only ingredient through the
+   destructive confirmation. The four interactions must not crash or address a
+   shifted row.
+2. Repeat a deletion request for the same ID through the model regression; it
+   must be a no-op.
+3. After deleting the only ingredient, verify the recipe remains empty and
+   **Start Shopping** is disabled with the explicit explanation to include at
+   least one ingredient that still needs purchasing.
+4. Relaunch and verify the empty active draft remains coherent. If the retained
+   record is intentionally unsaved, verify it is not silently resaved or
+   overwritten.
+5. Verify pantry state and unchanged editable pre-trip matches survive, only
+   the removed ingredient's match is invalidated, and any in-flight stale match
+   is rejected.
+6. Repeat against a recipe with a committed Shopping Trip. The session,
+   manifest, outcomes, pantry, and product preferences must remain immutable.
+
+## Home and Recipes stabilization matrix
+
+This stabilization work does not change the established Recipe Ready,
+product-exception, continuous Safari Shopping Trip, or user-confirmed pantry
+update. Validate these Home and library changes before replaying the frozen
+shopping-flow matrix below:
+
+1. Verify **Start New Recipe** is visible immediately and Home rendered order
+   is: header; **Start New Recipe**; one conditional
+   **Shopping Trips** section; optional **Shop Again**; preferred store; and the
+   checkout trust strip. Record order, not an unsupported claim that every
+   control fits in the first viewport.
+2. At standard Dynamic Type, verify compact, equal-height two-column rows for
+   **Take Photo**/**Choose Photo** and **Paste Link**/**More**. At an
+   Accessibility size, verify those four actions stack vertically. In both
+   modes, **Meal Prep Mode** remains a full-width action below them.
+3. With zero, one, and multiple pending trips, verify Home renders zero or one
+   **Shopping Trips** section, never separate primary and secondary trip
+   sections. Every pending trip must remain reachable.
+4. Verify Recipes shows only Saved Recipes membership, with title/ingredient
+   search and the pull-up **Recent Recipes** drawer. **Try a Sample** must use
+   its dedicated sample catalog and must not populate the saved library.
+5. Import a new non-sample recipe, verify it is saved by default, and complete
+   a Shopping Trip so **Shop Again** remains a reachable historical route.
+   Remove it from Saved Recipes, relaunch, and verify its retained recipe
+   record, Shopping Trips, pantry, preferences, product preferences, and frozen Meal Prep
+   provenance remain intact while its Recent Recipes entry is removed. Verify
+   it stays absent from Saved Recipes and Meal Prep selection.
+6. Reopen the retained unsaved recipe through Home's **Shop Again**, edit it,
+   and verify it remains unsaved until the tester explicitly chooses
+   **Save Recipe**.
+7. Verify importing or intentionally opening a whole recipe updates Recent
+   Recipes. Retailer-page navigation, Shopping Trip resume, replacement,
+   pantry reconciliation, **Next Item**, **Pause**, and archive actions must
+   not create or reorder recipe-recency events.
+
 ## Shopping Trip and reminder matrix
 
-Exercise each of these paths for Walmart and Target where applicable:
+Run the following as one continuous frozen trip for Walmart and repeat every
+retailer-applicable step for Target. Begin from an imported/reviewed recipe,
+resolve only genuine product exceptions, start the Safari Shopping Trip, and
+preserve the same trip identity through pause, relaunch, completion, and pantry
+review:
 
 1. After a successful retailer-page load, tap **Next Item**. Verify the next product opens in the same Safari trip and the prior item is recorded as `visited` only.
 2. Verify `visited` does not claim saved-to-list, cart, order, checkout, or purchase knowledge. It may be selected by default in the later pantry check-in, but the tester must still confirm what was bought.
@@ -49,8 +137,8 @@ Exercise each of these paths for Walmart and Target where applicable:
 4. Use Safari’s native close control or dismiss the sheet. Verify the result is the same safe pause at the current item.
 5. Force a retailer-page load failure. **Next Item** must remain unavailable, the item must remain waiting, and retry, external open, skip, and pause must remain reachable.
 6. Report unavailable, skip an item, and choose a safe replacement. Verify each explicit action advances or refreshes only the intended item.
-7. Complete a trip and exercise the Home prompt: **Yes** opens the pantry update; **Not Yet** leaves it pending; **Archive** suppresses only the repeated reminder.
-8. Relaunch after **Archive**. Verify the reminder stays hidden while the frozen completed trip remains intact and no pantry quantity, shopping outcome, or product preference changes.
+7. Complete a trip and return Home. Verify one pantry-update-pending card appears inside the **Shopping Trips** section. Open that card, then exercise the completion surface: **Yes, update pantry** opens review; **Not yet** leaves the update pending; **Archive without pantry update** suppresses only the pending reminder/card.
+8. Relaunch after **Archive without pantry update**. Verify the pending reminder/card stays hidden while the frozen completed trip remains intact and no pantry quantity, shopping outcome, or product preference changes.
 
 Any automatic retailer action, inferred purchase, ambiguous close that advances, failed page that enables **Next Item**, or archive action that deletes trip data blocks beta promotion.
 
@@ -77,16 +165,16 @@ Each tester should complete at least two plans using reviewed saved recipes:
 3. Resolve every uncertain merge, then verify the plan enters Recipe Ready and uses the same exception-only matching and continuous Shopping Trip.
 4. Terminate and relaunch during combined-ingredient review and during the Shopping Trip; verify the exact plan and waiting item restore.
 5. Change a serving count after a trip exists and verify SmartCart starts a new compatible trip rather than resuming stale quantities.
-6. Delete or edit a source recipe after starting a plan and verify the active trip retains its frozen title and ingredient provenance.
+6. Remove a source recipe from Saved Recipes or edit it after starting a plan and verify the active trip retains its frozen title and ingredient provenance.
 7. Complete pantry reconciliation twice and verify the second attempt cannot increment stock again.
 
 Record incorrect merges, missed safe merges, pantry deduction errors, and any unclear source provenance. Any automatic cross-dimension merge or incompatible trip resume blocks beta promotion.
 
 ## Dynamic Type and VoiceOver
 
-Run the core single-recipe and Meal Prep paths at the default size, an extra-extra-extra-large size, and at least one Accessibility size. Verify Recipe Ready rows and summaries, product-exception actions, the Shopping Trip bar and More menu, load-failure actions, and the Home reminder remain readable, scrollable, and reachable without clipped required controls.
+Run the core single-recipe and Meal Prep paths at the default size, an extra-extra-extra-large size, and at least one Accessibility size. Verify Home's grouped import actions and single Shopping Trips section, Recipe Ready rows and summaries, product-exception actions, the Shopping Trip bar and More menu, load-failure actions, and the pantry-update-pending Home card remain readable, scrollable, and reachable without clipped required controls.
 
-With VoiceOver enabled, verify logical focus order; meaningful labels, values, traits, and hints; the “next issue” focus move; item position; **Pause** and **Next Item** meaning; disabled **Next Item** during loading/failure; and distinct **Yes**, **Not Yet**, and **Archive** actions. Retailer webpage accessibility is owned by the retailer, but SmartCart’s trip controls must remain operable.
+With VoiceOver enabled, verify logical focus order; meaningful labels, values, traits, and hints; the “next issue” focus move; item position; **Pause** and **Next Item** meaning; disabled **Next Item** during loading/failure; and distinct **Yes, update pantry**, **Not yet**, and **Archive without pantry update** actions on the completion surface. Retailer webpage accessibility is owned by the retailer, but SmartCart’s trip controls must remain operable.
 
 ## Metrics and decision thresholds
 
@@ -99,7 +187,10 @@ With VoiceOver enabled, verify logical focus order; meaningful labels, values, t
 | Shopping Trip completion | at least 70% | below 55% |
 | Crash-free trips | at least 99% | any reproducible data-loss crash |
 
-The thresholds are product hypotheses, not claims. Revisit them after the first ten tester trips.
+The thresholds are product hypotheses, not claims. They cannot override a
+failed frozen held-out gate or a failed physical/accessibility walkthrough.
+Revisit them after the first ten tester trips only after the candidate has a recorded
+`GO`.
 
 ## Privacy and evidence handling
 
@@ -107,4 +198,11 @@ The diagnostic funnel stays on device and excludes recipe text, URLs, addresses,
 
 ## Exit gate
 
-Advance beyond closed beta only after the import-to-pantry loop meets the targets, reconciliation never double-increments stock, the Dynamic Type and VoiceOver matrix passes, and every non-safety miss is documented and accepted. Silent purchasing errors, false pantry changes, inaccessible required actions, and data loss cannot be accepted as metric tradeoffs.
+Enter or advance beyond closed beta only after the eligible suite and separately
+run frozen held-out gate both pass on the same candidate, the required
+human/physical walkthrough passes, the import-to-pantry loop meets the targets,
+reconciliation never double-increments stock, the Home/Recipes and Dynamic
+Type/VoiceOver matrices pass, and every non-safety miss is documented and
+accepted. Silent purchasing errors, false pantry changes, inaccessible required
+actions, and data loss cannot be accepted as metric tradeoffs. The current
+verdict remains `NO-GO`.
