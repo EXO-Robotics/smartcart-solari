@@ -1727,6 +1727,21 @@ final class SmartCartTests: XCTestCase {
         }
     }
 
+    func testVisitedGuidedItemStatusRoundTripsAndIsCompleted() throws {
+        let encoded = try JSONEncoder().encode(GuidedItemStatus.visited)
+
+        XCTAssertEqual(String(data: encoded, encoding: .utf8), "\"visited\"")
+        XCTAssertEqual(try JSONDecoder().decode(GuidedItemStatus.self, from: encoded), .visited)
+        XCTAssertTrue(GuidedItemStatus.visited.isCompleted)
+        XCTAssertFalse(GuidedItemStatus.waiting.isCompleted)
+    }
+
+    func testRetailerTripPageLoadStateOnlyAllowsVisitedAfterSuccessfulLoad() {
+        XCTAssertFalse(RetailerTripPageLoadState.loading.canRecordVisited)
+        XCTAssertTrue(RetailerTripPageLoadState.loaded.canRecordVisited)
+        XCTAssertFalse(RetailerTripPageLoadState.failed.canRecordVisited)
+    }
+
     @MainActor
     func testRetailerSetupCompletionIsScopedAndPersistsWithoutCredentials() {
         let defaults = isolatedCommerceDefaults()
@@ -1790,6 +1805,149 @@ final class SmartCartTests: XCTestCase {
     }
 
     @MainActor
+    func testVisitedOutcomeAdvancesAndSynchronizesEveryTripSnapshot() throws {
+        let store = InMemorySmartCartStateStore()
+        let model = AppModel(
+            stateStore: store,
+            commerceDefaults: isolatedCommerceDefaults(),
+            seedDemoShoppingState: true
+        )
+        XCTAssertGreaterThanOrEqual(model.shoppingItems.count, 2)
+        model.completeRetailerSetup()
+        XCTAssertTrue(model.startOrResumeRetailerShoppingSession())
+
+        let sessionID = try XCTUnwrap(model.activeShoppingSessionID)
+        let itemIndex = model.guidedIndex
+        let itemID = model.shoppingItems[itemIndex].id
+        let nextIndex = try XCTUnwrap(
+            model.shoppingItems.indices.first {
+                $0 > itemIndex && model.shoppingItems[$0].status == .waiting
+            } ?? model.shoppingItems.indices.first {
+                $0 != itemIndex && model.shoppingItems[$0].status == .waiting
+            }
+        )
+
+        XCTAssertTrue(model.recordRetailerOutcome(.visited, for: itemID, sessionID: sessionID))
+
+        XCTAssertEqual(model.shoppingItems[itemIndex].status, .visited)
+        XCTAssertEqual(model.guidedIndex, nextIndex)
+        XCTAssertEqual(
+            model.shoppingSession(id: sessionID)?.items.first(where: { $0.id == itemID })?.status,
+            .visited
+        )
+        let manifestID = try XCTUnwrap(model.shoppingSession(id: sessionID)?.manifestID)
+        let manifest = try XCTUnwrap(
+            model.savedLists.first(where: { $0.manifest.id == manifestID })?.manifest
+        )
+        XCTAssertEqual(manifest.handoffProgress, .inProgress)
+        XCTAssertEqual(manifest.items.first(where: { $0.id == itemID })?.status, .visited)
+        XCTAssertEqual(store.state?.shoppingItems[itemIndex].status, .visited)
+        XCTAssertEqual(
+            store.state?.shoppingSessions.first(where: { $0.id == sessionID })?
+                .items.first(where: { $0.id == itemID })?.status,
+            .visited
+        )
+        XCTAssertEqual(
+            store.state?.savedLists.first(where: { $0.manifest.id == manifestID })?
+                .manifest.items.first(where: { $0.id == itemID })?.status,
+            .visited
+        )
+    }
+
+    @MainActor
+    func testVisitingLastWaitingItemCompletesTripExactlyOnce() throws {
+        let store = InMemorySmartCartStateStore()
+        let model = AppModel(
+            stateStore: store,
+            commerceDefaults: isolatedCommerceDefaults(),
+            seedDemoShoppingState: true
+        )
+        model.shoppingItems = [try model.shoppingItems.firstUnwrapped()]
+        model.completeRetailerSetup()
+        XCTAssertTrue(model.startOrResumeRetailerShoppingSession())
+        let sessionID = try XCTUnwrap(model.activeShoppingSessionID)
+        let itemID = try XCTUnwrap(model.currentGuidedItem?.id)
+        let completionCountBefore = model.analyticsEvents.filter {
+            $0.name == .guidedShoppingCompleted
+        }.count
+
+        XCTAssertTrue(model.recordRetailerOutcome(.visited, for: itemID, sessionID: sessionID))
+
+        XCTAssertTrue(model.retailerGuideIsComplete)
+        XCTAssertEqual(model.shoppingItems.first?.status, .visited)
+        XCTAssertEqual(model.shoppingSession(id: sessionID)?.items.first?.status, .visited)
+        XCTAssertEqual(model.savedLists.first?.manifest.handoffProgress, .completed)
+        XCTAssertEqual(
+            model.analyticsEvents.filter { $0.name == .guidedShoppingCompleted }.count,
+            completionCountBefore + 1
+        )
+
+        let completedItems = model.shoppingItems
+        let completedLists = model.savedLists
+        let completedSessions = model.shoppingSessions
+        let completedEvents = model.analyticsEvents
+        XCTAssertFalse(model.recordRetailerOutcome(.visited, for: itemID, sessionID: sessionID))
+        XCTAssertEqual(model.shoppingItems, completedItems)
+        XCTAssertEqual(model.savedLists, completedLists)
+        XCTAssertEqual(model.shoppingSessions, completedSessions)
+        XCTAssertEqual(model.analyticsEvents, completedEvents)
+    }
+
+    @MainActor
+    func testExactAmbiguousDismissalPausesAndRelaunchResumesSameWaitingItem() throws {
+        let store = InMemorySmartCartStateStore()
+        let defaults = isolatedCommerceDefaults()
+        let model = AppModel(
+            stateStore: store,
+            commerceDefaults: defaults,
+            seedDemoShoppingState: true
+        )
+        model.completeRetailerSetup()
+        XCTAssertTrue(model.startOrResumeRetailerShoppingSession())
+        let sessionID = try XCTUnwrap(model.activeShoppingSessionID)
+        let itemID = try XCTUnwrap(model.currentGuidedItem?.id)
+        let originalItems = model.shoppingItems
+        let originalIndex = model.guidedIndex
+
+        XCTAssertFalse(
+            model.handleAmbiguousRetailerBrowserDismissal(
+                sessionID: UUID(),
+                itemID: itemID
+            )
+        )
+        XCTAssertFalse(
+            model.handleAmbiguousRetailerBrowserDismissal(
+                sessionID: sessionID,
+                itemID: UUID()
+            )
+        )
+        XCTAssertTrue(model.retailerSessionIsInProgress)
+
+        XCTAssertTrue(
+            model.handleAmbiguousRetailerBrowserDismissal(
+                sessionID: sessionID,
+                itemID: itemID
+            )
+        )
+        XCTAssertEqual(model.shoppingItems, originalItems)
+        XCTAssertEqual(model.guidedIndex, originalIndex)
+        XCTAssertEqual(model.currentGuidedItem?.status, .waiting)
+        XCTAssertEqual(model.savedLists.first?.manifest.handoffProgress, .paused)
+        XCTAssertEqual(model.shoppingSession(id: sessionID)?.items, originalItems)
+
+        let restored = AppModel(stateStore: store, commerceDefaults: defaults)
+        XCTAssertEqual(restored.activeShoppingSessionID, sessionID)
+        XCTAssertEqual(restored.guidedIndex, originalIndex)
+        XCTAssertEqual(restored.currentGuidedItem?.id, itemID)
+        XCTAssertEqual(restored.currentGuidedItem?.status, .waiting)
+        XCTAssertTrue(restored.hasResumableRetailerSession)
+        XCTAssertTrue(restored.startOrResumeRetailerShoppingSession())
+        XCTAssertEqual(restored.currentGuidedItem?.id, itemID)
+        XCTAssertEqual(restored.currentGuidedItem?.status, .waiting)
+        XCTAssertTrue(restored.retailerSessionIsInProgress)
+    }
+
+    @MainActor
     func testGuideNavigationDoesNotStartUntilSetupAndExplicitStart() {
         let model = AppModel(
             stateStore: InMemorySmartCartStateStore(),
@@ -1798,7 +1956,7 @@ final class SmartCartTests: XCTestCase {
         )
 
         model.beginGuidedShopping()
-        XCTAssertEqual(model.homePath.last, .guidedShopping)
+        XCTAssertEqual(model.homePath.last, .shoppingTrip)
         XCTAssertFalse(model.retailerSessionIsInProgress)
         XCTAssertTrue(model.shoppingSessions.isEmpty)
 
@@ -1832,12 +1990,12 @@ final class SmartCartTests: XCTestCase {
         model.beginRecipe(replacementRecipe)
         XCTAssertTrue(model.shoppingItems.isEmpty)
 
-        model.openShoppingSession(sessionID)
+        XCTAssertTrue(model.openShoppingSession(sessionID))
         XCTAssertEqual(model.activeRecipe.id, originalRecipeID)
         XCTAssertEqual(model.desiredServings, 6)
         XCTAssertEqual(model.fulfillmentMode, .delivery)
         XCTAssertFalse(model.shoppingItems.isEmpty)
-        XCTAssertEqual(model.homePath, [.guidedShopping])
+        XCTAssertEqual(model.homePath, [.shoppingTrip])
         XCTAssertEqual(model.mostRecentPendingShoppingSession?.id, sessionID)
     }
 
@@ -1850,17 +2008,213 @@ final class SmartCartTests: XCTestCase {
             seedDemoShoppingState: true
         )
         model.completeRetailerSetup()
-        model.startOrResumeRetailerShoppingSession()
+        XCTAssertTrue(model.startOrResumeRetailerShoppingSession())
         let itemID = try model.shoppingItems.firstUnwrapped().id
+        let originalItems = model.shoppingItems
         let originalIndex = model.guidedIndex
+        let originalLists = model.savedLists
+        let originalSessions = model.shoppingSessions
+        let originalEvents = model.analyticsEvents
+        let originalActiveSessionID = model.activeShoppingSessionID
+        let originalPersistedState = store.state
         store.failNextSave = true
 
-        model.recordRetailerOutcome(.unavailable, for: itemID)
+        XCTAssertFalse(model.recordRetailerOutcome(.unavailable, for: itemID))
 
-        XCTAssertEqual(model.shoppingItems.first?.status, .waiting)
+        XCTAssertEqual(model.shoppingItems, originalItems)
         XCTAssertEqual(model.guidedIndex, originalIndex)
-        XCTAssertEqual(model.shoppingSessions.first?.items.first?.status, .waiting)
-        XCTAssertEqual(store.state?.shoppingItems.first?.status, .waiting)
+        XCTAssertEqual(model.savedLists, originalLists)
+        XCTAssertEqual(model.shoppingSessions, originalSessions)
+        XCTAssertEqual(model.analyticsEvents, originalEvents)
+        XCTAssertEqual(model.activeShoppingSessionID, originalActiveSessionID)
+        XCTAssertEqual(store.state, originalPersistedState)
+        XCTAssertNotNil(model.persistenceIssue)
+    }
+
+    @MainActor
+    func testReplacementSucceedsWithoutAdvancingWaitingItem() throws {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedCommerceDefaults(),
+            seedDemoShoppingState: true
+        )
+        let itemIndex = try XCTUnwrap(
+            model.shoppingItems.indices.first { index in
+                model.shoppingItems[index].alternatives.contains { candidate in
+                    model.resolvedReplacementPackageCount(
+                        for: model.shoppingItems[index],
+                        product: candidate
+                    ) != nil
+                }
+            }
+        )
+        model.guidedIndex = itemIndex
+        model.completeRetailerSetup()
+        XCTAssertTrue(model.startOrResumeRetailerShoppingSession())
+        let sessionID = try XCTUnwrap(model.activeShoppingSessionID)
+        let item = model.shoppingItems[itemIndex]
+        let candidate = try XCTUnwrap(
+            item.alternatives.first {
+                model.resolvedReplacementPackageCount(for: item, product: $0) != nil
+            }
+        )
+
+        XCTAssertTrue(model.selectAlternative(itemID: item.id, candidateID: candidate.id))
+
+        XCTAssertEqual(model.guidedIndex, itemIndex)
+        XCTAssertEqual(model.currentGuidedItem?.id, item.id)
+        XCTAssertEqual(model.currentGuidedItem?.status, .waiting)
+        XCTAssertEqual(model.currentGuidedItem?.product.id, candidate.id)
+        XCTAssertEqual(
+            model.shoppingSession(id: sessionID)?.items.first(where: { $0.id == item.id })?.status,
+            .waiting
+        )
+        XCTAssertEqual(
+            model.savedLists.first?.manifest.items.first(where: { $0.id == item.id })?.status,
+            .waiting
+        )
+        XCTAssertTrue(model.retailerSessionIsInProgress)
+    }
+
+    @MainActor
+    func testVisitedDefaultsToPurchasedWhileUnavailableAndSkippedStayExcluded() throws {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedCommerceDefaults(),
+            seedDemoShoppingState: true
+        )
+        XCTAssertGreaterThanOrEqual(model.shoppingItems.count, 3)
+        model.shoppingItems = Array(model.shoppingItems.prefix(3))
+        let itemIDs = model.shoppingItems.map(\.id)
+        model.completeRetailerSetup()
+        XCTAssertTrue(model.startOrResumeRetailerShoppingSession())
+        let sessionID = try XCTUnwrap(model.activeShoppingSessionID)
+
+        XCTAssertTrue(model.recordRetailerOutcome(.visited, for: itemIDs[0], sessionID: sessionID))
+        XCTAssertTrue(model.recordRetailerOutcome(.unavailable, for: itemIDs[1], sessionID: sessionID))
+        XCTAssertTrue(model.recordRetailerOutcome(.skipped, for: itemIDs[2], sessionID: sessionID))
+
+        XCTAssertEqual(
+            model.defaultPurchasedItemIDs(for: .boughtEverything, sessionID: sessionID),
+            Set([itemIDs[0]])
+        )
+        XCTAssertEqual(
+            model.defaultPurchasedItemIDs(for: .boughtMost, sessionID: sessionID),
+            Set([itemIDs[0]])
+        )
+    }
+
+    @MainActor
+    func testVisitedCannotOverwriteUnavailableOrSkippedOutcomes() throws {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedCommerceDefaults(),
+            seedDemoShoppingState: true
+        )
+        XCTAssertGreaterThanOrEqual(model.shoppingItems.count, 3)
+        model.shoppingItems = Array(model.shoppingItems.prefix(3))
+        let itemIDs = model.shoppingItems.map(\.id)
+        model.completeRetailerSetup()
+        XCTAssertTrue(model.startOrResumeRetailerShoppingSession())
+        let sessionID = try XCTUnwrap(model.activeShoppingSessionID)
+
+        XCTAssertTrue(model.recordRetailerOutcome(.unavailable, for: itemIDs[0], sessionID: sessionID))
+        XCTAssertFalse(model.recordRetailerOutcome(.visited, for: itemIDs[0], sessionID: sessionID))
+        XCTAssertTrue(model.recordRetailerOutcome(.skipped, for: itemIDs[1], sessionID: sessionID))
+        XCTAssertFalse(model.recordRetailerOutcome(.visited, for: itemIDs[1], sessionID: sessionID))
+
+        XCTAssertEqual(model.shoppingItems[0].status, .unavailable)
+        XCTAssertEqual(model.shoppingItems[1].status, .skipped)
+        XCTAssertEqual(model.currentGuidedItem?.id, itemIDs[2])
+        XCTAssertEqual(model.currentGuidedItem?.status, .waiting)
+        XCTAssertEqual(model.shoppingSession(id: sessionID)?.items[0].status, .unavailable)
+        XCTAssertEqual(model.shoppingSession(id: sessionID)?.items[1].status, .skipped)
+        XCTAssertEqual(model.savedLists.first?.manifest.items[0].status, .unavailable)
+        XCTAssertEqual(model.savedLists.first?.manifest.items[1].status, .skipped)
+    }
+
+    @MainActor
+    func testCompletedSessionRejectsFurtherOutcomeAndReplacementMutation() throws {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedCommerceDefaults(),
+            seedDemoShoppingState: true
+        )
+        let item = try model.shoppingItems.first(where: { !$0.alternatives.isEmpty }).firstUnwrapped()
+        let candidateID = try item.alternatives.firstUnwrapped().id
+        model.shoppingItems = [item]
+        model.completeRetailerSetup()
+        XCTAssertTrue(model.startOrResumeRetailerShoppingSession())
+        let sessionID = try XCTUnwrap(model.activeShoppingSessionID)
+        XCTAssertTrue(model.recordRetailerOutcome(.visited, for: item.id, sessionID: sessionID))
+        XCTAssertTrue(model.activeShoppingSessionIsImmutable)
+        let completedItems = model.shoppingItems
+        let completedLists = model.savedLists
+        let completedSessions = model.shoppingSessions
+        let completedEvents = model.analyticsEvents
+
+        XCTAssertFalse(model.recordRetailerOutcome(.addedToCart, for: item.id, sessionID: sessionID))
+        XCTAssertFalse(model.selectAlternative(itemID: item.id, candidateID: candidateID))
+
+        XCTAssertEqual(model.shoppingItems, completedItems)
+        XCTAssertEqual(model.savedLists, completedLists)
+        XCTAssertEqual(model.shoppingSessions, completedSessions)
+        XCTAssertEqual(model.analyticsEvents, completedEvents)
+    }
+
+    @MainActor
+    func testOpenShoppingSessionSaveFailureRollsBackVisibleState() throws {
+        let store = ControllableSmartCartStateStore()
+        let defaults = isolatedCommerceDefaults()
+        let model = AppModel(
+            stateStore: store,
+            commerceDefaults: defaults,
+            seedDemoShoppingState: true
+        )
+        model.completeRetailerSetup()
+        XCTAssertTrue(model.startOrResumeRetailerShoppingSession())
+        let sessionID = try XCTUnwrap(model.activeShoppingSessionID)
+        XCTAssertTrue(model.pauseRetailerShoppingSession())
+
+        let otherRecipe = RecipeParser.parse(
+            title: "Visible Recipe",
+            text: "1 cup rice\n2 cups water"
+        )
+        model.beginRecipe(otherRecipe)
+        model.desiredServings = 3
+        model.fulfillmentMode = .delivery
+        model.startRetailerGuide(.target)
+        model.selectedTab = .pantry
+        model.homePath = [.recipeReady, .preferences]
+
+        let originalActiveSessionID = model.activeShoppingSessionID
+        let originalScope = model.shoppingScope
+        let originalRetailer = model.selectedRetailer
+        let originalStoreIDs = model.selectedStoreIDs
+        let originalRecipe = model.activeRecipe
+        let originalServings = model.desiredServings
+        let originalFulfillment = model.fulfillmentMode
+        let originalItems = model.shoppingItems
+        let originalIndex = model.guidedIndex
+        let originalTab = model.selectedTab
+        let originalPath = model.homePath
+        let originalPersistedState = store.state
+        store.failNextSave = true
+
+        XCTAssertFalse(model.openShoppingSession(sessionID))
+
+        XCTAssertEqual(model.activeShoppingSessionID, originalActiveSessionID)
+        XCTAssertEqual(model.shoppingScope, originalScope)
+        XCTAssertEqual(model.selectedRetailer, originalRetailer)
+        XCTAssertEqual(model.selectedStoreIDs, originalStoreIDs)
+        XCTAssertEqual(model.activeRecipe, originalRecipe)
+        XCTAssertEqual(model.desiredServings, originalServings)
+        XCTAssertEqual(model.fulfillmentMode, originalFulfillment)
+        XCTAssertEqual(model.shoppingItems, originalItems)
+        XCTAssertEqual(model.guidedIndex, originalIndex)
+        XCTAssertEqual(model.selectedTab, originalTab)
+        XCTAssertEqual(model.homePath, originalPath)
+        XCTAssertEqual(store.state, originalPersistedState)
         XCTAssertNotNil(model.persistenceIssue)
     }
 
@@ -1975,9 +2329,9 @@ final class SmartCartTests: XCTestCase {
         model.pauseRetailerShoppingSession()
 
         XCTAssertEqual(model.pendingShoppingSessions.count, 2)
-        model.openShoppingSession(firstSessionID)
+        XCTAssertTrue(model.openShoppingSession(firstSessionID))
         XCTAssertEqual(model.activeRecipe.id, firstRecipeID)
-        XCTAssertEqual(model.homePath, [.guidedShopping])
+        XCTAssertEqual(model.homePath, [.shoppingTrip])
     }
 
     @MainActor

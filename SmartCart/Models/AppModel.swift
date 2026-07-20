@@ -647,6 +647,10 @@ final class AppModel {
         shoppingItems.filter { $0.status.isCompleted }.count
     }
 
+    var retailerVisitedCount: Int {
+        shoppingItems.filter { $0.status == .visited }.count
+    }
+
     var savedForLaterCount: Int {
         shoppingItems.filter { $0.status == .savedToWishlist || $0.status == .added }.count
     }
@@ -708,7 +712,7 @@ final class AppModel {
     }
 
     var retailerSessionProgressText: String {
-        "\(guidedCompletedCount) of \(shoppingItems.count) answered"
+        "\(guidedCompletedCount) of \(shoppingItems.count) reviewed"
     }
 
     // Compatibility aliases keep schema-v3 tests and saved Walmart workflows
@@ -1590,19 +1594,20 @@ final class AppModel {
         shoppingItems[index].purchaseQuantity = max(1, shoppingItems[index].purchaseQuantity + delta)
     }
 
-    func selectAlternative(itemID: UUID, candidateID: UUID) {
+    @discardableResult
+    func selectAlternative(itemID: UUID, candidateID: UUID) -> Bool {
         guard persistenceReady,
             !activeShoppingSessionIsImmutable,
             let itemIndex = shoppingItems.firstIndex(where: { $0.id == itemID }),
             let candidateIndex = shoppingItems[itemIndex].alternatives.firstIndex(where: { $0.id == candidateID })
-        else { return }
+        else { return false }
         let candidate = shoppingItems[itemIndex].alternatives[candidateIndex]
         guard let replacementPackageCount = resolvedReplacementPackageCount(
             for: shoppingItems[itemIndex],
             product: candidate
         ) else {
             showToast("Confirm a compatible package size before replacing this product")
-            return
+            return false
         }
 
         let originalItems = shoppingItems
@@ -1638,6 +1643,7 @@ final class AppModel {
             persistenceIssue = nil
             suppressPersistence = false
             showToast("Product replacement selected")
+            return true
         } catch {
             shoppingItems = originalItems
             shoppingSessions = originalSessions
@@ -1647,6 +1653,7 @@ final class AppModel {
             suppressPersistence = false
             persistenceIssue = error.localizedDescription
             showToast("Product replacement could not be saved")
+            return false
         }
     }
 
@@ -1683,15 +1690,10 @@ final class AppModel {
     }
 
     func advanceGuidedItem() {
-        guard !activeShoppingSessionIsImmutable else { return }
-        guard !shoppingItems.isEmpty else { return }
-        if guidedIndex < shoppingItems.count - 1 {
-            guidedIndex += 1
-        } else {
-            persistCurrentManifest(progress: .completed)
-            track(.guidedShoppingCompleted, properties: ["items": String(shoppingItems.count)])
-            showToast("Guided shopping complete")
-        }
+        guard let sessionID = activeShoppingSessionID,
+              let item = currentGuidedItem,
+              item.status == .waiting else { return }
+        _ = recordRetailerOutcome(.visited, for: item.id, sessionID: sessionID)
     }
 
     func moveGuidedItem(by delta: Int) {
@@ -1705,13 +1707,16 @@ final class AppModel {
     }
 
     func beginGuidedShopping() {
-        continueTo(.guidedShopping)
+        continueTo(.shoppingTrip)
     }
 
     @discardableResult
     func startOrResumeRetailerShoppingSession() -> Bool {
-        guard persistenceReady,
-              !shoppingItems.isEmpty,
+        guard persistenceReady else {
+            showToast(persistenceIssue ?? "SmartCart storage is unavailable")
+            return false
+        }
+        guard !shoppingItems.isEmpty,
               retailerSetupIsComplete else {
             showToast("Complete retailer setup before starting")
             return false
@@ -1775,9 +1780,13 @@ final class AppModel {
 
     @discardableResult
     func pauseRetailerShoppingSession() -> Bool {
-        guard persistenceReady,
-              !shoppingItems.isEmpty,
+        guard persistenceReady else {
+            showToast(persistenceIssue ?? "SmartCart storage is unavailable")
+            return false
+        }
+        guard !shoppingItems.isEmpty,
               !retailerGuideIsComplete,
+              !activeShoppingSessionIsImmutable,
               let sessionID = activeShoppingSessionID else { return false }
         let originalLists = savedLists
         let originalSessions = shoppingSessions
@@ -1809,6 +1818,21 @@ final class AppModel {
         }
     }
 
+    /// Native Safari close and an interactive sheet dismissal are ambiguous:
+    /// neither proves that the current product was handled. Preserve the
+    /// waiting item and pause the durable trip at exactly the same position.
+    @discardableResult
+    func handleAmbiguousRetailerBrowserDismissal(
+        sessionID: UUID,
+        itemID: UUID
+    ) -> Bool {
+        guard activeShoppingSessionID == sessionID,
+              currentGuidedItem?.id == itemID,
+              currentGuidedItem?.status == .waiting,
+              currentSavedManifest?.handoffProgress == .inProgress else { return false }
+        return pauseRetailerShoppingSession()
+    }
+
     func completeRetailerSetup() {
         retailerSetupCompletedIDs.insert(selectedRetailer.rawValue)
         track(.retailerSetupCompleted, properties: ["retailer": selectedRetailer.rawValue])
@@ -1820,10 +1844,23 @@ final class AppModel {
         showToast("\(retailerConfiguration.displayName) setup can be confirmed again")
     }
 
-    func openShoppingSession(_ sessionID: UUID) {
-        guard let session = shoppingSession(id: sessionID), !session.items.isEmpty else { return }
+    @discardableResult
+    func openShoppingSession(_ sessionID: UUID) -> Bool {
+        guard persistenceReady,
+              let session = shoppingSession(id: sessionID),
+              !session.items.isEmpty else { return false }
         let retailer = session.retailerID.flatMap(ShoppingRetailer.init(rawValue:)) ??
             session.items.first.flatMap { ShoppingRetailer(rawValue: $0.product.retailerID) } ?? .walmart
+
+        let originalActiveSessionID = activeShoppingSessionID
+        let originalShoppingScope = shoppingScope
+        let originalRetailer = selectedRetailer
+        let originalStoreIDs = selectedStoreIDs
+        let originalRecipe = activeRecipe
+        let originalDesiredServings = desiredServings
+        let originalFulfillmentMode = fulfillmentMode
+        let originalItems = shoppingItems
+        let originalGuidedIndex = guidedIndex
 
         suppressPersistence = true
         activeShoppingSessionID = sessionID
@@ -1840,11 +1877,28 @@ final class AppModel {
         fulfillmentMode = session.fulfillmentMode ?? fulfillmentMode
         shoppingItems = session.items
         guidedIndex = shoppingItems.firstIndex(where: { !$0.status.isCompleted }) ?? 0
-        suppressPersistence = false
-        persistState()
-
-        selectedTab = .home
-        homePath = [.guidedShopping]
+        do {
+            try stateStore.save(stateSnapshot())
+            persistenceIssue = nil
+            suppressPersistence = false
+            selectedTab = .home
+            homePath = [.shoppingTrip]
+            return true
+        } catch {
+            activeShoppingSessionID = originalActiveSessionID
+            shoppingScope = originalShoppingScope
+            selectedRetailer = originalRetailer
+            selectedStoreIDs = originalStoreIDs
+            activeRecipe = originalRecipe
+            desiredServings = originalDesiredServings
+            fulfillmentMode = originalFulfillmentMode
+            shoppingItems = originalItems
+            guidedIndex = originalGuidedIndex
+            suppressPersistence = false
+            persistenceIssue = error.localizedDescription
+            showToast("Shopping trip could not be opened")
+            return false
+        }
     }
 
     func openSavedList(_ listID: UUID) {
@@ -1859,8 +1913,9 @@ final class AppModel {
             .filter { $0.manifestID == manifest.id }
             .max { $0.startedAt < $1.startedAt }
         if let session = identitySession ?? manifestSession {
-            openShoppingSession(session.id)
-            homePath = [.shoppingList]
+            if openShoppingSession(session.id) {
+                homePath = [.shoppingList]
+            }
             return
         }
         let retailer = ShoppingRetailer(rawValue: manifest.retailerID) ?? .walmart
@@ -1955,19 +2010,24 @@ final class AppModel {
         track(.retailerLinkOpened, properties: properties)
     }
 
+    @discardableResult
     func recordRetailerOutcome(
         _ outcome: GuidedItemStatus,
         for itemID: UUID,
         sessionID requestedSessionID: UUID? = nil
-    ) {
+    ) -> Bool {
+        guard persistenceReady else {
+            showToast(persistenceIssue ?? "SmartCart storage is unavailable")
+            return false
+        }
         let sessionID = requestedSessionID ?? activeShoppingSessionID
-        guard persistenceReady,
-              outcome != .waiting,
+        guard outcome != .waiting,
               let sessionID,
               activeShoppingSessionID == sessionID,
               shoppingSessions.contains(where: { $0.id == sessionID && $0.isReusable }),
-              let itemIndex = shoppingItems.firstIndex(where: { $0.id == itemID })
-        else { return }
+              let itemIndex = shoppingItems.firstIndex(where: { $0.id == itemID }),
+              shoppingItems[itemIndex].status == .waiting
+        else { return false }
 
         let originalItems = shoppingItems
         let originalIndex = guidedIndex
@@ -1995,6 +2055,7 @@ final class AppModel {
                 completedNow = true
                 let properties = [
                     "retailer": retailerID,
+                    "visited": String(retailerVisitedCount),
                     "saved": String(savedForLaterCount),
                     "cart": String(retailerAddedCount),
                     "unavailable": String(retailerUnavailableCount),
@@ -2012,8 +2073,9 @@ final class AppModel {
             persistenceIssue = nil
             suppressPersistence = false
             if completedNow {
-                showToast("\(retailerConfiguration.displayName) shopping session complete")
+                showToast("\(retailerConfiguration.displayName) shopping trip complete")
             }
+            return true
         } catch {
             shoppingItems = originalItems
             guidedIndex = originalIndex
@@ -2023,6 +2085,7 @@ final class AppModel {
             suppressPersistence = false
             persistenceIssue = error.localizedDescription
             showToast("That result could not be saved. Try again.")
+            return false
         }
     }
 

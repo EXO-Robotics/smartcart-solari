@@ -778,6 +778,9 @@ struct AnalyticsEvent: Identifiable, Hashable, Codable {
 
 enum GuidedItemStatus: String, Hashable, Codable {
     case waiting
+    /// The user explicitly advanced after viewing the retailer page. This is
+    /// not evidence that the product was saved, added, ordered, or purchased.
+    case visited
     /// Retained so schema-v3 state remains decodable. New Walmart flows use
     /// the explicit self-reported outcomes below.
     case added
