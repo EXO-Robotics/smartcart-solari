@@ -4,9 +4,6 @@ struct HomeView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    private let primaryImportCardMinimumHeight: CGFloat = 154
-    private let homeActionCardMinimumHeight: CGFloat = 104
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
@@ -110,9 +107,6 @@ struct HomeView: View {
             }
             .frame(
                 maxWidth: .infinity,
-                minHeight: dynamicTypeSize.isAccessibilitySize
-                    ? nil
-                    : primaryImportCardMinimumHeight,
                 maxHeight: .infinity,
                 alignment: .topLeading
             )
@@ -150,7 +144,6 @@ struct HomeView: View {
                     .font(.caption.bold())
                     .foregroundStyle(SmartCartTheme.green)
             }
-            .frame(minHeight: homeActionCardMinimumHeight)
             .smartCartCard(padding: 14)
         }
         .buttonStyle(PressableButtonStyle())
@@ -297,7 +290,6 @@ struct HomeView: View {
                 Image(systemName: "chevron.right")
                     .foregroundStyle(SmartCartTheme.green)
             }
-            .frame(minHeight: homeActionCardMinimumHeight)
             .smartCartCard(padding: 16)
             .shadow(color: SmartCartTheme.softShadow, radius: 12, y: 6)
         }
