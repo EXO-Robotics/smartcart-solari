@@ -3,202 +3,417 @@ import SwiftUI
 
 struct ProductMatchingView: View {
     @Environment(AppModel.self) private var appModel
-
-    private var stages: [(String, String)] {
-        return [
-            ("Reading saved shopping preferences", "slider.horizontal.3"),
-            ("Searching \(appModel.retailerConfiguration.displayName)", "magnifyingglass"),
-            ("Checking package sizes", "shippingbox.fill"),
-            ("Applying dietary and organic rules", "checkmark.shield.fill"),
-            ("Ranking eligible products", "arrow.up.arrow.down"),
-            ("Building the shopping manifest", "checklist")
-        ]
-    }
+    @State private var activeSheet: LegacyMatchingSheet?
+    @State private var isPreparingProducts = false
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 20) {
                 WorkflowHeader(
                     step: 6,
                     total: 6,
-                    eyebrow: "Product matching",
-                    title: appModel.matchProgress == 1 ? "Your products are ready" : "Finding the best matches",
-                    message: "SmartCart applies \(appModel.preferences.summary), then resolves exact \(appModel.retailerConfiguration.displayName) products or clearly labeled searches."
+                    eyebrow: "Product preparation",
+                    title: isPreparingProducts ? "Preparing Products…" : "Products prepared",
+                    message: "SmartCart is preparing the products for this trip. Only matches that need a decision will interrupt you."
                 )
 
-                matchingCard
-                stageList
-
-                if appModel.matchProgress == 1 {
-                    resultsSummary
-                    productPreview
-                }
-
-                InfoBanner(
-                    symbol: "waveform.path.ecg",
-                    title: "Seeded \(appModel.retailerConfiguration.displayName) records",
-                    message: "Exact retailer item IDs and observed non-live prices are stored on-device. Availability is not live, and search fallbacks are never presented as exact products.",
-                    color: SmartCartTheme.amber
-                )
+                preparationCard
             }
             .padding(18)
-            .padding(.bottom, 96)
+            .padding(.bottom, 30)
         }
         .smartCartBackground()
-        .navigationTitle("Match products")
+        .navigationTitle("Prepare products")
         .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .bottom) {
-            BottomActionBar {
-                Button {
-                    appModel.continueTo(.shoppingList)
-                } label: {
-                    HStack {
-                        Text(appModel.matchProgress == 1 ? "Review shopping list" : "Preparing list…")
-                        Spacer()
-                        if appModel.isMatching {
-                            ProgressView()
-                                .tint(SmartCartTheme.onAccent)
-                        } else {
-                            Image(systemName: "arrow.right")
-                        }
-                    }
-                }
-                .buttonStyle(PrimaryButtonStyle())
-                .disabled(appModel.matchProgress < 1)
-            }
-        }
+        .accessibilityIdentifier("legacy-product-preparation")
         .task {
-            await appModel.startMatching()
+            await prepareProducts()
+        }
+        .sheet(item: $activeSheet) { sheet in
+            switch sheet {
+            case .productExceptions:
+                ProductExceptionReviewSheet()
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+                    .interactiveDismissDisabled()
+            }
         }
     }
 
-    private var matchingCard: some View {
-        VStack(spacing: 18) {
-            ZStack {
-                Circle()
-                    .stroke(SmartCartTheme.border, lineWidth: 10)
-                Circle()
-                    .trim(from: 0, to: appModel.matchProgress)
-                    .stroke(
-                        SmartCartTheme.green,
-                        style: StrokeStyle(lineWidth: 10, lineCap: .round)
-                    )
-                    .rotationEffect(.degrees(-90))
-                    .shadow(color: SmartCartTheme.mintGlow, radius: 12)
-                    .animation(.easeInOut(duration: 0.35), value: appModel.matchProgress)
-
-                VStack(spacing: 2) {
-                    Text("\(Int(appModel.matchProgress * 100))%")
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
-                        .foregroundStyle(SmartCartTheme.navy)
-                    Text("matched")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(SmartCartTheme.secondaryInk)
-                }
+    private var preparationCard: some View {
+        HStack(spacing: 14) {
+            if isPreparingProducts {
+                ProgressView()
+                    .controlSize(.large)
+                    .tint(SmartCartTheme.green)
+                    .accessibilityIdentifier("legacy-product-preparation-progress")
+            } else {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.largeTitle)
+                    .foregroundStyle(SmartCartTheme.green)
             }
-            .frame(width: 122, height: 122)
 
-            VStack(spacing: 4) {
-                Text(appModel.matchStage)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(isPreparingProducts ? "Preparing Products…" : "Opening your shopping trip")
                     .font(.headline)
                     .foregroundStyle(SmartCartTheme.navy)
-                    .multilineTextAlignment(.center)
-                Text("\(appModel.ingredientsToBuy.count) ingredients · \(appModel.primaryStore.name)")
+                Text("\(appModel.ingredientsToBuy.count) ingredients · \(appModel.retailerConfiguration.displayName)")
                     .font(.caption)
                     .foregroundStyle(SmartCartTheme.secondaryInk)
             }
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .smartCartCard()
         .smartCartShadow()
     }
 
-    private var stageList: some View {
-        VStack(spacing: 12) {
-            ForEach(Array(stages.enumerated()), id: \.offset) { index, stage in
-                let threshold = Double(index + 1) / Double(stages.count)
-                let complete = appModel.matchProgress >= threshold
+    private func prepareProducts() async {
+        guard !isPreparingProducts else { return }
+        isPreparingProducts = true
+        await appModel.startMatching()
+        guard !Task.isCancelled else {
+            isPreparingProducts = false
+            return
+        }
+        isPreparingProducts = false
 
-                HStack(spacing: 12) {
-                    Image(systemName: complete ? "checkmark.circle.fill" : stage.1)
-                        .font(.subheadline.bold())
-                        .foregroundStyle(complete ? SmartCartTheme.green : SmartCartTheme.secondaryInk)
-                        .frame(width: 32, height: 32)
-                        .background(complete ? SmartCartTheme.herbLight : SmartCartTheme.canvas)
-                        .clipShape(Circle())
+        if appModel.unresolvedMatchingExceptionItems.isEmpty {
+            _ = appModel.continueToShoppingTrip()
+        } else {
+            activeSheet = .productExceptions
+        }
+    }
+}
 
-                    Text(stage.0)
-                        .font(.subheadline.weight(complete ? .semibold : .regular))
-                        .foregroundStyle(complete ? SmartCartTheme.navy : SmartCartTheme.secondaryInk)
+private enum LegacyMatchingSheet: String, Identifiable {
+    case productExceptions
 
-                    Spacer()
+    var id: String { rawValue }
+}
 
-                    if !complete && appModel.isMatching && index == currentStageIndex {
-                        ProgressView()
-                            .controlSize(.small)
+struct ProductExceptionReviewSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(AppModel.self) private var appModel
+    @State private var activeSheet: ProductExceptionSheetDestination?
+
+    private var unresolvedItems: [ShoppingListItem] {
+        appModel.unresolvedMatchingExceptionItems
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    exceptionHeader
+
+                    Button {
+                        activeSheet = .allProducts
+                    } label: {
+                        Label("View All Products", systemImage: "list.bullet.rectangle.portrait.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(SecondaryButtonStyle())
+                    .accessibilityIdentifier("product-exception-view-all-products")
+                    .accessibilityHint("Opens the complete prepared product list without resolving these decisions")
+
+                    LazyVStack(spacing: 14) {
+                        ForEach(unresolvedItems) { item in
+                            ProductExceptionCard(
+                                item: item,
+                                reasons: appModel.matchingExceptionReasons(for: item),
+                                onSearchManually: {
+                                    activeSheet = .manualSearch(
+                                        itemID: item.id,
+                                        url: manualSearchURL(for: item)
+                                    )
+                                },
+                                onDecision: continueIfResolved
+                            )
+                        }
                     }
                 }
+                .padding(18)
+                .padding(.bottom, 28)
+            }
+            .smartCartBackground()
+            .navigationTitle("Review product choices")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        returnToRecipeReady()
+                    } label: {
+                        Label("Recipe Ready", systemImage: "chevron.backward")
+                    }
+                    .accessibilityIdentifier("product-exception-return-recipe-ready")
+                }
+            }
+            .accessibilityIdentifier("product-exception-review")
+        }
+        .sheet(item: $activeSheet, onDismiss: continueIfResolved) { sheet in
+            switch sheet {
+            case .allProducts:
+                AllPreparedProductsSheet()
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+            case .manualSearch(_, let url):
+                RetailerSafariSheet(
+                    url: url,
+                    configuration: appModel.retailerConfiguration
+                )
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
             }
         }
-        .smartCartCard()
     }
 
-    private var currentStageIndex: Int {
-        min(
-            stages.count - 1,
-            max(0, Int(appModel.matchProgress * Double(stages.count)))
-        )
-    }
-
-    private var resultsSummary: some View {
-        HStack(spacing: 10) {
-            resultMetric("\(appModel.matchedItemCount)", "Exact links", "checkmark.seal.fill", SmartCartTheme.green)
-            resultMetric("\(appModel.searchFallbackCount)", "Searches", "magnifyingglass.circle.fill", SmartCartTheme.amber)
-            resultMetric(appModel.estimatedTotal.formatted(.currency(code: "USD")), "Observed", "cart.fill", SmartCartTheme.walmartBlue)
-        }
-    }
-
-    private func resultMetric(_ value: String, _ label: String, _ symbol: String, _ color: Color) -> some View {
-        VStack(spacing: 6) {
-            Image(systemName: symbol)
-                .foregroundStyle(color)
-            Text(value)
-                .font(.subheadline.bold())
+    private var exceptionHeader: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("PRODUCT DECISIONS", systemImage: "exclamationmark.bubble.fill")
+                .smartEyebrow(SmartCartTheme.amber)
+            Text("Review \(unresolvedItems.count) product \(unresolvedItems.count == 1 ? "choice" : "choices")")
+                .font(.system(.title2, design: .rounded, weight: .bold))
                 .foregroundStyle(SmartCartTheme.navy)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-            Text(label)
-                .font(.caption2)
+            Text("Everything else is ready. SmartCart stopped only where a fallback or product selection needs your approval.")
+                .font(.subheadline)
                 .foregroundStyle(SmartCartTheme.secondaryInk)
-                .lineLimit(1)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 13)
-        .background(SmartCartTheme.paper)
-        .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .stroke(SmartCartTheme.border, lineWidth: 1)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .smartCartCard()
+        .smartCartShadow()
+        .accessibilityIdentifier("product-exception-header")
+    }
+
+    private func continueIfResolved() {
+        guard appModel.unresolvedMatchingExceptionItems.isEmpty else { return }
+        if appModel.continueToShoppingTrip() {
+            dismiss()
+        } else {
+            returnToRecipeReady()
         }
     }
 
-    private var productPreview: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "A few top matches")
-            HStack(spacing: 10) {
-                ForEach(appModel.shoppingItems.prefix(4)) { item in
-                    VStack(spacing: 6) {
-                        ProductIcon(product: item.product, size: 54)
-                        Text(item.ingredient.name)
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(SmartCartTheme.navy)
-                            .lineLimit(1)
+    private func manualSearchURL(for item: ShoppingListItem) -> URL {
+        let query = item.ingredient.name.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        switch appModel.retailerConfiguration.retailer {
+        case .walmart:
+            var components = URLComponents(string: "https://www.walmart.com/search")
+            components?.queryItems = [URLQueryItem(name: "q", value: query)]
+            return components?.url ?? appModel.retailerURL()
+        case .target:
+            let terms = query
+                .components(separatedBy: CharacterSet.alphanumerics.inverted)
+                .filter { !$0.isEmpty }
+                .map { $0.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? $0 }
+                .joined(separator: "%2B")
+            var components = URLComponents()
+            components.scheme = "https"
+            components.host = "www.target.com"
+            components.percentEncodedPath = "/s/\(terms)"
+            return components.url ?? appModel.retailerURL()
+        case .kroger:
+            var components = URLComponents(string: "https://www.kroger.com/search")
+            components?.queryItems = [URLQueryItem(name: "query", value: query)]
+            return components?.url ?? appModel.retailerURL()
+        }
+    }
+
+    private func returnToRecipeReady() {
+        dismiss()
+        guard appModel.homePath.last != .recipeReady else { return }
+        appModel.selectedTab = .home
+        appModel.homePath = [.recipeReady]
+    }
+}
+
+private enum ProductExceptionSheetDestination: Identifiable {
+    case allProducts
+    case manualSearch(itemID: UUID, url: URL)
+
+    var id: String {
+        switch self {
+        case .allProducts:
+            "all-products"
+        case .manualSearch(let itemID, _):
+            "manual-search-\(itemID.uuidString)"
+        }
+    }
+}
+
+private struct ProductExceptionCard: View {
+    @Environment(AppModel.self) private var appModel
+
+    let item: ShoppingListItem
+    let reasons: [String]
+    let onSearchManually: () -> Void
+    let onDecision: () -> Void
+
+    private var safeAlternatives: [RetailerProductRecord] {
+        ReplacementOptionPolicy.resolvedCandidates(from: item.alternatives) { candidate in
+            appModel.resolvedReplacementPackageCount(for: item, product: candidate)
+        }
+    }
+
+    private var acceptTitle: String {
+        item.product.isExactProductLink ? "Accept selection" : "Accept fallback"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 12) {
+                ProductIcon(product: item.product, size: 58)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(item.ingredient.name)
+                        .font(.headline)
+                        .foregroundStyle(SmartCartTheme.navy)
+                    Text("\(item.product.brand) \(item.product.name)")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(SmartCartTheme.navy)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(item.product.isExactProductLink ? "Selected retailer product" : "Retailer search fallback")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(item.product.isExactProductLink ? SmartCartTheme.green : SmartCartTheme.amber)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            if !reasons.isEmpty {
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("Why this needs review")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
+                    ForEach(Array(reasons.enumerated()), id: \.offset) { _, reason in
+                        Label(reason, systemImage: "info.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(SmartCartTheme.secondaryInk)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
+                }
+                .padding(11)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(SmartCartTheme.amber.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+            }
+
+            Button {
+                guard appModel.acceptMatchingException(itemID: item.id) else { return }
+                onDecision()
+            } label: {
+                Label(acceptTitle, systemImage: "checkmark.circle.fill")
                     .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .accessibilityIdentifier("product-exception-accept-\(item.id.uuidString)")
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 9) {
+                    alternativeMenu
+                    manualSearchButton
+                    skipButton
+                }
+                VStack(spacing: 9) {
+                    alternativeMenu
+                    manualSearchButton
+                    skipButton
                 }
             }
         }
-        .smartCartCard()
+        .padding(14)
+        .background(SmartCartTheme.paper)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(SmartCartTheme.amber.opacity(0.55), lineWidth: 1)
+        }
+        .accessibilityIdentifier("product-exception-item-\(item.id.uuidString)")
+    }
+
+    @ViewBuilder
+    private var alternativeMenu: some View {
+        if !safeAlternatives.isEmpty {
+            Menu {
+                ForEach(safeAlternatives) { candidate in
+                    Button(alternativeLabel(candidate)) {
+                        appModel.selectAlternative(itemID: item.id, candidateID: candidate.id)
+                        onDecision()
+                    }
+                }
+            } label: {
+                Label("Safe alternative", systemImage: "arrow.triangle.2.circlepath")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(SecondaryButtonStyle())
+            .accessibilityIdentifier("product-exception-alternative-\(item.id.uuidString)")
+        }
+    }
+
+    private var manualSearchButton: some View {
+        Button(action: onSearchManually) {
+            Label("Search manually", systemImage: "safari.fill")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(SecondaryButtonStyle())
+        .accessibilityIdentifier("product-exception-search-\(item.id.uuidString)")
+    }
+
+    private var skipButton: some View {
+        Button {
+            guard appModel.skipMatchingException(itemID: item.id) else { return }
+            onDecision()
+        } label: {
+            Label("Skip", systemImage: "forward.fill")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(SecondaryButtonStyle())
+        .accessibilityIdentifier("product-exception-skip-\(item.id.uuidString)")
+    }
+
+    private func alternativeLabel(_ candidate: RetailerProductRecord) -> String {
+        let price = candidate.hasObservedPrice
+            ? candidate.price.formatted(.currency(code: "USD"))
+            : "price unavailable"
+        return "\(candidate.brand) \(candidate.name) · \(price)"
+    }
+}
+
+private struct AllPreparedProductsSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(AppModel.self) private var appModel
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 12) {
+                    SectionHeader(
+                        title: "All prepared products",
+                        subtitle: "\(appModel.shoppingItems.count) products · this list does not block your exception review"
+                    )
+
+                    ForEach(appModel.shoppingItems) { item in
+                        ShoppingProductRow(
+                            item: item,
+                            isReadOnly: appModel.activeShoppingSessionIsImmutable
+                        )
+                    }
+                }
+                .padding(18)
+                .padding(.bottom, 24)
+            }
+            .smartCartBackground()
+            .navigationTitle("All Products")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                        .accessibilityIdentifier("all-prepared-products-done")
+                }
+            }
+            .accessibilityIdentifier("all-prepared-products")
+        }
     }
 }
 
@@ -531,6 +746,7 @@ private struct ShoppingProductRow: View {
                             .clipShape(Capsule())
                     }
                     .smartCartMinimumHitTarget()
+                    .accessibilityIdentifier("shopping-product-change-\(item.id.uuidString)")
                 }
 
                 VStack(spacing: 3) {
@@ -564,6 +780,7 @@ private struct ShoppingProductRow: View {
                     lineWidth: 1
                 )
         }
+        .accessibilityIdentifier("shopping-product-row-\(item.id.uuidString)")
     }
 
     private func alternativeLabel(_ candidate: RetailerProductRecord) -> String {
@@ -587,6 +804,7 @@ private struct ShoppingProductRow: View {
         .smartCartMinimumHitTarget()
         .accessibilityLabel(symbol == "plus" ? "Increase planned quantity" : "Decrease planned quantity")
         .accessibilityValue("\(item.purchaseQuantity) packages")
+        .accessibilityIdentifier("shopping-product-quantity-\(delta > 0 ? "increase" : "decrease")-\(item.id.uuidString)")
     }
 }
 

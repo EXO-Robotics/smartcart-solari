@@ -12,6 +12,7 @@ struct RecipeReadyView: View {
     @State private var continueAfterRetailerSetup = false
     @State private var tripSettingsConfirmed = false
     @State private var issueCursor = 0
+    @State private var isPreparingProducts = false
     @AccessibilityFocusState private var focusedIssueID: UUID?
 
     var body: some View {
@@ -57,25 +58,41 @@ struct RecipeReadyView: View {
                             .accessibilityIdentifier("recipe-ready-disabled-reason")
                     }
 
-                    Button(action: startShopping) {
-                        ViewThatFits(in: .horizontal) {
+                    Button {
+                        Task { await startShopping() }
+                    } label: {
+                        if isPreparingProducts {
                             HStack {
-                                Text("Start Shopping · \(appModel.recipeReadyExpectedPurchaseCount) items")
+                                Text("Preparing Products…")
                                 Spacer()
-                                Image(systemName: "arrow.right")
+                                ProgressView()
+                                    .tint(SmartCartTheme.onAccent)
+                                    .accessibilityIdentifier("recipe-ready-preparing-products")
                             }
-                            HStack {
-                                Text("Start Shopping")
-                                Spacer()
-                                Text(appModel.recipeReadyExpectedPurchaseCount, format: .number)
-                                Image(systemName: "arrow.right")
+                        } else {
+                            ViewThatFits(in: .horizontal) {
+                                HStack {
+                                    Text("Start Shopping · \(appModel.recipeReadyExpectedPurchaseCount) items")
+                                    Spacer()
+                                    Image(systemName: "arrow.right")
+                                }
+                                HStack {
+                                    Text("Start Shopping")
+                                    Spacer()
+                                    Text(appModel.recipeReadyExpectedPurchaseCount, format: .number)
+                                    Image(systemName: "arrow.right")
+                                }
                             }
                         }
                     }
                     .buttonStyle(PrimaryButtonStyle())
-                    .disabled(!appModel.recipeReadyCanStartShopping)
+                    .disabled(!appModel.recipeReadyCanStartShopping || isPreparingProducts)
                     .accessibilityIdentifier("recipe-ready-start-shopping")
-                    .accessibilityLabel("Start Shopping, \(appModel.recipeReadyExpectedPurchaseCount) items")
+                    .accessibilityLabel(
+                        isPreparingProducts
+                            ? "Preparing Products"
+                            : "Start Shopping, \(appModel.recipeReadyExpectedPurchaseCount) items"
+                    )
                     .accessibilityHint(appModel.recipeReadyDisabledExplanation ?? "Matches products and opens the shopping trip")
                 }
             }
@@ -92,6 +109,11 @@ struct RecipeReadyView: View {
                 }
                     .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
+            case .productExceptions:
+                ProductExceptionReviewSheet()
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+                    .interactiveDismissDisabled()
             }
         }
     }
@@ -503,10 +525,10 @@ struct RecipeReadyView: View {
         }
     }
 
-    private func startShopping() {
-        guard appModel.recipeReadyCanStartShopping else { return }
+    private func startShopping() async {
+        guard appModel.recipeReadyCanStartShopping, !isPreparingProducts else { return }
         if appModel.retailerSetupIsComplete {
-            appModel.beginShoppingFromRecipeReady()
+            await prepareProducts()
         } else {
             continueAfterRetailerSetup = true
             tripSettingsConfirmed = false
@@ -520,7 +542,23 @@ struct RecipeReadyView: View {
         tripSettingsConfirmed = false
         guard shouldContinue else { return }
         guard appModel.retailerSetupIsComplete else { return }
-        appModel.beginShoppingFromRecipeReady()
+        Task { await prepareProducts() }
+    }
+
+    private func prepareProducts() async {
+        guard !isPreparingProducts else { return }
+        isPreparingProducts = true
+        defer { isPreparingProducts = false }
+
+        guard appModel.beginShoppingFromRecipeReady() else { return }
+        await appModel.startMatching()
+        guard !Task.isCancelled else { return }
+
+        if appModel.unresolvedMatchingExceptionItems.isEmpty {
+            _ = appModel.continueToShoppingTrip()
+        } else {
+            activeSheet = .productExceptions
+        }
     }
 }
 
@@ -538,6 +576,7 @@ struct ServingAdjustmentView: View {
 private enum RecipeReadySheet: String, Identifiable {
     case pantry
     case shoppingSettings
+    case productExceptions
 
     var id: String { rawValue }
 }

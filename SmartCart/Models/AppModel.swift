@@ -605,6 +605,40 @@ final class AppModel {
         shoppingItems.filter { $0.product.linkKind == .searchResults }.count
     }
 
+    /// Pre-trip matches that require an explicit keep-or-skip decision.
+    /// A review applies only to the exact matching input fingerprint, so a
+    /// quantity edit safely reopens the decision.
+    var unresolvedMatchingExceptionItems: [ShoppingListItem] {
+        guard activeShoppingSessionID == nil else { return [] }
+        return shoppingItems.filter { item in
+            guard item.status == .waiting,
+                  !matchingExceptionReasons(for: item).isEmpty else { return false }
+            guard let input = item.matchingInputFingerprint else { return true }
+            return item.reviewedMatchingFingerprint != input
+        }
+    }
+
+    func matchingExceptionReasons(for item: ShoppingListItem) -> [String] {
+        var reasons: [String] = []
+        if item.product.linkKind == .searchResults {
+            reasons.append("Retailer search fallback requires review")
+        }
+        if item.product.confidence != .high {
+            reasons.append("Product match is not high confidence")
+        }
+        if item.product.availability == .outOfStock {
+            reasons.append("Product is out of stock")
+        }
+        if PackageMath.resolvedPackageCount(
+            product: item.product,
+            requestedQuantity: requestedQuantityForShoppingItem(item),
+            requestedUnit: item.ingredient.unit
+        ) == nil {
+            reasons.append("Package quantity cannot be resolved safely")
+        }
+        return reasons
+    }
+
     var pricedItemCount: Int {
         shoppingItems.filter(\.product.hasObservedPrice).count
     }
@@ -992,7 +1026,9 @@ final class AppModel {
     }
 
     func beginMealPrepShopping() {
-        beginShoppingFromRecipeReady()
+        // The compatibility dashboard now rejoins the shared confirmation
+        // surface instead of trying to launch the retired matching route.
+        openMealPrepDashboard()
     }
 
     private func mealPrepIngredient(_ line: CombinedIngredientLine) -> Ingredient? {
@@ -1355,12 +1391,13 @@ final class AppModel {
         invalidateShoppingPlan()
     }
 
-    func beginShoppingFromRecipeReady() {
+    @discardableResult
+    func beginShoppingFromRecipeReady() -> Bool {
         guard recipeReadyCanStartShopping else {
             if let explanation = recipeReadyDisabledExplanation {
                 showToast(explanation)
             }
-            return
+            return false
         }
         if !isMealPrepShopping {
             synchronizeActiveRecipeRecord()
@@ -1375,9 +1412,7 @@ final class AppModel {
         prepareRetailerSafariWorkflow()
         invalidateShoppingPlan()
         selectedTab = .home
-        if homePath.last != .matching {
-            homePath.append(.matching)
-        }
+        return true
     }
 
     private func synchronizeActiveRecipeRecord() {
@@ -1388,9 +1423,15 @@ final class AppModel {
         }
     }
 
-    private func invalidateShoppingPlan() {
-        shoppingItems = []
-        activeShoppingSessionID = nil
+    private func invalidateShoppingPlan(preservingMatches: Bool = true) {
+        // Waiting pre-trip matches are a cache. Keep them long enough for the
+        // next matching pass to reconcile unchanged inputs selectively. Once
+        // a retailer session exists, its snapshot is historical trip state and
+        // must never become that cache; detach and rebuild an editable plan.
+        if !preservingMatches || activeShoppingSessionID != nil {
+            shoppingItems = []
+            activeShoppingSessionID = nil
+        }
         matchProgress = 0
         matchStage = "Ready to match"
         isMatching = false
@@ -1417,7 +1458,7 @@ final class AppModel {
     func selectStore(_ store: RetailerStore) {
         guard store.retailerID == selectedRetailer.rawValue else { return }
         retainOnlyStore(store.id, for: selectedRetailer)
-        invalidateShoppingPlan()
+        invalidateShoppingPlan(preservingMatches: false)
     }
 
     func startRetailerGuide(_ retailer: ShoppingRetailer) {
@@ -1433,7 +1474,7 @@ final class AppModel {
             retainOnlyStore(store.id, for: retailer)
         }
         if retailerChanged || shoppingItems.contains(where: { $0.product.retailerID != retailer.rawValue }) {
-            invalidateShoppingPlan()
+            invalidateShoppingPlan(preservingMatches: false)
         }
     }
 
@@ -1466,35 +1507,20 @@ final class AppModel {
 
     func startMatching(force: Bool = false) async {
         prepareRetailerSafariWorkflow()
-
-        if !shoppingItems.isEmpty && !force {
-            matchProgress = 1
-            matchStage = "\(shoppingItems.count) products ready"
-            return
+        let mayReusePreTripItems = activeShoppingSessionID == nil && !force
+        let reusableItems = mayReusePreTripItems ? shoppingItems : []
+        if activeShoppingSessionID != nil {
+            // Preserve the session-owned snapshot in `shoppingSessions`; the
+            // newly matched list is an independent editable fork.
+            shoppingItems = []
+            activeShoppingSessionID = nil
         }
-
         isMatching = true
         matchProgress = 0
-        shoppingItems = []
+        matchStage = "Matching products"
+        matchProgress = 0.1
 
-        let stages = [
-            ("Reading saved shopping preferences", 0.12),
-            ("Searching \(primaryStore.name)", 0.28),
-            ("Checking package sizes", 0.38),
-            ("Applying dietary and organic rules", 0.55),
-            ("Ranking eligible products", 0.74),
-            ("Building a retailer handoff manifest", 0.94)
-        ]
-
-        for (stage, progress) in stages {
-            matchStage = stage
-            withAnimation(.easeInOut(duration: 0.28)) {
-                matchProgress = progress
-            }
-            try? await Task.sleep(for: .milliseconds(330))
-        }
-
-        shoppingItems = await buildShoppingItems()
+        shoppingItems = await buildShoppingItems(reusing: reusableItems)
         withAnimation(.easeOut(duration: 0.35)) {
             matchProgress = 1
         }
@@ -1509,6 +1535,50 @@ final class AppModel {
                 "retailer": selectedRetailer.rawValue
             ]
         )
+    }
+
+    @discardableResult
+    func acceptMatchingException(itemID: UUID) -> Bool {
+        guard activeShoppingSessionID == nil,
+              let index = shoppingItems.firstIndex(where: { $0.id == itemID }),
+              shoppingItems[index].status == .waiting,
+              !matchingExceptionReasons(for: shoppingItems[index]).isEmpty else { return false }
+        ensureMatchingFingerprints(at: index)
+        shoppingItems[index].reviewedMatchingFingerprint = shoppingItems[index].matchingInputFingerprint
+        return true
+    }
+
+    @discardableResult
+    func skipMatchingException(itemID: UUID) -> Bool {
+        guard activeShoppingSessionID == nil,
+              let index = shoppingItems.firstIndex(where: { $0.id == itemID }),
+              shoppingItems[index].status == .waiting,
+              !matchingExceptionReasons(for: shoppingItems[index]).isEmpty else { return false }
+        ensureMatchingFingerprints(at: index)
+        shoppingItems[index].reviewedMatchingFingerprint = shoppingItems[index].matchingInputFingerprint
+        shoppingItems[index].status = .skipped
+        return true
+    }
+
+    @discardableResult
+    func continueToShoppingTrip() -> Bool {
+        guard !shoppingItems.isEmpty else {
+            showToast("Match at least one shopping item before continuing")
+            return false
+        }
+        guard unresolvedMatchingExceptionItems.isEmpty else {
+            showToast("Review or skip every matching exception before continuing")
+            return false
+        }
+        guard shoppingItems.contains(where: { $0.status == .waiting }) else {
+            showToast("Keep at least one shopping item before continuing")
+            return false
+        }
+        selectedTab = .home
+        if homePath.last != .shoppingTrip {
+            homePath.append(.shoppingTrip)
+        }
+        return true
     }
 
     func updatePurchaseQuantity(for itemID: UUID, delta: Int) {
@@ -1548,6 +1618,10 @@ final class AppModel {
         shoppingItems[itemIndex].alternatives.append(previous)
         shoppingItems[itemIndex].product = replacement
         shoppingItems[itemIndex].purchaseQuantity = replacementPackageCount
+        ensureMatchingFingerprints(at: itemIndex)
+        shoppingItems[itemIndex].reviewedMatchingFingerprint = matchingExceptionReasons(
+            for: shoppingItems[itemIndex]
+        ).isEmpty ? shoppingItems[itemIndex].matchingInputFingerprint : nil
         if let activeShoppingSessionID {
             synchronizeCurrentShoppingSessionItems(sessionID: activeShoppingSessionID)
         }
@@ -3195,22 +3269,63 @@ final class AppModel {
         savedLists.insert(SavedShoppingList(manifest: manifest), at: 0)
     }
 
-    private func buildShoppingItems() async -> [ShoppingListItem] {
-        let multiplier = isMealPrepShopping ? 1 : Double(desiredServings) / Double(max(1, activeRecipe.servings))
+    private func buildShoppingItems(reusing reusableItems: [ShoppingListItem]) async -> [ShoppingListItem] {
+        let mealPrepShopping = isMealPrepShopping
+        let multiplier = mealPrepShopping ? 1 : Double(desiredServings) / Double(max(1, activeRecipe.servings))
         let method: FulfillmentMethod = fulfillmentMode == .pickup ? .pickup : .delivery
         let store = primaryStore
+        let retailer = selectedRetailer
+        let matchingPreferences = preferences
+        let productPreferences = preferredProductIDsByIngredient
+        let ingredients = ingredientsToBuy
+        var reusableByIngredientID: [UUID: ShoppingListItem] = [:]
+        for item in reusableItems where item.status == .waiting {
+            reusableByIngredientID[item.ingredient.id] = reusableByIngredientID[item.ingredient.id] ?? item
+        }
         var results: [ShoppingListItem] = []
 
-        for ingredient in ingredientsToBuy {
-            let requestedQuantity = isMealPrepShopping
+        for ingredient in ingredients {
+            let requestedQuantity = mealPrepShopping
                 ? ingredient.quantity
                 : PantryMatchingService.quantityToBuy(
                     for: ingredient,
                     requiredQuantity: ingredient.quantity * multiplier
                 )
+            let contextFingerprint = matchingContextFingerprint(
+                for: ingredient,
+                retailerID: retailer.rawValue,
+                store: store,
+                fulfillmentMethod: method,
+                preferences: matchingPreferences
+            )
+            let inputFingerprint = matchingInputFingerprint(
+                contextFingerprint: contextFingerprint,
+                requestedQuantity: requestedQuantity,
+                pantryDecision: ingredient.pantryDecision,
+                pantryState: ingredient.pantryState
+            )
+            if var reused = reusableByIngredientID[ingredient.id],
+               reused.matchingContextFingerprint == contextFingerprint {
+                reused.ingredient = ingredient
+                reused.requestedQuantity = Ingredient.quantityText(
+                    requestedQuantity,
+                    unit: ingredient.unit
+                )
+                reused.requestedAmount = requestedQuantity
+                reused.purchaseQuantity = PackageMath.packageCount(
+                    product: reused.product,
+                    requestedQuantity: requestedQuantity,
+                    requestedUnit: ingredient.unit
+                )
+                reused.storeID = store.id
+                reused.matchingContextFingerprint = contextFingerprint
+                reused.matchingInputFingerprint = inputFingerprint
+                results.append(reused)
+                continue
+            }
             let request = RetailerProductSearchRequest(
                 ingredient: ingredient,
-                retailerID: selectedRetailer.rawValue,
+                retailerID: retailer.rawValue,
                 requestedQuantity: requestedQuantity,
                 requestedUnit: ingredient.unit,
                 storeID: store.retailerStoreID,
@@ -3218,16 +3333,16 @@ final class AppModel {
             )
             var ranked = await retailerEngine.rankedProducts(
                 for: request,
-                preferences: preferences
+                preferences: matchingPreferences
             )
             let retailerPreferenceKey = productPreferenceKey(
                 for: ingredient.name,
-                retailerID: selectedRetailer.rawValue
+                retailerID: retailer.rawValue
             )
-            let legacyWalmartPreference = selectedRetailer == .walmart
-                ? preferredProductIDsByIngredient[preferenceKey(for: ingredient.name)]
+            let legacyWalmartPreference = retailer == .walmart
+                ? productPreferences[preferenceKey(for: ingredient.name)]
                 : nil
-            if let preferredID = preferredProductIDsByIngredient[retailerPreferenceKey] ?? legacyWalmartPreference,
+            if let preferredID = productPreferences[retailerPreferenceKey] ?? legacyWalmartPreference,
                let preferredIndex = ranked.firstIndex(where: { $0.product.retailerProductID == preferredID }) {
                 let preferred = ranked.remove(at: preferredIndex)
                 ranked.insert(preferred, at: 0)
@@ -3252,11 +3367,99 @@ final class AppModel {
                     alternatives: Array(ranked.dropFirst().map(\.product)),
                     storeID: store.id,
                     matchScore: selected.score,
-                    selectionReasons: selected.reasons
+                    selectionReasons: selected.reasons,
+                    matchingContextFingerprint: contextFingerprint,
+                    matchingInputFingerprint: inputFingerprint
                 )
             )
         }
         return results
+    }
+
+    private func ensureMatchingFingerprints(at index: Int) {
+        guard shoppingItems.indices.contains(index) else { return }
+        guard shoppingItems[index].matchingContextFingerprint == nil ||
+                shoppingItems[index].matchingInputFingerprint == nil else { return }
+        let requestedQuantity = requestedQuantityForShoppingItem(shoppingItems[index])
+        let method: FulfillmentMethod = fulfillmentMode == .pickup ? .pickup : .delivery
+        let context = shoppingItems[index].matchingContextFingerprint ?? matchingContextFingerprint(
+                for: shoppingItems[index].ingredient,
+                retailerID: selectedRetailer.rawValue,
+                store: primaryStore,
+                fulfillmentMethod: method,
+                preferences: preferences
+            )
+        shoppingItems[index].matchingContextFingerprint = context
+        shoppingItems[index].matchingInputFingerprint = matchingInputFingerprint(
+            contextFingerprint: context,
+            requestedQuantity: requestedQuantity,
+            pantryDecision: shoppingItems[index].ingredient.pantryDecision,
+            pantryState: shoppingItems[index].ingredient.pantryState
+        )
+    }
+
+    private func matchingContextFingerprint(
+        for ingredient: Ingredient,
+        retailerID: String,
+        store: RetailerStore,
+        fulfillmentMethod: FulfillmentMethod,
+        preferences: ShoppingPreferences
+    ) -> String {
+        stableMatchingFingerprint(
+            version: "matching-context-v1",
+            fields: [
+                ingredient.id.uuidString.lowercased(),
+                ingredient.name,
+                ingredient.unit,
+                ingredient.preparation,
+                ingredient.includeInList ? "included" : "excluded",
+                ingredient.category.rawValue,
+                ingredient.brandNote ?? "",
+                ingredient.preferenceNote,
+                retailerID,
+                store.id.uuidString.lowercased(),
+                store.retailerStoreID,
+                fulfillmentMethod.rawValue,
+                preferences.organicPolicy.rawValue,
+                preferences.budgetPriority.rawValue,
+                preferences.dietaryRestrictions.map(\.rawValue).sorted().joined(separator: "\u{1f}"),
+                preferences.storeBrandPreference.rawValue,
+                preferences.preferredBrands.map { $0.lowercased() }.sorted().joined(separator: "\u{1f}")
+            ]
+        )
+    }
+
+    private func matchingInputFingerprint(
+        contextFingerprint: String,
+        requestedQuantity: Double,
+        pantryDecision: PantryDecision?,
+        pantryState: PantryState
+    ) -> String {
+        let quantityBits = requestedQuantity == 0 ? "0" : String(requestedQuantity.bitPattern)
+        return stableMatchingFingerprint(
+            version: "matching-input-v1",
+            fields: [
+                contextFingerprint,
+                quantityBits,
+                pantryDecision?.rawValue ?? "unreviewed",
+                pantryState.rawValue
+            ]
+        )
+    }
+
+    private func stableMatchingFingerprint(version: String, fields: [String]) -> String {
+        // Length-prefix every field so arbitrary ingredient text cannot create
+        // delimiter collisions. FNV-1a is deterministic across launches,
+        // unlike Swift's intentionally randomized Hasher.
+        let canonical = ([version] + fields).map { value in
+            "\(value.utf8.count):\(value)"
+        }.joined()
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in canonical.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+        return version + ":" + String(format: "%016llx", hash)
     }
 
     private func currentMealPrepSources(for ingredientID: UUID) -> [CombinedIngredientSource] {

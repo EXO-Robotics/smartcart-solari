@@ -801,6 +801,13 @@ struct ShoppingListItem: Identifiable, Hashable, Codable {
     var status: GuidedItemStatus
     var matchScore: Double
     var selectionReasons: [String]
+    /// Stable identity for every non-quantity input that can affect matching.
+    /// Optional so schema-v6 and older persisted items remain decodable.
+    var matchingContextFingerprint: String?
+    /// `matchingContextFingerprint` plus the requested quantity.
+    var matchingInputFingerprint: String?
+    /// The exact matching input the user explicitly reviewed, when needed.
+    var reviewedMatchingFingerprint: String?
 
     init(
         id: UUID = UUID(),
@@ -813,7 +820,10 @@ struct ShoppingListItem: Identifiable, Hashable, Codable {
         storeID: UUID,
         status: GuidedItemStatus = .waiting,
         matchScore: Double = 0,
-        selectionReasons: [String] = []
+        selectionReasons: [String] = [],
+        matchingContextFingerprint: String? = nil,
+        matchingInputFingerprint: String? = nil,
+        reviewedMatchingFingerprint: String? = nil
     ) {
         self.id = id
         self.ingredient = ingredient
@@ -826,6 +836,9 @@ struct ShoppingListItem: Identifiable, Hashable, Codable {
         self.status = status
         self.matchScore = matchScore
         self.selectionReasons = selectionReasons
+        self.matchingContextFingerprint = matchingContextFingerprint
+        self.matchingInputFingerprint = matchingInputFingerprint
+        self.reviewedMatchingFingerprint = reviewedMatchingFingerprint
     }
 
     var lineTotal: Double {

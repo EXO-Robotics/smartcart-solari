@@ -3077,6 +3077,412 @@ final class SmartCartTests: XCTestCase {
         XCTAssertEqual(model.recipeReadyExpectedPurchaseCount, 1)
     }
 
+    func testMatchingPipelineContainsNoArtificialSleep() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("SmartCart/Models/AppModel.swift"),
+            encoding: .utf8
+        )
+        let start = try XCTUnwrap(source.range(of: "    func startMatching(")?.lowerBound)
+        let end = try XCTUnwrap(
+            source.range(
+                of: "    func updatePurchaseQuantity",
+                range: start..<source.endIndex
+            )?.lowerBound
+        )
+
+        XCTAssertFalse(source[start..<end].contains("Task.sleep"))
+    }
+
+    @MainActor
+    func testAllHighConfidenceExactMatchesHaveNoExceptions() async throws {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        model.beginRecipe(
+            phase2Recipe(ingredients: [
+                Ingredient(name: "Penne pasta", quantity: 16, unit: "oz"),
+                Ingredient(name: "Olive oil", quantity: 2, unit: "tbsp")
+            ])
+        )
+
+        await model.startMatching()
+
+        XCTAssertEqual(model.shoppingItems.count, 2)
+        XCTAssertTrue(model.shoppingItems.allSatisfy {
+            $0.product.isExactProductLink && $0.product.confidence == .high
+        })
+        XCTAssertTrue(model.unresolvedMatchingExceptionItems.isEmpty)
+        XCTAssertTrue(model.continueToShoppingTrip())
+        XCTAssertEqual(model.homePath.last, .shoppingTrip)
+    }
+
+    @MainActor
+    func testFallbackAndLowConfidenceMatchesBlockOnlyUntilEachIsAccepted() async throws {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        model.beginRecipe(
+            phase2Recipe(ingredients: [
+                Ingredient(name: "Dragon fruit jam", quantity: 1, unit: "jar"),
+                Ingredient(name: "Garlic", quantity: 2, unit: "count")
+            ])
+        )
+        model.startRetailerGuide(.target)
+
+        await model.startMatching()
+
+        let fallback = try model.unresolvedMatchingExceptionItems
+            .first(where: { $0.product.linkKind == .searchResults })
+            .firstUnwrapped()
+        let lowConfidence = try model.unresolvedMatchingExceptionItems
+            .first(where: {
+                $0.product.isExactProductLink && $0.product.confidence != .high
+            })
+            .firstUnwrapped()
+        XCTAssertEqual(model.unresolvedMatchingExceptionItems.count, 2)
+        XCTAssertFalse(model.matchingExceptionReasons(for: fallback).isEmpty)
+        XCTAssertFalse(model.matchingExceptionReasons(for: lowConfidence).isEmpty)
+        XCTAssertFalse(model.continueToShoppingTrip())
+
+        XCTAssertTrue(model.acceptMatchingException(itemID: fallback.id))
+        XCTAssertEqual(model.unresolvedMatchingExceptionItems.map(\.id), [lowConfidence.id])
+        XCTAssertFalse(model.continueToShoppingTrip())
+
+        XCTAssertTrue(model.acceptMatchingException(itemID: lowConfidence.id))
+        XCTAssertTrue(model.unresolvedMatchingExceptionItems.isEmpty)
+        for itemID in [fallback.id, lowConfidence.id] {
+            let reviewed = try model.shoppingItems
+                .first(where: { $0.id == itemID })
+                .firstUnwrapped()
+            XCTAssertEqual(reviewed.reviewedMatchingFingerprint, reviewed.matchingInputFingerprint)
+        }
+        XCTAssertTrue(model.continueToShoppingTrip())
+        XCTAssertEqual(model.homePath.last, .shoppingTrip)
+    }
+
+    @MainActor
+    func testManualProductSelectionSurvivesUnrelatedIngredientEdit() async throws {
+        let pasta = Ingredient(name: "Penne pasta", quantity: 8, unit: "oz")
+        let oil = Ingredient(name: "Olive oil", quantity: 2, unit: "tbsp")
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        model.beginRecipe(phase2Recipe(ingredients: [pasta, oil]))
+        await model.startMatching()
+
+        let originalPasta = try model.shoppingItems
+            .first(where: { $0.id == pasta.id })
+            .firstUnwrapped()
+        let originalOil = try model.shoppingItems
+            .first(where: { $0.id == oil.id })
+            .firstUnwrapped()
+        let alternative = try originalPasta.alternatives
+            .first(where: { $0.isExactProductLink && $0.confidence == .high })
+            .firstUnwrapped()
+        model.selectAlternative(itemID: pasta.id, candidateID: alternative.id)
+        let manuallySelected = try model.shoppingItems
+            .first(where: { $0.id == pasta.id })
+            .firstUnwrapped()
+        XCTAssertEqual(manuallySelected.product.id, alternative.id)
+
+        // Remove the durable preference so this assertion exercises plan reuse,
+        // rather than the catalog independently choosing the same saved product.
+        model.preferredProductIDsByIngredient = [:]
+        var editedRecipe = model.activeRecipe
+        let oilIndex = try XCTUnwrap(editedRecipe.ingredients.firstIndex(where: { $0.id == oil.id }))
+        editedRecipe.ingredients[oilIndex].name = "Heavy cream"
+        model.activeRecipe = editedRecipe
+
+        await model.startMatching()
+
+        let preservedPasta = try model.shoppingItems
+            .first(where: { $0.id == pasta.id })
+            .firstUnwrapped()
+        let rebuiltOtherItem = try model.shoppingItems
+            .first(where: { $0.id == oil.id })
+            .firstUnwrapped()
+        XCTAssertEqual(preservedPasta.product.id, manuallySelected.product.id)
+        XCTAssertEqual(
+            preservedPasta.matchingInputFingerprint,
+            manuallySelected.matchingInputFingerprint
+        )
+        XCTAssertNotEqual(rebuiltOtherItem.ingredient.name, oil.name)
+        XCTAssertNotEqual(
+            rebuiltOtherItem.matchingInputFingerprint,
+            originalOil.matchingInputFingerprint
+        )
+    }
+
+    @MainActor
+    func testQuantityOnlyChangePreservesProductAndRecalculatesPackages() async throws {
+        let pasta = Ingredient(name: "Penne pasta", quantity: 8, unit: "oz")
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        model.beginRecipe(phase2Recipe(ingredients: [pasta]))
+        await model.startMatching()
+
+        let original = try model.shoppingItems.firstUnwrapped()
+        let alternative = try original.alternatives
+            .first(where: { $0.isExactProductLink && $0.confidence == .high })
+            .firstUnwrapped()
+        model.selectAlternative(itemID: pasta.id, candidateID: alternative.id)
+        let selected = try model.shoppingItems.firstUnwrapped()
+        model.preferredProductIDsByIngredient = [:]
+
+        var editedRecipe = model.activeRecipe
+        editedRecipe.ingredients[0].quantity = 40
+        model.activeRecipe = editedRecipe
+        await model.startMatching()
+
+        let updated = try model.shoppingItems.firstUnwrapped()
+        XCTAssertEqual(updated.product.id, selected.product.id)
+        XCTAssertEqual(updated.requestedAmount ?? -1, 40, accuracy: 0.001)
+        XCTAssertEqual(
+            updated.purchaseQuantity,
+            PackageMath.packageCount(
+                product: selected.product,
+                requestedQuantity: 40,
+                requestedUnit: "oz"
+            )
+        )
+        XCTAssertNotEqual(updated.purchaseQuantity, selected.purchaseQuantity)
+        XCTAssertNotEqual(updated.matchingInputFingerprint, selected.matchingInputFingerprint)
+    }
+
+    @MainActor
+    func testRetailerAndStoreChangesRebuildMatchingContext() async throws {
+        let pasta = Ingredient(name: "Penne pasta", quantity: 16, unit: "oz")
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        model.beginRecipe(phase2Recipe(ingredients: [pasta]))
+        await model.startMatching()
+        let original = try model.shoppingItems.firstUnwrapped()
+        XCTAssertNotNil(original.matchingContextFingerprint)
+
+        let otherWalmartStore = try model.stores
+            .first(where: {
+                $0.retailerID == ShoppingRetailer.walmart.rawValue &&
+                    $0.id != model.primaryStore.id
+            })
+            .firstUnwrapped()
+        model.selectStore(otherWalmartStore)
+        await model.startMatching()
+        let storeRebuilt = try model.shoppingItems.firstUnwrapped()
+
+        XCTAssertEqual(storeRebuilt.product.storeID, otherWalmartStore.retailerStoreID)
+        XCTAssertNotEqual(
+            storeRebuilt.matchingContextFingerprint,
+            original.matchingContextFingerprint
+        )
+
+        model.startRetailerGuide(.target)
+        await model.startMatching()
+        let retailerRebuilt = try model.shoppingItems.firstUnwrapped()
+
+        XCTAssertEqual(retailerRebuilt.product.retailerID, ShoppingRetailer.target.rawValue)
+        XCTAssertNotEqual(
+            retailerRebuilt.matchingContextFingerprint,
+            storeRebuilt.matchingContextFingerprint
+        )
+    }
+
+    @MainActor
+    func testOrganicAndDietaryChangesRebuildAffectedMatches() async throws {
+        let organicModel = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        var initialPreferences = organicModel.preferences
+        initialPreferences.organicPolicy = .noPreference
+        organicModel.preferences = initialPreferences
+        organicModel.beginRecipe(
+            phase2Recipe(ingredients: [
+                Ingredient(name: "Olive oil", quantity: 2, unit: "tbsp")
+            ])
+        )
+        await organicModel.startMatching()
+        let conventional = try organicModel.shoppingItems.firstUnwrapped()
+        XCTAssertFalse(conventional.product.organicStatus.isOrganic)
+
+        var organicOnly = organicModel.preferences
+        organicOnly.organicPolicy = .only
+        organicModel.preferences = organicOnly
+        await organicModel.startMatching()
+        let organic = try organicModel.shoppingItems.firstUnwrapped()
+
+        XCTAssertTrue(organic.product.organicStatus.isOrganic)
+        XCTAssertNotEqual(organic.product.id, conventional.product.id)
+        XCTAssertNotEqual(
+            organic.matchingContextFingerprint,
+            conventional.matchingContextFingerprint
+        )
+
+        let dietaryModel = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        var unrestricted = dietaryModel.preferences
+        unrestricted.organicPolicy = .noPreference
+        dietaryModel.preferences = unrestricted
+        dietaryModel.beginRecipe(
+            phase2Recipe(ingredients: [
+                Ingredient(name: "Penne pasta", quantity: 16, unit: "oz")
+            ])
+        )
+        await dietaryModel.startMatching()
+        let standard = try dietaryModel.shoppingItems.firstUnwrapped()
+        XCTAssertFalse(standard.product.dietaryAttributes.contains(.glutenFree))
+
+        var glutenFree = dietaryModel.preferences
+        glutenFree.dietaryRestrictions = [.glutenFree]
+        dietaryModel.preferences = glutenFree
+        await dietaryModel.startMatching()
+        let restricted = try dietaryModel.shoppingItems.firstUnwrapped()
+
+        XCTAssertTrue(restricted.product.dietaryAttributes.contains(.glutenFree))
+        XCTAssertNotEqual(restricted.product.id, standard.product.id)
+        XCTAssertNotEqual(
+            restricted.matchingContextFingerprint,
+            standard.matchingContextFingerprint
+        )
+    }
+
+    @MainActor
+    func testAddingAndRemovingIngredientsPreservesUnchangedSelection() async throws {
+        let pasta = Ingredient(name: "Penne pasta", quantity: 16, unit: "oz")
+        let oil = Ingredient(name: "Olive oil", quantity: 2, unit: "tbsp")
+        let cream = Ingredient(name: "Heavy cream", quantity: 1, unit: "cup")
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        model.beginRecipe(phase2Recipe(ingredients: [pasta, oil]))
+        await model.startMatching()
+
+        let originalOil = try model.shoppingItems
+            .first(where: { $0.id == oil.id })
+            .firstUnwrapped()
+        let alternative = try originalOil.alternatives
+            .first(where: { $0.isExactProductLink && $0.confidence == .high })
+            .firstUnwrapped()
+        model.selectAlternative(itemID: oil.id, candidateID: alternative.id)
+        let selectedOil = try model.shoppingItems
+            .first(where: { $0.id == oil.id })
+            .firstUnwrapped()
+        model.preferredProductIDsByIngredient = [:]
+
+        var addedRecipe = model.activeRecipe
+        addedRecipe.ingredients.append(cream)
+        model.activeRecipe = addedRecipe
+        await model.startMatching()
+
+        XCTAssertEqual(
+            Set(model.shoppingItems.map(\.id)),
+            Set([pasta.id, oil.id, cream.id])
+        )
+        XCTAssertEqual(
+            model.shoppingItems.first(where: { $0.id == oil.id })?.product.id,
+            selectedOil.product.id
+        )
+
+        var removedRecipe = model.activeRecipe
+        removedRecipe.ingredients.removeAll { $0.id == pasta.id }
+        model.activeRecipe = removedRecipe
+        await model.startMatching()
+
+        XCTAssertEqual(Set(model.shoppingItems.map(\.id)), Set([oil.id, cream.id]))
+        XCTAssertEqual(
+            model.shoppingItems.first(where: { $0.id == oil.id })?.product.id,
+            selectedOil.product.id
+        )
+    }
+
+    @MainActor
+    func testActiveAndCompletedSessionItemsAreNeverReusedOrMutated() async throws {
+        let activePasta = Ingredient(name: "Penne pasta", quantity: 16, unit: "oz")
+        let activeOil = Ingredient(name: "Olive oil", quantity: 2, unit: "tbsp")
+        let activeModel = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        activeModel.beginRecipe(phase2Recipe(ingredients: [activePasta, activeOil]))
+        await activeModel.startMatching()
+        activeModel.completeRetailerSetup()
+        XCTAssertTrue(activeModel.startOrResumeRetailerShoppingSession())
+        let activeSessionID = try XCTUnwrap(activeModel.activeShoppingSessionID)
+        activeModel.recordRetailerOutcome(
+            .unavailable,
+            for: activePasta.id,
+            sessionID: activeSessionID
+        )
+        XCTAssertFalse(activeModel.retailerGuideIsComplete)
+        let activeSnapshot = try XCTUnwrap(activeModel.shoppingSession(id: activeSessionID))
+
+        var editedActiveRecipe = activeModel.activeRecipe
+        editedActiveRecipe.ingredients[0].quantity = 40
+        activeModel.activeRecipe = editedActiveRecipe
+        await activeModel.startMatching()
+
+        XCTAssertNil(activeModel.activeShoppingSessionID)
+        XCTAssertEqual(activeModel.shoppingSession(id: activeSessionID), activeSnapshot)
+        XCTAssertTrue(activeModel.shoppingItems.allSatisfy { $0.status == .waiting })
+
+        let completedPasta = Ingredient(name: "Penne pasta", quantity: 16, unit: "oz")
+        let completedModel = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        completedModel.beginRecipe(phase2Recipe(ingredients: [completedPasta]))
+        await completedModel.startMatching()
+        completedModel.completeRetailerSetup()
+        XCTAssertTrue(completedModel.startOrResumeRetailerShoppingSession())
+        let completedSessionID = try XCTUnwrap(completedModel.activeShoppingSessionID)
+        completedModel.recordRetailerOutcome(
+            .savedToWishlist,
+            for: completedPasta.id,
+            sessionID: completedSessionID
+        )
+        XCTAssertTrue(completedModel.retailerGuideIsComplete)
+        let completedSnapshot = try XCTUnwrap(
+            completedModel.shoppingSession(id: completedSessionID)
+        )
+
+        var editedCompletedRecipe = completedModel.activeRecipe
+        editedCompletedRecipe.ingredients[0].quantity = 40
+        completedModel.activeRecipe = editedCompletedRecipe
+        await completedModel.startMatching()
+
+        XCTAssertNil(completedModel.activeShoppingSessionID)
+        XCTAssertEqual(
+            completedModel.shoppingSession(id: completedSessionID),
+            completedSnapshot
+        )
+        XCTAssertTrue(completedModel.shoppingItems.allSatisfy { $0.status == .waiting })
+    }
+
+    private func phase2Recipe(ingredients: [Ingredient]) -> Recipe {
+        Recipe(
+            title: "Phase 2 Matching",
+            source: .text,
+            sourceDetail: "Tests",
+            heroSymbol: "cart.fill",
+            servings: 2,
+            prepMinutes: 0,
+            cookMinutes: 0,
+            ingredients: ingredients
+        )
+    }
+
     private func searchRequest(
         for name: String,
         quantity: Double = 1,
