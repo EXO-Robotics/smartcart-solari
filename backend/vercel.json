@@ -1,0 +1,25 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "functions": {
+    "api/index.js": {
+      "maxDuration": 35
+    }
+  },
+  "routes": [
+    {
+      "src": "/health",
+      "methods": ["GET", "HEAD"],
+      "dest": "/api/index.js?route=health"
+    },
+    {
+      "src": "/v1/barcodes/(?<gtin>\\d{8,14})",
+      "methods": ["GET"],
+      "dest": "/api/index.js?route=barcode&gtin=$gtin"
+    },
+    {
+      "src": "/.*",
+      "status": 404
+    }
+  ]
+}

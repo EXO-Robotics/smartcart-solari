@@ -46,6 +46,9 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '429': { $ref: '#/components/responses/Error' }
         '500': { $ref: '#/components/responses/Error' }
+        '502': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+        '504': { $ref: '#/components/responses/Error' }
   /health:
     get:
       tags: [Health]
@@ -570,7 +573,7 @@ components:
                 name: { type: string, minLength: 1 }
                 brand: { type: [string, 'null'] }
                 quantity: { type: [string, 'null'] }
-                imageURL: { type: 'null' }
+                imageURL: { type: [string, 'null'], format: uri }
             source: { type: string, const: open_food_facts }
             verified: { type: boolean, const: false }
         - type: object

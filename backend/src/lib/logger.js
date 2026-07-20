@@ -24,7 +24,12 @@ export function redact(value, seen = new WeakSet()) {
   );
 }
 
-export function createLogger({ level = 'info', sink = console.log, now = () => new Date() } = {}) {
+export function createLogger({
+  level = 'info',
+  sink = console.log,
+  now = () => new Date(),
+  dataMode = 'local-demo'
+} = {}) {
   const priorities = { debug: 10, info: 20, warn: 30, error: 40, silent: 100 };
   const threshold = priorities[level] ?? priorities.info;
 
@@ -36,7 +41,7 @@ export function createLogger({ level = 'info', sink = console.log, now = () => n
         level: logLevel,
         message,
         ...redact(context),
-        dataMode: 'local-demo'
+        dataMode
       })
     );
   }

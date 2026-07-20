@@ -33,6 +33,19 @@ npm test
 
 Tests use only `node:test`, saved HTML, injected fetch doubles, and an ephemeral loopback HTTP port. No live website, provider, database, or package download is required.
 
+## Beta barcode deployment surface
+
+The Vercel project rooted at this `backend` directory deliberately deploys only one small
+function. `vercel.json` exposes `GET`/`HEAD /health` and `GET /v1/barcodes/{gtin}` and returns
+404 for every other route and method. The function reuses `BarcodeCatalogService`; it does not
+import or deploy the mock account, session, OAuth, manifest, analytics, recipe-page, affiliate,
+or Instacart application routes.
+
+This is a beta product-identity lookup, not a deployment of the complete local/demo backend.
+Its positive and negative caches and provider limiter are process-local and may be cold after a
+new function instance starts. Do not configure a Vercel project for this directory as if the
+other local/demo routes were production services.
+
 ## API overview
 
 Local/demo JSON responses include `meta.dataMode: "local-demo"`, and every JSON response carries `X-SmartCart-Data-Mode: local-demo`. The barcode response instead carries explicit `source` and `verified` fields because it may contain crowdsourced provider identity.
@@ -88,7 +101,7 @@ curl -s http://127.0.0.1:8787/v1/demo/account \
 - `TtlCache` provides lazy TTL expiry for sessions, OAuth state, and affiliate results.
 - `FixedWindowRateLimiter` is process-local and keyed by remote address plus path. It is a development safeguard, not distributed abuse protection.
 - Barcode lookup validates and canonicalizes GTIN-8, UPC-A, EAN-13, and GTIN-14, checks the in-memory positive/negative cache, and then calls Open Food Facts at most 12 times per minute per process. Concurrent requests for the same GTIN are coalesced. Raw GTIN path values are redacted from structured request logs.
-- Open Food Facts results are crowdsourced and are returned as editable, `verified: false` product identity only. SmartCart does not return or infer price, availability, retailer identity, nutrition, pantry amount, or purchase state from this endpoint.
+- Open Food Facts results are crowdsourced and are returned as editable, `verified: false` product identity only. Name, optional brand, display-only package quantity, validated optional HTTPS image URL, and source are the entire product response. SmartCart does not return or infer price, availability, retailer identity, nutrition, pantry amount, or purchase state from this endpoint.
 - Structured JSON logging redacts authorization, cookies, tokens, secrets, passwords, email-like fields, OAuth codes, and PKCE values. Request bodies are never logged.
 - Analytics rejects property keys that resemble direct identifiers or credentials, limits event/property counts and sizes, and retains at most 10,000 events in memory.
 - Affiliate targets must be HTTPS and cannot contain embedded URL credentials.
@@ -115,7 +128,7 @@ Typed failures distinguish invalid or non-HTTPS URLs, invalid/unsafe redirects, 
 
 ## Barcode identity lookup
 
-`GET /v1/barcodes/{gtin}` is intentionally credential-free so the iOS scanner can use it before any retailer interaction. Configure a reachable backend URL in the app with `SMARTCART_BARCODE_BACKEND_URL`; recipe or commerce backend URLs remain fallbacks for local testing. The service sends the configured identifying User-Agent, normalizes provider fields, caches positive matches for one day and misses for 15 minutes, and returns either `resolved` or `not_found`. Provider failures are not cached, allowing the app to fall back immediately to one-time manual naming.
+`GET /v1/barcodes/{gtin}` is intentionally credential-free so the iOS scanner can use it before any retailer interaction. Configure a reachable backend URL in the app with `SMARTCART_BARCODE_BACKEND_URL`; recipe or commerce backend URLs remain fallbacks for local testing. The service sends the configured identifying User-Agent, normalizes provider fields, caches positive matches for one day and true 404 misses for 15 minutes, and returns either `resolved` or `not_found`. Provider rate limits, timeouts, unavailability, upstream errors, and malformed responses use truthful 429/504/503/502 statuses and are never cached as misses.
 
 ## Instacart shopping-list handoff
 

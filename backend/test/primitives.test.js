@@ -30,3 +30,16 @@ test('structured logger redacts credentials and direct identifiers', () => {
   assert.deepEqual(redact({ password: 'never-log-me' }), { password: '[REDACTED]' });
   assert.deepEqual(redact({ apiKey: 'instacart-secret' }), { apiKey: '[REDACTED]' });
 });
+
+test('structured logger supports the public crowdsourced catalog data mode', () => {
+  const lines = [];
+  const logger = createLogger({
+    sink: (line) => lines.push(line),
+    now: () => new Date(0),
+    dataMode: 'crowdsourced-catalog'
+  });
+
+  logger.info('http_request', { path: '/v1/barcodes/:gtin' });
+
+  assert.equal(JSON.parse(lines[0]).dataMode, 'crowdsourced-catalog');
+});

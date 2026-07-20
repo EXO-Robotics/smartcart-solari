@@ -4,7 +4,11 @@ import { assertString, HttpError, localDemoMeta, readJson, requestId, sendJson }
 import { createLogger } from './lib/logger.js';
 import { FixedWindowRateLimiter } from './lib/rate-limiter.js';
 import { AffiliateLinkService, LocalDemoAffiliateProvider } from './services/affiliate-links.js';
-import { BarcodeCatalogService, OpenFoodFactsBarcodeProvider } from './services/barcode-catalog.js';
+import {
+  BarcodeCatalogService,
+  BarcodeProviderError,
+  OpenFoodFactsBarcodeProvider
+} from './services/barcode-catalog.js';
 import { LocalDemoStore } from './services/local-demo-store.js';
 import { LocalDemoOAuthPkce } from './services/oauth-pkce.js';
 import { RecipePageExtractor } from './services/recipe-page-extractor.js';
@@ -321,9 +325,17 @@ export function createApp(options = {}) {
 
       throw new HttpError(404, 'route_not_found', 'Route does not exist');
     } catch (error) {
-      const status = error instanceof HttpError ? error.status : 500;
-      const code = error instanceof HttpError ? error.code : 'internal_error';
-      const message = error instanceof HttpError ? error.message : 'Unexpected local/demo server error';
+      const status = error instanceof HttpError
+        ? error.status
+        : error instanceof BarcodeProviderError
+          ? error.httpStatus
+          : 500;
+      const code = error instanceof HttpError || error instanceof BarcodeProviderError
+        ? error.code
+        : 'internal_error';
+      const message = error instanceof HttpError || error instanceof BarcodeProviderError
+        ? error.message
+        : 'Unexpected local/demo server error';
       if (status >= 500) logger.error('http_error', { requestId: id, error });
       sendJson(response, status, {
         error: {
