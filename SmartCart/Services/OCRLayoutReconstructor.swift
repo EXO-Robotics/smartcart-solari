@@ -384,9 +384,14 @@ struct OCRLayoutReconstructor {
             .sorted(by: Self.physicalReadingOrder)
             .map(\.renderedText)
 
+        let hasIngredientEvidence = columns.contains { column in
+            column.contains(where: Self.isIngredientStart)
+        }
+
         for (columnIndex, column) in columns.enumerated() {
             let physicalLines = makePhysicalLines(from: column, columnIndex: columnIndex)
             let logicalLines = mergeBulletContinuations(in: physicalLines)
+            let columnHasIngredientEvidence = column.contains(where: Self.isIngredientStart)
             var reachedInstructions = false
 
             for line in logicalLines {
@@ -397,6 +402,13 @@ struct OCRLayoutReconstructor {
                     continue
                 } else if Self.isInstructionLine(line.text) {
                     reachedInstructions = true
+                    ignoredInstructionLines.append(rendered)
+                } else if ingredientHeading != nil,
+                          hasIngredientEvidence,
+                          !columnHasIngredientEvidence {
+                    // A disconnected, unanchored component beneath an explicit
+                    // Ingredients heading is commonly neighboring card copy or
+                    // a title from another OCR region. Keep it out of ingredients.
                     ignoredInstructionLines.append(rendered)
                 } else {
                     ingredientLines.append(rendered)
@@ -423,7 +435,7 @@ struct OCRLayoutReconstructor {
 
     private func detectColumns(in observations: [PreparedObservation]) -> ColumnDetection {
         let candidates = observations.filter { $0.box.width <= 0.58 }
-        guard candidates.count >= 4 else {
+        guard candidates.count >= 2 else {
             return ColumnDetection(
                 centers: [Self.median(observations.map { $0.box.minX })],
                 confidence: candidates.count < 2 ? 0.62 : 0.82,
@@ -447,9 +459,7 @@ struct OCRLayoutReconstructor {
             }
         }
 
-        let minimumBandSize = max(2, Int(floor(Double(candidates.count) * 0.18)))
-        var substantive = bands.filter { $0.count >= minimumBandSize }
-        if substantive.count <= 1 {
+        if bands.count <= 1 {
             let largestGap = zip(sorted, sorted.dropFirst())
                 .map { $1.box.minX - $0.box.minX }
                 .max() ?? 0
@@ -461,6 +471,10 @@ struct OCRLayoutReconstructor {
             )
         }
 
+        // Sparse OCR regions still carry meaningful geometry. Dropping a
+        // singleton band forces distant card regions into the nearest column,
+        // which can then contaminate an otherwise valid ingredient line.
+        var substantive = bands
         substantive.sort {
             Self.median($0.map { $0.box.minX }) < Self.median($1.map { $0.box.minX })
         }
@@ -506,9 +520,10 @@ struct OCRLayoutReconstructor {
         var rows: [[PreparedObservation]] = []
 
         for observation in sorted {
-            if let index = rows.indices.last,
-               Self.belongsOnSameRow(observation, as: rows[index]),
-               !Self.crossesIngredientStart(observation, row: rows[index]) {
+            if let index = rows.indices.reversed().first(where: {
+                Self.belongsOnSameRow(observation, as: rows[$0])
+                    && !Self.crossesIngredientStart(observation, row: rows[$0])
+            }) {
                 rows[index].append(observation)
             } else {
                 rows.append([observation])
@@ -572,7 +587,7 @@ struct OCRLayoutReconstructor {
                line.bulletMarker == nil,
                !Self.hasLeadingQuantity(line.text),
                line.columnIndex == previous.columnIndex,
-               line.minX >= previous.minX + max(0.018, previous.averageHeight * 0.45),
+               Self.isSafeContinuation(line, of: previous),
                line.maxY <= previous.minY + max(0.008, previous.averageHeight * 0.30),
                previous.minY - line.maxY <= max(0.065, previous.averageHeight * 2.2),
                !Self.isInstructionLine(line.text) {
@@ -623,6 +638,9 @@ struct OCRLayoutReconstructor {
                         maxX: line.maxX,
                         maxY: line.maxY,
                         averageHeight: line.averageHeight,
+                        anchorMinX: line.minX,
+                        anchorMaxX: line.maxX,
+                        anchorMinY: line.minY,
                         confidence: line.confidence,
                         alternateCandidates: line.alternateCandidates
                     )
@@ -639,22 +657,76 @@ struct OCRLayoutReconstructor {
     ) -> Bool {
         let rowMidY = row.map { $0.box.midY }.reduce(0, +) / Double(row.count)
         let rowHeight = row.map { $0.box.height }.reduce(0, +) / Double(row.count)
-        return abs(observation.box.midY - rowMidY) <= max(0.012, min(rowHeight, observation.box.height) * 0.55)
+        guard abs(observation.box.midY - rowMidY)
+                <= max(0.012, min(rowHeight, observation.box.height) * 0.55)
+        else { return false }
+
+        let nearestHorizontalGap = row.map { fragment in
+            horizontalGap(observation.box, fragment.box)
+        }.min() ?? .infinity
+        let maximumFragmentGap = min(
+            0.055,
+            max(0.020, min(rowHeight, observation.box.height) * 1.5)
+        )
+        return nearestHorizontalGap <= maximumFragmentGap
     }
 
     private static func crossesIngredientStart(
         _ observation: PreparedObservation,
         row: [PreparedObservation]
     ) -> Bool {
-        let rowHasBullet = row.contains { $0.bulletMarker != nil || extractBullet(from: $0.text, explicit: nil).marker != nil }
+        let rowHasBullet = row.contains {
+            $0.bulletMarker != nil || extractBullet(from: $0.text, explicit: nil).marker != nil
+        }
         let observationHasBullet = observation.bulletMarker != nil
             || extractBullet(from: observation.text, explicit: nil).marker != nil
-        if rowHasBullet && observationHasBullet { return true }
+        // Encountering a bullet always starts a new item, including when OCR
+        // happened to return a left-side unbulleted fragment first.
+        if observationHasBullet { return true }
 
-        let rowMinX = row.map { $0.box.minX }.min() ?? observation.box.minX
-        return rowHasBullet
-            && !observationHasBullet
-            && observation.box.minX - rowMinX > 0.18
+        guard rowHasBullet else { return false }
+        let bulletStart = row
+            .filter {
+                $0.bulletMarker != nil
+                    || extractBullet(from: $0.text, explicit: nil).marker != nil
+            }
+            .map { $0.box.minX }
+            .min() ?? observation.box.minX
+        return observation.box.minX < bulletStart - 0.004
+            || observation.box.minX - bulletStart > 0.18
+    }
+
+    private static func horizontalGap(
+        _ lhs: OCRNormalizedBoundingBox,
+        _ rhs: OCRNormalizedBoundingBox
+    ) -> Double {
+        max(0, max(lhs.minX - rhs.maxX, rhs.minX - lhs.maxX))
+    }
+
+    private static func isSafeContinuation(
+        _ line: PhysicalLine,
+        of previous: LogicalLine
+    ) -> Bool {
+        let indent = line.minX - previous.anchorMinX
+        let minimumIndent = max(0.018, previous.averageHeight * 0.45)
+        let maximumIndent = min(0.12, max(0.08, previous.averageHeight * 3.0))
+        let maximumAnchorDrop = max(0.08, previous.averageHeight * 3.0)
+        guard indent >= minimumIndent,
+              indent <= maximumIndent,
+              previous.anchorMinY - line.maxY <= maximumAnchorDrop
+        else { return false }
+
+        let overlap = min(previous.anchorMaxX, line.maxX)
+            - max(previous.anchorMinX, line.minX)
+        if overlap > max(0.004, min(line.maxX - line.minX, previous.anchorMaxX - previous.anchorMinX) * 0.06) {
+            return true
+        }
+
+        let gap = max(
+            0,
+            max(line.minX - previous.anchorMaxX, previous.anchorMinX - line.maxX)
+        )
+        return gap <= max(0.010, previous.averageHeight * 0.35)
     }
 
     private static func extractBullet(from text: String, explicit: String?) -> (marker: String?, text: String) {
@@ -749,6 +821,12 @@ struct OCRLayoutReconstructor {
         ) != nil
     }
 
+    private static func isIngredientStart(_ observation: PreparedObservation) -> Bool {
+        observation.bulletMarker != nil
+            || extractBullet(from: observation.text, explicit: nil).marker != nil
+            || hasLeadingQuantity(observation.text)
+    }
+
     private static func unique(_ values: [String]) -> [String] {
         var seen = Set<String>()
         return values.filter { seen.insert($0).inserted }
@@ -793,18 +871,31 @@ struct OCRLayoutReconstructor {
         let normalized = headingKey(text)
         if isInstructionHeading(normalized) { return true }
 
-        var actionText = normalized
-        if let match = actionText.range(of: #"^\d{1,2}[.)]\s*"#, options: .regularExpression) {
-            actionText.removeSubrange(match)
-        }
         let actions = [
             "preheat", "heat", "mix", "stir", "whisk", "combine", "add", "bake",
             "cook", "simmer", "boil", "roast", "grill", "fold", "beat", "place",
             "transfer", "spread", "pour", "arrange", "season", "chill", "refrigerate",
-            "freeze", "serve", "let", "set", "line", "grease", "melt"
+            "freeze", "serve", "let", "set", "line", "grease", "melt", "mash"
         ]
-        return actions.contains { action in
-            actionText == action || actionText.hasPrefix(action + " ")
+
+        // Imperative verbs are meaningful only at a sentence boundary. This
+        // catches embedded card copy such as "EASY AS 1-2-3! Mash... Stir..."
+        // without banning ingredient lines merely because they contain a verb.
+        let clauses = normalized.components(
+            separatedBy: CharacterSet(charactersIn: ".!?;:\n")
+        )
+        return clauses.contains { clause in
+            var actionText = collapseWhitespace(clause)
+            if let match = actionText.range(
+                of: #"^\d{1,2}(?:[.)]|\s+-)?\s*"#,
+                options: .regularExpression
+            ) {
+                actionText.removeSubrange(match)
+            }
+            if isInstructionHeading(actionText) { return true }
+            return actions.contains { action in
+                actionText == action || actionText.hasPrefix(action + " ")
+            }
         }
     }
 
@@ -896,6 +987,9 @@ private struct LogicalLine {
     var maxX: Double
     var maxY: Double
     var averageHeight: Double
+    var anchorMinX: Double
+    var anchorMaxX: Double
+    var anchorMinY: Double
     var confidence: Double
     var alternateCandidates: [OCRTextAlternative]
 

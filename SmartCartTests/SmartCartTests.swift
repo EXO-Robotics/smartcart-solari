@@ -922,6 +922,264 @@ final class SmartCartTests: XCTestCase {
         XCTAssertEqual(salt.confidence, .review)
     }
 
+    func testOCRPhysicalRowsRequireHorizontalContinuity() {
+        let observations = [
+            OCRTextObservation(
+                observationID: "left",
+                text: "Sourdough Discard",
+                boundingBox: .init(x: 0.06, y: 0.72, width: 0.22, height: 0.04),
+                confidence: 0.96
+            ),
+            OCRTextObservation(
+                observationID: "right",
+                text: "Vanilla",
+                boundingBox: .init(x: 0.68, y: 0.72, width: 0.12, height: 0.04),
+                confidence: 0.96
+            )
+        ]
+
+        let reconstruction = OCRLayoutReconstructor.reconstruct(observations)
+
+        XCTAssertFalse(reconstruction.ingredientSourceLines.contains { line in
+            line.sourceObservationIDs.contains("left")
+                && line.sourceObservationIDs.contains("right")
+        })
+        XCTAssertFalse(reconstruction.ingredientLines.contains {
+            $0.localizedCaseInsensitiveContains("sourdough discard vanilla")
+        })
+    }
+
+    func testOCRRightHandBulletAlwaysStartsItsOwnPhysicalLine() throws {
+        let observations = [
+            OCRTextObservation(
+                observationID: "left-copy",
+                text: "Neighboring card copy",
+                boundingBox: .init(x: 0.10, y: 0.70, width: 0.28, height: 0.04),
+                confidence: 0.95
+            ),
+            OCRTextObservation(
+                observationID: "right-bullet",
+                text: "• 1 cup brown sugar",
+                boundingBox: .init(x: 0.42, y: 0.70, width: 0.30, height: 0.04),
+                confidence: 0.97,
+                bulletMarker: "•"
+            )
+        ]
+
+        let reconstruction = OCRLayoutReconstructor.reconstruct(observations)
+        let bulletLine = try reconstruction.ingredientSourceLines.first(where: {
+            $0.sourceObservationIDs.contains("right-bullet")
+        }).firstUnwrapped()
+
+        XCTAssertEqual(bulletLine.sourceObservationIDs, ["right-bullet"])
+        XCTAssertFalse(bulletLine.text.localizedCaseInsensitiveContains("neighboring"))
+    }
+
+    func testOCRContinuationRequiresAnchorOverlap() throws {
+        let observations = [
+            OCRTextObservation(
+                observationID: "salt",
+                text: "• Flaky sea salt",
+                boundingBox: .init(x: 0.08, y: 0.78, width: 0.25, height: 0.04),
+                confidence: 0.96,
+                bulletMarker: "•"
+            ),
+            OCRTextObservation(
+                observationID: "far-right",
+                text: "for topping",
+                boundingBox: .init(x: 0.52, y: 0.73, width: 0.18, height: 0.04),
+                confidence: 0.94
+            )
+        ]
+
+        let reconstruction = OCRLayoutReconstructor.reconstruct(observations)
+        let saltLine = try reconstruction.ingredientSourceLines.first(where: {
+            $0.sourceObservationIDs.contains("salt")
+        }).firstUnwrapped()
+
+        XCTAssertEqual(saltLine.sourceObservationIDs, ["salt"])
+        XCTAssertFalse(saltLine.continuationAttached)
+    }
+
+    func testOCRContinuationCannotChainIndefinitelyAwayFromBulletAnchor() throws {
+        let observations = [
+            OCRTextObservation(
+                observationID: "bullet",
+                text: "• 1 cup semi-sweet chocolate",
+                boundingBox: .init(x: 0.08, y: 0.80, width: 0.34, height: 0.04),
+                confidence: 0.97,
+                bulletMarker: "•"
+            ),
+            OCRTextObservation(
+                observationID: "wrap-1",
+                text: "chips plus more",
+                boundingBox: .init(x: 0.11, y: 0.75, width: 0.24, height: 0.04),
+                confidence: 0.95
+            ),
+            OCRTextObservation(
+                observationID: "wrap-2",
+                text: "for serving",
+                boundingBox: .init(x: 0.12, y: 0.70, width: 0.20, height: 0.04),
+                confidence: 0.94
+            ),
+            OCRTextObservation(
+                observationID: "drifted-copy",
+                text: "banana bread is delicious",
+                boundingBox: .init(x: 0.13, y: 0.63, width: 0.30, height: 0.04),
+                confidence: 0.94
+            )
+        ]
+
+        let reconstruction = OCRLayoutReconstructor.reconstruct(observations)
+        let bulletLine = try reconstruction.ingredientSourceLines.first(where: {
+            $0.sourceObservationIDs.contains("bullet")
+        }).firstUnwrapped()
+
+        XCTAssertTrue(bulletLine.sourceObservationIDs.contains("wrap-1"))
+        XCTAssertTrue(bulletLine.sourceObservationIDs.contains("wrap-2"))
+        XCTAssertFalse(bulletLine.sourceObservationIDs.contains("drifted-copy"))
+        XCTAssertFalse(bulletLine.text.localizedCaseInsensitiveContains("banana bread"))
+    }
+
+    func testParserRemovesEmbeddedInstructionSuffixAndRetainsReviewEvidence() throws {
+        let original = "1 tsp flaky sea salt, EASY AS 1-2-3! Mash banana. Stir in peanut butter."
+        let sourceLine = OCRSourceLine(
+            text: original,
+            pageIndex: 0,
+            boundingBox: .init(x: 0.08, y: 0.72, width: 0.84, height: 0.05),
+            confidence: 0.91,
+            alternateCandidates: [],
+            sourceObservationIDs: ["mixed-line"]
+        )
+
+        let recipe = RecipeParser.parse(
+            title: "Mixed OCR line",
+            text: original,
+            source: .photo,
+            sourceLines: [sourceLine]
+        )
+
+        XCTAssertEqual(recipe.ingredients.count, 1)
+        let ingredient = try recipe.ingredients.firstUnwrapped()
+        XCTAssertEqual(ingredient.name.lowercased(), "flaky sea salt")
+        XCTAssertEqual(ingredient.quantity, 1, accuracy: 0.001)
+        XCTAssertEqual(ingredient.unit, "tsp")
+        XCTAssertEqual(ingredient.confidence, .review)
+        let evidence = try ingredient.sourceEvidence.firstUnwrapped()
+        XCTAssertEqual(evidence.rawText, original)
+        XCTAssertEqual(evidence.originalLine, original)
+        XCTAssertEqual(
+            evidence.removedSuffix,
+            "EASY AS 1-2-3! Mash banana. Stir in peanut butter."
+        )
+        XCTAssertTrue(evidence.reviewReasons?.contains("instruction_suffix_removed") == true)
+    }
+
+    func testParserTreatsForToppingPreparationTheSameWithOrWithoutComma() throws {
+        let variants = [
+            "1 tsp flaky sea salt for topping",
+            "1 tsp flaky sea salt, for topping"
+        ]
+
+        let parsed = variants.map {
+            RecipeParser.parse(title: "Salt", text: $0).ingredients.first
+        }
+
+        XCTAssertEqual(parsed.compactMap(\.self).count, variants.count)
+        for ingredient in parsed.compactMap(\.self) {
+            XCTAssertEqual(ingredient.name.lowercased(), "flaky sea salt")
+            XCTAssertEqual(ingredient.preparation.lowercased(), "for topping")
+        }
+    }
+
+    func testParserRejectsStandaloneForToppingEvenWithOCREvidence() {
+        let sourceLine = OCRSourceLine(
+            text: "for topping",
+            pageIndex: 0,
+            boundingBox: .init(x: 0.14, y: 0.52, width: 0.22, height: 0.04),
+            confidence: 0.94,
+            alternateCandidates: [],
+            sourceObservationIDs: ["orphan-preparation"]
+        )
+
+        let recipe = RecipeParser.parse(
+            title: "Orphan preparation",
+            text: sourceLine.text,
+            source: .photo,
+            sourceLines: [sourceLine]
+        )
+
+        XCTAssertTrue(recipe.ingredients.isEmpty)
+    }
+
+    func testInstructionSanitizerPreservesRangesHyphensAndCommaIngredientNames() throws {
+        let text = """
+        Ingredients
+        2–3 Honeycrisp apples, peeled
+        1 cup extra-virgin olive oil
+        1 cup tomatoes, fire-roasted
+        """
+        let recipe = RecipeParser.parse(title: "Valid punctuation", text: text)
+
+        XCTAssertEqual(recipe.ingredients.count, 3)
+        let apples = try recipe.ingredients.first(where: {
+            $0.name.localizedCaseInsensitiveContains("Honeycrisp apples")
+        }).firstUnwrapped()
+        XCTAssertEqual(apples.quantityLowerBound, 2)
+        XCTAssertEqual(apples.quantity, 3, accuracy: 0.001)
+        XCTAssertEqual(apples.preparation.lowercased(), "peeled")
+        XCTAssertTrue(recipe.ingredients.contains {
+            $0.name.localizedCaseInsensitiveContains("extra-virgin olive oil")
+        })
+        XCTAssertTrue(recipe.ingredients.contains {
+            $0.name.localizedCaseInsensitiveContains("tomatoes")
+                && $0.name.localizedCaseInsensitiveContains("fire-roasted")
+        })
+    }
+
+    func testRecipeSourceDocumentCodableRoundTripPreservesRawAndDerivedRepresentations() throws {
+        let sourceDocument = RecipeSourceDocument(
+            rawRecognizedText: "INGREDIENTS\n1 cup flour\nINSTRUCTIONS\nWhisk until smooth",
+            reconstructedText: "1 cup flour",
+            filteredIngredientLines: ["1 cup flour"],
+            ignoredSourceLines: ["INSTRUCTIONS", "Whisk until smooth"],
+            observations: [
+                RecipeSourceObservation(
+                    observationID: "page-0-vision-0",
+                    text: "1 cup flour",
+                    pageIndex: 0,
+                    boundingBox: .init(x: 0.1, y: 0.7, width: 0.4, height: 0.05),
+                    confidence: 0.93,
+                    alternatives: [
+                        .init(text: "I cup flour", confidence: 0.61)
+                    ]
+                )
+            ]
+        )
+        let recipe = Recipe(
+            title: "Source preservation",
+            source: .photo,
+            sourceDetail: "Camera",
+            heroSymbol: "camera",
+            servings: 2,
+            prepMinutes: 5,
+            cookMinutes: 0,
+            ingredients: [Ingredient(name: "Flour", quantity: 1, unit: "cup")],
+            rawSourceText: sourceDocument.rawRecognizedText,
+            sourceDocument: sourceDocument
+        )
+
+        let decoded = try JSONDecoder().decode(
+            Recipe.self,
+            from: JSONEncoder().encode(recipe)
+        )
+
+        XCTAssertEqual(decoded, recipe)
+        XCTAssertNotEqual(decoded.sourceDocument?.rawRecognizedText, decoded.sourceDocument?.reconstructedText)
+        XCTAssertEqual(decoded.sourceDocument?.ignoredSourceLines.count, 2)
+        XCTAssertEqual(decoded.sourceDocument?.observations.first?.observationID, "page-0-vision-0")
+    }
+
     func testChocolateChipCookieBarsGoldenVisionObservationsReconstructAndParse() throws {
         let fixtureURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -1039,6 +1297,15 @@ final class SmartCartTests: XCTestCase {
         XCTAssertFalse(result.text.localizedCaseInsensitiveContains("instructions"))
         XCTAssertGreaterThan(result.confidence, 0)
         XCTAssertGreaterThan(result.layoutConfidence, 0)
+        XCTAssertEqual(result.sourceDocument.reconstructedText, result.text)
+        XCTAssertEqual(result.sourceDocument.filteredIngredientLines.count, 5)
+        XCTAssertFalse(result.sourceDocument.ignoredSourceLines.isEmpty)
+        XCTAssertFalse(result.sourceDocument.observations.isEmpty)
+        XCTAssertNotEqual(result.sourceDocument.rawRecognizedText, result.text)
+        let rawObservationIDs = Set(result.sourceDocument.observations.map(\.observationID))
+        XCTAssertTrue(result.sourceLines.allSatisfy { line in
+            line.sourceObservationIDs.allSatisfy(rawObservationIDs.contains)
+        })
 
         let recipe = RecipeParser.parse(
             title: try result.suggestedTitle.firstUnwrapped(),

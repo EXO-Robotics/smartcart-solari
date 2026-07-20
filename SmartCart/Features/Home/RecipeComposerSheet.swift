@@ -34,6 +34,7 @@ struct RecipeComposerSheet: View {
     @State private var lastVisionOCRConfidence: Double?
     @State private var lastVisionLayoutConfidence: Double?
     @State private var lastVisionSourceLines: [OCRSourceLine] = []
+    @State private var lastVisionSourceDocument: RecipeSourceDocument?
     @State private var lastVisionRetryCount = 0
     @State private var lastVisionDuration: TimeInterval = 0
     @State private var lastVisionLayoutAmbiguityCount = 0
@@ -81,8 +82,33 @@ struct RecipeComposerSheet: View {
                 }
                 recipe.ingredients[index].sourceEvidence?.layoutConfidence = lastVisionLayoutConfidence
             }
-        }
-        if selectedMethod == .camera || selectedMethod == .photoLibrary || selectedMethod == .recipeText {
+            recipe.sourceDocument = lastVisionSourceDocument
+            if let sourceDocument = lastVisionSourceDocument {
+                let rawSourceText = sourceDocument.rawRecognizedText
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                recipe.rawSourceText = rawSourceText.isEmpty
+                    ? nil
+                    : sourceDocument.rawRecognizedText
+                let observationsByID = Dictionary(
+                    sourceDocument.observations.map { ($0.observationID, $0) },
+                    uniquingKeysWith: { first, _ in first }
+                )
+                for index in recipe.ingredients.indices {
+                    guard let observationIDs = recipe.ingredients[index]
+                        .sourceEvidence?.sourceObservationIDs
+                    else { continue }
+                    let originalLines = observationIDs.compactMap {
+                        observationsByID[$0]?.text
+                    }
+                    if !originalLines.isEmpty {
+                        recipe.ingredients[index].sourceEvidence?.originalLine = originalLines
+                            .joined(separator: "\n")
+                    }
+                }
+            } else {
+                recipe.rawSourceText = nil
+            }
+        } else if selectedMethod == .recipeText {
             let sourceText = recipeText.trimmingCharacters(in: .whitespacesAndNewlines)
             recipe.rawSourceText = sourceText.isEmpty ? nil : recipeText
         }
@@ -777,6 +803,7 @@ struct RecipeComposerSheet: View {
             lastVisionOCRConfidence = Double(result.confidence)
             lastVisionLayoutConfidence = result.layoutConfidence
             lastVisionSourceLines = result.sourceLines
+            lastVisionSourceDocument = result.sourceDocument
             lastVisionRetryCount = result.retryCount
             lastVisionDuration = result.duration
             lastVisionLayoutAmbiguityCount = result.layoutAmbiguityCount
@@ -827,6 +854,7 @@ struct RecipeComposerSheet: View {
         lastVisionOCRConfidence = nil
         lastVisionLayoutConfidence = nil
         lastVisionSourceLines = []
+        lastVisionSourceDocument = nil
         lastVisionRetryCount = 0
         lastVisionDuration = 0
         lastVisionLayoutAmbiguityCount = 0
@@ -894,6 +922,7 @@ enum RecipeVisionReader {
         var suggestedTitle: String?
         var text: String
         var sourceLines: [OCRSourceLine]
+        var sourceDocument: RecipeSourceDocument
         var pageCount: Int
         var retryCount: Int
         var duration: TimeInterval
@@ -907,6 +936,11 @@ enum RecipeVisionReader {
         var suggestedTitle: String?
         var text: String
         var sourceLines: [OCRSourceLine]
+        var rawRecognizedText: String
+        var reconstructedText: String
+        var filteredIngredientLines: [String]
+        var ignoredSourceLines: [String]
+        var sourceObservations: [RecipeSourceObservation]
         var confidence: Float
         var layoutConfidence: Double
         var layoutAmbiguityCount: Int
@@ -928,6 +962,11 @@ enum RecipeVisionReader {
     ) async throws -> Result {
         let startedAt = Date()
         var pages: [String] = []
+        var rawPages: [String] = []
+        var reconstructedPages: [String] = []
+        var filteredIngredientLines: [String] = []
+        var ignoredSourceLines: [String] = []
+        var sourceObservations: [RecipeSourceObservation] = []
         var suggestedTitle: String?
         var sourceLines: [OCRSourceLine] = []
         var retryCount = 0
@@ -990,6 +1029,11 @@ enum RecipeVisionReader {
                 suggestedTitle = page.suggestedTitle
             }
             pages.append(page.text)
+            rawPages.append(page.rawRecognizedText)
+            reconstructedPages.append(page.reconstructedText)
+            filteredIngredientLines.append(contentsOf: page.filteredIngredientLines)
+            ignoredSourceLines.append(contentsOf: page.ignoredSourceLines)
+            sourceObservations.append(contentsOf: page.sourceObservations)
             sourceLines.append(contentsOf: page.sourceLines)
             confidenceTotal += page.confidence
             layoutConfidenceTotal += page.layoutConfidence
@@ -1004,6 +1048,13 @@ enum RecipeVisionReader {
             suggestedTitle: suggestedTitle,
             text: combined,
             sourceLines: sourceLines,
+            sourceDocument: RecipeSourceDocument(
+                rawRecognizedText: rawPages.joined(separator: "\n"),
+                reconstructedText: reconstructedPages.joined(separator: "\n"),
+                filteredIngredientLines: filteredIngredientLines,
+                ignoredSourceLines: ignoredSourceLines,
+                observations: sourceObservations
+            ),
             pageCount: images.count,
             retryCount: retryCount,
             duration: Date().timeIntervalSince(startedAt),
@@ -1034,29 +1085,34 @@ enum RecipeVisionReader {
 
                 let observations = request.results as? [VNRecognizedTextObservation] ?? []
                 let candidates = observations.compactMap {
-                    observation -> (VNRecognizedTextObservation, VNRecognizedText, [OCRTextAlternative])? in
+                    observation -> (VNRecognizedTextObservation, VNRecognizedText, [OCRTextAlternative], [OCRTextAlternative])? in
                     let recognized = observation.topCandidates(3)
                     guard let candidate = recognized.first else { return nil }
-                    let alternatives: [OCRTextAlternative]
+                    let alternatives = recognized.dropFirst().compactMap { alternative -> OCRTextAlternative? in
+                        let text = alternative.string.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !text.isEmpty,
+                              text.caseInsensitiveCompare(candidate.string) != .orderedSame
+                        else { return nil }
+                        return OCRTextAlternative(
+                            text: text,
+                            confidence: Double(alternative.confidence)
+                        )
+                    }
+                    let reconstructionAlternatives: [OCRTextAlternative]
                     if RecipeOCRPolicy.shouldPreserveAlternatives(
                         in: candidate.string,
                         confidence: candidate.confidence
                     ) {
-                        alternatives = recognized.dropFirst().compactMap { alternative in
-                            let text = alternative.string.trimmingCharacters(in: .whitespacesAndNewlines)
-                            guard !text.isEmpty,
-                                  text.caseInsensitiveCompare(candidate.string) != .orderedSame
-                            else { return nil }
-                            return OCRTextAlternative(
-                                text: text,
-                                confidence: Double(alternative.confidence)
-                            )
-                        }
+                        reconstructionAlternatives = alternatives
                     } else {
-                        alternatives = []
+                        reconstructionAlternatives = []
                     }
-                    return (observation, candidate, alternatives)
+                    return (observation, candidate, alternatives, reconstructionAlternatives)
                 }
+                let sourceObservations = sourceObservations(
+                    from: candidates,
+                    pageIndex: pageIndex
+                )
                 let layout = OCRLayoutReconstructor.reconstruct(
                     layoutObservations(from: candidates, pageIndex: pageIndex)
                 )
@@ -1072,6 +1128,11 @@ enum RecipeVisionReader {
                             suggestedTitle: layout.suggestedTitle,
                             text: text,
                             sourceLines: layout.ingredientSourceLines,
+                            rawRecognizedText: sourceObservations.map(\.text).joined(separator: "\n"),
+                            reconstructedText: text,
+                            filteredIngredientLines: layout.ingredientLines,
+                            ignoredSourceLines: layout.ignoredInstructionLines,
+                            sourceObservations: sourceObservations,
                             confidence: confidence,
                             layoutConfidence: layout.layoutConfidence,
                             layoutAmbiguityCount: layout.ambiguities.count,
@@ -1098,11 +1159,11 @@ enum RecipeVisionReader {
     }
 
     private static func layoutObservations(
-        from candidates: [(VNRecognizedTextObservation, VNRecognizedText, [OCRTextAlternative])],
+        from candidates: [(VNRecognizedTextObservation, VNRecognizedText, [OCRTextAlternative], [OCRTextAlternative])],
         pageIndex: Int
     ) -> [OCRTextObservation] {
         candidates.enumerated().flatMap { observationIndex, entry in
-            let (observation, candidate, alternatives) = entry
+            let (observation, candidate, _, alternatives) = entry
             let ranges = bulletDelimitedRanges(in: candidate.string)
             let baseID = "page-\(pageIndex)-vision-\(observationIndex)"
 
@@ -1145,6 +1206,34 @@ enum RecipeVisionReader {
                     alternateCandidates: fragmentAlternatives
                 )
             }
+        }
+    }
+
+    private static func sourceObservations(
+        from candidates: [(VNRecognizedTextObservation, VNRecognizedText, [OCRTextAlternative], [OCRTextAlternative])],
+        pageIndex: Int
+    ) -> [RecipeSourceObservation] {
+        candidates.enumerated().map { observationIndex, entry in
+            let (observation, candidate, alternatives, _) = entry
+            let box = normalizedBox(observation.boundingBox)
+            return RecipeSourceObservation(
+                observationID: "page-\(pageIndex)-vision-\(observationIndex)",
+                text: candidate.string,
+                pageIndex: pageIndex,
+                boundingBox: NormalizedSourceRect(
+                    x: box.x,
+                    y: box.y,
+                    width: box.width,
+                    height: box.height
+                ),
+                confidence: Double(candidate.confidence),
+                alternatives: alternatives.map {
+                    RecipeSourceTextAlternative(
+                        text: $0.text,
+                        confidence: $0.confidence
+                    )
+                }
+            )
         }
     }
 

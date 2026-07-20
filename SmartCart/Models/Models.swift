@@ -150,6 +150,33 @@ enum RecipeSource: String, CaseIterable, Hashable, Codable {
     case sample = "SmartCart sample"
 }
 
+/// A persisted OCR candidate kept independently from layout reconstruction and parsing.
+struct RecipeSourceTextAlternative: Hashable, Codable {
+    var text: String
+    var confidence: Double
+}
+
+/// One raw OCR observation in normalized, orientation-corrected image coordinates.
+struct RecipeSourceObservation: Hashable, Codable {
+    var observationID: String
+    var text: String
+    var pageIndex: Int
+    var boundingBox: NormalizedSourceRect
+    var confidence: Double
+    var alternatives: [RecipeSourceTextAlternative]
+}
+
+/// The immutable source snapshot for a photo recipe. Raw Vision output is retained
+/// separately from reconstructed and parser-filtered text so later review never has
+/// to infer what the camera originally recognized.
+struct RecipeSourceDocument: Hashable, Codable {
+    var rawRecognizedText: String
+    var reconstructedText: String
+    var filteredIngredientLines: [String]
+    var ignoredSourceLines: [String]
+    var observations: [RecipeSourceObservation]
+}
+
 struct Recipe: Identifiable, Hashable, Codable {
     let id: UUID
     var title: String
@@ -163,6 +190,8 @@ struct Recipe: Identifiable, Hashable, Codable {
     /// Original recognized or pasted text retained for explicit source review.
     /// Optional decoding keeps pre-existing schema-v0 through schema-v6 recipes compatible.
     var rawSourceText: String?
+    /// Full photo-OCR provenance. Missing from older schema-v6 payloads by design.
+    var sourceDocument: RecipeSourceDocument?
 
     init(
         id: UUID = UUID(),
@@ -174,7 +203,8 @@ struct Recipe: Identifiable, Hashable, Codable {
         prepMinutes: Int,
         cookMinutes: Int,
         ingredients: [Ingredient],
-        rawSourceText: String? = nil
+        rawSourceText: String? = nil,
+        sourceDocument: RecipeSourceDocument? = nil
     ) {
         self.id = id
         self.title = title
@@ -186,6 +216,7 @@ struct Recipe: Identifiable, Hashable, Codable {
         self.cookMinutes = cookMinutes
         self.ingredients = ingredients
         self.rawSourceText = rawSourceText
+        self.sourceDocument = sourceDocument
     }
 
     var totalMinutes: Int { prepMinutes + cookMinutes }
@@ -344,6 +375,9 @@ struct IngredientSourceEvidence: Hashable, Codable {
     var sourceObservationIDs: [String]? = nil
     var continuationAttached: Bool? = nil
     var reconstructionConfidence: Double? = nil
+    var originalLine: String? = nil
+    var removedSuffix: String? = nil
+    var reviewReasons: [String]? = nil
 }
 
 enum PantryCoverage: String, Hashable, Codable {

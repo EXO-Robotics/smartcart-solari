@@ -3828,6 +3828,14 @@ enum ShoppingReconciliationError: LocalizedError, Equatable {
 }
 
 enum RecipeParser {
+    struct SanitizedIngredientCandidate: Equatable {
+        let ingredientText: String
+        let originalText: String
+        let removedSuffix: String?
+        let requiresReview: Bool
+        let reviewReasons: [String]
+    }
+
     static func parse(
         title: String,
         text: String,
@@ -3857,6 +3865,10 @@ enum RecipeParser {
                 continue
             }
 
+            let candidate = sanitizedIngredientCandidate(from: line)
+            let ingredientLine = candidate.ingredientText
+            guard !ingredientLine.isEmpty else { continue }
+
             let exactSourceIndex = remainingSourceLines.firstIndex(where: {
                 normalizedSourceText($0.text) == normalizedSourceText(line)
             })
@@ -3868,18 +3880,22 @@ enum RecipeParser {
                 || hasStructuredIngredientContext
                 || hasOCRIngredientEvidence
 
-            if isLikelyInstruction(line) {
+            if isLikelyInstruction(ingredientLine) {
                 if !ingredients.isEmpty { break }
                 continue
             }
-            guard isLikelyIngredient(line, contextAllowsQuantitylessLine: contextAllowsQuantitylessLine),
+            guard isLikelyIngredient(
+                ingredientLine,
+                contextAllowsQuantitylessLine: contextAllowsQuantitylessLine
+            ),
                   ingredients.count < 60
             else { continue }
-            var ingredient = parseIngredient(line, source: source)
+            var ingredient = parseIngredient(ingredientLine, source: source)
             if let sourceIndex {
                 let sourceLine = remainingSourceLines.remove(at: sourceIndex)
                 apply(sourceLine: sourceLine, to: &ingredient, source: source)
             }
+            apply(candidate: candidate, to: &ingredient)
             ingredient.sectionName = sectionName
             ingredients.append(ingredient)
         }
@@ -3919,6 +3935,118 @@ enum RecipeParser {
             omittedCandidateLineCount: max(0, candidateLineCount - recipe.ingredients.count),
             requiredConfirmationCount: recipe.ingredients.filter { $0.quantityReviewRequired == true }.count
         )
+    }
+
+    static func sanitizedIngredientCandidate(from line: String) -> SanitizedIngredientCandidate {
+        let originalText = line
+        let text = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else {
+            return SanitizedIngredientCandidate(
+                ingredientText: "",
+                originalText: originalText,
+                removedSuffix: nil,
+                requiresReview: false,
+                reviewReasons: []
+            )
+        }
+
+        // A continuation that lost its ingredient anchor is not independently
+        // purchasable. Keep this deliberately narrow; broader contextual
+        // ingredient filtering is handled separately.
+        if text.range(
+            of: #"^\s*[-•*☐✓]?\s*for\s+topping[.!]?\s*$"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil {
+            return SanitizedIngredientCandidate(
+                ingredientText: "",
+                originalText: originalText,
+                removedSuffix: nil,
+                requiresReview: true,
+                reviewReasons: ["preparation_only"]
+            )
+        }
+
+        guard let boundary = strongInstructionBoundary(in: text) else {
+            return SanitizedIngredientCandidate(
+                ingredientText: text,
+                originalText: originalText,
+                removedSuffix: nil,
+                requiresReview: false,
+                reviewReasons: []
+            )
+        }
+
+        let ingredientText = text[..<boundary]
+            .trimmingCharacters(in: CharacterSet(charactersIn: " ,.;:!?"))
+        let removedSuffix = text[boundary...]
+            .trimmingCharacters(
+                in: .whitespacesAndNewlines.union(
+                    CharacterSet(charactersIn: ",;:")
+                )
+            )
+
+        return SanitizedIngredientCandidate(
+            ingredientText: ingredientText,
+            originalText: originalText,
+            removedSuffix: removedSuffix.isEmpty ? nil : removedSuffix,
+            requiresReview: true,
+            reviewReasons: ["instruction_suffix_removed"]
+        )
+    }
+
+    private static func strongInstructionBoundary(in text: String) -> String.Index? {
+        // These are intentionally high-signal imperative starts. Ambiguous
+        // grocery nouns/verbs such as cream, toast, roll, slice, blend, and
+        // juice do not belong here.
+        let strongImperative = #"(?:preheat|heat|mix|stir|whisk|combine|add|bake|cook|simmer|boil|roast|grill|fold|beat|place|transfer|spread|pour|arrange|season|chill|refrigerate|freeze|serve|mash|let|set|grease|melt|bring)"#
+        let sentenceStartPattern = #"(?i)(?:^|[.!?]\s*)(?:step\s+\d{1,2}\s*[:.)-]?\s*)?("#
+            + strongImperative
+            + #")\b"#
+        guard let match = text.range(of: sentenceStartPattern, options: .regularExpression),
+              let verb = text[match].range(
+                of: strongImperative,
+                options: [.regularExpression, .caseInsensitive]
+              )
+        else { return nil }
+
+        var boundary = match.lowerBound
+
+        // A compact promotional instruction banner can sit between the final
+        // ingredient delimiter and the first imperative sentence. Once an
+        // imperative has confirmed the transition, remove that banner too.
+        let bannerPrefix = text[..<verb.lowerBound]
+        if let banner = bannerPrefix.range(
+            of: #"(?i),\s*easy\s+as\s+\d+(?:\s*[-–—]\s*\d+)+\s*[.!?]?\s*$"#,
+            options: .regularExpression
+        ) {
+            boundary = banner.lowerBound
+        }
+        return boundary
+    }
+
+    private static func apply(
+        candidate: SanitizedIngredientCandidate,
+        to ingredient: inout Ingredient
+    ) {
+        if candidate.requiresReview {
+            ingredient.confidence = .review
+        }
+        guard candidate.removedSuffix != nil,
+              var evidence = ingredient.sourceEvidence
+        else { return }
+        // The parsed shopping fields use only the sanitized ingredient text,
+        // while review keeps the complete source line, including what was cut.
+        evidence.rawText = candidate.originalText
+        if evidence.originalLine == nil {
+            evidence.originalLine = candidate.originalText
+        }
+        evidence.removedSuffix = candidate.removedSuffix
+        var reviewReasons = evidence.reviewReasons ?? []
+        for reason in candidate.reviewReasons where !reviewReasons.contains(reason) {
+            reviewReasons.append(reason)
+        }
+        evidence.reviewReasons = reviewReasons.isEmpty ? nil : reviewReasons
+        ingredient.sourceEvidence = evidence
     }
 
     private static func isLikelyIngredient(
@@ -3983,7 +4111,7 @@ enum RecipeParser {
             "preheat", "heat", "mix", "stir", "whisk", "combine", "add", "bake",
             "cook", "simmer", "boil", "roast", "grill", "fold", "beat", "place",
             "transfer", "spread", "pour", "arrange", "season", "chill", "refrigerate",
-            "freeze", "serve", "let", "set", "line", "grease", "melt", "bring"
+            "freeze", "serve", "mash", "let", "set", "line", "grease", "melt", "bring"
         ]
         return actions.contains { value == $0 || value.hasPrefix($0 + " ") }
     }
@@ -4018,11 +4146,17 @@ enum RecipeParser {
                 isInsideIngredientSection = true
                 continue
             }
-            if isLikelyInstruction(line) {
+            let candidate = sanitizedIngredientCandidate(from: line)
+            let ingredientLine = candidate.ingredientText
+            guard !ingredientLine.isEmpty else { continue }
+            if isLikelyInstruction(ingredientLine) {
                 if count > 0 { break }
                 continue
             }
-            if isLikelyIngredient(line, contextAllowsQuantitylessLine: isInsideIngredientSection) {
+            if isLikelyIngredient(
+                ingredientLine,
+                contextAllowsQuantitylessLine: isInsideIngredientSection
+            ) {
                 count += 1
             }
         }
@@ -4126,7 +4260,7 @@ enum RecipeParser {
         let commaParts = remaining.split(separator: ",", omittingEmptySubsequences: true).map {
             $0.trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        let preparationPattern = #"(?i)\b(optional|if desired|as desired|as needed|divided|softened|melted|sifted|packed|room temperature|at room temperature|chopped|roughly chopped|finely chopped|minced|drained|rinsed|cubed|diced|peeled|seeded|zested|juiced|crushed|grated|shredded|plus more[^,]*|for serving|for garnish|to taste)\b"#
+        let preparationPattern = #"(?i)\b(optional|if desired|as desired|as needed|divided|softened|melted|sifted|packed|room temperature|at room temperature|chopped|roughly chopped|finely chopped|minced|drained|rinsed|cubed|diced|peeled|seeded|zested|juiced|crushed|grated|shredded|plus more[^,]*|for serving|for garnish|for topping|to taste)\b"#
         var nameParts: [String] = []
         var commaPreparationParts: [String] = []
         for (index, part) in commaParts.enumerated() {
@@ -4155,7 +4289,7 @@ enum RecipeParser {
         let isPackagedProduct = packageMeasurement != nil
             || ["can", "cans", "jar", "jars", "bag", "bags", "pkg"].contains(unit)
         let inlinePreparationPattern = isPackagedProduct
-            ? #"(?i)\b(optional|if desired|as desired|as needed|divided|plus more[^,]*|for serving|for garnish|to taste)\b"#
+            ? #"(?i)\b(optional|if desired|as desired|as needed|divided|plus more[^,]*|for serving|for garnish|for topping|to taste)\b"#
             : preparationPattern
         let inlinePreparation = matches(pattern: inlinePreparationPattern, in: rawName, capture: 0)
         let name = rawName
