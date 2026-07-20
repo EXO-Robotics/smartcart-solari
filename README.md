@@ -10,6 +10,8 @@ Import a recipe → confirm it in Recipe Ready → start shopping → review onl
 
 Meal Prep combines one to five reviewed saved recipes conservatively, keeps uncertain ingredients separate until resolved, and then converges into the same Recipe Ready, matching, Shopping Trip, and pantry-update flow as a single recipe.
 
+Home keeps **Take Photo**, **Choose Photo**, and **Meal Prep Mode** in the first viewport. Recipes is now a focused saved-recipe library with search and a pull-up **Recent Recipes** drawer; retailer-page navigation never writes recipe history.
+
 The app currently supports:
 
 - Camera, photo-library, pasted-text, sample, and backend-mediated recipe-page imports.
@@ -23,7 +25,7 @@ The app currently supports:
 - Durable pause and resume at the current waiting item. Tapping **Pause** or dismissing the retailer page with native close pauses without advancing. A load failure keeps the item waiting and offers retry, external open, skip, or pause.
 - A post-trip pantry check-in whose purchase selections remain user-controlled. The Home reminder offers **Yes**, **Not Yet**, and **Archive**; archiving hides only that reminder and does not change the pantry, record an outcome, or remove the completed trip.
 - Pantry-first review with separate package count, package size/unit, and remaining amount/unit; full/partial/possible coverage uses remaining stock, with buy-remainder math and a buy-full override.
-- Persistent barcode/manual pantry inventory with checksum-valid UPC/EAN/GTIN handling, leading-zero preservation, offline fixtures, required naming for unknown products, and explicit duplicate actions.
+- Persistent barcode/manual pantry inventory with checksum-valid EAN-8/UPC-A/EAN-13/GTIN-14 handling, leading-zero preservation, saved user naming, bundled fixtures, backend-mediated Open Food Facts identity, and explicit duplicate handling. Catalog names remain editable and unverified; no price or availability is inferred.
 - Privacy-limited on-device funnel instrumentation and an internal tester dashboard.
 - Walmart and Target matching, with Kroger and additional retailers clearly marked Coming Soon.
 

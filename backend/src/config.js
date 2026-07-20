@@ -28,6 +28,13 @@ export function loadConfig(overrides = {}) {
     recipePageTimeoutMs: integer('RECIPE_PAGE_TIMEOUT_MS', 10_000, { max: 60_000 }),
     recipePageMaxBytes: integer('RECIPE_PAGE_MAX_BYTES', 2_097_152, { max: 10_485_760 }),
     recipePageMaxRedirects: integer('RECIPE_PAGE_MAX_REDIRECTS', 5, { max: 10 }),
+    openFoodFactsBaseUrl: process.env.OPEN_FOOD_FACTS_BASE_URL ?? 'https://world.openfoodfacts.org',
+    openFoodFactsUserAgent: process.env.OPEN_FOOD_FACTS_USER_AGENT
+      ?? 'SmartCartBeta/0.4 (https://github.com/EXO-Robotics/smartcart-ios)',
+    barcodeLookupTimeoutMs: integer('BARCODE_LOOKUP_TIMEOUT_MS', 5_000, { max: 30_000 }),
+    barcodePositiveCacheTtlMs: integer('BARCODE_POSITIVE_CACHE_TTL_SECONDS', 86_400, { max: 31_536_000 }) * 1_000,
+    barcodeNegativeCacheTtlMs: integer('BARCODE_NEGATIVE_CACHE_TTL_SECONDS', 900, { max: 86_400 }) * 1_000,
+    barcodeProviderRateLimit: integer('BARCODE_PROVIDER_RATE_LIMIT_PER_MINUTE', 12, { max: 15 }),
     instacartApiKey: process.env.INSTACART_API_KEY || undefined,
     instacartApiBaseUrl: process.env.INSTACART_API_BASE_URL ?? (
       env === 'production' ? 'https://connect.instacart.com' : 'https://connect.dev.instacart.tools'

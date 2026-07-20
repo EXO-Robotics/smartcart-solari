@@ -1,8 +1,8 @@
 # SmartCart local/demo backend
 
-This directory is a zero-dependency Node.js ESM HTTP service intended for local development and automated tests. It can optionally make a server-authenticated Instacart Developer Platform handoff request when explicitly configured.
+This directory is a zero-dependency Node.js ESM HTTP service intended for local development and automated tests. It can optionally make a server-authenticated Instacart Developer Platform handoff request when explicitly configured and can resolve food identity through Open Food Facts.
 
-**Nothing here is production-ready.** Accounts and bearer sessions are mock local/demo identities. Manifests, handoff URL caches, and analytics events exist only in process memory and disappear on restart. Product/catalog fields are client-supplied local/demo records and are never refreshed from a retailer. OAuth performs no provider request or token exchange. Affiliate URLs are deterministic local/demo decoration and do not provide attribution, pricing, inventory, cart transfer, or checkout. Recipe-page extraction and an explicitly configured Instacart handoff are the only deliberate outbound capabilities.
+**Nothing here is production-ready.** Accounts and bearer sessions are mock local/demo identities. Manifests, handoff URL caches, barcode lookup caches, and analytics events exist only in process memory and disappear on restart. OAuth performs no provider request or token exchange. Affiliate URLs are deterministic local/demo decoration and do not provide attribution, pricing, inventory, cart transfer, or checkout. Recipe-page extraction, food-identity lookup, and an explicitly configured Instacart handoff are the only deliberate outbound capabilities.
 
 ## Requirements and start
 
@@ -35,11 +35,12 @@ Tests use only `node:test`, saved HTML, injected fetch doubles, and an ephemeral
 
 ## API overview
 
-Every JSON response includes `meta.dataMode: "local-demo"`, and every JSON response carries `X-SmartCart-Data-Mode: local-demo`.
+Local/demo JSON responses include `meta.dataMode: "local-demo"`, and every JSON response carries `X-SmartCart-Data-Mode: local-demo`. The barcode response instead carries explicit `source` and `verified` fields because it may contain crowdsourced provider identity.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/health` | Health and local/demo capability disclosure |
+| `GET` | `/v1/barcodes/{gtin}` | Resolve food identity without price or availability claims |
 | `POST` | `/v1/demo/accounts` | Create an in-memory mock account |
 | `POST` | `/v1/demo/sessions` | Issue an expiring in-memory bearer token |
 | `GET` | `/v1/demo/account` | Read the authenticated mock account |
@@ -86,6 +87,8 @@ curl -s http://127.0.0.1:8787/v1/demo/account \
 - `AffiliateLinkService` depends on a provider interface and uses a TTL cache. Its included provider only appends clearly named local/demo query parameters.
 - `TtlCache` provides lazy TTL expiry for sessions, OAuth state, and affiliate results.
 - `FixedWindowRateLimiter` is process-local and keyed by remote address plus path. It is a development safeguard, not distributed abuse protection.
+- Barcode lookup validates and canonicalizes GTIN-8, UPC-A, EAN-13, and GTIN-14, checks the in-memory positive/negative cache, and then calls Open Food Facts at most 12 times per minute per process. Concurrent requests for the same GTIN are coalesced. Raw GTIN path values are redacted from structured request logs.
+- Open Food Facts results are crowdsourced and are returned as editable, `verified: false` product identity only. SmartCart does not return or infer price, availability, retailer identity, nutrition, pantry amount, or purchase state from this endpoint.
 - Structured JSON logging redacts authorization, cookies, tokens, secrets, passwords, email-like fields, OAuth codes, and PKCE values. Request bodies are never logged.
 - Analytics rejects property keys that resemble direct identifiers or credentials, limits event/property counts and sizes, and retains at most 10,000 events in memory.
 - Affiliate targets must be HTTPS and cannot contain embedded URL credentials.
@@ -109,6 +112,10 @@ curl -s http://127.0.0.1:8787/v1/recipe-pages/extract \
 ```
 
 Typed failures distinguish invalid or non-HTTPS URLs, invalid/unsafe redirects, redirect-limit and missing-location errors, network failure, timeout, upstream access denial/not-found/rate-limit/other status, oversized pages, unsupported MIME or charset, empty bodies, and pages with no extractable recipe.
+
+## Barcode identity lookup
+
+`GET /v1/barcodes/{gtin}` is intentionally credential-free so the iOS scanner can use it before any retailer interaction. Configure a reachable backend URL in the app with `SMARTCART_BARCODE_BACKEND_URL`; recipe or commerce backend URLs remain fallbacks for local testing. The service sends the configured identifying User-Agent, normalizes provider fields, caches positive matches for one day and misses for 15 minutes, and returns either `resolved` or `not_found`. Provider failures are not cached, allowing the app to fall back immediately to one-time manual naming.
 
 ## Instacart shopping-list handoff
 

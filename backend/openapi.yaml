@@ -8,6 +8,8 @@ info:
     ephemeral, client-supplied, or simulated; it is never live retailer or identity-provider data.
     The recipe-page extraction endpoint makes a bounded, user-requested HTTPS GET to the supplied
     third-party page and returns extracted text plus URL provenance; it does not execute page scripts.
+    The barcode endpoint performs a bounded crowdsourced food-identity lookup and returns no
+    price, availability, retailer, nutrition, pantry, or purchase claim.
     When explicitly configured, the Instacart handoff endpoint is the only server-authenticated
     commerce-provider call and keeps the provider API key out of clients and responses.
 servers:
@@ -21,8 +23,29 @@ tags:
   - name: Analytics
   - name: Affiliate links
   - name: Recipe pages
+  - name: Barcode identity
   - name: Instacart handoffs
 paths:
+  /v1/barcodes/{gtin}:
+    get:
+      tags: [Barcode identity]
+      summary: Resolve editable food-product identity by validated GTIN
+      operationId: resolveBarcode
+      security: []
+      parameters:
+        - name: gtin
+          in: path
+          required: true
+          schema: { type: string, pattern: '^\\d{8}$|^\\d{12,14}$' }
+      responses:
+        '200':
+          description: A crowdsourced identity match or a cacheable not-found result.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BarcodeLookupResponse' }
+        '400': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
   /health:
     get:
       tags: [Health]
@@ -531,6 +554,31 @@ components:
                   details: { type: object }
               meta: { $ref: '#/components/schemas/LocalDemoMeta' }
   schemas:
+    BarcodeLookupResponse:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [status, barcode, product, source, verified]
+          properties:
+            status: { type: string, const: resolved }
+            barcode: { type: string, pattern: '^\\d{14}$' }
+            product:
+              type: object
+              additionalProperties: false
+              required: [name, brand, quantity, imageURL]
+              properties:
+                name: { type: string, minLength: 1 }
+                brand: { type: [string, 'null'] }
+                quantity: { type: [string, 'null'] }
+                imageURL: { type: 'null' }
+            source: { type: string, const: open_food_facts }
+            verified: { type: boolean, const: false }
+        - type: object
+          additionalProperties: false
+          required: [status, barcode]
+          properties:
+            status: { type: string, const: not_found }
+            barcode: { type: string, pattern: '^\\d{14}$' }
     LocalDemoMeta:
       type: object
       required: [dataMode, persistence, auth, catalog]

@@ -54,6 +54,20 @@ Exercise each of these paths for Walmart and Target where applicable:
 
 Any automatic retailer action, inferred purchase, ambiguous close that advances, failed page that enables **Next Item**, or archive action that deletes trip data blocks beta promotion.
 
+## Barcode matrix
+
+Run the scanner on a supported physical iPhone and repeat the manual-entry portions in Simulator:
+
+1. Scan a barcode already linked to pantry stock. Verify **Already in pantry** appears and adding another increments only that item.
+2. Resolve a catalog barcode. Verify name and brand are prefilled but editable, and no price, availability, retailer, or verification claim appears.
+3. Use a valid catalog miss. Verify **Product not found** requests a name, accepts an optional brand, and permits adding the item without a dead end.
+4. Terminate and relaunch, then scan the manually named barcode again. Verify the saved pantry name resolves before any network lookup and is not requested again.
+5. Stop or misconfigure the backend. Verify a valid barcode still reaches manual naming rather than an indefinite progress or error-only state.
+6. Enter an invalid checksum and verify the validation explanation leaves entry and rescan available.
+7. Hold one barcode in the camera frame and verify repeated detections do not restart lookup or increment stock.
+
+Provider product identity is crowdsourced and editable. Any inferred price/availability, raw GTIN in backend logs, dead-end miss, lost manual mapping, or duplicate increment blocks beta promotion.
+
 ## Meal Prep matrix
 
 Each tester should complete at least two plans using reviewed saved recipes:

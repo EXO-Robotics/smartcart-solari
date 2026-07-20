@@ -16,10 +16,9 @@ struct BarcodeScannerSheet: View {
     @State private var isResolving = false
     @State private var resolution: BarcodeResolutionResult?
     @State private var stockName = ""
+    @State private var stockBrand = ""
     @State private var stockAmount: Double = 1
     @State private var resolutionTask: Task<Void, Never>?
-
-    private let resolver = BarcodeResolutionService()
 
     init(
         embedded: Bool = false,
@@ -100,7 +99,7 @@ struct BarcodeScannerSheet: View {
             LiveBarcodeScanner { code, symbology in
                 manualCode = code
                 capturedSymbology = symbology
-                beginResolution(code: code, symbology: symbology)
+                beginResolution(code: code, symbology: symbology, debounceCamera: true)
             }
             .frame(height: 330)
             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -134,7 +133,12 @@ struct BarcodeScannerSheet: View {
                 .keyboardType(.numberPad)
                 .textContentType(.none)
                 .smartField()
-                .onChange(of: manualCode) { _, _ in resolution = nil }
+                .accessibilityIdentifier("barcode-code")
+                .onChange(of: manualCode) { _, _ in
+                    resolutionTask?.cancel()
+                    isResolving = false
+                    resolution = nil
+                }
 
             Button {
                 beginResolution(code: manualCode, symbology: "manual-entry")
@@ -148,8 +152,9 @@ struct BarcodeScannerSheet: View {
             }
             .buttonStyle(SecondaryButtonStyle())
             .disabled(isResolving || manualCode.isEmpty)
+            .accessibilityIdentifier("barcode-resolve")
 
-            Text("Offline fixtures: 078742002163 pasta · 078742131917 olive oil · 041000303319 parmesan")
+            Text("SmartCart checks saved pantry names before its product catalog. If there is no match, name the product once.")
                 .font(.caption2)
                 .foregroundStyle(SmartCartTheme.secondaryInk)
         }
@@ -168,10 +173,13 @@ struct BarcodeScannerSheet: View {
             switch resolution {
             case .resolved(let resolved):
                 stockEntryCard(
-                    heading: resolved.product.name,
+                    heading: resolved.source == .localUserEditedCache
+                        ? "Already in pantry — add another?"
+                        : resolved.product.name,
                     headingSymbol: "checkmark.seal.fill",
                     headingColor: SmartCartTheme.green,
-                    subheading: (resolved.product.brand?.isEmpty == false) ? resolved.product.brand : nil,
+                    subheading: resolutionSubtitle(for: resolved.source),
+                    knownPantryBarcode: resolved.source == .localUserEditedCache,
                     barcode: resolved.barcode,
                     raw: resolved.scan.rawBarcode,
                     submission: PantryBarcodeSubmission(
@@ -187,10 +195,10 @@ struct BarcodeScannerSheet: View {
             case .unresolved(let unresolved):
                 if let barcode = unresolved.normalizedBarcode {
                     stockEntryCard(
-                        heading: "Name this product",
+                        heading: "Product not found",
                         headingSymbol: "questionmark.circle.fill",
                         headingColor: SmartCartTheme.amber,
-                        subheading: "No verified product matched this barcode. SmartCart will not invent a name.",
+                        subheading: "Name this product once. SmartCart will use your saved name on future scans.",
                         barcode: barcode,
                         raw: unresolved.scan.rawBarcode,
                         submission: PantryBarcodeSubmission(
@@ -199,7 +207,7 @@ struct BarcodeScannerSheet: View {
                             name: "",
                             brand: "",
                             externalProductID: nil,
-                            requiresUserNaming: false
+                            requiresUserNaming: true
                         )
                     )
                 } else {
@@ -222,6 +230,7 @@ struct BarcodeScannerSheet: View {
         headingSymbol: String,
         headingColor: Color,
         subheading: String?,
+        knownPantryBarcode: Bool = false,
         barcode: NormalizedBarcode,
         raw: String,
         submission: PantryBarcodeSubmission
@@ -231,7 +240,7 @@ struct BarcodeScannerSheet: View {
             ? appModel.pantryMergeTarget(named: trimmedName, submission: submission)
             : nil
         let suggestions = onSubmission == nil ? appModel.pantryNameSuggestions(for: stockName) : []
-        let displayHeading = mergeTarget?.name ?? heading
+        let displayHeading = knownPantryBarcode ? heading : (mergeTarget?.name ?? heading)
 
         return VStack(alignment: .leading, spacing: 12) {
             Label(displayHeading, systemImage: headingSymbol)
@@ -266,6 +275,7 @@ struct BarcodeScannerSheet: View {
                 TextField("What is this item?", text: $stockName)
                     .textInputAutocapitalization(.words)
                     .smartField()
+                    .accessibilityIdentifier("barcode-product-name")
 
                 if !suggestions.isEmpty {
                     ScrollView(.horizontal) {
@@ -301,6 +311,15 @@ struct BarcodeScannerSheet: View {
             }
 
             VStack(alignment: .leading, spacing: 7) {
+                Text("BRAND · OPTIONAL")
+                    .smartEyebrow(SmartCartTheme.mutedInk)
+                TextField("Brand", text: $stockBrand)
+                    .textInputAutocapitalization(.words)
+                    .smartField()
+                    .accessibilityIdentifier("barcode-product-brand")
+            }
+
+            VStack(alignment: .leading, spacing: 7) {
                 Text(amountLabel.uppercased())
                     .smartEyebrow(SmartCartTheme.mutedInk)
                 HStack(spacing: 10) {
@@ -322,10 +341,18 @@ struct BarcodeScannerSheet: View {
             barcodeProvenance(barcode, raw: raw)
 
             Button {
+                let editedSubmission = PantryBarcodeSubmission(
+                    scan: submission.scan,
+                    barcode: submission.barcode,
+                    name: trimmedName,
+                    brand: stockBrand.trimmingCharacters(in: .whitespacesAndNewlines),
+                    externalProductID: submission.externalProductID,
+                    requiresUserNaming: submission.requiresUserNaming
+                )
                 if let onSubmission {
-                    onSubmission(trimmedName, stockAmount, submission)
+                    onSubmission(trimmedName, stockAmount, editedSubmission)
                 } else {
-                    appModel.addPantryStock(name: trimmedName, amount: stockAmount, submission: submission)
+                    appModel.addPantryStock(name: trimmedName, amount: stockAmount, submission: editedSubmission)
                 }
                 finish()
             } label: {
@@ -341,6 +368,7 @@ struct BarcodeScannerSheet: View {
             }
             .buttonStyle(PrimaryButtonStyle())
             .disabled(trimmedName.isEmpty || stockAmount <= 0)
+            .accessibilityIdentifier("barcode-add-to-pantry")
         }
         .smartCartCard(padding: 15)
     }
@@ -378,14 +406,29 @@ struct BarcodeScannerSheet: View {
     }
 
     @MainActor
-    private func beginResolution(code: String, symbology: String?) {
+    private func beginResolution(
+        code: String,
+        symbology: String?,
+        debounceCamera: Bool = false
+    ) {
         resolutionTask?.cancel()
         isResolving = true
         stockAmount = 1
         resolution = nil
 
         let scan = BarcodeScan(rawBarcode: code, rawSymbology: symbology)
+        let resolver = BarcodeResolutionService(
+            userEditedCache: PantryBarcodeUserEditedCache(items: appModel.pantryInventory),
+            adapters: [SmartCartBackendBarcodeAdapter()]
+        )
         resolutionTask = Task {
+            if debounceCamera {
+                do {
+                    try await Task.sleep(for: .milliseconds(300))
+                } catch {
+                    return
+                }
+            }
             let result = await resolver.resolve(scan)
             guard !Task.isCancelled else { return }
 
@@ -394,12 +437,17 @@ struct BarcodeScannerSheet: View {
             case .resolved(let resolved):
                 stockName = appModel.pantryItem(matching: resolved.barcode)?.name
                     ?? resolved.product.name
+                stockBrand = appModel.pantryItem(matching: resolved.barcode)?.brand
+                    ?? resolved.product.brand
+                    ?? ""
             case .unresolved(let unresolved):
                 if let barcode = unresolved.normalizedBarcode,
                    let existing = appModel.pantryItem(matching: barcode) {
                     stockName = existing.name
+                    stockBrand = existing.brand
                 } else {
                     stockName = ""
+                    stockBrand = ""
                 }
             }
             isResolving = false
@@ -410,6 +458,19 @@ struct BarcodeScannerSheet: View {
         switch reason {
         case .invalid(let error): error.localizedDescription
         case .noMatch: "No verified product matched this barcode."
+        }
+    }
+
+    private func resolutionSubtitle(for source: BarcodeResolutionSource) -> String {
+        switch source {
+        case .localUserEditedCache:
+            "This barcode uses your saved pantry name."
+        case .bundledFixture:
+            "Bundled SmartCart demo result — confirm or edit before adding."
+        case .adapter(let identifier) where identifier == "smartcart-barcode-api":
+            "Open Food Facts result — crowdsourced, unverified, and editable."
+        case .adapter:
+            "Catalog result — unverified and editable."
         }
     }
 }
@@ -442,7 +503,7 @@ private struct LiveBarcodeScanner: UIViewControllerRepresentable {
 
     final class Coordinator: NSObject, DataScannerViewControllerDelegate {
         let onCode: (String, String?) -> Void
-        private var lastCode: String?
+        private var activeCodes: Set<String> = []
 
         init(onCode: @escaping (String, String?) -> Void) { self.onCode = onCode }
 
@@ -453,11 +514,22 @@ private struct LiveBarcodeScanner: UIViewControllerRepresentable {
         ) {
             for item in addedItems {
                 guard case .barcode(let barcode) = item,
-                      let code = barcode.payloadStringValue,
-                      code != lastCode else { continue }
-                lastCode = code
+                      let code = barcode.payloadStringValue else { continue }
+                guard activeCodes.insert(code).inserted else { continue }
                 onCode(code, barcode.observation.symbology.rawValue)
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            }
+        }
+
+        func dataScanner(
+            _ dataScanner: DataScannerViewController,
+            didRemove removedItems: [RecognizedItem],
+            allItems: [RecognizedItem]
+        ) {
+            for item in removedItems {
+                guard case .barcode(let barcode) = item,
+                      let code = barcode.payloadStringValue else { continue }
+                activeCodes.remove(code)
             }
         }
     }

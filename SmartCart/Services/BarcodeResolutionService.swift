@@ -12,6 +12,7 @@ struct BarcodeScan: Hashable, Sendable {
 }
 
 enum BarcodeFormat: String, Codable, Hashable, Sendable {
+    case ean8
     case upcA
     case ean13
     case gtin14
@@ -32,7 +33,7 @@ extension BarcodeValidationError: LocalizedError {
         case .containsNonASCIIDigits:
             "The barcode must contain only ASCII digits."
         case .unsupportedLength(let length):
-            "The barcode has \(length) digits; expected UPC-A (12), EAN-13 (13), or GTIN-14 (14)."
+            "The barcode has \(length) digits; expected EAN-8 (8), UPC-A (12), EAN-13 (13), or GTIN-14 (14)."
         case .invalidCheckDigit(let expected, let actual):
             "The barcode check digit is \(actual); expected \(expected)."
         }
@@ -71,6 +72,9 @@ enum BarcodeNormalizer {
         let format: BarcodeFormat
         let canonicalGTIN14: String
         switch digits.count {
+        case 8:
+            format = .ean8
+            canonicalGTIN14 = "000000" + digits
         case 12:
             format = .upcA
             canonicalGTIN14 = "00" + digits
@@ -98,7 +102,7 @@ enum BarcodeNormalizer {
         )
     }
 
-    /// GS1 modulo-10 check digit calculation for UPC-A, EAN-13, and GTIN-14 bodies.
+    /// GS1 modulo-10 check digit calculation for EAN-8, UPC-A, EAN-13, and GTIN-14 bodies.
     static func checkDigit(forBody body: Substring) -> Character {
         var sum = 0
         for (offset, character) in body.reversed().enumerated() {
@@ -170,6 +174,36 @@ actor InMemoryBarcodeUserEditedCache: WritableBarcodeUserEditedCache {
     }
 }
 
+/// A read-only snapshot of durable pantry mappings. Manual names are already
+/// persisted in SmartCart state, so relaunches do not depend on a second cache.
+struct PantryBarcodeUserEditedCache: BarcodeUserEditedCache, Sendable {
+    private let productsByGTIN14: [String: BarcodeProduct]
+
+    init(items: [PantryInventoryItem]) {
+        var products: [String: BarcodeProduct] = [:]
+        for item in items where item.requiresUserNaming != true {
+            let name = item.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty, name.caseInsensitiveCompare("Unknown Product") != .orderedSame else {
+                continue
+            }
+            let identities = Set((item.barcodeGTINs ?? []) + [item.gtin14].compactMap { $0 })
+            for identity in identities where products[identity] == nil {
+                products[identity] = BarcodeProduct(
+                    identifier: "pantry:\(item.id.uuidString)",
+                    name: name,
+                    brand: item.brand.isEmpty ? nil : item.brand,
+                    externalReference: item.preferredRetailerProductID
+                )
+            }
+        }
+        productsByGTIN14 = products
+    }
+
+    func product(forCanonicalGTIN14 canonicalGTIN14: String) async -> BarcodeProduct? {
+        productsByGTIN14[canonicalGTIN14]
+    }
+}
+
 struct BundledBarcodeFixture: Hashable, Sendable {
     let barcode: String
     let product: BarcodeProduct
@@ -238,6 +272,90 @@ struct BundledBarcodeFixtureCatalog: Sendable {
 protocol BarcodeProductAdapter: Sendable {
     var identifier: String { get }
     func resolve(_ barcode: NormalizedBarcode) async throws -> BarcodeProduct?
+}
+
+enum SmartCartBarcodeAdapterError: Error, Hashable, Sendable {
+    case invalidEndpoint
+    case invalidResponse
+    case server(statusCode: Int)
+}
+
+/// Resolves product identity through the SmartCart backend. The provider does
+/// not return or imply price, availability, pantry quantity, or purchase state.
+struct SmartCartBackendBarcodeAdapter: BarcodeProductAdapter, @unchecked Sendable {
+    let identifier = "smartcart-barcode-api"
+
+    private let session: URLSession
+    private let baseURL: URL
+
+    init(session: URLSession = .shared, baseURL: URL? = nil) {
+        self.session = session
+        if let baseURL {
+            self.baseURL = baseURL
+        } else {
+            let environment = ProcessInfo.processInfo.environment
+            let configured = environment["SMARTCART_BARCODE_BACKEND_URL"]
+                ?? environment["SMARTCART_RECIPE_BACKEND_URL"]
+                ?? environment["SMARTCART_COMMERCE_BACKEND_URL"]
+            self.baseURL = configured.flatMap(URL.init(string:))
+                ?? URL(string: "http://localhost:8787")!
+        }
+    }
+
+    func resolve(_ barcode: NormalizedBarcode) async throws -> BarcodeProduct? {
+        let url = baseURL
+            .appendingPathComponent("v1")
+            .appendingPathComponent("barcodes")
+            .appendingPathComponent(barcode.canonicalGTIN14)
+        guard url.scheme == "http" || url.scheme == "https" else {
+            throw SmartCartBarcodeAdapterError.invalidEndpoint
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 6
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("SmartCart-iOS/0.4 barcode-identity", forHTTPHeaderField: "User-Agent")
+
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw SmartCartBarcodeAdapterError.invalidResponse
+        }
+        guard 200..<300 ~= http.statusCode else {
+            throw SmartCartBarcodeAdapterError.server(statusCode: http.statusCode)
+        }
+
+        let envelope: BarcodeAPIResponse
+        do {
+            envelope = try JSONDecoder().decode(BarcodeAPIResponse.self, from: data)
+        } catch {
+            throw SmartCartBarcodeAdapterError.invalidResponse
+        }
+        guard envelope.status == "resolved", let product = envelope.product else { return nil }
+        let name = product.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return nil }
+
+        return BarcodeProduct(
+            identifier: "backend:\(barcode.canonicalGTIN14)",
+            name: name,
+            brand: product.brand?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            externalReference: nil
+        )
+    }
+
+    private struct BarcodeAPIResponse: Decodable {
+        let status: String
+        let product: Product?
+
+        struct Product: Decodable {
+            let name: String
+            let brand: String?
+        }
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }
 
 enum BarcodeResolutionSource: Hashable, Sendable {

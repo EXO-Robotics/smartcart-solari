@@ -1201,6 +1201,108 @@ final class SmartCartTests: XCTestCase {
             XCTAssertEqual(barcode.format, .ean13)
             XCTAssertEqual(barcode.canonicalGTIN14, "0\(code)")
         }
+
+        guard case .success(let ean8) = BarcodeNormalizer.normalize("96385074") else {
+            return XCTFail("Expected valid EAN-8")
+        }
+        XCTAssertEqual(ean8.format, .ean8)
+        XCTAssertEqual(ean8.canonicalGTIN14, "00000096385074")
+    }
+
+    @MainActor
+    func testUserNamedBarcodeResolvesFromDurablePantryMappingAfterRelaunch() async throws {
+        let store = JSONSmartCartStateStore(
+            fileURL: temporaryDirectory().appendingPathComponent("barcode-name-state.json")
+        )
+        let barcode: NormalizedBarcode
+        switch BarcodeNormalizer.normalize("96385074") {
+        case .success(let normalized): barcode = normalized
+        case .failure(let error): return XCTFail("Fixture barcode should be valid: \(error)")
+        }
+        let submission = PantryBarcodeSubmission(
+            scan: BarcodeScan(rawBarcode: barcode.digits, rawSymbology: "ean8"),
+            barcode: barcode,
+            name: "",
+            brand: "Kitchen Test",
+            externalProductID: nil,
+            requiresUserNaming: true
+        )
+
+        let model = AppModel(stateStore: store)
+        model.addPantryStock(name: "Rice Crackers", amount: 1, submission: submission)
+        let restored = AppModel(stateStore: store)
+        let resolver = BarcodeResolutionService(
+            userEditedCache: PantryBarcodeUserEditedCache(items: restored.pantryInventory),
+            fixtures: BundledBarcodeFixtureCatalog(fixtures: []),
+            adapters: [ThrowingBarcodeAdapter()]
+        )
+
+        let result = await resolver.resolve(submission.scan)
+        guard case .resolved(let resolved) = result else {
+            return XCTFail("Saved pantry mapping should resolve before the network adapter")
+        }
+        XCTAssertEqual(resolved.source, .localUserEditedCache)
+        XCTAssertEqual(resolved.product.name, "Rice Crackers")
+        XCTAssertEqual(resolved.product.brand, "Kitchen Test")
+        XCTAssertEqual(restored.pantryInventory.first?.requiresUserNaming, false)
+    }
+
+    func testBarcodeNetworkFailureFallsBackToManualNamingState() async {
+        let resolver = BarcodeResolutionService(
+            userEditedCache: InMemoryBarcodeUserEditedCache(),
+            fixtures: BundledBarcodeFixtureCatalog(fixtures: []),
+            adapters: [ThrowingBarcodeAdapter()]
+        )
+
+        let result = await resolver.resolve(BarcodeScan(rawBarcode: "4006381333931"))
+
+        guard case .unresolved(let unresolved) = result else {
+            return XCTFail("Network failure must leave a manual naming path")
+        }
+        XCTAssertEqual(unresolved.reason, .noMatch)
+        XCTAssertEqual(unresolved.attemptedAdapterIdentifiers, ["failing-test-adapter"])
+        XCTAssertEqual(unresolved.adapterFailures.count, 1)
+        XCTAssertNotNil(unresolved.normalizedBarcode)
+    }
+
+    func testSmartCartBarcodeAdapterDecodesIdentityWithoutRetailClaims() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [BarcodeURLProtocolStub.self]
+        let adapter = SmartCartBackendBarcodeAdapter(
+            session: URLSession(configuration: configuration),
+            baseURL: URL(string: "https://smartcart.test")!
+        )
+        let barcode: NormalizedBarcode
+        switch BarcodeNormalizer.normalize("078742002163") {
+        case .success(let normalized): barcode = normalized
+        case .failure(let error): return XCTFail("Fixture barcode should be valid: \(error)")
+        }
+
+        let product = try await adapter.resolve(barcode)
+
+        XCTAssertEqual(product?.name, "Penne Pasta")
+        XCTAssertEqual(product?.brand, "Great Value")
+        XCTAssertNil(product?.externalReference)
+    }
+
+    func testBarcodeScannerWiresCatalogManualNamingAndCameraDebounce() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "SmartCart/Features/Pantry/BarcodeScannerView.swift"
+            ),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(source.contains("PantryBarcodeUserEditedCache(items: appModel.pantryInventory)"))
+        XCTAssertTrue(source.contains("adapters: [SmartCartBackendBarcodeAdapter()]"))
+        XCTAssertTrue(source.contains("heading: \"Product not found\""))
+        XCTAssertTrue(source.contains("requiresUserNaming: true"))
+        XCTAssertTrue(source.contains("try await Task.sleep(for: .milliseconds(300))"))
+        XCTAssertTrue(source.contains("activeCodes.insert(code).inserted"))
+        XCTAssertTrue(source.contains("didRemove removedItems"))
     }
 
     func testSchemaV2MigratesInferredBarcodeNamesWithoutLosingBarcode() throws {
@@ -4602,6 +4704,54 @@ private actor RecordingInstacartHandoffService: InstacartHandoffServicing {
             presentationMode: "in_app_safari"
         )
     }
+}
+
+private struct ThrowingBarcodeAdapter: BarcodeProductAdapter {
+    enum Failure: Error { case offline }
+
+    let identifier = "failing-test-adapter"
+
+    func resolve(_ barcode: NormalizedBarcode) async throws -> BarcodeProduct? {
+        throw Failure.offline
+    }
+}
+
+private final class BarcodeURLProtocolStub: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        guard request.url?.path == "/v1/barcodes/00078742002163" else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+            return
+        }
+        let payload = """
+        {
+          "status": "resolved",
+          "barcode": "00078742002163",
+          "product": {
+            "name": "Penne Pasta",
+            "brand": "Great Value",
+            "quantity": "16 oz",
+            "imageURL": null
+          },
+          "source": "open_food_facts",
+          "verified": false
+        }
+        """.data(using: .utf8)!
+        let response = HTTPURLResponse(
+            url: request.url!,
+            statusCode: 200,
+            httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Type": "application/json"]
+        )!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: payload)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
 }
 
 private final class ControllableSmartCartStateStore: SmartCartStateStoring {

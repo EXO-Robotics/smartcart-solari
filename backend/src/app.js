@@ -4,6 +4,7 @@ import { assertString, HttpError, localDemoMeta, readJson, requestId, sendJson }
 import { createLogger } from './lib/logger.js';
 import { FixedWindowRateLimiter } from './lib/rate-limiter.js';
 import { AffiliateLinkService, LocalDemoAffiliateProvider } from './services/affiliate-links.js';
+import { BarcodeCatalogService, OpenFoodFactsBarcodeProvider } from './services/barcode-catalog.js';
 import { LocalDemoStore } from './services/local-demo-store.js';
 import { LocalDemoOAuthPkce } from './services/oauth-pkce.js';
 import { RecipePageExtractor } from './services/recipe-page-extractor.js';
@@ -40,6 +41,11 @@ function clientKey(request) {
 function routeMatch(pathname, expression) {
   const match = expression.exec(pathname);
   return match?.groups ?? null;
+}
+
+function requestPathForLogging(requestUrl) {
+  const path = requestUrl?.split('?')[0];
+  return path?.replace(/^\/v1\/barcodes\/[^/]+$/, '/v1/barcodes/:gtin');
 }
 
 export function createApp(options = {}) {
@@ -86,6 +92,17 @@ export function createApp(options = {}) {
     cacheTtlMs: config.instacartHandoffCacheTtlMs,
     now
   });
+  const barcodeCatalog = options.barcodeCatalog ?? new BarcodeCatalogService({
+    provider: new OpenFoodFactsBarcodeProvider({
+      baseUrl: config.openFoodFactsBaseUrl,
+      userAgent: config.openFoodFactsUserAgent,
+      timeoutMs: config.barcodeLookupTimeoutMs
+    }),
+    positiveTtlMs: config.barcodePositiveCacheTtlMs,
+    negativeTtlMs: config.barcodeNegativeCacheTtlMs,
+    rateLimit: config.barcodeProviderRateLimit,
+    now
+  });
 
   async function handler(request, response) {
     const id = requestId(request);
@@ -96,7 +113,7 @@ export function createApp(options = {}) {
       logger.info('http_request', {
         requestId: id,
         method: request.method,
-        path: request.url?.split('?')[0],
+        path: requestPathForLogging(request.url),
         status: response.statusCode,
         durationMs: now() - startedAt,
         remoteAddress: clientKey(request)
@@ -144,6 +161,16 @@ export function createApp(options = {}) {
         } else {
           sendJson(response, 200, payload, headers);
         }
+        return;
+      }
+
+      const barcodeRoute = routeMatch(url.pathname, /^\/v1\/barcodes\/(?<gtin>\d{8,14})$/);
+      if (method === 'GET' && barcodeRoute) {
+        const result = await barcodeCatalog.resolve(barcodeRoute.gtin);
+        if (result.status === 'invalid') {
+          throw new HttpError(400, 'invalid_gtin', 'A valid GTIN-8, UPC-A, EAN-13, or GTIN-14 is required');
+        }
+        sendJson(response, 200, result, headers);
         return;
       }
 
@@ -313,7 +340,16 @@ export function createApp(options = {}) {
   return {
     handler,
     config,
-    services: { store, oauth, affiliate, limiter, recipePageFetcher, recipePageExtractor, instacartHandoff }
+    services: {
+      store,
+      oauth,
+      affiliate,
+      limiter,
+      recipePageFetcher,
+      recipePageExtractor,
+      instacartHandoff,
+      barcodeCatalog
+    }
   };
 }
 
