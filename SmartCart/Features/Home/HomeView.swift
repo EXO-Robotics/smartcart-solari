@@ -26,10 +26,6 @@ struct HomeView: View {
                     VStack(alignment: .leading, spacing: 24) {
                         header
                         startShoppingSection
-                        if appModel.hasCompletedShoppingTrip,
-                           let recipe = appModel.mostRecentShoppedRecipe {
-                            shopAgainCard(recipe)
-                        }
                     }
                     .padding(.horizontal, 18)
                     .padding(.bottom, collapsedShoppingTripsDrawerHeight + 34)
@@ -307,64 +303,6 @@ struct HomeView: View {
         .buttonStyle(SecondaryButtonStyle())
         .accessibilityIdentifier("home-import-more")
         .accessibilityHint("Shows saved recipe and sample options")
-    }
-
-    private func shopAgainCard(_ recipe: Recipe) -> some View {
-        Button {
-            appModel.beginRecipe(recipe)
-        } label: {
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 15) {
-                    shopAgainIdentity(recipe)
-                    Spacer(minLength: 8)
-                    Label("Shop Again", systemImage: "arrow.clockwise")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(SmartCartTheme.onAccent)
-                        .padding(.horizontal, 13)
-                        .padding(.vertical, 10)
-                        .background(SmartCartTheme.green)
-                        .clipShape(Capsule())
-                }
-                VStack(alignment: .leading, spacing: 14) {
-                    shopAgainIdentity(recipe)
-                    Label("Shop Again", systemImage: "arrow.clockwise")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(SmartCartTheme.onAccent)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 11)
-                        .background(SmartCartTheme.green)
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                }
-            }
-            .smartCartCard(padding: 16)
-            .smartCartShadow()
-        }
-        .buttonStyle(PressableButtonStyle())
-        .accessibilityIdentifier("home-shop-again")
-        .accessibilityLabel("Shop \(recipe.title) again")
-        .accessibilityHint("Opens a fresh Recipe Ready review for this recipe")
-    }
-
-    private func shopAgainIdentity(_ recipe: Recipe) -> some View {
-        HStack(spacing: 13) {
-            Image(systemName: recipe.heroSymbol)
-                .font(.title2.bold())
-                .foregroundStyle(SmartCartTheme.green)
-                .frame(width: 48, height: 48)
-                .background(SmartCartTheme.herbLight)
-                .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text("SHOP AGAIN")
-                    .smartEyebrow()
-                Text(recipe.title)
-                    .font(.headline)
-                    .foregroundStyle(SmartCartTheme.navy)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
     }
 
     private func refreshClipboardDetection() {

@@ -4376,12 +4376,10 @@ final class SmartCartTests: XCTestCase {
         let body = homeSource[bodyStart..<headerStart]
         let headerIndex = try XCTUnwrap(body.range(of: "header")?.lowerBound)
         let startIndex = try XCTUnwrap(body.range(of: "startShoppingSection")?.lowerBound)
-        let shopAgainIndex = try XCTUnwrap(body.range(of: "shopAgainCard")?.lowerBound)
         let drawerIndex = try XCTUnwrap(body.range(of: "continueShoppingTripsDrawer")?.lowerBound)
 
         XCTAssertLessThan(headerIndex, startIndex)
-        XCTAssertLessThan(startIndex, shopAgainIndex)
-        XCTAssertLessThan(shopAgainIndex, drawerIndex)
+        XCTAssertLessThan(startIndex, drawerIndex)
         XCTAssertTrue(homeSource.contains("GeometryReader { geometry in"))
         XCTAssertTrue(homeSource.contains("ZStack(alignment: .bottom)"))
         XCTAssertTrue(homeSource.contains("Text(\"Start a Shopping Trip\")"))
@@ -4412,6 +4410,9 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(homeSource.contains("Completed shopping history is never deleted here."))
         XCTAssertTrue(homeSource.contains("appModel.archivePantryUpdateReminder(sessionID: session.id)"))
         XCTAssertTrue(homeSource.contains("accessibilityIdentifier(\"home-start-meal-prep\")"))
+        XCTAssertFalse(homeSource.contains("shopAgainCard"))
+        XCTAssertFalse(homeSource.contains("home-shop-again"))
+        XCTAssertFalse(homeSource.contains("Shop Again"))
         XCTAssertFalse(homeSource.contains("storeCard"))
         XCTAssertFalse(homeSource.contains("trustStrip"))
 
