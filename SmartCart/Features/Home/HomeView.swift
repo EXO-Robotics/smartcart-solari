@@ -128,7 +128,7 @@ struct HomeView: View {
                 }
                 .font(.system(.body, design: .rounded, weight: .semibold))
                 .foregroundStyle(.white)
-                .frame(maxWidth: .infinity, minHeight: 50)
+                .frame(maxWidth: .infinity, minHeight: 82)
                 .contentShape(Rectangle())
             }
             .buttonStyle(PressableButtonStyle())
@@ -140,9 +140,11 @@ struct HomeView: View {
 
             mealPrepLaunchButton
         }
-        .padding(18)
+        .padding(.horizontal, 18)
+        .padding(.top, 18)
+        .padding(.bottom, 24)
         .background {
-            HomeGlassSurface(radius: 30, darkness: 0.31)
+            HomeGlassSurface(radius: 30, darkness: 0.16)
         }
     }
 
@@ -176,7 +178,7 @@ struct HomeView: View {
                     .foregroundStyle(.white.opacity(0.72))
                     .accessibilityHidden(true)
             }
-            .frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: 96, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(PressableButtonStyle())
@@ -380,7 +382,20 @@ private struct HomeGlassSurface: View {
                 shape.fill(Color.black.opacity(darkness))
             }
             .overlay {
-                shape.stroke(Color.white.opacity(0.18), lineWidth: 1)
+                shape.fill(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.10),
+                            Color.clear,
+                            Color.black.opacity(0.10)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+            }
+            .overlay {
+                shape.stroke(Color.white.opacity(0.22), lineWidth: 1)
             }
             .shadow(color: .black.opacity(0.28), radius: 20, y: 10)
     }
