@@ -3836,6 +3836,16 @@ enum RecipeParser {
         let reviewReasons: [String]
     }
 
+    #if DEBUG
+    struct ContextualShadowReport: Equatable {
+        let source: ContextualIngredientFilter.DocumentSource
+        let records: [ContextualIngredientFilter.LineRecord]
+        let authoritativeAcceptedLineIDs: [String]
+        let contextualResult: ContextualIngredientFilter.FilterResult
+        let divergence: ContextualIngredientFilter.DivergenceReport
+    }
+    #endif
+
     static func parse(
         title: String,
         text: String,
@@ -3852,7 +3862,10 @@ enum RecipeParser {
         var isInsideIngredientSection = false
         var ingredients: [Ingredient] = []
         var remainingSourceLines = sourceLines
-        for line in lines.prefix(120) {
+        #if DEBUG
+        var authoritativeAcceptedLineOrdinals: [Int] = []
+        #endif
+        for (lineOrdinal, line) in lines.prefix(120).enumerated() {
             if isInstructionHeading(line) { break }
             if isIngredientHeading(line) {
                 isInsideIngredientSection = true
@@ -3898,7 +3911,20 @@ enum RecipeParser {
             apply(candidate: candidate, to: &ingredient)
             ingredient.sectionName = sectionName
             ingredients.append(ingredient)
+            #if DEBUG
+            authoritativeAcceptedLineOrdinals.append(lineOrdinal)
+            #endif
         }
+
+        #if DEBUG
+        _ = contextualShadowReport(
+            text: text,
+            source: source,
+            sourceDetail: sourceDetail,
+            sourceLines: sourceLines,
+            authoritativeAcceptedLineOrdinals: authoritativeAcceptedLineOrdinals
+        )
+        #endif
 
         return Recipe(
             title: title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? inferredTitle(from: lines) : title,
@@ -3911,6 +3937,152 @@ enum RecipeParser {
             ingredients: ingredients
         )
     }
+
+    #if DEBUG
+    /// Builds lossless source-line evidence for development comparison only.
+    /// The returned contextual result never feeds the shipping parser output.
+    static func contextualShadowReport(
+        text: String,
+        source: RecipeSource = .text,
+        sourceDetail: String = "Pasted into SmartCart",
+        sourceLines: [OCRSourceLine] = [],
+        authoritativeAcceptedLineOrdinals: [Int]
+    ) -> ContextualShadowReport {
+        let documentSource = ContextualIngredientFilter.DocumentSource(
+            kind: contextualShadowSourceKind(
+                for: source,
+                sourceDetail: sourceDetail,
+                sourceLines: sourceLines
+            ),
+            documentID: "recipe-parser-shadow",
+            detail: sourceDetail
+        )
+        let records = contextualShadowLineRecords(text: text, sourceLines: sourceLines)
+        let parserInputRecords = records.filter {
+            !$0.originalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        let authoritativeAcceptedLineIDs = authoritativeAcceptedLineOrdinals.compactMap { ordinal in
+            parserInputRecords.indices.contains(ordinal) ? parserInputRecords[ordinal].id : nil
+        }
+        let contextualResult = ContextualIngredientFilter.filter(
+            records,
+            source: documentSource,
+            using: .contextual
+        )
+        let authoritativeAcceptedIDSet = Set(authoritativeAcceptedLineIDs)
+        let contextualByID = Dictionary(
+            uniqueKeysWithValues: contextualResult.decisions.map { ($0.lineID, $0) }
+        )
+        let divergences = records.compactMap { record -> ContextualIngredientFilter.Divergence? in
+            guard let contextual = contextualByID[record.id] else { return nil }
+            let authoritativeDisposition: ContextualIngredientFilter.Disposition =
+                authoritativeAcceptedIDSet.contains(record.id) ? .accepted : .ignored
+            guard authoritativeDisposition != contextual.disposition else { return nil }
+            return ContextualIngredientFilter.Divergence(
+                lineID: record.id,
+                originalText: record.originalText,
+                legacyDisposition: authoritativeDisposition,
+                contextualDisposition: contextual.disposition,
+                legacyReason: nil,
+                contextualReason: contextual.acceptanceReason,
+                contextualIgnoredReasons: contextual.ignoredReasons
+            )
+        }
+        return ContextualShadowReport(
+            source: documentSource,
+            records: records,
+            authoritativeAcceptedLineIDs: authoritativeAcceptedLineIDs,
+            contextualResult: contextualResult,
+            divergence: ContextualIngredientFilter.DivergenceReport(
+                comparedLineCount: records.count,
+                agreementCount: records.count - divergences.count,
+                divergences: divergences
+            )
+        )
+    }
+
+    private static func contextualShadowLineRecords(
+        text: String,
+        sourceLines: [OCRSourceLine]
+    ) -> [ContextualIngredientFilter.LineRecord] {
+        let originalLines = text.components(separatedBy: .newlines)
+        var remainingSourceLines = sourceLines
+        var matchedSourceLines: [Int: OCRSourceLine] = [:]
+
+        // Reserve exact matches across the whole document before considering
+        // corrected-text fuzzy matches, and consume every OCR line at most once.
+        for (index, originalText) in originalLines.enumerated() {
+            let normalized = normalizedSourceText(originalText)
+            guard !normalized.isEmpty,
+                  let sourceIndex = remainingSourceLines.firstIndex(where: {
+                      normalizedSourceText($0.text) == normalized
+                  })
+            else { continue }
+            matchedSourceLines[index] = remainingSourceLines.remove(at: sourceIndex)
+        }
+
+        for (index, originalText) in originalLines.enumerated()
+        where matchedSourceLines[index] == nil {
+            guard let sourceIndex = bestSourceLineIndex(
+                matching: originalText,
+                in: remainingSourceLines
+            ) else { continue }
+            matchedSourceLines[index] = remainingSourceLines.remove(at: sourceIndex)
+        }
+
+        return originalLines.enumerated().map { index, originalText in
+            let evidence: ContextualIngredientFilter.LineEvidence
+            if let sourceLine = matchedSourceLines[index] {
+                evidence = ContextualIngredientFilter.LineEvidence(
+                    ocrSourceLine: sourceLine,
+                    sectionID: "ocr-ingredient-stream",
+                    sectionName: "Ingredients"
+                )
+            } else {
+                evidence = .none
+            }
+            return ContextualIngredientFilter.LineRecord(
+                id: String(format: "recipe-parser-shadow-line-%04d", index + 1),
+                originalText: originalText,
+                ordinal: index,
+                evidence: evidence
+            )
+        }
+    }
+
+    private static func contextualShadowSourceKind(
+        for source: RecipeSource,
+        sourceDetail: String,
+        sourceLines: [OCRSourceLine]
+    ) -> ContextualIngredientFilter.DocumentSource.Kind {
+        switch source {
+        case .photo:
+            if sourceLines.contains(where: { $0.pageIndex > 0 })
+                || Set(sourceLines.map(\.pageIndex)).count > 1 {
+                return .multiPageScan
+            }
+            let detail = sourceDetail.folding(
+                options: [.caseInsensitive, .diacriticInsensitive],
+                locale: Locale(identifier: "en_US_POSIX")
+            )
+            if detail.localizedCaseInsensitiveContains("captured") {
+                return .cameraPhoto
+            }
+            if detail.localizedCaseInsensitiveContains("photos") {
+                return .photoLibrary
+            }
+            return .screenshot
+        case .link:
+            return .structuredURL
+        case .pinterest:
+            return .pinterest
+        case .text:
+            return .pastedText
+        case .sample:
+            return .groceryList
+        }
+    }
+    #endif
 
     static func importReport(
         for recipe: Recipe,
