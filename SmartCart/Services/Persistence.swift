@@ -28,6 +28,9 @@ struct SmartCartPersistedState: Codable, Hashable {
     var shoppingScope: ShoppingScope? = nil
     var mealPrepDraft: MealPrepDraft? = nil
     var mealPrepPlan: MealPrepPlanSnapshot? = nil
+    /// Library membership is independent from retained recipe records. Optional
+    /// decoding keeps schema-6 payloads written before this field compatible.
+    var savedRecipeIDs: Set<UUID>? = nil
 }
 
 struct LegacySmartCartPersistedStateV5: Codable, Hashable {

@@ -179,7 +179,7 @@ struct RecipeComposerSheet: View {
         case .recipeText:
             !recipe.ingredients.isEmpty
         case .sample:
-            appModel.recipes.indices.contains(selectedSampleIndex)
+            appModel.sampleRecipes.indices.contains(selectedSampleIndex)
         }
     }
 
@@ -405,7 +405,7 @@ struct RecipeComposerSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             SectionHeader(title: "Choose a sample", subtitle: "Perfect for testing every step")
 
-            ForEach(Array(appModel.recipes.enumerated()), id: \.element.id) { index, recipe in
+            ForEach(Array(appModel.sampleRecipes.enumerated()), id: \.element.id) { index, recipe in
                 Button {
                     selectedSampleIndex = index
                 } label: {
@@ -866,8 +866,8 @@ struct RecipeComposerSheet: View {
 
         switch selectedMethod {
         case .sample:
-            guard appModel.recipes.indices.contains(selectedSampleIndex) else { return }
-            if !appModel.beginRecipe(appModel.recipes[selectedSampleIndex]) {
+            guard appModel.sampleRecipes.indices.contains(selectedSampleIndex) else { return }
+            if !appModel.beginRecipe(appModel.sampleRecipes[selectedSampleIndex]) {
                 errorMessage = "That sample has no ingredients. Choose another recipe."
             }
 

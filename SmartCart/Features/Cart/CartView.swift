@@ -197,6 +197,18 @@ struct RecipeReadyView: View {
                 .accessibilityIdentifier("recipe-ready-view-source-text")
                 .accessibilityHint("Opens the original recognized recipe text")
             }
+
+            if !appModel.isRecipeSaved(appModel.activeRecipe.id) {
+                Button {
+                    appModel.saveRecipeToLibrary(appModel.activeRecipe.id)
+                } label: {
+                    Label("Save Recipe", systemImage: "bookmark.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(SecondaryButtonStyle())
+                .accessibilityIdentifier("recipe-ready-save-recipe")
+                .accessibilityHint("Adds this recipe to Saved Recipes")
+            }
         }
         .smartCartCard()
         .smartCartShadow()
@@ -1028,6 +1040,7 @@ private struct RecipeReadyIngredientRow: View {
 struct RecipesView: View {
     @Environment(AppModel.self) private var appModel
     @State private var searchText = ""
+    @State private var pendingRecipeRemoval: Recipe?
     @State private var recentDrawerExpanded = {
         let environment = ProcessInfo.processInfo.environment
         return environment["SMARTCART_RECIPES_DRAWER"] == "recent" ||
@@ -1056,6 +1069,27 @@ struct RecipesView: View {
         .smartCartBackground()
         .toolbar(.hidden, for: .navigationBar)
         .sensoryFeedback(.selection, trigger: recentDrawerExpanded)
+        .confirmationDialog(
+            pendingRecipeRemoval.map {
+                "Remove “\($0.title)” from Saved Recipes?"
+            } ?? "Remove recipe from Saved Recipes?",
+            isPresented: Binding(
+                get: { pendingRecipeRemoval != nil },
+                set: { isPresented in
+                    if !isPresented { pendingRecipeRemoval = nil }
+                }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Remove from Saved Recipes", role: .destructive) {
+                guard let recipe = pendingRecipeRemoval else { return }
+                pendingRecipeRemoval = nil
+                appModel.removeRecipeFromLibrary(recipe.id)
+            }
+            Button("Cancel", role: .cancel) { pendingRecipeRemoval = nil }
+        } message: {
+            Text("Existing Shopping Trips and pantry history will remain available.")
+        }
     }
 
     private var recipeLibrary: some View {
@@ -1104,7 +1138,7 @@ struct RecipesView: View {
 
     private var recipesTitle: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text("Recipes")
+            Text("Saved Recipes")
                 .font(.system(.title, design: .rounded, weight: .bold))
                 .foregroundStyle(SmartCartTheme.navy)
             Text("View, edit, or reuse a saved recipe")
@@ -1134,21 +1168,46 @@ struct RecipesView: View {
     }
 
     private func recipeLibraryCard(_ recipe: Recipe) -> some View {
-        Button {
-            openRecipe(recipe)
-        } label: {
-            HStack(spacing: 13) {
-                recipeIdentity(recipe, lastOpenedAt: nil)
-                Spacer(minLength: 6)
-                Image(systemName: "chevron.right")
-                    .font(.caption.bold())
-                    .foregroundStyle(SmartCartTheme.green)
+        HStack(spacing: 8) {
+            Button {
+                openRecipe(recipe)
+            } label: {
+                HStack(spacing: 13) {
+                    recipeIdentity(recipe, lastOpenedAt: nil)
+                    Spacer(minLength: 6)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.bold())
+                        .foregroundStyle(SmartCartTheme.green)
+                }
+                .contentShape(Rectangle())
             }
-            .smartCartCard(padding: 13)
+            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityHint("Opens this recipe for review and shopping")
+
+            Menu {
+                Button {
+                    openRecipe(recipe)
+                } label: {
+                    Label("Open Recipe", systemImage: "book.fill")
+                }
+                Button(role: .destructive) {
+                    pendingRecipeRemoval = recipe
+                } label: {
+                    Label("Remove from Saved Recipes", systemImage: "bookmark.slash")
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .font(.title3)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("More actions for \(recipe.title)")
+            .accessibilityIdentifier("saved-recipe-menu-\(recipe.id.uuidString)")
         }
-        .buttonStyle(PressableButtonStyle())
+        .smartCartCard(padding: 13)
         .accessibilityIdentifier("saved-recipe-\(recipe.id.uuidString)")
-        .accessibilityHint("Opens this recipe for review and shopping")
     }
 
     private func recentRecipesDrawer(height: CGFloat, collapsedOffset: CGFloat) -> some View {
@@ -1320,8 +1379,8 @@ struct RecipesView: View {
 
     private var filteredRecipes: [Recipe] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !query.isEmpty else { return appModel.recipes }
-        return appModel.recipes.filter { recipe in
+        guard !query.isEmpty else { return appModel.savedRecipes }
+        return appModel.savedRecipes.filter { recipe in
             recipe.title.lowercased().contains(query) ||
                 recipe.ingredients.contains { $0.name.lowercased().contains(query) }
         }

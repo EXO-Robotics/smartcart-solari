@@ -15,6 +15,9 @@ final class AppModel {
     var recipes: [Recipe] {
         didSet { persistState() }
     }
+    private(set) var savedRecipeIDs: Set<UUID> {
+        didSet { persistState() }
+    }
     var desiredServings: Int {
         didSet { persistState() }
     }
@@ -143,6 +146,16 @@ final class AppModel {
     private static let handoffFeedbackKey = "smartcart.commerce.lastFeedback"
 
     var recentRecipeIDs: [UUID] { recentRecipeRecords.map(\.recipeID) }
+
+    /// Records remain available for trip/history resolution even after the
+    /// person removes their membership from the Saved Recipes library.
+    var savedRecipes: [Recipe] {
+        recipes.filter { savedRecipeIDs.contains($0.id) }
+    }
+
+    /// A dedicated immutable catalog prevents imported or historical records
+    /// from leaking into Try a Sample.
+    var sampleRecipes: [Recipe] { SampleData.recipes }
 
     var recentRecipes: [Recipe] {
         recentRecipeRecords.compactMap { record in
@@ -343,8 +356,19 @@ final class AppModel {
         let initialFeatureFlags = restoredState?.featureFlags ?? AppFeatureFlags()
         let initialStoreStrategy = restoredState?.storeStrategy ?? .oneStore
         let initialFulfillment = restoredState?.fulfillmentMode ?? .pickup
+        let validRecipeIDs = Set(initialRecipes.map(\.id))
+        let initialSavedRecipeIDs: Set<UUID>
+        if let restoredState {
+            initialSavedRecipeIDs = (
+                restoredState.savedRecipeIDs
+                    ?? Set(initialRecipes.filter { $0.source != .sample }.map(\.id))
+            ).intersection(validRecipeIDs)
+        } else {
+            initialSavedRecipeIDs = []
+        }
 
         recipes = initialRecipes
+        savedRecipeIDs = initialSavedRecipeIDs
         activeRecipe = initialRecipe
         desiredServings = initialServings
         preferences = initialPreferences
@@ -835,10 +859,14 @@ final class AppModel {
         activeRecipe = recipe
         shoppingScope = .singleRecipe(recipe.id)
         mealPrepPlan = nil
+        let isNewRecipeRecord = !recipes.contains { $0.id == recipe.id }
         if let index = recipes.firstIndex(where: { $0.id == recipe.id }) {
             recipes[index] = recipe
         } else {
             recipes.insert(recipe, at: 0)
+        }
+        if isNewRecipeRecord && recipe.source != .sample {
+            savedRecipeIDs.insert(recipe.id)
         }
         recordRecipeOpened(recipe.id)
         shoppingItems = []
@@ -857,6 +885,64 @@ final class AppModel {
                 "ingredient_count": String(recipe.ingredients.count)
             ]
         )
+        return true
+    }
+
+    func isRecipeSaved(_ id: UUID) -> Bool {
+        savedRecipeIDs.contains(id)
+    }
+
+    /// Explicitly saves the retained record. If the active working copy has
+    /// edits, those edits become the saved record in the same persisted write.
+    @discardableResult
+    func saveRecipeToLibrary(_ id: UUID) -> Bool {
+        guard recipes.contains(where: { $0.id == id }) || activeRecipe.id == id else {
+            return false
+        }
+        if savedRecipeIDs.contains(id), activeRecipe.id != id { return true }
+
+        let previousRecipes = recipes
+        let previousSavedRecipeIDs = savedRecipeIDs
+        var updatedRecipes = recipes
+        if activeRecipe.id == id {
+            if let index = updatedRecipes.firstIndex(where: { $0.id == id }) {
+                updatedRecipes[index] = activeRecipe
+            } else {
+                updatedRecipes.insert(activeRecipe, at: 0)
+            }
+        }
+        var updatedSavedRecipeIDs = savedRecipeIDs
+        updatedSavedRecipeIDs.insert(id)
+
+        return persistLibraryMutation(
+            recipes: updatedRecipes,
+            savedRecipeIDs: updatedSavedRecipeIDs,
+            rollbackRecipes: previousRecipes,
+            rollbackSavedRecipeIDs: previousSavedRecipeIDs
+        )
+    }
+
+    /// Removes only Saved Recipes membership. Historical records and frozen
+    /// shopping/Meal Prep state continue referencing the retained Recipe.
+    @discardableResult
+    func removeRecipeFromLibrary(_ id: UUID) -> Bool {
+        guard savedRecipeIDs.contains(id) else { return false }
+        let previousRecipes = recipes
+        let previousSavedRecipeIDs = savedRecipeIDs
+        var updatedSavedRecipeIDs = savedRecipeIDs
+        updatedSavedRecipeIDs.remove(id)
+
+        guard persistLibraryMutation(
+            recipes: recipes,
+            savedRecipeIDs: updatedSavedRecipeIDs,
+            rollbackRecipes: previousRecipes,
+            rollbackSavedRecipeIDs: previousSavedRecipeIDs
+        ) else { return false }
+
+        // Recents are UI history stored separately from the JSON state. Prune
+        // only after membership persistence succeeds so a failed removal never
+        // leaves the two surfaces disagreeing.
+        recentRecipeRecords.removeAll { $0.recipeID == id }
         return true
     }
 
@@ -3761,6 +3847,33 @@ final class AppModel {
         }
     }
 
+    private func persistLibraryMutation(
+        recipes updatedRecipes: [Recipe],
+        savedRecipeIDs updatedSavedRecipeIDs: Set<UUID>,
+        rollbackRecipes: [Recipe],
+        rollbackSavedRecipeIDs: Set<UUID>
+    ) -> Bool {
+        guard persistenceReady else { return false }
+
+        suppressPersistence = true
+        recipes = updatedRecipes
+        savedRecipeIDs = updatedSavedRecipeIDs
+        suppressPersistence = false
+
+        do {
+            try stateStore.save(stateSnapshot())
+            persistenceIssue = nil
+            return true
+        } catch {
+            suppressPersistence = true
+            recipes = rollbackRecipes
+            savedRecipeIDs = rollbackSavedRecipeIDs
+            suppressPersistence = false
+            persistenceIssue = error.localizedDescription
+            return false
+        }
+    }
+
     private func stateSnapshot(
         pantryInventory pantryOverride: [PantryInventoryItem]? = nil,
         preferredProductIDs preferenceOverride: [String: String]? = nil,
@@ -3790,7 +3903,8 @@ final class AppModel {
             activeShoppingSessionID: activeShoppingSessionID,
             shoppingScope: shoppingScope,
             mealPrepDraft: mealPrepDraft,
-            mealPrepPlan: mealPrepPlan
+            mealPrepPlan: mealPrepPlan,
+            savedRecipeIDs: savedRecipeIDs
         )
     }
 

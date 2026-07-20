@@ -4980,6 +4980,200 @@ final class SmartCartTests: XCTestCase {
         XCTAssertEqual(model.homePath, [.recipeReady])
     }
 
+    @MainActor
+    func testSavedRecipeMembershipStartsEmptyAndNewImportsDoNotPolluteSamples() throws {
+        let store = InMemorySmartCartStateStore()
+        let model = AppModel(
+            stateStore: store,
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+
+        XCTAssertTrue(model.savedRecipes.isEmpty)
+        XCTAssertEqual(model.sampleRecipes.count, 3)
+        XCTAssertTrue(model.sampleRecipes.allSatisfy { $0.source == .sample })
+        XCTAssertTrue(model.recipes.allSatisfy { !model.isRecipeSaved($0.id) })
+
+        let imported = phase4Recipe(title: "Imported library recipe")
+        XCTAssertTrue(model.beginRecipe(imported))
+        XCTAssertEqual(model.savedRecipes.map(\.id), [imported.id])
+        XCTAssertEqual(model.sampleRecipes.count, 3)
+        XCTAssertTrue(model.sampleRecipes.allSatisfy { $0.source == .sample })
+
+        let restored = AppModel(
+            stateStore: store,
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        XCTAssertEqual(restored.savedRecipes.map(\.id), [imported.id])
+        XCTAssertEqual(restored.sampleRecipes.count, 3)
+    }
+
+    @MainActor
+    func testRemovingSavedMembershipPreservesTripsSnapshotsPantryAndPreferences() throws {
+        let store = InMemorySmartCartStateStore()
+        let defaults = isolatedCommerceDefaults()
+        let completed = try completePhase4Trip(
+            stateStore: store,
+            commerceDefaults: defaults
+        )
+        let model = completed.model
+        let recipeID = model.activeRecipe.id
+        XCTAssertTrue(model.saveRecipeToLibrary(recipeID))
+        model.recordRecipeOpened(recipeID)
+        model.pantryInventory = [PantryInventoryItem(name: "Rice", quantity: 2, unit: "cup")]
+        model.preferredProductIDsByIngredient = ["rice|walmart": "preferred-rice"]
+        model.mealPrepDraft = MealPrepDraft(selections: [
+            MealPrepSelection(recipe: model.activeRecipe, targetServings: 4)
+        ])
+
+        let recipesBefore = model.recipes
+        let sessionsBefore = model.shoppingSessions
+        let savedListsBefore = model.savedLists
+        let pantryBefore = model.pantryInventory
+        let preferencesBefore = model.preferences
+        let productPreferencesBefore = model.preferredProductIDsByIngredient
+        let analyticsBefore = model.analyticsEvents
+        let draftBefore = model.mealPrepDraft
+
+        XCTAssertTrue(model.removeRecipeFromLibrary(recipeID))
+        XCTAssertFalse(model.isRecipeSaved(recipeID))
+        XCTAssertEqual(model.recipes, recipesBefore)
+        XCTAssertEqual(model.shoppingSessions, sessionsBefore)
+        XCTAssertEqual(model.savedLists, savedListsBefore)
+        XCTAssertEqual(model.pantryInventory, pantryBefore)
+        XCTAssertEqual(model.preferences, preferencesBefore)
+        XCTAssertEqual(model.preferredProductIDsByIngredient, productPreferencesBefore)
+        XCTAssertEqual(model.analyticsEvents, analyticsBefore)
+        XCTAssertEqual(model.mealPrepDraft, draftBefore)
+        XCTAssertFalse(model.recentRecipeIDs.contains(recipeID))
+        XCTAssertFalse(model.removeRecipeFromLibrary(recipeID))
+
+        let restored = AppModel(stateStore: store, commerceDefaults: defaults)
+        XCTAssertFalse(restored.isRecipeSaved(recipeID))
+        XCTAssertTrue(restored.recipes.contains { $0.id == recipeID })
+        XCTAssertEqual(restored.shoppingSessions, sessionsBefore)
+        XCTAssertEqual(restored.savedLists, savedListsBefore)
+        XCTAssertEqual(restored.pantryInventory, pantryBefore)
+        XCTAssertEqual(restored.preferredProductIDsByIngredient, productPreferencesBefore)
+        XCTAssertEqual(restored.mealPrepDraft, draftBefore)
+    }
+
+    @MainActor
+    func testOpeningAndEditingRetainedUnsavedRecipeDoesNotResaveUntilExplicitSave() {
+        let store = InMemorySmartCartStateStore()
+        let defaults = isolatedCommerceDefaults()
+        let model = AppModel(stateStore: store, commerceDefaults: defaults)
+        let imported = phase4Recipe(title: "Keep history, not membership")
+
+        XCTAssertTrue(model.beginRecipe(imported))
+        XCTAssertTrue(model.removeRecipeFromLibrary(imported.id))
+        model.activeRecipe.title = "Edited while unsaved"
+        XCTAssertTrue(model.beginRecipe(model.activeRecipe))
+        XCTAssertFalse(model.isRecipeSaved(imported.id))
+
+        var restored = AppModel(stateStore: store, commerceDefaults: defaults)
+        XCTAssertFalse(restored.isRecipeSaved(imported.id))
+        XCTAssertEqual(
+            restored.recipes.first(where: { $0.id == imported.id })?.title,
+            "Edited while unsaved"
+        )
+
+        XCTAssertTrue(restored.saveRecipeToLibrary(imported.id))
+        XCTAssertTrue(restored.isRecipeSaved(imported.id))
+        restored = AppModel(stateStore: store, commerceDefaults: defaults)
+        XCTAssertTrue(restored.isRecipeSaved(imported.id))
+        XCTAssertEqual(restored.savedRecipes.first?.title, "Edited while unsaved")
+    }
+
+    @MainActor
+    func testSavedMembershipRemovalFailureRollsBackMembershipAndRecency() {
+        let store = ControllableSmartCartStateStore()
+        let defaults = isolatedCommerceDefaults()
+        let model = AppModel(stateStore: store, commerceDefaults: defaults)
+        let imported = phase4Recipe(title: "Rollback recipe")
+        XCTAssertTrue(model.beginRecipe(imported))
+        let persistedBefore = store.state
+        let recentsBefore = model.recentRecipeRecords
+
+        store.failNextSave = true
+        XCTAssertFalse(model.removeRecipeFromLibrary(imported.id))
+
+        XCTAssertTrue(model.isRecipeSaved(imported.id))
+        XCTAssertEqual(model.recentRecipeRecords, recentsBefore)
+        XCTAssertEqual(store.state, persistedBefore)
+        XCTAssertNotNil(model.persistenceIssue)
+    }
+
+    @MainActor
+    func testSchema6MissingMembershipInfersNonSamplesAndInvalidIDsAreDiscarded() throws {
+        let directory = temporaryDirectory()
+        let fileURL = directory.appendingPathComponent("schema6-without-membership.json")
+        let seedStore = InMemorySmartCartStateStore()
+        let seed = AppModel(
+            stateStore: seedStore,
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        let imported = phase4Recipe(title: "Existing schema 6 recipe")
+        XCTAssertTrue(seed.beginRecipe(imported))
+        var state = try XCTUnwrap(seedStore.state)
+        state.savedRecipeIDs = nil
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(state).write(to: fileURL, options: .atomic)
+        let payload = try String(contentsOf: fileURL, encoding: .utf8)
+        XCTAssertFalse(payload.contains("savedRecipeIDs"))
+
+        let store = JSONSmartCartStateStore(fileURL: fileURL)
+        let loaded = try XCTUnwrap(store.load())
+        XCTAssertNil(loaded.savedRecipeIDs)
+        let restored = AppModel(
+            stateStore: InMemorySmartCartStateStore(state: loaded),
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        XCTAssertEqual(restored.savedRecipeIDs, [imported.id])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: fileURL.path))
+        XCTAssertFalse(
+            try FileManager.default.contentsOfDirectory(atPath: directory.path)
+                .contains { $0.contains("corrupt-") }
+        )
+
+        var invalidState = loaded
+        invalidState.savedRecipeIDs = [imported.id, UUID()]
+        let normalized = AppModel(
+            stateStore: InMemorySmartCartStateStore(state: invalidState),
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        XCTAssertEqual(normalized.savedRecipeIDs, [imported.id])
+    }
+
+    func testSavedRecipeUISurfacesUseMembershipAndDedicatedSampleCatalog() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let cart = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("SmartCart/Features/Cart/CartView.swift"),
+            encoding: .utf8
+        )
+        let mealPrep = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("SmartCart/Features/MealPrep/MealPrepViews.swift"),
+            encoding: .utf8
+        )
+        let composer = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("SmartCart/Features/Home/RecipeComposerSheet.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(cart.contains("Text(\"Saved Recipes\")"))
+        XCTAssertTrue(cart.contains("appModel.savedRecipes"))
+        XCTAssertTrue(cart.contains("Remove from Saved Recipes"))
+        XCTAssertTrue(cart.contains("Existing Shopping Trips and pantry history will remain available."))
+        XCTAssertTrue(cart.contains("recipe-ready-save-recipe"))
+        XCTAssertTrue(mealPrep.contains("ForEach(appModel.savedRecipes)"))
+        XCTAssertFalse(mealPrep.contains("ForEach(appModel.recipes)"))
+        XCTAssertTrue(composer.contains("appModel.sampleRecipes"))
+    }
+
     private func phase4Recipe(
         title: String,
         source: RecipeSource = .text
