@@ -3410,6 +3410,14 @@ final class AppModel {
         item.product.exactURL
     }
 
+    func targetSearchURL(for item: ShoppingListItem) -> URL {
+        DemoTargetCatalogService.searchFallback(
+            for: item.ingredient,
+            storeID: "target-online",
+            preferences: preferences
+        ).exactURL
+    }
+
     func productHandoffLabel(for item: ShoppingListItem) -> String {
         item.product.isExactProductLink
             ? "Open exact product"

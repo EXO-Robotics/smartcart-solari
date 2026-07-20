@@ -649,6 +649,28 @@ final class SmartCartTests: XCTestCase {
         XCTAssertEqual(fallback.exactURL.host, "www.target.com")
     }
 
+    @MainActor
+    func testTargetComparisonURLResearchesCurrentIngredientWithoutChangingRetailer() throws {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            seedDemoShoppingState: true
+        )
+        model.preferences.organicPolicy = .only
+        let item = try XCTUnwrap(model.shoppingItems.first)
+        let selectedRetailer = model.selectedRetailer
+        let selectedProduct = item.product
+
+        let url = model.targetSearchURL(for: item)
+
+        XCTAssertEqual(url.host, "www.target.com")
+        XCTAssertTrue(url.absoluteString.localizedCaseInsensitiveContains("organic"))
+        for term in item.ingredient.name.split(whereSeparator: { !$0.isLetter && !$0.isNumber }) {
+            XCTAssertTrue(url.absoluteString.localizedCaseInsensitiveContains(term))
+        }
+        XCTAssertEqual(model.selectedRetailer, selectedRetailer)
+        XCTAssertEqual(model.shoppingItems.first?.product, selectedProduct)
+    }
+
     func testMatcherRejectsCrossRetailerProductsButAllowsUnknownFulfillment() {
         let ingredient = Ingredient(name: "Penne pasta", quantity: 16, unit: "oz")
         let products = DemoTargetCatalogService.seededProducts(
@@ -4346,6 +4368,24 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(tripSource.contains("Label(\"Next Item\", systemImage: \"arrow.right.circle.fill\")"))
         XCTAssertTrue(tripSource.contains("loadState.canRecordVisited\n                        ? SmartCartTheme.green"))
         XCTAssertTrue(tripSource.contains(".background(SmartCartTheme.herbLight)"))
+    }
+
+    func testRetailerTripMoreMenuIncludesTargetSearchAndLargerTrigger() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let tripSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "SmartCart/Features/Orders/WalmartWishlistViews.swift"
+            ),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(tripSource.contains("Button(\"Check Target\", systemImage: \"magnifyingglass\")"))
+        XCTAssertTrue(tripSource.contains("checkedTargetURL = targetSearchURL"))
+        XCTAssertTrue(tripSource.contains("url: displayedURL"))
+        XCTAssertTrue(tripSource.contains(".frame(minWidth: 72, minHeight: 48)"))
+        XCTAssertTrue(tripSource.contains("retailer-trip-check-target"))
     }
 
     func testHomeUsesActionFirstLayoutAndRecipeImportersAutoPresentMediaTools() throws {

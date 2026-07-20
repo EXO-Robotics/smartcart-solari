@@ -64,6 +64,7 @@ struct RetailerSafariHandoffView: View {
                     sessionID: sessionID,
                     itemID: itemID,
                     url: url,
+                    targetSearchURL: targetSearchURL(for: itemID),
                     configuration: appModel.retailerConfiguration,
                     position: appModel.guidedIndex + 1,
                     total: appModel.shoppingItems.count,
@@ -115,6 +116,13 @@ struct RetailerSafariHandoffView: View {
             return "Current product"
         }
         return "\(item.ingredient.name), \(item.product.brand) \(item.product.name)"
+    }
+
+    private func targetSearchURL(for itemID: UUID) -> URL {
+        guard let item = appModel.shoppingItems.first(where: { $0.id == itemID }) else {
+            return ShoppingRetailer.target.configuration.homeURL
+        }
+        return appModel.targetSearchURL(for: item)
     }
 
     private var safeReplacementCandidates: [RetailerProductRecord] {
@@ -763,6 +771,7 @@ private struct RetailerTripSafariSheet: View {
     let sessionID: UUID
     let itemID: UUID
     let url: URL
+    let targetSearchURL: URL
     let configuration: RetailerGuideConfiguration
     let position: Int
     let total: Int
@@ -778,6 +787,7 @@ private struct RetailerTripSafariSheet: View {
 
     @State private var loadState = RetailerTripPageLoadState.loading
     @State private var loadAttempt = 0
+    @State private var checkedTargetURL: URL?
     @State private var showsHelp = false
 
     var body: some View {
@@ -794,14 +804,14 @@ private struct RetailerTripSafariSheet: View {
                 loadFailureView
             } else {
                 RetailerSafariView(
-                    url: url,
+                    url: displayedURL,
                     onInitialLoad: { didLoadSuccessfully in
                         loadState = didLoadSuccessfully ? .loaded : .failed
                         onInitialLoad(didLoadSuccessfully)
                     },
                     onFinish: onAmbiguousDismiss
                 )
-                .id("\(itemID.uuidString)-\(loadAttempt)")
+                .id("\(itemID.uuidString)-\(displayedURL.absoluteString)-\(loadAttempt)")
                 .ignoresSafeArea(edges: .bottom)
             }
         }
@@ -930,7 +940,7 @@ private struct RetailerTripSafariSheet: View {
     }
 
     private var retailerOwnershipLabel: some View {
-        Label("Shopping stays with \(configuration.displayName)", systemImage: "lock.shield.fill")
+        Label(retailerOwnershipText, systemImage: "lock.shield.fill")
             .font(.caption2)
             .foregroundStyle(SmartCartTheme.secondaryInk)
             .fixedSize(horizontal: false, vertical: true)
@@ -955,6 +965,13 @@ private struct RetailerTripSafariSheet: View {
 
             Button("Skip item in SmartCart", systemImage: "forward.fill", action: onSkip)
                 .accessibilityIdentifier("retailer-trip-skip")
+            Button("Check Target", systemImage: "magnifyingglass") {
+                checkedTargetURL = targetSearchURL
+                loadState = .loading
+                loadAttempt += 1
+            }
+            .accessibilityIdentifier("retailer-trip-check-target")
+            .accessibilityHint("Opens a fresh Target search for this ingredient without changing the shopping trip")
             Button("Reload retailer page", systemImage: "arrow.clockwise") {
                 loadState = .loading
                 loadAttempt += 1
@@ -966,11 +983,32 @@ private struct RetailerTripSafariSheet: View {
             .accessibilityIdentifier("retailer-trip-help")
         } label: {
             Label("More", systemImage: "ellipsis.circle")
-                .font(.caption.bold())
-                .frame(minWidth: 44, minHeight: 44)
+                .font(.subheadline.bold())
+                .padding(.horizontal, 12)
+                .frame(minWidth: 72, minHeight: 48)
+                .background(SmartCartTheme.herbLight)
+                .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .stroke(SmartCartTheme.borderStrong, lineWidth: 1)
+                }
         }
         .accessibilityIdentifier("retailer-trip-more")
         .accessibilityLabel("More actions")
+    }
+
+    private var displayedURL: URL {
+        checkedTargetURL ?? url
+    }
+
+    private var retailerOwnershipText: String {
+        guard checkedTargetURL != nil else {
+            return "Shopping stays with \(configuration.displayName)"
+        }
+        if configuration.retailer == .target {
+            return "Fresh Target search · shopping trip unchanged"
+        }
+        return "Checking Target · trip stays with \(configuration.displayName)"
     }
 
     private var loadFailureView: some View {
