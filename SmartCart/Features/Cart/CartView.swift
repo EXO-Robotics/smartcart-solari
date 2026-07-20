@@ -958,93 +958,79 @@ private struct RecipeReadyIngredientRow: View {
 
 struct RecipesView: View {
     @Environment(AppModel.self) private var appModel
-    @State private var page: RecipesPage =
-        ProcessInfo.processInfo.environment["SMARTCART_RECIPES_PAGE"] == "recent" ? .recent : .saved
+    @State private var searchText = ""
+    @State private var recentDrawerExpanded = {
+        let environment = ProcessInfo.processInfo.environment
+        return environment["SMARTCART_RECIPES_DRAWER"] == "recent" ||
+            environment["SMARTCART_RECIPES_PAGE"] == "recent"
+    }()
+    @GestureState private var recentDrawerDrag: CGFloat = 0
 
-    private enum RecipesPage: Int, CaseIterable {
-        case saved
-        case recent
-
-        var title: String {
-            switch self {
-            case .saved: "Saved"
-            case .recent: "Opened"
-            }
-        }
-
-        var symbol: String {
-            switch self {
-            case .saved: "bookmark.fill"
-            case .recent: "clock.fill"
-            }
-        }
-    }
+    private let collapsedDrawerHeight: CGFloat = 92
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-                .padding(.horizontal, 18)
+        GeometryReader { geometry in
+            let drawerHeight = max(420, geometry.size.height - 88)
+            let collapsedOffset = drawerHeight - collapsedDrawerHeight
 
-            TabView(selection: $page) {
-                savedPage
-                    .tag(RecipesPage.saved)
-                recentPage
-                    .tag(RecipesPage.recent)
+            ZStack(alignment: .bottom) {
+                recipeLibrary
+
+                recentRecipesDrawer(height: drawerHeight, collapsedOffset: collapsedOffset)
+                    .offset(y: recentDrawerOffset(collapsedOffset: collapsedOffset))
+                    .animation(
+                        .spring(response: 0.42, dampingFraction: 0.86),
+                        value: recentDrawerExpanded
+                    )
             }
-            .tabViewStyle(.page(indexDisplayMode: .never))
         }
         .smartCartBackground()
         .toolbar(.hidden, for: .navigationBar)
+        .sensoryFeedback(.selection, trigger: recentDrawerExpanded)
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            ViewThatFits(in: .horizontal) {
-                HStack {
-                    recipesTitle
-                    Spacer()
-                    SmartCartLogo(compact: true)
-                        .accessibilityHidden(true)
-                }
-                VStack(alignment: .leading, spacing: 8) {
-                    recipesTitle
-                    SmartCartLogo(compact: true)
-                        .accessibilityHidden(true)
-                }
-            }
+    private var recipeLibrary: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 14) {
+                libraryHeader
+                recipeSearch
 
-            HStack(spacing: 4) {
-                ForEach(RecipesPage.allCases, id: \.rawValue) { candidate in
-                    Button {
-                        withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
-                            page = candidate
-                        }
-                    } label: {
-                        Label(candidate.title, systemImage: candidate.symbol)
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(page == candidate ? SmartCartTheme.onAccent : SmartCartTheme.secondaryInk)
-                            .padding(.horizontal, 13)
-                            .padding(.vertical, 9)
-                            .frame(maxWidth: .infinity)
-                            .background {
-                                if page == candidate {
-                                    Capsule().fill(SmartCartTheme.green)
-                                }
-                            }
-                            .clipShape(Capsule())
+                if filteredRecipes.isEmpty {
+                    EmptyStateView(
+                        symbol: "book.closed.fill",
+                        title: searchText.isEmpty ? "No saved recipes" : "No matching recipes",
+                        message: searchText.isEmpty
+                            ? "Import a recipe from Home to build your library."
+                            : "Try another recipe title or ingredient."
+                    )
+                } else {
+                    ForEach(filteredRecipes) { recipe in
+                        recipeLibraryCard(recipe)
                     }
-                    .buttonStyle(PressableButtonStyle())
-                    .accessibilityAddTraits(page == candidate ? .isSelected : [])
-                    .accessibilityIdentifier(candidate == .saved ? "recipes-page-saved" : "recipes-page-opened")
                 }
             }
-            .padding(4)
-            .background(SmartCartTheme.paper)
-            .clipShape(Capsule())
-            .overlay { Capsule().stroke(SmartCartTheme.border, lineWidth: 1) }
+            .padding(.horizontal, 18)
+            .padding(.bottom, collapsedDrawerHeight + 34)
+        }
+        .scrollIndicators(.hidden)
+        .scrollDismissesKeyboard(.interactively)
+    }
+
+    private var libraryHeader: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline) {
+                recipesTitle
+                Spacer()
+                SmartCartLogo(compact: true)
+                    .accessibilityHidden(true)
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                recipesTitle
+                SmartCartLogo(compact: true)
+                    .accessibilityHidden(true)
+            }
         }
         .padding(.top, 8)
-        .padding(.bottom, 12)
     }
 
     private var recipesTitle: some View {
@@ -1052,86 +1038,168 @@ struct RecipesView: View {
             Text("Recipes")
                 .font(.system(.title, design: .rounded, weight: .bold))
                 .foregroundStyle(SmartCartTheme.navy)
-            Text("Saved lists and recently opened recipes")
+            Text("View, edit, or reuse a saved recipe")
                 .font(.subheadline)
                 .foregroundStyle(SmartCartTheme.secondaryInk)
         }
     }
 
-    private var savedPage: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                if appModel.shoppingItems.isEmpty {
-                    EmptyStateView(
-                        symbol: "book.fill",
-                        title: "No recipe in progress",
-                        message: "Import a recipe and SmartCart will build your first product-matched list.",
-                        actionTitle: "Import recipe"
-                    ) {
-                        appModel.selectedTab = .home
-                        appModel.openImporter(.sample)
-                    }
-                } else {
-                    currentListCard
+    private var recipeSearch: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(SmartCartTheme.secondaryInk)
+            TextField("Search saved recipes", text: $searchText)
+                .textInputAutocapitalization(.never)
+                .accessibilityIdentifier("recipes-search")
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
                 }
-
-                savedSection
-                transparencyCard
+                .accessibilityLabel("Clear recipe search")
             }
-            .padding(.horizontal, 18)
-            .padding(.bottom, 34)
         }
-        .scrollIndicators(.hidden)
+        .smartField()
     }
 
-    private var recentPage: some View {
+    private func recipeLibraryCard(_ recipe: Recipe) -> some View {
+        Button {
+            openRecipe(recipe)
+        } label: {
+            HStack(spacing: 13) {
+                recipeIdentity(recipe, lastOpenedAt: nil)
+                Spacer(minLength: 6)
+                Image(systemName: "chevron.right")
+                    .font(.caption.bold())
+                    .foregroundStyle(SmartCartTheme.green)
+            }
+            .smartCartCard(padding: 13)
+        }
+        .buttonStyle(PressableButtonStyle())
+        .accessibilityIdentifier("saved-recipe-\(recipe.id.uuidString)")
+        .accessibilityHint("Opens this recipe for review and shopping")
+    }
+
+    private func recentRecipesDrawer(height: CGFloat, collapsedOffset: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            recentDrawerHandle(collapsedOffset: collapsedOffset)
+
+            Divider()
+                .overlay(SmartCartTheme.border)
+
+            if recentDrawerExpanded {
+                recentRecipeContents
+                    .transition(.opacity)
+            } else {
+                Color.clear
+                    .allowsHitTesting(false)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: height, alignment: .top)
+        .background(SmartCartTheme.paper)
+        .clipShape(RecipesPullUpShape())
+        .overlay {
+            RecipesPullUpShape()
+                .stroke(SmartCartTheme.borderStrong.opacity(0.72), lineWidth: 1)
+        }
+        .shadow(color: .black.opacity(0.28), radius: 22, y: -8)
+        .padding(.horizontal, 8)
+        .accessibilityElement(children: .contain)
+    }
+
+    private func recentDrawerHandle(collapsedOffset: CGFloat) -> some View {
+        Button {
+            recentDrawerExpanded.toggle()
+        } label: {
+            VStack(spacing: 4) {
+                Image(systemName: recentDrawerExpanded ? "chevron.compact.down" : "chevron.compact.up")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundStyle(SmartCartTheme.green)
+                    .frame(height: 35)
+
+                HStack(spacing: 9) {
+                    Label("Recent Recipes", systemImage: "clock.fill")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(SmartCartTheme.ink)
+
+                    Spacer()
+
+                    Text(recentDrawerExpanded ? "Swipe down to hide" : "Swipe up")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
+                }
+                .padding(.horizontal, 18)
+                .padding(.bottom, 10)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: collapsedDrawerHeight)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressableButtonStyle())
+        .simultaneousGesture(recentDragGesture(collapsedOffset: collapsedOffset))
+        .accessibilityIdentifier("recipes-recent-drawer")
+        .accessibilityLabel("Recent Recipes drawer")
+        .accessibilityValue(recentDrawerExpanded ? "Expanded" : "Collapsed")
+        .accessibilityHint(recentDrawerExpanded ? "Swipe down or tap to hide recent recipes" : "Swipe up or tap to show recent recipes")
+    }
+
+    private var recentRecipeContents: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
+            LazyVStack(alignment: .leading, spacing: 12) {
                 SectionHeader(
-                    title: "Recently opened",
-                    subtitle: recentlyOpenedSubtitle
+                    title: "Recent Recipes",
+                    subtitle: recentRecipesSubtitle
                 )
 
-                if appModel.recentRecipes.isEmpty {
+                if appModel.recentRecipeRecords.isEmpty {
                     EmptyStateView(
                         symbol: "clock.fill",
                         title: "Nothing recent yet",
-                        message: "Recipes you import or open will appear here."
+                        message: "Recipes you import or intentionally open will appear here."
                     )
                 } else {
-                    ForEach(appModel.recentRecipes.prefix(5)) { recipe in
-                        recentRecipeCard(recipe)
+                    ForEach(appModel.recentRecipeRecords.prefix(5)) { record in
+                        if let recipe = appModel.recipes.first(where: { $0.id == record.recipeID }) {
+                            recentRecipeCard(recipe, record: record)
+                        }
                     }
                 }
             }
             .padding(.horizontal, 18)
-            .padding(.bottom, 34)
+            .padding(.top, 16)
+            .padding(.bottom, 40)
         }
         .scrollIndicators(.hidden)
     }
 
-    private func recentRecipeCard(_ recipe: Recipe) -> some View {
-        let canShopAgain = appModel.hasCompletedShoppingTrip &&
-            appModel.mostRecentShoppedRecipe?.id == recipe.id
-        let actionTitle = canShopAgain ? "Shop Again" : "Open"
+    private func recentRecipeCard(_ recipe: Recipe, record: RecentRecipeRecord) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            recipeIdentity(recipe, lastOpenedAt: record.lastOpenedAt)
 
-        return ViewThatFits(in: .horizontal) {
-            HStack(spacing: 13) {
-                recentRecipeIdentity(recipe)
-                Spacer(minLength: 6)
-                recentRecipeAction(recipe, title: actionTitle, fillsWidth: false)
-            }
-            VStack(alignment: .leading, spacing: 12) {
-                recentRecipeIdentity(recipe)
-                recentRecipeAction(recipe, title: actionTitle, fillsWidth: true)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 9) {
+                    openRecipeButton(recipe)
+                    if canShopAgain(recipe) {
+                        shopAgainButton(recipe)
+                    }
+                }
+                VStack(spacing: 9) {
+                    openRecipeButton(recipe)
+                    if canShopAgain(recipe) {
+                        shopAgainButton(recipe)
+                    }
+                }
             }
         }
         .smartCartCard(padding: 13)
         .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("recently-opened-recipe-\(recipe.id.uuidString)")
+        .accessibilityIdentifier("recent-recipe-\(recipe.id.uuidString)")
     }
 
-    private func recentRecipeIdentity(_ recipe: Recipe) -> some View {
+    private func recipeIdentity(_ recipe: Recipe, lastOpenedAt: Date?) -> some View {
         HStack(spacing: 13) {
             Image(systemName: recipe.heroSymbol)
                 .font(.title3.bold())
@@ -1146,160 +1214,126 @@ struct RecipesView: View {
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(SmartCartTheme.navy)
                     .lineLimit(2)
-                Text("\(recipe.ingredients.count) ingredients · \(recipe.servings) servings · \(recipe.source.rawValue)")
+                Text("\(recipe.ingredients.count) ingredients · \(recipe.servings) servings")
                     .font(.caption)
                     .foregroundStyle(SmartCartTheme.secondaryInk)
-                    .fixedSize(horizontal: false, vertical: true)
+                if let lastOpenedAt {
+                    Text("Opened \(lastOpenedAt, style: .relative)")
+                    .font(.caption2)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
+                }
             }
         }
         .accessibilityElement(children: .combine)
     }
 
-    private func recentRecipeAction(
-        _ recipe: Recipe,
-        title: String,
-        fillsWidth: Bool
-    ) -> some View {
+    private func openRecipeButton(_ recipe: Recipe) -> some View {
         Button {
-            appModel.beginRecipe(recipe)
+            openRecipe(recipe)
         } label: {
-            Label(title, systemImage: "arrow.right")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(SmartCartTheme.onAccent)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 9)
-                .frame(maxWidth: fillsWidth ? .infinity : nil)
-                .background(SmartCartTheme.green)
-                .clipShape(fillsWidth ? AnyShape(RoundedRectangle(cornerRadius: 13, style: .continuous)) : AnyShape(Capsule()))
+            Label("Open Recipe", systemImage: "book.fill")
+                .frame(maxWidth: .infinity)
         }
-        .buttonStyle(PressableButtonStyle())
-        .smartCartMinimumHitTarget()
-        .accessibilityLabel(title == "Shop Again" ? "Shop \(recipe.title) again" : "Open \(recipe.title)")
-        .accessibilityIdentifier(title == "Shop Again" ? "recipe-shop-again" : "recipe-open")
+        .buttonStyle(SecondaryButtonStyle())
+        .accessibilityIdentifier("recent-recipe-open-\(recipe.id.uuidString)")
     }
 
-    private var recentlyOpenedSubtitle: String {
-        let count = min(5, appModel.recentRecipes.count)
+    private func shopAgainButton(_ recipe: Recipe) -> some View {
+        Button {
+            openRecipe(recipe)
+        } label: {
+            Label("Shop Again", systemImage: "arrow.clockwise")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(PrimaryButtonStyle())
+        .accessibilityIdentifier("recent-recipe-shop-again-\(recipe.id.uuidString)")
+    }
+
+    private var filteredRecipes: [Recipe] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return appModel.recipes }
+        return appModel.recipes.filter { recipe in
+            recipe.title.lowercased().contains(query) ||
+                recipe.ingredients.contains { $0.name.lowercased().contains(query) }
+        }
+    }
+
+    private var recentRecipesSubtitle: String {
+        let count = min(5, appModel.recentRecipeRecords.count)
         return count == 0
-            ? "Recipes you open will appear here"
+            ? "Whole recipes you open will appear here"
             : "\(count) most recently opened recipe\(count == 1 ? "" : "s"), newest first"
     }
 
-    private var currentListCard: some View {
-        Button {
-            appModel.selectedTab = .home
-            appModel.homePath = [.shoppingList]
-        } label: {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    StatusPill(title: "Current list", symbol: "checkmark.circle.fill")
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text(appModel.estimatedTotal, format: .currency(code: "USD"))
-                            .font(.title3.bold())
-                            .foregroundStyle(SmartCartTheme.navy)
-                        Text("Demo subtotal · not live")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(SmartCartTheme.amber)
-                    }
-                }
-
-                HStack(spacing: 14) {
-                    Image(systemName: appModel.isMealPrepShopping ? "calendar.badge.checkmark" : appModel.activeRecipe.heroSymbol)
-                        .font(.title.bold())
-                        .foregroundStyle(SmartCartTheme.onAccent)
-                        .frame(width: 62, height: 62)
-                        .background(SmartCartTheme.green)
-                        .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
-                        .shadow(color: SmartCartTheme.mintGlow, radius: 12)
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(appModel.currentShoppingTitle)
-                            .font(.title3.bold())
-                            .foregroundStyle(SmartCartTheme.navy)
-                            .lineLimit(2)
-                        Text("\(appModel.shoppingItems.count) products · \(appModel.primaryStore.name)")
-                            .font(.caption)
-                            .foregroundStyle(SmartCartTheme.secondaryInk)
-                            .lineLimit(1)
-                    }
-                    Spacer(minLength: 0)
-                }
-
-                HStack {
-                    Label("\(appModel.matchedItemCount) best matches", systemImage: "tag.fill")
-                    Spacer()
-                    Label("Open list", systemImage: "arrow.right")
-                }
-                .font(.caption.weight(.bold))
-                .foregroundStyle(SmartCartTheme.green)
-            }
-            .smartCartCard()
-            .smartCartShadow()
-        }
-        .buttonStyle(PressableButtonStyle())
-    }
-
-    private var savedSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "Saved lists", subtitle: "Lists you can revisit")
-
-            if appModel.savedLists.isEmpty {
-                HStack(spacing: 12) {
-                    Image(systemName: "bookmark.fill")
-                        .foregroundStyle(SmartCartTheme.walmartBlue)
-                        .frame(width: 40, height: 40)
-                        .background(SmartCartTheme.walmartLight)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    Text("Save the current shopping list to keep its products, quantities, observed-price subtotal, and Shopping Trip progress here.")
-                        .font(.caption)
-                        .foregroundStyle(SmartCartTheme.secondaryInk)
-                }
-                .smartCartCard(padding: 14)
-            } else {
-                ForEach(appModel.savedLists) { list in
-                    Button {
-                        appModel.openSavedList(list.id)
-                    } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: "bookmark.fill")
-                                .foregroundStyle(SmartCartTheme.green)
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(list.recipeTitle)
-                                    .font(.subheadline.weight(.bold))
-                                    .foregroundStyle(SmartCartTheme.navy)
-                                Text("\(list.itemCount) items · \(list.storeName)")
-                                    .font(.caption)
-                                    .foregroundStyle(SmartCartTheme.secondaryInk)
-                            }
-                            Spacer()
-                            VStack(alignment: .trailing, spacing: 2) {
-                                Text(list.total, format: .currency(code: "USD"))
-                                    .font(.subheadline.weight(.bold))
-                                    .foregroundStyle(SmartCartTheme.navy)
-                                Text("Demo · not live")
-                                    .font(.system(size: 9, weight: .bold))
-                                    .foregroundStyle(SmartCartTheme.amber)
-                            }
-                            Image(systemName: "chevron.right")
-                                .font(.caption.bold())
-                                .foregroundStyle(SmartCartTheme.green)
-                        }
-                        .smartCartCard(padding: 14)
-                    }
-                    .buttonStyle(PressableButtonStyle())
-                    .accessibilityIdentifier("saved-list-\(list.id.uuidString)")
-                }
-            }
+    private func canShopAgain(_ recipe: Recipe) -> Bool {
+        appModel.shoppingSessions.contains { session in
+            session.recipeID == recipe.id && (session.isGuideComplete || session.isCommitted)
         }
     }
 
-    private var transparencyCard: some View {
-        InfoBanner(
-            symbol: "clock.badge.exclamationmark.fill",
-            title: "Estimated totals stay transparent",
-            message: "Retailer prices and availability can change. \(appModel.retailerConfiguration.displayName) confirms taxes, fees, substitutions, tips, and final variable-weight prices.",
-            color: SmartCartTheme.amber
+    private func openRecipe(_ recipe: Recipe) {
+        recentDrawerExpanded = false
+        appModel.beginRecipe(recipe)
+    }
+
+    private func recentDrawerOffset(collapsedOffset: CGFloat) -> CGFloat {
+        let restingOffset = recentDrawerExpanded ? 0 : collapsedOffset
+        return min(max(restingOffset + recentDrawerDrag, 0), collapsedOffset)
+    }
+
+    private func recentDragGesture(collapsedOffset: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 6)
+            .updating($recentDrawerDrag) { value, state, _ in
+                state = value.translation.height
+            }
+            .onEnded { value in
+                let projected = value.predictedEndTranslation.height
+                let decisiveDistance = min(96, collapsedOffset * 0.22)
+
+                if recentDrawerExpanded {
+                    if projected > decisiveDistance {
+                        recentDrawerExpanded = false
+                    }
+                } else if projected < -decisiveDistance {
+                    recentDrawerExpanded = true
+                }
+            }
+    }
+}
+
+private struct RecipesPullUpShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let top: CGFloat = 34
+        let cornerRadius: CGFloat = 26
+        let handleRadius: CGFloat = 36
+        let centerX = rect.midX
+
+        var path = Path()
+        path.move(to: CGPoint(x: cornerRadius, y: top))
+        path.addLine(to: CGPoint(x: centerX - handleRadius, y: top))
+        path.addCurve(
+            to: CGPoint(x: centerX, y: 0),
+            control1: CGPoint(x: centerX - 23, y: top),
+            control2: CGPoint(x: centerX - 28, y: 0)
         )
+        path.addCurve(
+            to: CGPoint(x: centerX + handleRadius, y: top),
+            control1: CGPoint(x: centerX + 28, y: 0),
+            control2: CGPoint(x: centerX + 23, y: top)
+        )
+        path.addLine(to: CGPoint(x: rect.maxX - cornerRadius, y: top))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX, y: top + cornerRadius),
+            control: CGPoint(x: rect.maxX, y: top)
+        )
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: top + cornerRadius))
+        path.addQuadCurve(
+            to: CGPoint(x: cornerRadius, y: top),
+            control: CGPoint(x: rect.minX, y: top)
+        )
+        path.closeSubpath()
+        return path
     }
 }

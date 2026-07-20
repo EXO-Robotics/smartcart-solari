@@ -3550,6 +3550,27 @@ final class SmartCartTests: XCTestCase {
         XCTAssertFalse(recipesSource.contains("private var mealPrepLaunchCard"))
     }
 
+    func testRecipesTabUsesSavedLibraryAndRecentRecipeDrawer() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let recipesSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "SmartCart/Features/Cart/CartView.swift"
+            ),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(recipesSource.contains("TextField(\"Search saved recipes\""))
+        XCTAssertTrue(recipesSource.contains("Label(\"Recent Recipes\", systemImage: \"clock.fill\")"))
+        XCTAssertTrue(recipesSource.contains("accessibilityIdentifier(\"recipes-recent-drawer\")"))
+        XCTAssertTrue(recipesSource.contains("recentDragGesture"))
+        XCTAssertFalse(recipesSource.contains("enum RecipesPage"))
+        XCTAssertFalse(recipesSource.contains("Text(\"Recently opened\")"))
+        XCTAssertFalse(recipesSource.contains("private var mealPrepLaunchCard"))
+        XCTAssertFalse(recipesSource.contains("private var currentListCard"))
+    }
+
     @MainActor
     func testAllHighConfidenceExactMatchesHaveNoExceptions() async throws {
         let model = AppModel(
@@ -4075,6 +4096,38 @@ final class SmartCartTests: XCTestCase {
             commerceDefaults: isolatedCommerceDefaults()
         )
         XCTAssertTrue(separatelyIsolated.recentRecipeIDs.isEmpty)
+    }
+
+    @MainActor
+    func testRetailerQueueActionsNeverAlterRecentRecipeHistory() async throws {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        let recipe = phase2Recipe(ingredients: [
+            Ingredient(name: "Penne pasta", quantity: 16, unit: "oz"),
+            Ingredient(name: "Olive oil", quantity: 2, unit: "tbsp")
+        ])
+        XCTAssertTrue(model.beginRecipe(recipe))
+        model.completeRetailerSetup()
+        await model.startMatching()
+        for item in model.unresolvedMatchingExceptionItems {
+            XCTAssertTrue(model.acceptMatchingException(itemID: item.id))
+        }
+        XCTAssertTrue(model.continueToShoppingTrip())
+        XCTAssertTrue(model.startOrResumeRetailerShoppingSession())
+
+        let originalRecents = model.recentRecipeRecords
+        let sessionID = try XCTUnwrap(model.activeShoppingSessionID)
+
+        model.advanceGuidedItem()
+        XCTAssertEqual(model.recentRecipeRecords, originalRecents)
+        XCTAssertTrue(model.pauseRetailerShoppingSession())
+        XCTAssertEqual(model.recentRecipeRecords, originalRecents)
+        XCTAssertTrue(model.openShoppingSession(sessionID))
+        XCTAssertEqual(model.recentRecipeRecords, originalRecents)
+        XCTAssertTrue(model.startOrResumeRetailerShoppingSession())
+        XCTAssertEqual(model.recentRecipeRecords, originalRecents)
     }
 
     @MainActor

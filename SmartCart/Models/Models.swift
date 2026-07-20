@@ -191,6 +191,19 @@ struct Recipe: Identifiable, Hashable, Codable {
     var totalMinutes: Int { prepMinutes + cookMinutes }
 }
 
+/// Recipe-level interaction history used only to order the Recent Recipes UI.
+/// Shopping-product navigation never writes this record.
+struct RecentRecipeRecord: Identifiable, Hashable, Codable {
+    var id: UUID { recipeID }
+    let recipeID: UUID
+    var lastOpenedAt: Date
+
+    init(recipeID: UUID, lastOpenedAt: Date = .now) {
+        self.recipeID = recipeID
+        self.lastOpenedAt = lastOpenedAt
+    }
+}
+
 struct Ingredient: Identifiable, Hashable, Codable {
     let id: UUID
     var rawText: String

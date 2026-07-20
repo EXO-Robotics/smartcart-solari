@@ -121,15 +121,20 @@ final class AppModel {
     var toastMessage: String?
     private(set) var persistenceIssue: String?
 
-    /// Most-recently-shopped recipe ids, newest first. Stored in UserDefaults
-    /// (not the JSON state schema) because it is pure UI ordering data.
-    var recentRecipeIDs: [UUID] = [] {
+    /// Whole-recipe opens, newest first. Stored in UserDefaults rather than
+    /// the JSON state schema because this is UI history, not shopping state.
+    private(set) var recentRecipeRecords: [RecentRecipeRecord] = [] {
         didSet {
-            commerceDefaults.set(recentRecipeIDs.map(\.uuidString), forKey: Self.recentRecipesKey)
+            if let data = try? JSONEncoder().encode(recentRecipeRecords) {
+                commerceDefaults.set(data, forKey: Self.recentRecipeRecordsKey)
+            }
+            // Retain the former ordering key for downgrade compatibility.
+            commerceDefaults.set(recentRecipeIDs.map(\.uuidString), forKey: Self.legacyRecentRecipesKey)
         }
     }
 
-    private static let recentRecipesKey = "smartcart.recentRecipeIDs"
+    private static let recentRecipeRecordsKey = "smartcart.recentRecipeRecords"
+    private static let legacyRecentRecipesKey = "smartcart.recentRecipeIDs"
     private static let selectedRetailerKey = "smartcart.commerce.selectedRetailer"
     private static let retailerSetupCompletedKey = "smartcart.commerce.retailerSetupCompleted"
     private static let shoppingRouteKey = "smartcart.commerce.shoppingRoute"
@@ -137,8 +142,12 @@ final class AppModel {
     private static let commerceFulfillmentKey = "smartcart.commerce.fulfillment"
     private static let handoffFeedbackKey = "smartcart.commerce.lastFeedback"
 
+    var recentRecipeIDs: [UUID] { recentRecipeRecords.map(\.recipeID) }
+
     var recentRecipes: [Recipe] {
-        recentRecipeIDs.compactMap { id in recipes.first { $0.id == id } }
+        recentRecipeRecords.compactMap { record in
+            recipes.first { $0.id == record.recipeID }
+        }
     }
 
     var hasCompletedShoppingTrip: Bool {
@@ -384,8 +393,28 @@ final class AppModel {
         }
 
         guidedIndex = min(max(0, guidedIndex), max(0, shoppingItems.count - 1))
-        recentRecipeIDs = (commerceDefaults.stringArray(forKey: Self.recentRecipesKey) ?? [])
-            .compactMap(UUID.init(uuidString:))
+        if let data = commerceDefaults.data(forKey: Self.recentRecipeRecordsKey),
+           let records = try? JSONDecoder().decode([RecentRecipeRecord].self, from: data) {
+            recentRecipeRecords = records
+                .filter { record in recipes.contains { $0.id == record.recipeID } }
+                .sorted { $0.lastOpenedAt > $1.lastOpenedAt }
+                .prefix(5)
+                .map { $0 }
+        } else {
+            let migrationDate = Date()
+            recentRecipeRecords = (commerceDefaults.stringArray(forKey: Self.legacyRecentRecipesKey) ?? [])
+                .compactMap(UUID.init(uuidString:))
+                .enumerated()
+                .map { index, recipeID in
+                    RecentRecipeRecord(
+                        recipeID: recipeID,
+                        lastOpenedAt: migrationDate.addingTimeInterval(-Double(index))
+                    )
+                }
+                .filter { record in recipes.contains { $0.id == record.recipeID } }
+                .prefix(5)
+                .map { $0 }
+        }
         if let stateLoadError {
             persistenceIssue = stateLoadError.localizedDescription
             persistenceReady = false
@@ -809,7 +838,7 @@ final class AppModel {
         } else {
             recipes.insert(recipe, at: 0)
         }
-        recentRecipeIDs = ([recipe.id] + recentRecipeIDs.filter { $0 != recipe.id }).prefix(5).map { $0 }
+        recordRecipeOpened(recipe.id)
         shoppingItems = []
         activeShoppingSessionID = nil
         matchProgress = 0
@@ -827,6 +856,18 @@ final class AppModel {
             ]
         )
         return true
+    }
+
+    /// Records only an intentional whole-recipe open. Retailer pages,
+    /// shopping-trip resume, replacements, and reconciliation never call it.
+    func recordRecipeOpened(_ recipeID: UUID, at openedAt: Date = .now) {
+        guard recipes.contains(where: { $0.id == recipeID }) else { return }
+        recentRecipeRecords = (
+            [RecentRecipeRecord(recipeID: recipeID, lastOpenedAt: openedAt)] +
+                recentRecipeRecords.filter { $0.recipeID != recipeID }
+        )
+        .prefix(5)
+        .map { $0 }
     }
 
     var currentShoppingTitle: String {
