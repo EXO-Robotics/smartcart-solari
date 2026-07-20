@@ -80,18 +80,16 @@ struct HomeView: View {
     }
 
     private var header: some View {
-        HStack {
-            Image(systemName: "leaf.fill")
-                .font(.system(size: 30, weight: .semibold))
-                .foregroundStyle(SmartCartTheme.green)
-                .shadow(color: SmartCartTheme.green.opacity(0.34), radius: 12)
-                .frame(width: 44, height: 44, alignment: .leading)
-                .accessibilityLabel("SmartCart")
+        ZStack {
+            SmartCartLogo()
+                .frame(maxWidth: .infinity, alignment: .center)
 
-            Spacer()
-
-            moreImportMenu
+            HStack {
+                Spacer()
+                moreImportMenu
+            }
         }
+        .padding(.top, 8)
     }
 
     @ViewBuilder
@@ -106,6 +104,8 @@ struct HomeView: View {
             Text("Start a Shopping Trip")
                 .font(.system(.largeTitle, design: .rounded, weight: .bold))
                 .foregroundStyle(.white)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
 
             startShoppingPanel
