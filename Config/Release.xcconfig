@@ -1,0 +1,6 @@
+#include "Base.xcconfig"
+
+// Filled with the verified public HTTPS barcode-only service before release.
+// An empty value produces a truthful configurationMissing outcome.
+SMARTCART_BARCODE_BACKEND_URL =
+

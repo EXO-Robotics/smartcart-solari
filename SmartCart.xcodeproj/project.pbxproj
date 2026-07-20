@@ -84,12 +84,16 @@
 		B1000000000000000000001C /* MealPrepAggregationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealPrepAggregationService.swift; sourceTree = "<group>"; };
 		B1000000000000000000001D /* MealPrepViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealPrepViews.swift; sourceTree = "<group>"; };
 		B1000000000000000000001E /* ContextualIngredientFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContextualIngredientFilter.swift; sourceTree = "<group>"; };
+		B1000000000000000000001F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B20000000000000000000001 /* SmartCartTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartCartTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000002 /* SmartCartTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SmartCartTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B20000000000000000000003 /* MealPrepAggregationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealPrepAggregationTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000004 /* ReleaseBlockerMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReleaseBlockerMigrationTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000005 /* ReleaseBlockerPackageMathTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReleaseBlockerPackageMathTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000006 /* ContextualIngredientFilterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContextualIngredientFilterTests.swift; sourceTree = "<group>"; };
+		B30000000000000000000001 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
+		B30000000000000000000002 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
+		B30000000000000000000003 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -113,15 +117,27 @@
 		D10000000000000000000001 = {
 			isa = PBXGroup;
 			children = (
+				D30000000000000000000001 /* Config */,
 				D10000000000000000000002 /* SmartCart */,
 				D20000000000000000000001 /* SmartCartTests */,
 				D1000000000000000000000A /* Products */,
 			);
 			sourceTree = "<group>";
 		};
+		D30000000000000000000001 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				B30000000000000000000001 /* Base.xcconfig */,
+				B30000000000000000000002 /* Debug.xcconfig */,
+				B30000000000000000000003 /* Release.xcconfig */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
 		D10000000000000000000002 /* SmartCart */ = {
 			isa = PBXGroup;
 			children = (
+				B1000000000000000000001F /* Info.plist */,
 				B10000000000000000000001 /* SmartCartApp.swift */,
 				B10000000000000000000006 /* RootView.swift */,
 				B10000000000000000000013 /* PrivacyInfo.xcprivacy */,
@@ -483,17 +499,21 @@
 		};
 		F10000000000000000000005 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = B30000000000000000000002 /* Debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 2;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = SmartCart/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = SmartCart;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.food-and-drink";
 				INFOPLIST_KEY_NSCameraUsageDescription = "SmartCart uses the camera to scan recipe cards, cookbook pages, and pantry barcodes.";
 				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking = YES;
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "SmartCart connects to a local barcode service during development.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "SmartCart imports recipe screenshots and photos from your library.";
+				INFOPLIST_KEY_SmartCartBarcodeBackendURL = "$(SMARTCART_BARCODE_BACKEND_URL)";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -514,16 +534,19 @@
 		};
 		F10000000000000000000006 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = B30000000000000000000003 /* Release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 2;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = SmartCart/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = SmartCart;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.food-and-drink";
 				INFOPLIST_KEY_NSCameraUsageDescription = "SmartCart uses the camera to scan recipe cards, cookbook pages, and pantry barcodes.";
 				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking = YES;
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "SmartCart imports recipe screenshots and photos from your library.";
+				INFOPLIST_KEY_SmartCartBarcodeBackendURL = "$(SMARTCART_BARCODE_BACKEND_URL)";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";

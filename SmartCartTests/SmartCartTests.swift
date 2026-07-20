@@ -1514,6 +1514,163 @@ final class SmartCartTests: XCTestCase {
         }
         XCTAssertEqual(ean8.format, .ean8)
         XCTAssertEqual(ean8.canonicalGTIN14, "00000096385074")
+
+        let equivalentTradeItems = [
+            "078742002163",
+            "0078742002163",
+            "00078742002163"
+        ]
+        let canonicalIdentities = try equivalentTradeItems.map { rawValue in
+            switch BarcodeNormalizer.normalize(rawValue) {
+            case .success(let barcode):
+                return barcode.canonicalGTIN14
+            case .failure(let error):
+                throw error
+            }
+        }
+        XCTAssertEqual(Set(canonicalIdentities), ["00078742002163"])
+    }
+
+    func testBundledBarcodeFixtureUsesCurrentIdentityWithoutRetailClaims() async {
+        let resolver = BarcodeResolutionService(
+            userEditedCache: InMemoryBarcodeUserEditedCache(),
+            fixtures: .smartCart,
+            adapters: [ThrowingBarcodeAdapter()]
+        )
+
+        let result = await resolver.resolve(BarcodeScan(rawBarcode: "078742002163"))
+        guard case .resolved(let resolved) = result else {
+            return XCTFail("The bundled demo barcode should resolve before network access")
+        }
+        XCTAssertEqual(resolved.source, .bundledFixture)
+        XCTAssertEqual(resolved.product.name, "Kettle Cooked Original Potato Chips with Sea Salt")
+        XCTAssertEqual(resolved.product.brand, "Great Value")
+        XCTAssertNil(resolved.product.externalReference)
+    }
+
+    func testBarcodeBackendConfigurationUsesRequiredPrecedenceAndBuildRules() throws {
+        let bundleInfo: [String: Any] = [
+            BarcodeBackendConfiguration.bundleKey: "https://bundle.smartcart.app"
+        ]
+        let environment = [
+            "SMARTCART_BARCODE_BACKEND_URL": "http://localhost:8787"
+        ]
+
+        let injected = try BarcodeBackendConfiguration.resolve(
+            explicitURL: URL(string: "https://injected.smartcart.app")!,
+            environment: environment,
+            bundleInfo: bundleInfo,
+            buildMode: .release
+        ).get()
+        XCTAssertEqual(injected.source, .injected)
+        XCTAssertEqual(injected.baseURL.host, "injected.smartcart.app")
+
+        let debug = try BarcodeBackendConfiguration.resolve(
+            environment: environment,
+            bundleInfo: bundleInfo,
+            buildMode: .debug
+        ).get()
+        XCTAssertEqual(debug.source, .debugEnvironment)
+        XCTAssertEqual(debug.baseURL.absoluteString, "http://localhost:8787")
+
+        let release = try BarcodeBackendConfiguration.resolve(
+            environment: environment,
+            bundleInfo: bundleInfo,
+            buildMode: .release
+        ).get()
+        XCTAssertEqual(release.source, .bundle)
+        XCTAssertEqual(release.baseURL.absoluteString, "https://bundle.smartcart.app")
+    }
+
+    func testBarcodeBuildConfigurationProcessesTheBundleKeyAndLocalATSException() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let infoData = try Data(
+            contentsOf: repositoryRoot.appendingPathComponent("SmartCart/Info.plist")
+        )
+        let info = try XCTUnwrap(
+            PropertyListSerialization.propertyList(from: infoData, format: nil)
+                as? [String: Any]
+        )
+        XCTAssertEqual(
+            info[BarcodeBackendConfiguration.bundleKey] as? String,
+            "$(SMARTCART_BARCODE_BACKEND_URL)"
+        )
+        let ats = try XCTUnwrap(info["NSAppTransportSecurity"] as? [String: Any])
+        XCTAssertEqual(ats["NSAllowsLocalNetworking"] as? Bool, true)
+
+        let project = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "SmartCart.xcodeproj/project.pbxproj"
+            ),
+            encoding: .utf8
+        )
+        XCTAssertEqual(project.components(separatedBy: "GENERATE_INFOPLIST_FILE = NO;").count - 1, 2)
+        XCTAssertEqual(project.components(separatedBy: "INFOPLIST_FILE = SmartCart/Info.plist;").count - 1, 2)
+
+        let debug = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("Config/Debug.xcconfig"),
+            encoding: .utf8
+        )
+        XCTAssertTrue(debug.contains("SMARTCART_BARCODE_BACKEND_URL = http:/$()/localhost:8787"))
+    }
+
+    func testBarcodeBackendConfigurationRejectsUnsafeReleaseEndpoints() {
+        let unsafeValues = [
+            "http://catalog.smartcart.example.net",
+            "https://localhost:8787",
+            "https://localhost.",
+            "https://127.0.0.1",
+            "https://[::1]",
+            "https://[0:0:0:0:0:0:0:1]",
+            "https://[fd00::1]",
+            "https://[::ffff:127.0.0.1]",
+            "https://[::ffff:192.168.1.12]",
+            "https://192.168.1.12",
+            "https://catalog.example.com",
+            "https://catalog.example.com.",
+            "https://catalog.example.net",
+            "https://catalog.test",
+            "https://api.example",
+            "https://backend",
+            "https://not_a_host.com",
+            "https://-bad.com",
+            "https://bad-.com",
+            "https://bad..com",
+            "not a url"
+        ]
+
+        for value in unsafeValues {
+            let result = BarcodeBackendConfiguration.resolve(
+                environment: [:],
+                bundleInfo: [BarcodeBackendConfiguration.bundleKey: value],
+                buildMode: .release
+            )
+            guard case .failure = result else {
+                return XCTFail("Release configuration should reject \(value)")
+            }
+        }
+
+        let missing = BarcodeBackendConfiguration.resolve(
+            environment: [:],
+            bundleInfo: [:],
+            buildMode: .release
+        )
+        XCTAssertThrowsError(try missing.get())
+        if case .failure(let error) = missing {
+            XCTAssertEqual(error, .missing)
+        } else {
+            XCTFail("Missing Release configuration must remain explicit")
+        }
+
+        XCTAssertNoThrow(
+            try BarcodeBackendConfiguration.resolve(
+                environment: [:],
+                bundleInfo: [BarcodeBackendConfiguration.bundleKey: "https://fcatalog.com"],
+                buildMode: .release
+            ).get()
+        )
     }
 
     @MainActor
@@ -1554,7 +1711,7 @@ final class SmartCartTests: XCTestCase {
         XCTAssertEqual(restored.pantryInventory.first?.requiresUserNaming, false)
     }
 
-    func testBarcodeNetworkFailureFallsBackToManualNamingState() async {
+    func testBarcodeNetworkFailureRemainsUnavailableWithManualNamingState() async {
         let resolver = BarcodeResolutionService(
             userEditedCache: InMemoryBarcodeUserEditedCache(),
             fixtures: BundledBarcodeFixtureCatalog(fixtures: []),
@@ -1563,13 +1720,46 @@ final class SmartCartTests: XCTestCase {
 
         let result = await resolver.resolve(BarcodeScan(rawBarcode: "4006381333931"))
 
-        guard case .unresolved(let unresolved) = result else {
-            return XCTFail("Network failure must leave a manual naming path")
+        guard case .unavailable(let unresolved, let failure) = result else {
+            return XCTFail("Network failure must remain distinct from a catalog miss")
         }
         XCTAssertEqual(unresolved.reason, .noMatch)
         XCTAssertEqual(unresolved.attemptedAdapterIdentifiers, ["failing-test-adapter"])
         XCTAssertEqual(unresolved.adapterFailures.count, 1)
+        XCTAssertEqual(failure, .serverError)
         XCTAssertNotNil(unresolved.normalizedBarcode)
+    }
+
+    func testSmartCartBarcodeAdapterMapsOfflineAndMissingReleaseConfiguration() async {
+        let offlineResolver = BarcodeResolutionService(
+            userEditedCache: InMemoryBarcodeUserEditedCache(),
+            fixtures: BundledBarcodeFixtureCatalog(fixtures: []),
+            adapters: [makeBarcodeAdapter(protocolClass: BarcodeOfflineURLProtocolStub.self)]
+        )
+        let offline = await offlineResolver.resolve(BarcodeScan(rawBarcode: "4006381333931"))
+        guard case .unavailable(_, let offlineFailure) = offline else {
+            return XCTFail("A URLSession connectivity failure must remain unavailable")
+        }
+        XCTAssertEqual(offlineFailure, .offline)
+
+        let missingConfigurationResolver = BarcodeResolutionService(
+            userEditedCache: InMemoryBarcodeUserEditedCache(),
+            fixtures: BundledBarcodeFixtureCatalog(fixtures: []),
+            adapters: [
+                SmartCartBackendBarcodeAdapter(
+                    environment: [:],
+                    bundleInfo: [:],
+                    buildMode: .release
+                )
+            ]
+        )
+        let missing = await missingConfigurationResolver.resolve(
+            BarcodeScan(rawBarcode: "4006381333931")
+        )
+        guard case .unavailable(_, let missingFailure) = missing else {
+            return XCTFail("Missing Release configuration must remain unavailable")
+        }
+        XCTAssertEqual(missingFailure, .configurationMissing)
     }
 
     func testSmartCartBarcodeAdapterDecodesIdentityWithoutRetailClaims() async throws {
@@ -1577,19 +1767,104 @@ final class SmartCartTests: XCTestCase {
         configuration.protocolClasses = [BarcodeURLProtocolStub.self]
         let adapter = SmartCartBackendBarcodeAdapter(
             session: URLSession(configuration: configuration),
-            baseURL: URL(string: "https://smartcart.test")!
+            baseURL: URL(string: "https://barcode.smartcart.app")!,
+            buildMode: .release
         )
         let barcode: NormalizedBarcode
-        switch BarcodeNormalizer.normalize("078742002163") {
+        switch BarcodeNormalizer.normalize("5449000000996") {
         case .success(let normalized): barcode = normalized
-        case .failure(let error): return XCTFail("Fixture barcode should be valid: \(error)")
+        case .failure(let error): return XCTFail("Known barcode should be valid: \(error)")
         }
 
         let product = try await adapter.resolve(barcode)
 
-        XCTAssertEqual(product?.name, "Penne Pasta")
-        XCTAssertEqual(product?.brand, "Great Value")
+        XCTAssertEqual(product?.name, "Coca-Cola")
+        XCTAssertEqual(product?.brand, "Coca-Cola")
+        XCTAssertEqual(product?.packageDisplayText, "33 cl")
+        XCTAssertEqual(product?.imageURL, URL(string: "https://images.openfoodfacts.org/coca-cola.jpg"))
+        XCTAssertEqual(product?.catalogSource, "open_food_facts")
+        XCTAssertEqual(product?.isVerified, false)
         XCTAssertNil(product?.externalReference)
+    }
+
+    func testSmartCartBarcodeAdapterDropsUnsafeImageURLWithoutLosingIdentity() async throws {
+        let adapter = makeBarcodeAdapter(protocolClass: BarcodeUnsafeImageURLProtocolStub.self)
+        let barcode = try BarcodeNormalizer.normalize("5449000000996").get()
+
+        let product = try await adapter.resolve(barcode)
+
+        XCTAssertEqual(product?.name, "Coca-Cola")
+        XCTAssertEqual(product?.packageDisplayText, "33 cl")
+        XCTAssertNil(product?.imageURL)
+    }
+
+    func testSmartCartBarcodeAdapterRejectsMismatchedResponseIdentity() async throws {
+        let adapter = makeBarcodeAdapter(protocolClass: BarcodeMismatchedIdentityURLProtocolStub.self)
+        let barcode = try BarcodeNormalizer.normalize("5449000000996").get()
+
+        do {
+            _ = try await adapter.resolve(barcode)
+            XCTFail("A response for a different barcode must not be accepted")
+        } catch let error as SmartCartBarcodeAdapterError {
+            XCTAssertEqual(error, .failure(.malformedResponse))
+        }
+    }
+
+    func testBarcodeBackendTrueMissIsNotFound() async {
+        for protocolClass in [
+            BarcodeNotFoundURLProtocolStub.self,
+            BarcodeHTTPNotFoundURLProtocolStub.self
+        ] {
+            let resolver = BarcodeResolutionService(
+                userEditedCache: InMemoryBarcodeUserEditedCache(),
+                fixtures: BundledBarcodeFixtureCatalog(fixtures: []),
+                adapters: [makeBarcodeAdapter(protocolClass: protocolClass)]
+            )
+
+            let result = await resolver.resolve(BarcodeScan(rawBarcode: "4006381333931"))
+            guard case .notFound(let unresolved) = result else {
+                return XCTFail("An explicit catalog miss should be notFound")
+            }
+            XCTAssertEqual(unresolved.reason, .noMatch)
+            XCTAssertTrue(unresolved.adapterFailures.isEmpty)
+        }
+    }
+
+    func testBarcodeBackendRouteNotFoundRemainsUnavailable() async {
+        let resolver = BarcodeResolutionService(
+            userEditedCache: InMemoryBarcodeUserEditedCache(),
+            fixtures: BundledBarcodeFixtureCatalog(fixtures: []),
+            adapters: [makeBarcodeAdapter(protocolClass: BarcodeRouteNotFoundURLProtocolStub.self)]
+        )
+
+        let result = await resolver.resolve(BarcodeScan(rawBarcode: "4006381333931"))
+        guard case .unavailable(_, let failure) = result else {
+            return XCTFail("A deployment route 404 must not become product-not-found")
+        }
+        XCTAssertEqual(failure, .serverError)
+    }
+
+    func testBarcodeBackendTimeoutRateLimitServerAndMalformedResponsesAreUnavailable() async {
+        let cases: [(URLProtocol.Type, BarcodeLookupFailure)] = [
+            (BarcodeTimeoutURLProtocolStub.self, .timedOut),
+            (BarcodeRateLimitURLProtocolStub.self, .rateLimited),
+            (BarcodeInternalServerErrorURLProtocolStub.self, .serverError),
+            (BarcodeServerErrorURLProtocolStub.self, .serverError),
+            (BarcodeMalformedURLProtocolStub.self, .malformedResponse)
+        ]
+
+        for (protocolClass, expectedFailure) in cases {
+            let resolver = BarcodeResolutionService(
+                userEditedCache: InMemoryBarcodeUserEditedCache(),
+                fixtures: BundledBarcodeFixtureCatalog(fixtures: []),
+                adapters: [makeBarcodeAdapter(protocolClass: protocolClass)]
+            )
+            let result = await resolver.resolve(BarcodeScan(rawBarcode: "4006381333931"))
+            guard case .unavailable(_, let failure) = result else {
+                return XCTFail("\(protocolClass) must not become product-not-found")
+            }
+            XCTAssertEqual(failure, expectedFailure)
+        }
     }
 
     func testBarcodeScannerWiresCatalogManualNamingAndCameraDebounce() throws {
@@ -1606,10 +1881,32 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(source.contains("PantryBarcodeUserEditedCache(items: appModel.pantryInventory)"))
         XCTAssertTrue(source.contains("adapters: [SmartCartBackendBarcodeAdapter()]"))
         XCTAssertTrue(source.contains("heading: \"Product not found\""))
+        XCTAssertTrue(source.contains("title: \"Product lookup unavailable\""))
+        XCTAssertTrue(source.contains("Label(\"Retry Lookup\""))
+        XCTAssertTrue(source.contains("Text(\"Name Manually\")"))
+        XCTAssertTrue(source.contains("resolved.product.catalogSource"))
+        XCTAssertTrue(source.contains("resolved.product.isVerified == true"))
         XCTAssertTrue(source.contains("requiresUserNaming: true"))
         XCTAssertTrue(source.contains("try await Task.sleep(for: .milliseconds(300))"))
+        XCTAssertTrue(source.contains("text: Binding("))
+        XCTAssertTrue(source.contains("resetResolutionForManualCodeChange()"))
+        XCTAssertFalse(source.contains(".onChange(of: manualCode)"))
         XCTAssertTrue(source.contains("activeCodes.insert(code).inserted"))
         XCTAssertTrue(source.contains("didRemove removedItems"))
+        XCTAssertTrue(source.contains(".barcode(symbologies: [.ean13, .ean8, .code128])"))
+        XCTAssertFalse(source.contains(".upce"))
+    }
+
+    private func makeBarcodeAdapter(
+        protocolClass: URLProtocol.Type
+    ) -> SmartCartBackendBarcodeAdapter {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [protocolClass]
+        return SmartCartBackendBarcodeAdapter(
+            session: URLSession(configuration: configuration),
+            baseURL: URL(string: "https://barcode.smartcart.app")!,
+            buildMode: .release
+        )
     }
 
     func testSchemaV2MigratesInferredBarcodeNamesWithoutLosingBarcode() throws {
@@ -5839,19 +6136,19 @@ private final class BarcodeURLProtocolStub: URLProtocol {
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
-        guard request.url?.path == "/v1/barcodes/00078742002163" else {
+        guard request.url?.path == "/v1/barcodes/05449000000996" else {
             client?.urlProtocol(self, didFailWithError: URLError(.badURL))
             return
         }
         let payload = """
         {
           "status": "resolved",
-          "barcode": "00078742002163",
+          "barcode": "05449000000996",
           "product": {
-            "name": "Penne Pasta",
-            "brand": "Great Value",
-            "quantity": "16 oz",
-            "imageURL": null
+            "name": "Coca-Cola",
+            "brand": "Coca-Cola",
+            "quantity": "33 cl",
+            "imageURL": "https://images.openfoodfacts.org/coca-cola.jpg"
           },
           "source": "open_food_facts",
           "verified": false
@@ -5868,6 +6165,222 @@ private final class BarcodeURLProtocolStub: URLProtocol {
         client?.urlProtocolDidFinishLoading(self)
     }
 
+    override func stopLoading() {}
+}
+
+private final class BarcodeNotFoundURLProtocolStub: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        let payload = """
+        {"status":"not_found","barcode":"04006381333931"}
+        """.data(using: .utf8)!
+        let response = HTTPURLResponse(
+            url: request.url!,
+            statusCode: 200,
+            httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Type": "application/json"]
+        )!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: payload)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
+
+private final class BarcodeHTTPNotFoundURLProtocolStub: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        let payload = Data(
+            #"{"status":"not_found","barcode":"04006381333931"}"#.utf8
+        )
+        let response = HTTPURLResponse(
+            url: request.url!,
+            statusCode: 404,
+            httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Type": "application/json"]
+        )!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: payload)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
+
+private final class BarcodeRouteNotFoundURLProtocolStub: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        let payload = Data(
+            #"{"error":{"code":"route_not_found","message":"Route does not exist"}}"#.utf8
+        )
+        let response = HTTPURLResponse(
+            url: request.url!,
+            statusCode: 404,
+            httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Type": "application/json"]
+        )!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: payload)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
+
+private final class BarcodeTimeoutURLProtocolStub: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        client?.urlProtocol(self, didFailWithError: URLError(.timedOut))
+    }
+    override func stopLoading() {}
+}
+
+private final class BarcodeOfflineURLProtocolStub: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
+    }
+    override func stopLoading() {}
+}
+
+private final class BarcodeRateLimitURLProtocolStub: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() { respond(statusCode: 429) }
+    override func stopLoading() {}
+
+    private func respond(statusCode: Int) {
+        let response = HTTPURLResponse(
+            url: request.url!,
+            statusCode: statusCode,
+            httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Type": "application/json"]
+        )!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data("{}".utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+}
+
+private final class BarcodeServerErrorURLProtocolStub: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let response = HTTPURLResponse(
+            url: request.url!,
+            statusCode: 503,
+            httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Type": "application/json"]
+        )!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data("{}".utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+
+private final class BarcodeInternalServerErrorURLProtocolStub: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let response = HTTPURLResponse(
+            url: request.url!,
+            statusCode: 500,
+            httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Type": "application/json"]
+        )!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data("{}".utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+
+private final class BarcodeUnsafeImageURLProtocolStub: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let payload = """
+        {
+          "status": "resolved",
+          "barcode": "05449000000996",
+          "product": {
+            "name": "Coca-Cola",
+            "brand": "Coca-Cola",
+            "quantity": "33 cl",
+            "imageURL": "http://images.openfoodfacts.org/coca-cola.jpg"
+          },
+          "source": "open_food_facts",
+          "verified": false
+        }
+        """.data(using: .utf8)!
+        let response = HTTPURLResponse(
+            url: request.url!,
+            statusCode: 200,
+            httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Type": "application/json"]
+        )!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: payload)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+
+private final class BarcodeMismatchedIdentityURLProtocolStub: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let payload = """
+        {
+          "status": "resolved",
+          "barcode": "04006381333931",
+          "product": {
+            "name": "Wrong product",
+            "brand": "Wrong catalog identity",
+            "quantity": "1 item",
+            "imageURL": "https://images.openfoodfacts.org/wrong.jpg"
+          },
+          "source": "open_food_facts",
+          "verified": false
+        }
+        """.data(using: .utf8)!
+        let response = HTTPURLResponse(
+            url: request.url!,
+            statusCode: 200,
+            httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Type": "application/json"]
+        )!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: payload)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+
+private final class BarcodeMalformedURLProtocolStub: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let response = HTTPURLResponse(
+            url: request.url!,
+            statusCode: 200,
+            httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Type": "application/json"]
+        )!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data("not-json".utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
     override func stopLoading() {}
 }
 

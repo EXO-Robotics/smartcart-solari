@@ -1,0 +1,5 @@
+#include "Base.xcconfig"
+
+// `$()` safely separates the URL slashes from xcconfig's `//` comment syntax.
+SMARTCART_BARCODE_BACKEND_URL = http:/$()/localhost:8787
+

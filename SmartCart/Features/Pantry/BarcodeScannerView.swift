@@ -12,9 +12,9 @@ struct BarcodeScannerSheet: View {
     let onSubmission: ((String, Double, PantryBarcodeSubmission) -> Void)?
 
     @State private var manualCode = ""
-    @State private var capturedSymbology: String?
     @State private var isResolving = false
     @State private var resolution: BarcodeResolutionResult?
+    @State private var manualFallback: UnresolvedBarcode?
     @State private var stockName = ""
     @State private var stockBrand = ""
     @State private var stockAmount: Double = 1
@@ -98,7 +98,6 @@ struct BarcodeScannerSheet: View {
         if scannerAvailable {
             LiveBarcodeScanner { code, symbology in
                 manualCode = code
-                capturedSymbology = symbology
                 beginResolution(code: code, symbology: symbology, debounceCamera: true)
             }
             .frame(height: 330)
@@ -129,16 +128,20 @@ struct BarcodeScannerSheet: View {
             Text("UPC / EAN / GTIN")
                 .font(.caption.weight(.bold))
                 .foregroundStyle(SmartCartTheme.secondaryInk)
-            TextField("Try 078742002163", text: $manualCode)
+            TextField(
+                "Try 078742002163",
+                text: Binding(
+                    get: { manualCode },
+                    set: { newValue in
+                        manualCode = newValue
+                        resetResolutionForManualCodeChange()
+                    }
+                )
+            )
                 .keyboardType(.numberPad)
                 .textContentType(.none)
                 .smartField()
                 .accessibilityIdentifier("barcode-code")
-                .onChange(of: manualCode) { _, _ in
-                    resolutionTask?.cancel()
-                    isResolving = false
-                    resolution = nil
-                }
 
             Button {
                 beginResolution(code: manualCode, symbology: "manual-entry")
@@ -165,7 +168,7 @@ struct BarcodeScannerSheet: View {
         if isResolving {
             InfoBanner(
                 symbol: "hourglass",
-                title: "Resolving product",
+                title: "Looking up product…",
                 message: "Checking your edited products, bundled fixtures, and configured catalog adapters.",
                 color: SmartCartTheme.walmartBlue
             )
@@ -178,7 +181,7 @@ struct BarcodeScannerSheet: View {
                         : resolved.product.name,
                     headingSymbol: "checkmark.seal.fill",
                     headingColor: SmartCartTheme.green,
-                    subheading: resolutionSubtitle(for: resolved.source),
+                    subheading: resolutionSubtitle(for: resolved),
                     knownPantryBarcode: resolved.source == .localUserEditedCache,
                     barcode: resolved.barcode,
                     raw: resolved.scan.rawBarcode,
@@ -192,33 +195,88 @@ struct BarcodeScannerSheet: View {
                     )
                 )
 
-            case .unresolved(let unresolved):
-                if let barcode = unresolved.normalizedBarcode {
-                    stockEntryCard(
-                        heading: "Product not found",
-                        headingSymbol: "questionmark.circle.fill",
-                        headingColor: SmartCartTheme.amber,
-                        subheading: "Name this product once. SmartCart will use your saved name on future scans.",
-                        barcode: barcode,
-                        raw: unresolved.scan.rawBarcode,
-                        submission: PantryBarcodeSubmission(
-                            scan: unresolved.scan,
-                            barcode: barcode,
-                            name: "",
-                            brand: "",
-                            externalProductID: nil,
-                            requiresUserNaming: true
-                        )
-                    )
-                } else {
+            case .notFound(let unresolved):
+                manualNamingCard(
+                    unresolved,
+                    heading: "Product not found",
+                    subheading: "Name this product once. SmartCart will use your saved name on future scans."
+                )
+
+            case .unavailable(let unresolved, let failure):
+                VStack(alignment: .leading, spacing: 12) {
                     InfoBanner(
-                        symbol: "xmark.octagon.fill",
-                        title: "Invalid barcode",
-                        message: validationMessage(unresolved.reason),
+                        symbol: "wifi.exclamationmark",
+                        title: "Product lookup unavailable",
+                        message: unavailableMessage(failure),
                         color: SmartCartTheme.coral
                     )
+
+                    HStack(spacing: 10) {
+                        Button {
+                            beginResolution(
+                                code: unresolved.scan.rawBarcode,
+                                symbology: unresolved.scan.rawSymbology
+                            )
+                        } label: {
+                            Label("Retry Lookup", systemImage: "arrow.clockwise")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(SecondaryButtonStyle())
+                        .accessibilityIdentifier("barcode-retry-lookup")
+
+                        Button {
+                            manualFallback = unresolved
+                        } label: {
+                            Text("Name Manually")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(SecondaryButtonStyle())
+                        .accessibilityIdentifier("barcode-name-manually")
+                    }
+
+                    if let manualFallback {
+                        manualNamingCard(
+                            manualFallback,
+                            heading: "Name product manually",
+                            subheading: "Your saved name will resolve this barcode locally next time, even while the catalog is unavailable."
+                        )
+                    }
                 }
+
+            case .invalid(let unresolved):
+                InfoBanner(
+                    symbol: "xmark.octagon.fill",
+                    title: "Invalid barcode",
+                    message: validationMessage(unresolved.reason),
+                    color: SmartCartTheme.coral
+                )
             }
+        }
+    }
+
+    @ViewBuilder
+    private func manualNamingCard(
+        _ unresolved: UnresolvedBarcode,
+        heading: String,
+        subheading: String
+    ) -> some View {
+        if let barcode = unresolved.normalizedBarcode {
+            stockEntryCard(
+                heading: heading,
+                headingSymbol: "questionmark.circle.fill",
+                headingColor: SmartCartTheme.amber,
+                subheading: subheading,
+                barcode: barcode,
+                raw: unresolved.scan.rawBarcode,
+                submission: PantryBarcodeSubmission(
+                    scan: unresolved.scan,
+                    barcode: barcode,
+                    name: "",
+                    brand: "",
+                    externalProductID: nil,
+                    requiresUserNaming: true
+                )
+            )
         }
     }
 
@@ -406,6 +464,14 @@ struct BarcodeScannerSheet: View {
     }
 
     @MainActor
+    private func resetResolutionForManualCodeChange() {
+        resolutionTask?.cancel()
+        isResolving = false
+        resolution = nil
+        manualFallback = nil
+    }
+
+    @MainActor
     private func beginResolution(
         code: String,
         symbology: String?,
@@ -415,6 +481,7 @@ struct BarcodeScannerSheet: View {
         isResolving = true
         stockAmount = 1
         resolution = nil
+        manualFallback = nil
 
         let scan = BarcodeScan(rawBarcode: code, rawSymbology: symbology)
         let resolver = BarcodeResolutionService(
@@ -440,7 +507,9 @@ struct BarcodeScannerSheet: View {
                 stockBrand = appModel.pantryItem(matching: resolved.barcode)?.brand
                     ?? resolved.product.brand
                     ?? ""
-            case .unresolved(let unresolved):
+            case .notFound(let unresolved),
+                 .unavailable(let unresolved, _),
+                 .invalid(let unresolved):
                 if let barcode = unresolved.normalizedBarcode,
                    let existing = appModel.pantryItem(matching: barcode) {
                     stockName = existing.name
@@ -461,17 +530,40 @@ struct BarcodeScannerSheet: View {
         }
     }
 
-    private func resolutionSubtitle(for source: BarcodeResolutionSource) -> String {
-        switch source {
-        case .localUserEditedCache:
-            "This barcode uses your saved pantry name."
-        case .bundledFixture:
-            "Bundled SmartCart demo result — confirm or edit before adding."
-        case .adapter(let identifier) where identifier == "smartcart-barcode-api":
-            "Open Food Facts result — crowdsourced, unverified, and editable."
-        case .adapter:
-            "Catalog result — unverified and editable."
+    private func unavailableMessage(_ failure: BarcodeLookupFailure) -> String {
+        switch failure {
+        case .configurationMissing:
+            "Product lookup is not configured for this build. You can still name the product manually."
+        case .offline:
+            "Check your connection, retry, or name the product manually."
+        case .timedOut:
+            "The lookup took too long. Retry or name the product manually."
+        case .rateLimited:
+            "The catalog is receiving too many requests. Retry shortly or name the product manually."
+        case .serverError, .malformedResponse:
+            "The catalog could not complete this lookup. Retry or name the product manually."
         }
+    }
+
+    private func resolutionSubtitle(for resolved: ResolvedBarcodeProduct) -> String {
+        let sourceText: String
+        switch resolved.source {
+        case .localUserEditedCache:
+            sourceText = "This barcode uses your saved pantry name."
+        case .bundledFixture:
+            sourceText = "Bundled SmartCart demo result — confirm or edit before adding."
+        case .adapter:
+            let catalogName = resolved.product.catalogSource == "open_food_facts"
+                ? "Open Food Facts"
+                : "Catalog"
+            sourceText = resolved.product.isVerified == true
+                ? "\(catalogName) result — verified and editable."
+                : "\(catalogName) result — unverified and editable."
+        }
+        if let packageDisplayText = resolved.product.packageDisplayText {
+            return "\(sourceText) · Package: \(packageDisplayText)"
+        }
+        return sourceText
     }
 }
 
@@ -482,7 +574,10 @@ private struct LiveBarcodeScanner: UIViewControllerRepresentable {
 
     func makeUIViewController(context: Context) -> DataScannerViewController {
         let controller = DataScannerViewController(
-            recognizedDataTypes: [.barcode(symbologies: [.ean13, .ean8, .upce, .code128])],
+            // UPC-E requires an explicit expansion step before it can share the
+            // canonical GTIN-14 path. Keep capture limited to formats the
+            // normalizer can validate without guessing.
+            recognizedDataTypes: [.barcode(symbologies: [.ean13, .ean8, .code128])],
             qualityLevel: .balanced,
             recognizesMultipleItems: false,
             isHighFrameRateTrackingEnabled: false,

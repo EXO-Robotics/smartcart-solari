@@ -1,0 +1,4 @@
+// Shared SmartCart build configuration. URLs are supplied by the concrete
+// Debug and Release files so a missing Release endpoint fails explicitly.
+SMARTCART_BARCODE_BACKEND_URL =
+
