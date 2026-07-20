@@ -882,6 +882,46 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(result.ingredientSourceLines.allSatisfy { $0.boundingBox.isUsable })
     }
 
+    func testCrossRegionBananaPeanutButterOCRContaminationRegression() throws {
+        let fixtureURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent(
+                "Fixtures/OCR/cross_region_banana_peanut_butter_observations.json"
+            )
+        let observations = try JSONDecoder().decode(
+            [OCRTextObservation].self,
+            from: Data(contentsOf: fixtureURL)
+        )
+
+        let reconstruction = OCRLayoutReconstructor.reconstruct(observations)
+        let saltLine = try reconstruction.ingredientSourceLines.first(where: {
+            $0.sourceObservationIDs.contains("salt")
+        }).firstUnwrapped()
+
+        XCTAssertEqual(saltLine.text, "• Flaky Sea Salt for topping")
+        XCTAssertEqual(
+            saltLine.sourceObservationIDs,
+            ["salt", "salt-continuation"]
+        )
+        XCTAssertFalse(saltLine.text.localizedCaseInsensitiveContains("sourdough"))
+        XCTAssertFalse(saltLine.text.localizedCaseInsensitiveContains("mash banana"))
+        XCTAssertFalse(reconstruction.ingredientLines.contains {
+            $0.localizedCaseInsensitiveContains("stir in peanut butter")
+        })
+
+        let recipe = RecipeParser.parse(
+            title: "Banana Peanut Butter Card",
+            text: reconstruction.reconstructedText,
+            source: .photo,
+            sourceLines: reconstruction.ingredientSourceLines
+        )
+        XCTAssertEqual(recipe.ingredients.map(\.name), ["Flaky Sea Salt"])
+        let salt = try recipe.ingredients.firstUnwrapped()
+        XCTAssertEqual(salt.quantity, 1, accuracy: 0.001)
+        XCTAssertEqual(salt.preparation, "for topping")
+        XCTAssertEqual(salt.confidence, .review)
+    }
+
     func testChocolateChipCookieBarsGoldenVisionObservationsReconstructAndParse() throws {
         let fixtureURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

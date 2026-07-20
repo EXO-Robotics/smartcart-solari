@@ -1,0 +1,63 @@
+[
+  {
+    "observationID": "heading",
+    "text": "INGREDIENTS",
+    "boundingBox": {
+      "x": 0.08,
+      "y": 0.90,
+      "width": 0.18,
+      "height": 0.04
+    },
+    "confidence": 0.99,
+    "pageIndex": 0
+  },
+  {
+    "observationID": "salt",
+    "text": "• Flaky Sea Salt",
+    "boundingBox": {
+      "x": 0.08,
+      "y": 0.80,
+      "width": 0.09,
+      "height": 0.04
+    },
+    "confidence": 0.98,
+    "pageIndex": 0,
+    "bulletMarker": "•"
+  },
+  {
+    "observationID": "discard-title",
+    "text": "Sourdough Discard & Vanilla",
+    "boundingBox": {
+      "x": 0.25,
+      "y": 0.80,
+      "width": 0.30,
+      "height": 0.04
+    },
+    "confidence": 0.97,
+    "pageIndex": 0
+  },
+  {
+    "observationID": "easy-instructions",
+    "text": "EASY AS 1-2-3! Mash banana. Stir in peanut butter",
+    "boundingBox": {
+      "x": 0.60,
+      "y": 0.75,
+      "width": 0.36,
+      "height": 0.04
+    },
+    "confidence": 0.97,
+    "pageIndex": 0
+  },
+  {
+    "observationID": "salt-continuation",
+    "text": "for topping",
+    "boundingBox": {
+      "x": 0.11,
+      "y": 0.71,
+      "width": 0.14,
+      "height": 0.03
+    },
+    "confidence": 0.96,
+    "pageIndex": 0
+  }
+]
