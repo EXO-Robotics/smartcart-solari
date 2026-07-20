@@ -3,7 +3,6 @@ import SwiftUI
 import UIKit
 
 struct RetailerSafariHandoffView: View {
-    @Environment(\.dismiss) private var dismiss
     @Environment(AppModel.self) private var appModel
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -576,12 +575,13 @@ struct RetailerSafariHandoffView: View {
     private func openProduct(
         _ item: ShoppingListItem,
         sessionID: UUID,
-        refreshPrewarming: Bool = true
+        refreshPrewarming: Bool = true,
+        isExplicitTransition: Bool = false
     ) {
         appModel.recordRetailerProductOpened(itemID: item.id)
         presentedProductSessionID = sessionID
         presentedProductItemID = item.id
-        productDismissalIsExplicit = false
+        productDismissalIsExplicit = isExplicitTransition
         if refreshPrewarming {
             prewarmAfterItem(item.id)
         }
@@ -590,14 +590,21 @@ struct RetailerSafariHandoffView: View {
 
     private func sheetDidDismiss() {
         guard presentedProductSessionID != nil, presentedProductItemID != nil else { return }
-        defer {
+        if productDismissalIsExplicit {
             productDismissalIsExplicit = false
-            presentedProductSessionID = nil
-            presentedProductItemID = nil
+            // Swapping one product destination for the next dismisses the old
+            // sheet before SwiftUI presents the replacement. Keep the new
+            // product identity intact; a true Pause/final dismissal clears it.
+            if sheetDestination == nil {
+                presentedProductSessionID = nil
+                presentedProductItemID = nil
+            }
+            return
         }
-        guard !productDismissalIsExplicit else { return }
         guard let sessionID = presentedProductSessionID,
               let itemID = presentedProductItemID else { return }
+        presentedProductSessionID = nil
+        presentedProductItemID = nil
         pauseTripAndReturnHome(sessionID: sessionID, itemID: itemID)
     }
 
@@ -633,13 +640,23 @@ struct RetailerSafariHandoffView: View {
         guard let nextItem = appModel.currentGuidedItem, nextItem.status == .waiting else { return }
         // Retain the token for the page we are about to open. Its successful
         // initial load refreshes prewarming for the following waiting item.
-        openProduct(nextItem, sessionID: sessionID, refreshPrewarming: false)
+        openProduct(
+            nextItem,
+            sessionID: sessionID,
+            refreshPrewarming: false,
+            isExplicitTransition: true
+        )
     }
 
     private func replaceCurrentProduct(candidateID: UUID, itemID: UUID, sessionID: UUID) {
         guard appModel.selectAlternative(itemID: itemID, candidateID: candidateID),
               let updatedItem = appModel.shoppingItems.first(where: { $0.id == itemID }) else { return }
-        openProduct(updatedItem, sessionID: sessionID, refreshPrewarming: false)
+        openProduct(
+            updatedItem,
+            sessionID: sessionID,
+            refreshPrewarming: false,
+            isExplicitTransition: true
+        )
     }
 
     private func pauseTripAndReturnHome(sessionID: UUID? = nil, itemID: UUID? = nil) {
@@ -658,7 +675,8 @@ struct RetailerSafariHandoffView: View {
         sheetDestination = nil
         Task { @MainActor in
             await Task.yield()
-            dismiss()
+            appModel.selectedTab = .home
+            appModel.homePath = []
         }
     }
 
@@ -763,6 +781,11 @@ private struct RetailerTripSafariSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             tripBar
+                // Large-detent Safari sheets can report a zero top safe-area
+                // inset while still extending beneath the status bar. Keep
+                // the trip controls below that system-owned region so Pause,
+                // position, and Next Item remain visible and tappable.
+                .padding(.top, 44)
             Divider()
 
             if loadState == .failed {

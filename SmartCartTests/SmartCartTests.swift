@@ -3450,6 +3450,48 @@ final class SmartCartTests: XCTestCase {
         XCTAssertFalse(source[start..<end].contains("Task.sleep"))
     }
 
+    func testRetailerTripSheetTransitionsStayExplicitAndPauseReturnsHome() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "SmartCart/Features/Orders/WalmartWishlistViews.swift"
+            ),
+            encoding: .utf8
+        )
+
+        let advanceStart = try XCTUnwrap(
+            source.range(of: "    private func advanceFromProduct(")?.lowerBound
+        )
+        let replacementStart = try XCTUnwrap(
+            source.range(
+                of: "    private func replaceCurrentProduct",
+                range: advanceStart..<source.endIndex
+            )?.lowerBound
+        )
+        let pauseStart = try XCTUnwrap(
+            source.range(
+                of: "    private func pauseTripAndReturnHome",
+                range: replacementStart..<source.endIndex
+            )?.lowerBound
+        )
+        let prewarmStart = try XCTUnwrap(
+            source.range(
+                of: "    private func prewarmAfterItem",
+                range: pauseStart..<source.endIndex
+            )?.lowerBound
+        )
+
+        XCTAssertTrue(
+            source[advanceStart..<replacementStart].contains("isExplicitTransition: true")
+        )
+        XCTAssertTrue(
+            source[replacementStart..<pauseStart].contains("isExplicitTransition: true")
+        )
+        XCTAssertTrue(source[pauseStart..<prewarmStart].contains("appModel.homePath = []"))
+    }
+
     @MainActor
     func testAllHighConfidenceExactMatchesHaveNoExceptions() async throws {
         let model = AppModel(

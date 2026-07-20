@@ -69,6 +69,14 @@ struct RecipeReadyView: View {
                                     .tint(SmartCartTheme.onAccent)
                                     .accessibilityIdentifier("recipe-ready-preparing-products")
                             }
+                        } else if dynamicTypeSize.isAccessibilitySize {
+                            HStack {
+                                Text("Start\nShopping")
+                                    .multilineTextAlignment(.leading)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Spacer(minLength: 12)
+                                Image(systemName: "arrow.right")
+                            }
                         } else {
                             ViewThatFits(in: .horizontal) {
                                 HStack {
