@@ -3517,6 +3517,39 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(tripSource.contains(".background(SmartCartTheme.herbLight)"))
     }
 
+    func testHomePrioritizesPhotoAndMealPrepStartsBeforeSecondaryContent() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let homeSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "SmartCart/Features/Home/HomeView.swift"
+            ),
+            encoding: .utf8
+        )
+        let recipesSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "SmartCart/Features/Cart/CartView.swift"
+            ),
+            encoding: .utf8
+        )
+
+        let bodyStart = try XCTUnwrap(homeSource.range(of: "    var body: some View")?.lowerBound)
+        let headerStart = try XCTUnwrap(homeSource.range(of: "    private var header", range: bodyStart..<homeSource.endIndex)?.lowerBound)
+        let body = homeSource[bodyStart..<headerStart]
+        let startIndex = try XCTUnwrap(body.range(of: "startShoppingSection")?.lowerBound)
+        let shopAgainIndex = try XCTUnwrap(body.range(of: "shopAgainCard")?.lowerBound)
+        let storeIndex = try XCTUnwrap(body.range(of: "storeCard")?.lowerBound)
+
+        XCTAssertLessThan(startIndex, shopAgainIndex)
+        XCTAssertLessThan(shopAgainIndex, storeIndex)
+        XCTAssertTrue(homeSource.contains("title: \"Start a Shopping Trip\""))
+        XCTAssertTrue(homeSource.contains("Text(method == .camera ? \"Take Photo\" : \"Choose Photo\")"))
+        XCTAssertTrue(homeSource.contains("accessibilityIdentifier(\"home-start-meal-prep\")"))
+        XCTAssertFalse(homeSource.contains("promiseCard"))
+        XCTAssertFalse(recipesSource.contains("private var mealPrepLaunchCard"))
+    }
+
     @MainActor
     func testAllHighConfidenceExactMatchesHaveNoExceptions() async throws {
         let model = AppModel(

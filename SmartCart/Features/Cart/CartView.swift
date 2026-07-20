@@ -1061,8 +1061,6 @@ struct RecipesView: View {
     private var savedPage: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                mealPrepLaunchCard
-
                 if appModel.shoppingItems.isEmpty {
                     EmptyStateView(
                         symbol: "book.fill",
@@ -1084,40 +1082,6 @@ struct RecipesView: View {
             .padding(.bottom, 34)
         }
         .scrollIndicators(.hidden)
-    }
-
-    private var mealPrepLaunchCard: some View {
-        Button {
-            appModel.startMealPrepDraft()
-        } label: {
-            HStack(spacing: 15) {
-                Image(systemName: "calendar.badge.plus")
-                    .font(.title2.bold())
-                    .foregroundStyle(SmartCartTheme.onAccent)
-                    .frame(width: 54, height: 54)
-                    .background(SmartCartTheme.green)
-                    .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Meal Prep Mode")
-                        .font(.headline)
-                        .foregroundStyle(SmartCartTheme.navy)
-                    Text("Select up to five saved recipes and build one pantry-aware shopping trip.")
-                        .font(.caption)
-                        .foregroundStyle(SmartCartTheme.secondaryInk)
-                        .multilineTextAlignment(.leading)
-                }
-                Spacer(minLength: 4)
-                Image(systemName: "chevron.right")
-                    .font(.caption.bold())
-                    .foregroundStyle(SmartCartTheme.green)
-            }
-            .smartCartCard()
-            .smartCartShadow()
-        }
-        .buttonStyle(PressableButtonStyle())
-        .accessibilityLabel("Meal Prep Mode")
-        .accessibilityHint("Select up to five saved recipes and shop once")
     }
 
     private var recentPage: some View {

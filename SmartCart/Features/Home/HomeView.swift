@@ -11,18 +11,18 @@ struct HomeView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 header
-                if !appModel.hasCompletedShoppingTrip {
-                    promiseCard
+                if let session = primaryResumeSession {
+                    pendingShoppingCard(session, compact: true)
                 }
-                if !appModel.pendingShoppingSessions.isEmpty {
-                    pendingShoppingSection
-                }
+                startShoppingSection
                 if appModel.hasCompletedShoppingTrip,
                    let recipe = appModel.mostRecentShoppedRecipe {
                     shopAgainCard(recipe)
                 }
-                importSection
                 storeCard
+                if !secondaryPendingSessions.isEmpty {
+                    pendingShoppingSection(secondaryPendingSessions)
+                }
                 trustStrip
             }
             .padding(.horizontal, 18)
@@ -63,75 +63,11 @@ struct HomeView: View {
         .padding(.top, 8)
     }
 
-    private var promiseCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .center) {
-                Text("RECIPE IN · RETAILER READY")
-                    .smartEyebrow()
-                Spacer()
-                Image(systemName: "safari.fill")
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(SmartCartTheme.green)
-                    .frame(width: 42, height: 42)
-                    .background(SmartCartTheme.herbLight)
-                    .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 13, style: .continuous)
-                            .stroke(SmartCartTheme.borderStrong, lineWidth: 1)
-                    }
-                    .accessibilityHidden(true)
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Any recipe, ready to shop.")
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
-                    .foregroundStyle(SmartCartTheme.ink)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Text("Capture a recipe, confirm the ingredients, and open a product-matched shopping trip in Safari.")
-                    .font(.subheadline)
-                    .foregroundStyle(SmartCartTheme.secondaryInk)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 8) {
-                    promisePill("Photo or link", symbol: "camera.fill")
-                    promisePill("Smart match", symbol: "tag.fill")
-                    promisePill("Share or shop", symbol: "square.and.arrow.up.fill")
-                }
-                VStack(alignment: .leading, spacing: 8) {
-                    promisePill("Photo or link", symbol: "camera.fill")
-                    promisePill("Smart match", symbol: "tag.fill")
-                    promisePill("Share or shop", symbol: "square.and.arrow.up.fill")
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(20)
-        .background(SmartCartTheme.paper)
-        .smartCartCardEdge(radius: 26)
-        .smartCartShadow()
-    }
-
-    private func promisePill(_ title: String, symbol: String) -> some View {
-        Label(title, systemImage: symbol)
-            .font(.caption2.weight(.bold))
-            .foregroundStyle(SmartCartTheme.green)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 7)
-            .background(SmartCartTheme.herbLight.opacity(0.7))
-            .clipShape(Capsule())
-            .overlay {
-                Capsule().stroke(SmartCartTheme.border, lineWidth: 1)
-            }
-    }
-
-    private var importSection: some View {
+    private var startShoppingSection: some View {
         VStack(alignment: .leading, spacing: 13) {
             SectionHeader(
-                title: "Start with a recipe",
-                subtitle: "Take a photo or choose one you already have"
+                title: "Start a Shopping Trip",
+                subtitle: "Shop one recipe or combine up to five"
             )
 
             if dynamicTypeSize.isAccessibilitySize {
@@ -145,6 +81,8 @@ struct HomeView: View {
                     primaryImportButton(.photoLibrary)
                 }
             }
+
+            mealPrepLaunchButton
 
             if clipboardContainsProbableWebURL {
                 pasteCopiedLinkButton
@@ -176,7 +114,7 @@ struct HomeView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(method == .camera ? "Camera" : "Photos")
+                    Text(method == .camera ? "Take Photo" : "Choose Photo")
                         .font(.headline)
                         .foregroundStyle(SmartCartTheme.navy)
                     Text(method == .camera ? "Snap a cookbook or card" : "Choose a saved recipe image")
@@ -192,6 +130,40 @@ struct HomeView: View {
         .buttonStyle(PressableButtonStyle())
         .accessibilityIdentifier(method == .camera ? "home-import-camera" : "home-import-photos")
         .accessibilityHint(method == .camera ? "Opens the camera recipe importer" : "Opens the photo recipe importer")
+    }
+
+    private var mealPrepLaunchButton: some View {
+        Button {
+            appModel.startMealPrepDraft()
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: "calendar.badge.plus")
+                    .font(.title2.bold())
+                    .foregroundStyle(SmartCartTheme.onAccent)
+                    .frame(width: 50, height: 50)
+                    .background(SmartCartTheme.green)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Meal Prep Mode")
+                        .font(.headline)
+                        .foregroundStyle(SmartCartTheme.navy)
+                    Text("Combine up to five saved recipes")
+                        .font(.caption)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
+                }
+
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right")
+                    .font(.caption.bold())
+                    .foregroundStyle(SmartCartTheme.green)
+            }
+            .smartCartCard(padding: 14)
+        }
+        .buttonStyle(PressableButtonStyle())
+        .accessibilityIdentifier("home-start-meal-prep")
+        .accessibilityLabel("Meal Prep Mode")
+        .accessibilityHint("Combine up to five saved recipes into one shopping trip")
     }
 
     private var pasteLinkButton: some View {
@@ -337,7 +309,7 @@ struct HomeView: View {
         appModel.openImporter(.recipeLink, initialText: validatedText)
     }
 
-    private func pendingShoppingCard(_ session: ShoppingSession) -> some View {
+    private func pendingShoppingCard(_ session: ShoppingSession, compact: Bool = false) -> some View {
         let completed = session.items.filter { $0.status.isCompleted }.count
         let isGuideComplete = !session.items.isEmpty && completed == session.items.count
         let retailerName = session.items.first
@@ -368,24 +340,34 @@ struct HomeView: View {
                     .foregroundStyle(SmartCartTheme.green)
             }
             .smartCartCard(padding: 16)
-            .smartCartShadow()
+            .shadow(
+                color: compact ? .clear : SmartCartTheme.softShadow,
+                radius: compact ? 0 : 12,
+                y: compact ? 0 : 6
+            )
         }
         .buttonStyle(PressableButtonStyle())
         .accessibilityIdentifier(isGuideComplete ? "home-pantry-update-pending" : "home-resume-shopping")
     }
 
-    private var pendingShoppingSection: some View {
+    private func pendingShoppingSection(_ sessions: [ShoppingSession]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            if appModel.pendingShoppingSessions.count > 1 {
-                SectionHeader(
-                    title: "Shopping trips",
-                    subtitle: "Resume a trip or finish its pantry update"
-                )
-            }
-            ForEach(appModel.pendingShoppingSessions) { session in
+            SectionHeader(
+                title: "Other Shopping Trips",
+                subtitle: "Resume a trip or finish its pantry update"
+            )
+            ForEach(sessions) { session in
                 pendingShoppingCard(session)
             }
         }
+    }
+
+    private var primaryResumeSession: ShoppingSession? {
+        appModel.pendingShoppingSessions.first { !$0.isGuideComplete }
+    }
+
+    private var secondaryPendingSessions: [ShoppingSession] {
+        appModel.pendingShoppingSessions.filter { $0.id != primaryResumeSession?.id }
     }
 
     private var storeCard: some View {
