@@ -272,7 +272,7 @@ private extension MealPrepAggregationService {
                     )
                 )
             }
-            if lines[lineIndex].buyFullOverride == true {
+            if lines[lineIndex].isBuyingFullQuantity {
                 lines[lineIndex].quantityToBuy = lines[lineIndex].quantity
             } else {
                 remaining = candidateRemaining

@@ -151,6 +151,434 @@ struct PantryCheckView: View {
     }
 }
 
+/// Pantry decisions are reviewed from Recipe Ready instead of repeating them
+/// inside every ingredient editor and again on a mandatory route.
+struct RecipeReadyPantrySheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(AppModel.self) private var appModel
+
+    var body: some View {
+        @Bindable var appModel = appModel
+
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    InfoBanner(
+                        symbol: "cabinet.fill",
+                        title: "What should SmartCart buy?",
+                        message: "Pantry matches never remove an ingredient automatically. If you do not choose a safe pantry option, SmartCart buys the full recipe amount.",
+                        color: SmartCartTheme.purple
+                    )
+
+                    if appModel.isMealPrepShopping {
+                        mealPrepPantryRows
+                    } else {
+                        singleRecipeQuickActions
+
+                        ForEach($appModel.activeRecipe.ingredients) { $ingredient in
+                            if ingredient.includeInList {
+                                RecipeReadyPantryIngredientRow(ingredient: $ingredient)
+                            }
+                        }
+                    }
+                }
+                .padding(18)
+                .padding(.bottom, 24)
+            }
+            .scrollIndicators(.hidden)
+            .smartCartBackground()
+            .navigationTitle("Pantry Decisions")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                        .accessibilityIdentifier("recipe-ready-pantry-done")
+                }
+            }
+        }
+    }
+
+    private var singleRecipeQuickActions: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 9) { pantryBulkActions }
+            VStack(spacing: 9) { pantryBulkActions }
+        }
+    }
+
+    @ViewBuilder private var pantryBulkActions: some View {
+        Button("Use safe matches") {
+            appModel.useSafePantrySuggestions()
+        }
+        .buttonStyle(SecondaryButtonStyle())
+        .disabled(appModel.recipeReadyPantrySuggestionCount == 0)
+        .accessibilityHint("Uses only exact compatible pantry matches and buys any remainder")
+
+        Button("Buy everything") {
+            appModel.buyFullRecipeReadyIngredients()
+        }
+        .buttonStyle(SecondaryButtonStyle())
+        .accessibilityHint("Ignores pantry suggestions and buys the full recipe amounts")
+    }
+
+    private var mealPrepPantryRows: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(
+                appModel.currentShoppingMealPrepSnapshot?.lines.filter(\.participatesInCurrentTrip) ?? []
+            ) { line in
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .top, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(line.name)
+                                .font(.subheadline.weight(.bold))
+                                .foregroundStyle(SmartCartTheme.navy)
+                            Text(mealPrepPantryDetail(line))
+                                .font(.caption)
+                                .foregroundStyle(SmartCartTheme.secondaryInk)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer(minLength: 6)
+                        Text("Buy \(Ingredient.quantityText(line.quantityToBuy, unit: line.unit.symbol == "count" ? "" : line.unit.symbol))")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(SmartCartTheme.green)
+                            .multilineTextAlignment(.trailing)
+                    }
+
+                    if line.hasPantryChoice {
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 8) { mealPrepPantryChoices(line) }
+                            VStack(spacing: 8) { mealPrepPantryChoices(line) }
+                        }
+                    } else {
+                        Label("No safe compatible pantry match", systemImage: "cart.badge.plus")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(SmartCartTheme.secondaryInk)
+                    }
+                }
+                .smartCartCard(padding: 13)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func mealPrepPantryChoices(_ line: CombinedIngredientLine) -> some View {
+        pantryChoice("Use Pantry", selected: !line.isBuyingFullQuantity) {
+            appModel.setMealPrepPantryOverride(lineID: line.id, buyFull: false)
+        }
+        pantryChoice("Buy Full", selected: line.isBuyingFullQuantity) {
+            appModel.setMealPrepPantryOverride(lineID: line.id, buyFull: true)
+        }
+    }
+
+    private func pantryChoice(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(selected ? SmartCartTheme.onAccent : SmartCartTheme.green)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background(selected ? SmartCartTheme.green : SmartCartTheme.herbLight)
+                .clipShape(Capsule())
+        }
+        .buttonStyle(PressableButtonStyle())
+        .smartCartMinimumHitTarget()
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityValue(selected ? "Selected" : "Not selected")
+    }
+
+    private func mealPrepPantryDetail(_ line: CombinedIngredientLine) -> String {
+        let required = Ingredient.quantityText(line.quantity, unit: line.unit.symbol == "count" ? "" : line.unit.symbol)
+        guard !line.pantryDeductions.isEmpty else { return "Need \(required) · buying full amount" }
+        let applied = line.pantryDeductions.reduce(0) { $0 + $1.quantity }
+        let pantry = Ingredient.quantityText(applied, unit: line.unit.symbol == "count" ? "" : line.unit.symbol)
+        return "Need \(required) · compatible pantry amount \(pantry)"
+    }
+}
+
+private struct RecipeReadyPantryIngredientRow: View {
+    @Environment(AppModel.self) private var appModel
+    @Binding var ingredient: Ingredient
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 11) {
+                Image(systemName: ingredient.category.symbol)
+                    .font(.subheadline.bold())
+                    .foregroundStyle(SmartCartTheme.purple)
+                    .frame(width: 42, height: 42)
+                    .background(SmartCartTheme.purple.opacity(0.09))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(ingredient.name)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(SmartCartTheme.navy)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("Need \(appModel.scaledQuantityText(for: ingredient)) · buy \(appModel.quantityToBuyText(for: ingredient))")
+                        .font(.caption)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 4)
+            }
+
+            if let suggestion = ingredient.pantrySuggestion {
+                Label(suggestionTitle(suggestion), systemImage: suggestion.coverage == .possible ? "exclamationmark.triangle.fill" : "sparkles")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(suggestion.coverage == .possible ? SmartCartTheme.amber : SmartCartTheme.purple)
+                Text(suggestionMessage(suggestion))
+                    .font(.caption2)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Label("No safe pantry match · buying full amount", systemImage: "cart.badge.plus")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
+            }
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) { choiceButtons }
+                VStack(spacing: 8) { choiceButtons }
+            }
+        }
+        .smartCartCard(padding: 13)
+        .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder private var choiceButtons: some View {
+        if let suggestion = ingredient.pantrySuggestion, suggestion.coverage != .possible {
+            decisionButton(
+                suggestion.coverage == .partial ? "Use + Buy Rest" : "Use Pantry",
+                selected: ingredient.pantryDecision == .useAvailable && ingredient.pantryState != .haveEnough
+            ) {
+                appModel.setPantryDecision(.useAvailable, for: ingredient.id)
+            }
+        }
+
+        decisionButton("Buy Full", selected: ingredient.pantryDecision == .buyFull || ingredient.pantryDecision == nil) {
+            appModel.setPantryDecision(.buyFull, for: ingredient.id)
+        }
+
+        Menu {
+            Button("Already have enough") {
+                ingredient.pantryDecision = .useAvailable
+                ingredient.pantryState = .haveEnough
+            }
+            Button("Ask me later") {
+                appModel.setPantryDecision(.review, for: ingredient.id)
+            }
+        } label: {
+            Label("More", systemImage: "ellipsis.circle")
+                .font(.caption.weight(.bold))
+                .frame(maxWidth: .infinity, minHeight: 44)
+        }
+        .buttonStyle(.bordered)
+        .accessibilityLabel("More pantry choices for \(ingredient.name)")
+    }
+
+    private func decisionButton(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(selected ? SmartCartTheme.onAccent : SmartCartTheme.green)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background(selected ? SmartCartTheme.green : SmartCartTheme.herbLight)
+                .clipShape(Capsule())
+        }
+        .buttonStyle(PressableButtonStyle())
+        .smartCartMinimumHitTarget()
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityValue(selected ? "Selected" : "Not selected")
+    }
+
+    private func suggestionTitle(_ suggestion: PantrySuggestion) -> String {
+        switch suggestion.coverage {
+        case .full: "Pantry may cover this"
+        case .partial: "Pantry may cover part of this"
+        case .possible: "Possible name match · units cannot be compared"
+        }
+    }
+
+    private func suggestionMessage(_ suggestion: PantrySuggestion) -> String {
+        switch suggestion.coverage {
+        case .full:
+            "\(suggestion.pantryItemName) appears to cover the scaled amount. It is used only if you choose Use Pantry."
+        case .partial:
+            "\(suggestion.pantryItemName) covers about \(Ingredient.quantityText(suggestion.availableQuantity, unit: suggestion.availableUnit)); SmartCart can buy the remainder."
+        case .possible:
+            "\(suggestion.pantryItemName) matches by name, but \(suggestion.availableUnit.isEmpty ? "its saved package unit" : suggestion.availableUnit) cannot be safely compared with \(ingredient.unit.isEmpty ? "this recipe count" : ingredient.unit). SmartCart will buy the full amount unless you explicitly say you already have enough."
+        }
+    }
+}
+
+/// Retailer, store, fulfillment, and matching preferences are durable defaults
+/// edited together from the compact Recipe Ready summary.
+struct RecipeReadyTripSettingsSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(AppModel.self) private var appModel
+    @State private var showRetailerSetupSafari = false
+    let onConfirm: () -> Void
+
+    var body: some View {
+        @Bindable var appModel = appModel
+
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    SectionHeader(
+                        title: "Retailer",
+                        subtitle: "Saved settings become the default for future trips"
+                    )
+
+                    ForEach(ShoppingRetailer.allCases.filter { $0.configuration.isAvailable }) { retailer in
+                        RetailerChoiceCard(
+                            retailer: retailer,
+                            selected: appModel.selectedRetailer == retailer
+                        ) {
+                            appModel.startRetailerGuide(retailer)
+                        }
+                    }
+
+                    if appModel.selectedRetailer == .walmart {
+                        storeChoices
+                    } else {
+                        InfoBanner(
+                            symbol: "location.viewfinder",
+                            title: "Choose your store in \(appModel.retailerConfiguration.displayName)",
+                            message: "SmartCart matches the retailer catalog. The retailer-owned page confirms your local store, live availability, and fulfillment.",
+                            color: .red
+                        )
+                    }
+
+                    fulfillmentChoice(appModel: $appModel)
+
+                    SectionHeader(
+                        title: "Shopping preferences",
+                        subtitle: "Hard dietary and organic rules still block unsuitable products"
+                    )
+                    ShoppingPreferenceControls()
+
+                    retailerSetup
+                }
+                .padding(18)
+                .padding(.bottom, 24)
+            }
+            .scrollIndicators(.hidden)
+            .smartCartBackground()
+            .navigationTitle("Trip Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        onConfirm()
+                        dismiss()
+                    }
+                        .disabled(appModel.selectedStores.isEmpty)
+                        .accessibilityIdentifier("recipe-ready-settings-done")
+                }
+            }
+            .sheet(isPresented: $showRetailerSetupSafari) {
+                RetailerSafariSheet(
+                    url: appModel.retailerSetupURL(),
+                    configuration: appModel.retailerConfiguration
+                )
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+            }
+        }
+    }
+
+    private var storeChoices: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionHeader(title: "Store", subtitle: "Used as the matching context")
+            ForEach(appModel.storesForSelectedRetailer) { store in
+                Button {
+                    appModel.selectStore(store)
+                } label: {
+                    HStack(alignment: .top, spacing: 11) {
+                        Image(systemName: appModel.selectedStoreIDs.contains(store.id) ? "checkmark.circle.fill" : "circle")
+                            .font(.title3)
+                            .foregroundStyle(appModel.selectedStoreIDs.contains(store.id) ? SmartCartTheme.green : SmartCartTheme.secondaryInk)
+                            .accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(store.name)
+                                .font(.subheadline.weight(.bold))
+                                .foregroundStyle(SmartCartTheme.navy)
+                            Text("\(store.address) · \(store.distance, specifier: "%.1f") mi")
+                                .font(.caption)
+                                .foregroundStyle(SmartCartTheme.secondaryInk)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .smartCartCard(padding: 13)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(PressableButtonStyle())
+                .accessibilityLabel("\(store.name), \(store.address), \(store.distance.formatted(.number.precision(.fractionLength(1)))) miles")
+                .accessibilityValue(appModel.selectedStoreIDs.contains(store.id) ? "Selected" : "Not selected")
+                .accessibilityAddTraits(appModel.selectedStoreIDs.contains(store.id) ? .isSelected : [])
+            }
+        }
+    }
+
+    private func fulfillmentChoice(appModel: Bindable<AppModel>) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionHeader(title: "Fulfillment", subtitle: "The retailer confirms live availability and final options")
+            Picker("Fulfillment mode", selection: appModel.fulfillmentMode) {
+                ForEach(FulfillmentMode.allCases) { mode in
+                    Text(mode.rawValue).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .accessibilityIdentifier("recipe-ready-fulfillment")
+        }
+        .smartCartCard()
+    }
+
+    private var retailerSetup: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if appModel.retailerSetupIsComplete {
+                Label("\(appModel.retailerConfiguration.displayName) setup is ready", systemImage: "checkmark.circle.fill")
+                    .font(.headline)
+                    .foregroundStyle(SmartCartTheme.green)
+            } else {
+                SectionHeader(
+                    title: "One-time retailer setup",
+                    subtitle: "Sign-in and list setup stay on the retailer-owned page"
+                )
+
+                Button {
+                    appModel.recordRetailerSetupStarted()
+                    showRetailerSetupSafari = true
+                } label: {
+                    HStack {
+                        Text("Open \(appModel.retailerConfiguration.displayName) setup")
+                        Spacer()
+                        Image(systemName: "arrow.up.right")
+                    }
+                }
+                .buttonStyle(BlueButtonStyle())
+                .accessibilityIdentifier("recipe-ready-retailer-setup-open")
+
+                Button {
+                    appModel.completeRetailerSetup()
+                    onConfirm()
+                    dismiss()
+                } label: {
+                    Label("I’m signed in and my list is ready", systemImage: "checkmark.circle.fill")
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .accessibilityIdentifier("recipe-ready-retailer-setup-complete")
+            }
+
+            Text("SmartCart cannot see retailer credentials, verify sign-in, create a list or cart, or know what happens on a retailer page.")
+                .font(.caption)
+                .foregroundStyle(SmartCartTheme.secondaryInk)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .smartCartCard()
+    }
+}
+
 private struct PantryIngredientRow: View {
     @Binding var ingredient: Ingredient
 
@@ -425,6 +853,8 @@ private struct RetailerChoiceCard: View {
         .buttonStyle(PressableButtonStyle())
         .disabled(!configuration.isAvailable)
         .accessibilityIdentifier("retailer-card-\(retailer.rawValue)")
+        .accessibilityValue(selected ? "Selected" : "Not selected")
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     @ViewBuilder

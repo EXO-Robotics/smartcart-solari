@@ -1,6 +1,10 @@
 import Foundation
 
 enum PantryMatchingService {
+    static func convertedQuantity(_ quantity: Double, from source: String, to destination: String) -> Double? {
+        convert(quantity, from: source, to: destination)
+    }
+
     static func bestSuggestion(
         for ingredient: Ingredient,
         requiredQuantity: Double? = nil,

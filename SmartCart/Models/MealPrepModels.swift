@@ -219,7 +219,9 @@ struct CombinedIngredientLine: Identifiable, Hashable, Codable {
         max(0, quantity - pantryDeductions.reduce(0) { $0 + $1.quantity })
     }
     var isBuyingFullQuantity: Bool {
-        buyFullOverride == true
+        // A missing choice is the conservative state: pantry stock is only
+        // applied after the user explicitly chooses Use Pantry.
+        buyFullOverride != false
     }
     var hasPantryChoice: Bool {
         !pantryDeductions.isEmpty

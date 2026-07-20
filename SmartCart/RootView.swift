@@ -99,6 +99,10 @@ struct RootView: View {
             MealPrepReviewView()
         case .mealPrepDashboard:
             MealPrepDashboardView()
+        case .recipeReady:
+            RecipeReadyView()
+        case .shoppingTrip:
+            RetailerSafariHandoffView()
         case .ingredientReview:
             IngredientReviewView()
         case .servingAdjustment:

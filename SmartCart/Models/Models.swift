@@ -35,6 +35,8 @@ enum SmartRoute: Hashable {
     case mealPrepSelection
     case mealPrepReview
     case mealPrepDashboard
+    case recipeReady
+    case shoppingTrip
     case ingredientReview
     case servingAdjustment
     case pantryCheck

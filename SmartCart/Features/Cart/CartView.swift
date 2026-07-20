@@ -1,409 +1,152 @@
 import SwiftUI
 import UIKit
 
-struct IngredientReviewView: View {
+/// The adaptive confirmation surface shared by single recipes and reviewed
+/// Meal Prep plans. Internal pipeline stages stay available to legacy routes,
+/// but the normal funnel no longer asks the user to visit them one by one.
+struct RecipeReadyView: View {
     @Environment(AppModel.self) private var appModel
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var expandedIngredientIDs: Set<UUID> = []
+    @State private var activeSheet: RecipeReadySheet?
+    @State private var continueAfterRetailerSetup = false
+    @State private var tripSettingsConfirmed = false
+    @State private var issueCursor = 0
+    @AccessibilityFocusState private var focusedIssueID: UUID?
 
     var body: some View {
         @Bindable var appModel = appModel
 
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                WorkflowHeader(
-                    step: 1,
-                    total: 6,
-                    eyebrow: "Ingredient review",
-                    title: "Check what SmartCart found",
-                    message: "Correct names and quantities now. Nothing is matched to a product until you confirm this list."
-                )
-
-                recipeSummary
-                confidenceLegend
-
-                LazyVStack(spacing: 11) {
-                    ForEach($appModel.activeRecipe.ingredients) { $ingredient in
-                        IngredientReviewRow(ingredient: $ingredient)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    if appModel.isMealPrepShopping {
+                        mealPrepHeader
+                        mealPrepRecipeSummary
+                        mealPrepIngredientSummary
+                    } else {
+                        recipeHeader
+                        ingredientSection(proxy: proxy, appModel: $appModel)
                     }
-                }
 
-                Button {
-                    appModel.activeRecipe.ingredients.append(
-                        Ingredient(name: "New ingredient", confidence: .review)
-                    )
-                } label: {
-                    Label("Add an ingredient", systemImage: "plus.circle.fill")
-                        .frame(maxWidth: .infinity)
+                    pantrySummary
+                    shoppingSettingsSummary
+                    purchaseSummary
                 }
-                .buttonStyle(SecondaryButtonStyle())
+                .padding(18)
+                .padding(.bottom, 104)
             }
-            .padding(18)
-            .padding(.bottom, 96)
+            .scrollIndicators(.hidden)
+            .scrollDismissesKeyboard(.interactively)
+            .onAppear(perform: expandAttentionRows)
+            .onChange(of: attentionIngredientIDs) { _, _ in
+                expandAttentionRows()
+            }
         }
         .smartCartBackground()
-        .navigationTitle("Review ingredients")
+        .navigationTitle("Recipe Ready")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
             BottomActionBar {
-                Button {
-                    appModel.commitIngredientReview()
-                } label: {
-                    ViewThatFits {
-                        HStack {
-                            Text("Continue with \(appModel.includedIngredientCount) ingredients")
-                            Spacer()
-                            Image(systemName: "arrow.right")
-                        }
-                        HStack {
-                            Text("Continue")
-                            Spacer()
-                            Image(systemName: "arrow.right")
-                        }
-                    }
-                }
-                .buttonStyle(PrimaryButtonStyle())
-                .disabled(appModel.includedIngredientCount == 0 || appModel.unresolvedQuantityReviewCount > 0)
-            }
-        }
-    }
-
-    private var recipeSummary: some View {
-        HStack(spacing: 14) {
-            Image(systemName: appModel.activeRecipe.heroSymbol)
-                .font(.title2.bold())
-                .foregroundStyle(SmartCartTheme.onAccent)
-                .frame(width: 56, height: 56)
-                .background(SmartCartTheme.green)
-                .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
-                .shadow(color: SmartCartTheme.mintGlow, radius: 12)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(appModel.activeRecipe.title)
-                    .font(.headline)
-                    .foregroundStyle(SmartCartTheme.navy)
-                    .lineLimit(2)
-                Text("\(appModel.activeRecipe.source.rawValue) · \(appModel.activeRecipe.ingredients.count) ingredients detected")
-                    .font(.caption)
-                    .foregroundStyle(SmartCartTheme.secondaryInk)
-            }
-
-            Spacer(minLength: 0)
-        }
-        .smartCartCard(padding: 14)
-    }
-
-    private var confidenceLegend: some View {
-        HStack(spacing: 8) {
-            IngredientConfidenceBadge(confidence: .high)
-            IngredientConfidenceBadge(confidence: .review)
-            Spacer(minLength: 0)
-        }
-    }
-}
-
-private struct IngredientReviewRow: View {
-    @Binding var ingredient: Ingredient
-    @State private var showSourceEvidence = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 11) {
-                Toggle("Include \(ingredient.name)", isOn: $ingredient.includeInList)
-                    .labelsHidden()
-                    .tint(SmartCartTheme.green)
-                    .accessibilityLabel("Include \(ingredient.name) in this shopping trip")
-                    .accessibilityValue(ingredient.includeInList ? "Included" : "Excluded")
-
-                Image(systemName: ingredient.category.symbol)
-                    .font(.subheadline.bold())
-                    .foregroundStyle(ingredient.includeInList ? SmartCartTheme.green : SmartCartTheme.secondaryInk)
-                    .frame(width: 37, height: 37)
-                    .background(ingredient.includeInList ? SmartCartTheme.herbLight : SmartCartTheme.canvas)
-                    .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-
-                VStack(alignment: .leading, spacing: 6) {
-                    TextField("Ingredient name", text: $ingredient.name)
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(SmartCartTheme.navy)
-                        .textInputAutocapitalization(.words)
-
-                    Menu {
-                        ForEach(IngredientConfidence.allCases) { confidence in
-                            Button {
-                                ingredient.confidence = confidence
-                            } label: {
-                                Label(confidence.rawValue, systemImage: confidence.symbol)
-                            }
-                        }
-                    } label: {
-                        IngredientConfidenceBadge(confidence: ingredient.confidence)
-                    }
-                }
-
-                Spacer(minLength: 0)
-            }
-
-            HStack(spacing: 8) {
-                TextField("Qty", value: $ingredient.quantity, format: .number.precision(.fractionLength(0...2)))
-                    .keyboardType(.decimalPad)
-                    .frame(width: 66)
-                    .smartField()
-
-                TextField("Unit", text: $ingredient.unit)
-                    .textInputAutocapitalization(.never)
-                    .frame(width: 88)
-                    .smartField()
-
-                TextField("Preparation (optional)", text: $ingredient.preparation)
-                    .smartField()
-            }
-            .font(.caption)
-
-            if let suggestion = ingredient.pantrySuggestion {
-                VStack(alignment: .leading, spacing: 8) {
-                    Label(pantrySuggestionTitle(suggestion), systemImage: "cabinet.fill")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(SmartCartTheme.purple)
-                    Text(pantrySuggestionMessage(suggestion))
-                        .font(.caption2)
-                        .foregroundStyle(SmartCartTheme.secondaryInk)
-
-                    HStack(spacing: 8) {
-                        Button(suggestion.coverage == .partial ? "Use it + buy rest" : "Use pantry") {
-                            ingredient.pantryDecision = .useAvailable
-                            ingredient.pantryState = .runningLow
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(SmartCartTheme.green)
-                        .foregroundStyle(SmartCartTheme.onAccent)
-
-                        Button("Buy full amount") {
-                            ingredient.pantryDecision = .buyFull
-                            ingredient.pantryState = .needToBuy
-                        }
-                        .buttonStyle(.bordered)
-                    }
-                    .font(.caption.weight(.bold))
-                }
-                .padding(11)
-                .background(SmartCartTheme.purple.opacity(0.07))
-                .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 13, style: .continuous)
-                        .stroke(SmartCartTheme.purple.opacity(0.22), lineWidth: 1)
-                }
-            }
-
-            if ingredient.quantityReviewRequired == true {
-                HStack {
-                    Label("Quantity is uncertain. Confirm it before product matching.", systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(SmartCartTheme.coral)
-                    Spacer()
-                    Button("Confirm \(ingredient.displayQuantity)") {
-                        ingredient.quantityReviewRequired = false
-                    }
-                    .font(.caption.weight(.bold))
-                    .buttonStyle(.bordered)
-                }
-            }
-
-            if let evidence = ingredient.sourceEvidence {
-                DisclosureGroup(isExpanded: $showSourceEvidence) {
-                    VStack(alignment: .leading, spacing: 5) {
-                        if let cropData = evidence.sourceCropJPEGData,
-                           let crop = UIImage(data: cropData) {
-                            Image(uiImage: crop)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(maxWidth: .infinity, maxHeight: 120)
-                                .background(SmartCartTheme.canvasRaise)
-                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .stroke(SmartCartTheme.border, lineWidth: 1)
-                                }
-                                .accessibilityLabel("Source crop for \(ingredient.name)")
-                        }
-                        Text(evidence.rawText)
-                            .font(.caption.monospaced())
-                            .textSelection(.enabled)
-                        Text("\(evidence.extractionStrategy.rawValue) · parser \(evidence.parserConfidence.formatted(.percent.precision(.fractionLength(0)))) · normalization \(evidence.normalizationConfidence.formatted(.percent.precision(.fractionLength(0))))")
-                            .font(.caption2)
-                            .foregroundStyle(SmartCartTheme.secondaryInk)
-                        if let layout = evidence.layoutConfidence {
-                            Text("Layout confidence: \(layout.formatted(.percent.precision(.fractionLength(0))))")
-                                .font(.caption2)
-                                .foregroundStyle(SmartCartTheme.secondaryInk)
-                        }
-                        if let pageIndex = evidence.pageIndex,
-                           let box = evidence.boundingBox {
-                            Text(
-                                "Page \(pageIndex + 1) · source box x \(box.x.formatted(.percent.precision(.fractionLength(0)))), y \(box.y.formatted(.percent.precision(.fractionLength(0))))"
-                            )
-                            .font(.caption2)
-                            .foregroundStyle(SmartCartTheme.secondaryInk)
-                        }
-                        if let alternatives = evidence.alternateSourceTexts,
-                           !alternatives.isEmpty {
-                            Text("OCR alternatives")
-                                .font(.caption2.weight(.bold))
-                                .foregroundStyle(SmartCartTheme.amber)
-                            ForEach(Array(alternatives.enumerated()), id: \.offset) { _, alternative in
-                                Text(alternative)
-                                    .font(.caption2.monospaced())
-                                    .foregroundStyle(SmartCartTheme.secondaryInk)
-                            }
-                        }
-                        if evidence.alternateQuantityCandidates.count > 1 {
-                            Text(
-                                "Quantity candidates: \(evidence.alternateQuantityCandidates.map { $0.formatted(.number.precision(.fractionLength(0...2))) }.joined(separator: " · "))"
-                            )
-                            .font(.caption2.weight(.bold))
+                VStack(alignment: .leading, spacing: 7) {
+                    if let explanation = appModel.recipeReadyDisabledExplanation {
+                        Label(explanation, systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption.weight(.semibold))
                             .foregroundStyle(SmartCartTheme.coral)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("recipe-ready-disabled-reason")
+                    }
+
+                    Button(action: startShopping) {
+                        ViewThatFits(in: .horizontal) {
+                            HStack {
+                                Text("Start Shopping · \(appModel.recipeReadyExpectedPurchaseCount) items")
+                                Spacer()
+                                Image(systemName: "arrow.right")
+                            }
+                            HStack {
+                                Text("Start Shopping")
+                                Spacer()
+                                Text(appModel.recipeReadyExpectedPurchaseCount, format: .number)
+                                Image(systemName: "arrow.right")
+                            }
                         }
                     }
-                    .padding(.top, 7)
-                } label: {
-                    Label("Source evidence", systemImage: "doc.text.magnifyingglass")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(SmartCartTheme.walmartBlue)
-                }
-            }
-
-            HStack {
-                Menu {
-                    ForEach(GroceryCategory.allCases, id: \.self) { category in
-                        Button(category.rawValue) {
-                            ingredient.category = category
-                        }
-                    }
-                } label: {
-                    Label(ingredient.category.rawValue, systemImage: "square.grid.2x2.fill")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(SmartCartTheme.secondaryInk)
-                }
-
-                Spacer()
-
-                Button {
-                    ingredient.pantryState = ingredient.pantryState == .haveEnough ? .needToBuy : .haveEnough
-                } label: {
-                    Label(
-                        ingredient.pantryState == .haveEnough ? "Already have" : "Need this",
-                        systemImage: ingredient.pantryState == .haveEnough ? "checkmark.seal.fill" : "cart.badge.plus"
-                    )
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(ingredient.pantryState == .haveEnough ? SmartCartTheme.green : SmartCartTheme.walmartBlue)
+                    .buttonStyle(PrimaryButtonStyle())
+                    .disabled(!appModel.recipeReadyCanStartShopping)
+                    .accessibilityIdentifier("recipe-ready-start-shopping")
+                    .accessibilityLabel("Start Shopping, \(appModel.recipeReadyExpectedPurchaseCount) items")
+                    .accessibilityHint(appModel.recipeReadyDisabledExplanation ?? "Matches products and opens the shopping trip")
                 }
             }
         }
-        .padding(13)
-        .background(ingredient.includeInList ? SmartCartTheme.paper : SmartCartTheme.canvas.opacity(0.72))
-        .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 17, style: .continuous)
-                .stroke(SmartCartTheme.border, lineWidth: 1)
-        }
-        .opacity(ingredient.includeInList ? 1 : 0.62)
-    }
-
-    private func pantrySuggestionTitle(_ suggestion: PantrySuggestion) -> String {
-        switch suggestion.coverage {
-        case .full: "Pantry may cover this"
-        case .partial: "Pantry may cover part of this"
-        case .possible: "Possible pantry match"
-        }
-    }
-
-    private func pantrySuggestionMessage(_ suggestion: PantrySuggestion) -> String {
-        switch suggestion.coverage {
-        case .full:
-            "\(suggestion.pantryItemName) appears to cover \(ingredient.displayQuantity). Confirm before SmartCart skips it."
-        case .partial:
-            "\(suggestion.pantryItemName) covers about \(Ingredient.quantityText(suggestion.availableQuantity, unit: suggestion.availableUnit)); SmartCart can buy the remainder."
-        case .possible:
-            "\(suggestion.pantryItemName) matches by name, but its saved package unit cannot be compared with \(ingredient.unit.isEmpty ? "this recipe amount" : ingredient.unit)."
-        }
-    }
-}
-
-struct ServingAdjustmentView: View {
-    @Environment(AppModel.self) private var appModel
-    @State private var preferLeftovers = false
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                WorkflowHeader(
-                    step: 2,
-                    total: 6,
-                    eyebrow: "Adjust servings",
-                    title: "How many people are eating?",
-                    message: "SmartCart scales the recipe first, then estimates the packages you may need to buy."
-                )
-
-                servingControl
-                packageExplanation
-                quantityPreview
-                leftoversToggle
-            }
-            .padding(18)
-            .padding(.bottom, 96)
-        }
-        .smartCartBackground()
-        .navigationTitle("Adjust servings")
-        .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .bottom) {
-            BottomActionBar {
-                Button {
-                    appModel.continueTo(.pantryCheck)
-                } label: {
-                    HStack {
-                        Text("Check my pantry")
-                        Spacer()
-                        Image(systemName: "arrow.right")
-                    }
+        .sheet(item: $activeSheet, onDismiss: sheetDidDismiss) { sheet in
+            switch sheet {
+            case .pantry:
+                RecipeReadyPantrySheet()
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+            case .shoppingSettings:
+                RecipeReadyTripSettingsSheet {
+                    tripSettingsConfirmed = true
                 }
-                .buttonStyle(PrimaryButtonStyle())
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
             }
         }
     }
 
-    private var servingControl: some View {
-        VStack(spacing: 16) {
-            HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Desired servings")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(SmartCartTheme.navy)
-                    Text("Original recipe: \(appModel.activeRecipe.servings)")
-                        .font(.caption)
-                        .foregroundStyle(SmartCartTheme.secondaryInk)
+    private var recipeHeader: some View {
+        @Bindable var appModel = appModel
+
+        return VStack(alignment: .leading, spacing: 16) {
+            Label("RECIPE READY", systemImage: "checkmark.seal.fill")
+                .smartEyebrow()
+
+            TextField("Recipe title", text: $appModel.activeRecipe.title, axis: .vertical)
+                .font(.system(.title2, design: .rounded, weight: .bold))
+                .foregroundStyle(SmartCartTheme.navy)
+                .textInputAutocapitalization(.words)
+                .accessibilityIdentifier("recipe-ready-title")
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 14) {
+                    servingIdentity
+                    Spacer(minLength: 8)
+                    servingControls
                 }
-
-                Spacer()
-
-                HStack(spacing: 16) {
-                    servingButton(symbol: "minus", delta: -1)
-                    Text("\(appModel.desiredServings)")
-                        .font(.system(size: 30, weight: .bold, design: .rounded))
-                        .foregroundStyle(SmartCartTheme.navy)
-                        .frame(minWidth: 42)
-                    servingButton(symbol: "plus", delta: 1)
-                }
-            }
-
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(SmartCartTheme.border)
-                    Capsule()
-                        .fill(SmartCartTheme.green)
-                        .frame(width: proxy.size.width * min(CGFloat(appModel.desiredServings) / 12, 1))
+                VStack(alignment: .leading, spacing: 12) {
+                    servingIdentity
+                    servingControls
                 }
             }
-            .frame(height: 6)
         }
         .smartCartCard()
+        .smartCartShadow()
+    }
+
+    private var servingIdentity: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("Servings")
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(SmartCartTheme.navy)
+            Text("Original recipe: \(appModel.activeRecipe.servings)")
+                .font(.caption)
+                .foregroundStyle(SmartCartTheme.secondaryInk)
+        }
+    }
+
+    private var servingControls: some View {
+        HStack(spacing: 12) {
+            servingButton(symbol: "minus", delta: -1)
+            Text(appModel.desiredServings, format: .number)
+                .font(.title2.bold().monospacedDigit())
+                .foregroundStyle(SmartCartTheme.navy)
+                .frame(minWidth: 38)
+                .accessibilityLabel("\(appModel.desiredServings) servings")
+            servingButton(symbol: "plus", delta: 1)
+        }
+        .accessibilityElement(children: .contain)
     }
 
     private func servingButton(symbol: String, delta: Int) -> some View {
@@ -413,76 +156,717 @@ struct ServingAdjustmentView: View {
             Image(systemName: symbol)
                 .font(.headline.bold())
                 .foregroundStyle(SmartCartTheme.green)
-                .frame(width: 42, height: 42)
+                .frame(width: 44, height: 44)
                 .background(SmartCartTheme.herbLight)
                 .clipShape(Circle())
         }
         .buttonStyle(PressableButtonStyle())
         .accessibilityLabel(delta > 0 ? "Increase servings" : "Decrease servings")
+        .accessibilityIdentifier(delta > 0 ? "recipe-ready-servings-increase" : "recipe-ready-servings-decrease")
     }
 
-    private var packageExplanation: some View {
-        InfoBanner(
-            symbol: "shippingbox.fill",
-            title: "Recipe amount ≠ package amount",
-            message: "If the recipe needs 1.5 lb of chicken and the best product is a 3 lb pack, SmartCart shows the extra so you can choose.",
-            color: SmartCartTheme.walmartBlue
+    @ViewBuilder
+    private func ingredientSection(proxy: ScrollViewProxy, appModel: Bindable<AppModel>) -> some View {
+        VStack(alignment: .leading, spacing: 11) {
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    ingredientHeading
+                    Spacer(minLength: 8)
+                    issueControl(proxy: proxy)
+                }
+                VStack(alignment: .leading, spacing: 9) {
+                    ingredientHeading
+                    issueControl(proxy: proxy)
+                }
+            }
+
+            LazyVStack(spacing: 10) {
+                ForEach(appModel.activeRecipe.ingredients) { $ingredient in
+                    RecipeReadyIngredientRow(
+                        ingredient: $ingredient,
+                        isExpanded: expansionBinding(for: ingredient.id),
+                        onDelete: {
+                            self.appModel.activeRecipe.ingredients.removeAll { $0.id == ingredient.id }
+                            expandedIngredientIDs.remove(ingredient.id)
+                        }
+                    )
+                    .id(ingredient.id)
+                    .accessibilityFocused($focusedIssueID, equals: ingredient.id)
+                }
+            }
+
+            Button {
+                let ingredient = Ingredient(name: "New ingredient", confidence: .review)
+                self.appModel.activeRecipe.ingredients.append(ingredient)
+                expandedIngredientIDs.insert(ingredient.id)
+            } label: {
+                Label("Add an ingredient", systemImage: "plus.circle.fill")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(SecondaryButtonStyle())
+            .accessibilityIdentifier("recipe-ready-add-ingredient")
+        }
+    }
+
+    private var ingredientHeading: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("Ingredients")
+                .font(.headline)
+                .foregroundStyle(SmartCartTheme.navy)
+            Text("\(appModel.includedIngredientCount) included · tap any row to edit")
+                .font(.caption)
+                .foregroundStyle(SmartCartTheme.secondaryInk)
+        }
+    }
+
+    @ViewBuilder
+    private func issueControl(proxy: ScrollViewProxy) -> some View {
+        if !blockingIngredientIDs.isEmpty {
+            Button {
+                focusNextIssue(proxy: proxy)
+            } label: {
+                Label(
+                    "\(blockingIngredientIDs.count) need attention",
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .font(.caption.weight(.bold))
+                .foregroundStyle(SmartCartTheme.coral)
+                .padding(.horizontal, 11)
+                .frame(minHeight: 44)
+                .background(SmartCartTheme.coral.opacity(0.09))
+                .clipShape(Capsule())
+            }
+            .buttonStyle(PressableButtonStyle())
+            .accessibilityIdentifier("recipe-ready-review-issues")
+            .accessibilityHint("Moves to the next ingredient that must be resolved")
+        } else if attentionIngredientIDs.count > 0 {
+            Label("\(attentionIngredientIDs.count) review suggested", systemImage: "info.circle.fill")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(SmartCartTheme.amber)
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            Label("Ingredients look good", systemImage: "checkmark.circle.fill")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(SmartCartTheme.green)
+        }
+    }
+
+    private var mealPrepHeader: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("MEAL PREP READY", systemImage: "calendar.badge.checkmark")
+                .smartEyebrow()
+            Text(appModel.currentShoppingMealPrepSnapshot?.title ?? appModel.mealPrepDraft?.title ?? "Weekly Meal Prep")
+                .font(.system(.title2, design: .rounded, weight: .bold))
+                .foregroundStyle(SmartCartTheme.navy)
+            Text("\(appModel.currentShoppingMealPrepSnapshot?.recipeCount ?? 0) recipes · \(appModel.includedIngredientCount) combined ingredients")
+                .font(.subheadline)
+                .foregroundStyle(SmartCartTheme.secondaryInk)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .smartCartCard()
+        .smartCartShadow()
+    }
+
+    private var mealPrepRecipeSummary: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionHeader(title: "Recipes and servings", subtitle: "Each recipe keeps its own scale")
+            ForEach(appModel.currentShoppingMealPrepSnapshot?.selections ?? []) { selection in
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 10) {
+                        mealPrepRecipeIdentity(selection)
+                        Spacer(minLength: 8)
+                        mealPrepServingControls(selection)
+                    }
+                    VStack(alignment: .leading, spacing: 10) {
+                        mealPrepRecipeIdentity(selection)
+                        mealPrepServingControls(selection)
+                    }
+                }
+                .smartCartCard(padding: 13)
+            }
+        }
+    }
+
+    private func mealPrepRecipeIdentity(_ selection: MealPrepSelection) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(selection.recipeSnapshot.title)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(SmartCartTheme.navy)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Originally \(selection.recipeSnapshot.originalServings) servings")
+                .font(.caption)
+                .foregroundStyle(SmartCartTheme.secondaryInk)
+        }
+    }
+
+    private func mealPrepServingControls(_ selection: MealPrepSelection) -> some View {
+        HStack(spacing: 9) {
+            mealPrepServingButton(selection: selection, symbol: "minus", delta: -1)
+            Text(Int(selection.targetServings), format: .number)
+                .font(.headline.monospacedDigit())
+                .foregroundStyle(SmartCartTheme.navy)
+                .frame(minWidth: 34)
+            mealPrepServingButton(selection: selection, symbol: "plus", delta: 1)
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private func mealPrepServingButton(
+        selection: MealPrepSelection,
+        symbol: String,
+        delta: Double
+    ) -> some View {
+        Button {
+            appModel.updateMealPrepServings(selectionID: selection.id, delta: delta)
+        } label: {
+            Image(systemName: symbol)
+                .font(.caption.bold())
+                .foregroundStyle(SmartCartTheme.green)
+                .frame(width: 44, height: 44)
+                .background(SmartCartTheme.herbLight)
+                .clipShape(Circle())
+        }
+        .buttonStyle(PressableButtonStyle())
+        .accessibilityLabel(
+            delta > 0
+                ? "Increase servings for \(selection.recipeSnapshot.title)"
+                : "Decrease servings for \(selection.recipeSnapshot.title)"
         )
     }
 
-    private var quantityPreview: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("Ingredient")
-                Spacer()
-                Text("Recipe")
-                    .frame(width: 74, alignment: .trailing)
-                Text("Buy")
-                    .frame(width: 62, alignment: .trailing)
+    private var mealPrepIngredientSummary: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionHeader(
+                title: "Combined ingredients",
+                subtitle: appModel.recipeReadyBlockingIssueCount == 0
+                    ? "Reviewed and ready for pantry decisions"
+                    : "\(appModel.recipeReadyBlockingIssueCount) still need review"
+            )
+
+            ForEach(Array(mealPrepParticipatingLines.prefix(10))) { line in
+                HStack(spacing: 10) {
+                    Image(systemName: line.needsReview ? "exclamationmark.triangle.fill" : line.category.symbol)
+                        .foregroundStyle(line.needsReview ? SmartCartTheme.coral : SmartCartTheme.green)
+                        .frame(width: 34, height: 34)
+                        .background((line.needsReview ? SmartCartTheme.coral : SmartCartTheme.green).opacity(0.09))
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(line.name)
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(SmartCartTheme.navy)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(Ingredient.quantityText(line.quantity, unit: line.unit.symbol == "count" ? "" : line.unit.symbol))
+                            .font(.caption)
+                            .foregroundStyle(SmartCartTheme.secondaryInk)
+                    }
+                    Spacer(minLength: 6)
+                    if line.needsReview {
+                        Text("Needs review")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(SmartCartTheme.coral)
+                    }
+                }
+                .smartCartCard(padding: 12)
             }
-            .font(.caption2.weight(.heavy))
-            .foregroundStyle(SmartCartTheme.secondaryInk)
-            .padding(.bottom, 10)
 
-            ForEach(appModel.activeRecipe.ingredients.filter(\.includeInList).prefix(7)) { ingredient in
-                HStack(spacing: 8) {
-                    Text(ingredient.name)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(SmartCartTheme.navy)
-                        .lineLimit(1)
-                    Spacer()
-                    Text(appModel.scaledQuantityText(for: ingredient))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(SmartCartTheme.secondaryInk)
-                        .frame(width: 74, alignment: .trailing)
-                    Text("1 pkg")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(SmartCartTheme.green)
-                        .frame(width: 62, alignment: .trailing)
-                }
-                .padding(.vertical, 10)
-
-                if ingredient.id != appModel.activeRecipe.ingredients.filter(\.includeInList).prefix(7).last?.id {
-                    Divider()
-                }
+            if mealPrepParticipatingLines.count > 10 {
+                Text("Plus \(mealPrepParticipatingLines.count - 10) more combined ingredients")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
+                    .frame(maxWidth: .infinity, alignment: .center)
             }
         }
-        .smartCartCard()
     }
 
-    private var leftoversToggle: some View {
-        Toggle(isOn: $preferLeftovers) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Prefer useful leftovers")
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(SmartCartTheme.navy)
-                Text("Favor the next package size up when the price difference is small.")
-                    .font(.caption)
-                    .foregroundStyle(SmartCartTheme.secondaryInk)
+    private var pantrySummary: some View {
+        Button {
+            activeSheet = .pantry
+        } label: {
+            RecipeReadySummaryRow(
+                symbol: "cabinet.fill",
+                color: SmartCartTheme.purple,
+                title: "Pantry",
+                primaryDetail: pantryPrimaryDetail,
+                secondaryDetail: "\(appModel.recipeReadyExpectedPurchaseCount) ingredients currently need buying",
+                actionTitle: "Review"
+            )
+        }
+        .buttonStyle(PressableButtonStyle())
+        .accessibilityIdentifier("recipe-ready-pantry-summary")
+        .accessibilityLabel("Pantry. \(pantryPrimaryDetail). \(appModel.recipeReadyExpectedPurchaseCount) ingredients currently need buying")
+        .accessibilityHint("Review what SmartCart should buy")
+    }
+
+    private var pantryPrimaryDetail: String {
+        let count = appModel.recipeReadyPantrySuggestionCount
+        if count == 0 { return "No safe matches need review" }
+        return "Can reduce \(count) item\(count == 1 ? "" : "s")"
+    }
+
+    private var shoppingSettingsSummary: some View {
+        Button {
+            continueAfterRetailerSetup = false
+            tripSettingsConfirmed = false
+            activeSheet = .shoppingSettings
+        } label: {
+            RecipeReadySummaryRow(
+                symbol: "storefront.fill",
+                color: appModel.selectedRetailer == .walmart ? SmartCartTheme.walmartBlue : .red,
+                title: retailerLocationSummary,
+                primaryDetail: "\(appModel.fulfillmentMode.rawValue) · \(appModel.preferences.summary)",
+                secondaryDetail: appModel.retailerSetupIsComplete
+                    ? "Retailer setup ready"
+                    : "Retailer setup needed before the first product",
+                actionTitle: "Change"
+            )
+        }
+        .buttonStyle(PressableButtonStyle())
+        .accessibilityIdentifier("recipe-ready-retailer-summary")
+        .accessibilityLabel("\(retailerLocationSummary), \(appModel.fulfillmentMode.rawValue), \(appModel.preferences.summary)")
+        .accessibilityHint("Change retailer, store, fulfillment, or shopping preferences")
+    }
+
+    private var purchaseSummary: some View {
+        InfoBanner(
+            symbol: "basket.fill",
+            title: "\(appModel.recipeReadyExpectedPurchaseCount) items to buy",
+            message: "SmartCart will match products now. Exact high-confidence matches continue automatically; only product exceptions need another decision.",
+            color: SmartCartTheme.green
+        )
+        .accessibilityIdentifier("recipe-ready-purchase-summary")
+    }
+
+    private var retailerLocationSummary: String {
+        if appModel.selectedRetailer == .walmart {
+            return "\(appModel.retailerConfiguration.displayName) · \(appModel.primaryStore.name)"
+        }
+        return "\(appModel.retailerConfiguration.displayName) · Store chosen on retailer page"
+    }
+
+    private var attentionIngredientIDs: [UUID] {
+        appModel.activeRecipe.ingredients.compactMap { ingredient in
+            guard ingredient.includeInList,
+                  ingredient.confidence != .high
+                    || ingredient.quantityReviewRequired == true
+                    || hasUnresolvedAlternative(ingredient) else { return nil }
+            return ingredient.id
+        }
+    }
+
+    private var mealPrepParticipatingLines: [CombinedIngredientLine] {
+        (appModel.currentShoppingMealPrepSnapshot?.lines ?? []).filter(\.participatesInCurrentTrip)
+    }
+
+    private var blockingIngredientIDs: [UUID] {
+        appModel.activeRecipe.ingredients.compactMap { ingredient in
+            guard ingredient.includeInList,
+                  ingredient.quantityReviewRequired == true || hasUnresolvedAlternative(ingredient) else { return nil }
+            return ingredient.id
+        }
+    }
+
+    private func hasUnresolvedAlternative(_ ingredient: Ingredient) -> Bool {
+        ingredient.alternativeGroup != nil && ingredient.name.range(
+            of: #"\s+or\s+"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
+    }
+
+    private func expansionBinding(for ingredientID: UUID) -> Binding<Bool> {
+        Binding(
+            get: { expandedIngredientIDs.contains(ingredientID) },
+            set: { expanded in
+                if expanded {
+                    expandedIngredientIDs.insert(ingredientID)
+                } else {
+                    expandedIngredientIDs.remove(ingredientID)
+                }
+            }
+        )
+    }
+
+    private func expandAttentionRows() {
+        expandedIngredientIDs.formUnion(attentionIngredientIDs)
+    }
+
+    private func focusNextIssue(proxy: ScrollViewProxy) {
+        let issues = blockingIngredientIDs
+        guard !issues.isEmpty else { return }
+        let issueID = issues[issueCursor % issues.count]
+        issueCursor = (issueCursor + 1) % issues.count
+        expandedIngredientIDs.insert(issueID)
+        withAnimation(.easeInOut) {
+            proxy.scrollTo(issueID, anchor: .center)
+        }
+        DispatchQueue.main.async {
+            focusedIssueID = issueID
+        }
+    }
+
+    private func startShopping() {
+        guard appModel.recipeReadyCanStartShopping else { return }
+        if appModel.retailerSetupIsComplete {
+            appModel.beginShoppingFromRecipeReady()
+        } else {
+            continueAfterRetailerSetup = true
+            tripSettingsConfirmed = false
+            activeSheet = .shoppingSettings
+        }
+    }
+
+    private func sheetDidDismiss() {
+        let shouldContinue = continueAfterRetailerSetup && tripSettingsConfirmed
+        continueAfterRetailerSetup = false
+        tripSettingsConfirmed = false
+        guard shouldContinue else { return }
+        guard appModel.retailerSetupIsComplete else { return }
+        appModel.beginShoppingFromRecipeReady()
+    }
+}
+
+/// Kept so schema-era navigation values and older tests can still construct
+/// the legacy destination while the live funnel enters Recipe Ready directly.
+struct IngredientReviewView: View {
+    var body: some View { RecipeReadyView() }
+}
+
+/// Compatibility destination only. Serving controls now live in Recipe Ready.
+struct ServingAdjustmentView: View {
+    var body: some View { RecipeReadyView() }
+}
+
+private enum RecipeReadySheet: String, Identifiable {
+    case pantry
+    case shoppingSettings
+
+    var id: String { rawValue }
+}
+
+private struct RecipeReadySummaryRow: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    let symbol: String
+    let color: Color
+    let title: String
+    let primaryDetail: String
+    let secondaryDetail: String
+    let actionTitle: String
+
+    var body: some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 11) {
+                    identity
+                    HStack {
+                        Text(actionTitle)
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(SmartCartTheme.green)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption.bold())
+                            .foregroundStyle(SmartCartTheme.green)
+                    }
+                }
+            } else {
+                HStack(spacing: 13) {
+                    identity
+                    Spacer(minLength: 8)
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text(actionTitle)
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(SmartCartTheme.green)
+                        Image(systemName: "chevron.right")
+                            .font(.caption.bold())
+                            .foregroundStyle(SmartCartTheme.green)
+                    }
+                }
             }
         }
-        .tint(SmartCartTheme.green)
-        .smartCartCard()
+        .smartCartCard(padding: 14)
+        .contentShape(Rectangle())
+    }
+
+    private var identity: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: symbol)
+                .font(.headline.bold())
+                .foregroundStyle(color)
+                .frame(width: 44, height: 44)
+                .background(color.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(SmartCartTheme.navy)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(primaryDetail)
+                    .font(.caption)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(secondaryDetail)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(SmartCartTheme.mutedInk)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+private struct RecipeReadyIngredientRow: View {
+    @Environment(AppModel.self) private var appModel
+    @Binding var ingredient: Ingredient
+    @Binding var isExpanded: Bool
+    let onDelete: () -> Void
+    @State private var showSourceEvidence = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Button {
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                compactSummary
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(summaryAccessibilityLabel)
+            .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+            .accessibilityHint(isExpanded ? "Collapse ingredient editor" : "Open ingredient editor")
+            .accessibilityIdentifier("recipe-ready-ingredient-\(ingredient.id.uuidString)")
+
+            if isExpanded {
+                Divider()
+                editor
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .padding(13)
+        .background(ingredient.includeInList ? SmartCartTheme.paper : SmartCartTheme.canvas.opacity(0.72))
+        .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 17, style: .continuous)
+                .stroke(needsAttention ? SmartCartTheme.amber.opacity(0.72) : SmartCartTheme.border, lineWidth: needsAttention ? 1.5 : 1)
+        }
+        .opacity(ingredient.includeInList ? 1 : 0.68)
+    }
+
+    private var compactSummary: some View {
+        HStack(spacing: 11) {
+            Image(systemName: ingredient.category.symbol)
+                .font(.subheadline.bold())
+                .foregroundStyle(ingredient.includeInList ? SmartCartTheme.green : SmartCartTheme.secondaryInk)
+                .frame(width: 40, height: 40)
+                .background(ingredient.includeInList ? SmartCartTheme.herbLight : SmartCartTheme.canvas)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(ingredient.name)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(SmartCartTheme.navy)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(compactDetail)
+                    .font(.caption)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 6)
+
+            if ingredient.quantityReviewRequired == true {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(SmartCartTheme.coral)
+                    .accessibilityHidden(true)
+            } else if ingredient.confidence != .high {
+                Image(systemName: ingredient.confidence.symbol)
+                    .foregroundStyle(ingredient.confidence.color)
+                    .accessibilityHidden(true)
+            }
+
+            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                .font(.caption.bold())
+                .foregroundStyle(SmartCartTheme.secondaryInk)
+                .accessibilityHidden(true)
+        }
+    }
+
+    private var editor: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Toggle("Include in this shopping trip", isOn: $ingredient.includeInList)
+                .tint(SmartCartTheme.green)
+                .accessibilityValue(ingredient.includeInList ? "Included" : "Excluded")
+
+            TextField("Ingredient name", text: $ingredient.name)
+                .font(.subheadline.weight(.bold))
+                .textInputAutocapitalization(.words)
+                .smartField()
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) { measurementFields }
+                VStack(spacing: 8) { measurementFields }
+            }
+            .font(.caption)
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) { correctionMenus }
+                VStack(alignment: .leading, spacing: 10) { correctionMenus }
+            }
+
+            if ingredient.quantityReviewRequired == true {
+                quantityResolution
+            }
+
+            if let evidence = ingredient.sourceEvidence {
+                sourceEvidence(evidence)
+            }
+
+            Button(role: .destructive, action: onDelete) {
+                Label("Delete ingredient", systemImage: "trash")
+                    .font(.caption.weight(.bold))
+                    .frame(minHeight: 44)
+            }
+            .accessibilityLabel("Delete \(ingredient.name)")
+        }
+        .onChange(of: ingredient.name) { _, _ in appModel.refreshPantrySuggestions() }
+        .onChange(of: ingredient.quantity) { _, _ in appModel.refreshPantrySuggestions() }
+        .onChange(of: ingredient.unit) { _, _ in appModel.refreshPantrySuggestions() }
+        .onChange(of: ingredient.includeInList) { _, _ in appModel.refreshPantrySuggestions() }
+    }
+
+    @ViewBuilder private var measurementFields: some View {
+        TextField("Quantity", value: $ingredient.quantity, format: .number.precision(.fractionLength(0...2)))
+            .keyboardType(.decimalPad)
+            .smartField()
+        TextField("Unit", text: $ingredient.unit)
+            .textInputAutocapitalization(.never)
+            .smartField()
+        TextField("Preparation (optional)", text: $ingredient.preparation)
+            .smartField()
+    }
+
+    @ViewBuilder private var correctionMenus: some View {
+        Menu {
+            ForEach(IngredientConfidence.allCases) { confidence in
+                Button {
+                    ingredient.confidence = confidence
+                } label: {
+                    Label(confidence.rawValue, systemImage: confidence.symbol)
+                }
+            }
+        } label: {
+            IngredientConfidenceBadge(confidence: ingredient.confidence)
+                .frame(minHeight: 44)
+        }
+
+        Menu {
+            ForEach(GroceryCategory.allCases, id: \.self) { category in
+                Button(category.rawValue) {
+                    ingredient.category = category
+                }
+            }
+        } label: {
+            Label(ingredient.category.rawValue, systemImage: "square.grid.2x2.fill")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(SmartCartTheme.secondaryInk)
+                .frame(minHeight: 44)
+        }
+    }
+
+    private var quantityResolution: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Label("Quantity is uncertain. Confirm it before shopping.", systemImage: "exclamationmark.triangle.fill")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(SmartCartTheme.coral)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let candidates = ingredient.sourceEvidence?.alternateQuantityCandidates,
+               candidates.count > 1 {
+                Menu {
+                    ForEach(Array(candidates.enumerated()), id: \.offset) { _, candidate in
+                        Button(Ingredient.quantityText(candidate, unit: ingredient.unit)) {
+                            ingredient.quantity = candidate
+                            ingredient.quantityReviewRequired = false
+                        }
+                    }
+                } label: {
+                    Label("Choose quantity", systemImage: "list.bullet")
+                        .frame(minHeight: 44)
+                }
+                .buttonStyle(.bordered)
+            } else {
+                Button("Confirm \(ingredient.displayQuantity)") {
+                    ingredient.quantityReviewRequired = false
+                }
+                .buttonStyle(.bordered)
+                .frame(minHeight: 44)
+            }
+        }
+        .padding(11)
+        .background(SmartCartTheme.coral.opacity(0.07))
+        .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+        .accessibilityIdentifier("recipe-ready-quantity-review-\(ingredient.id.uuidString)")
+    }
+
+    private func sourceEvidence(_ evidence: IngredientSourceEvidence) -> some View {
+        DisclosureGroup(isExpanded: $showSourceEvidence) {
+            VStack(alignment: .leading, spacing: 6) {
+                if let cropData = evidence.sourceCropJPEGData,
+                   let crop = UIImage(data: cropData) {
+                    Image(uiImage: crop)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: .infinity, maxHeight: 150)
+                        .background(SmartCartTheme.canvasRaise)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .accessibilityLabel("Source crop for \(ingredient.name)")
+                }
+                Text(evidence.rawText)
+                    .font(.caption.monospaced())
+                    .textSelection(.enabled)
+                Text("\(evidence.extractionStrategy.rawValue) · parser \(evidence.parserConfidence.formatted(.percent.precision(.fractionLength(0)))) · normalization \(evidence.normalizationConfidence.formatted(.percent.precision(.fractionLength(0))))")
+                    .font(.caption2)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
+                if let layout = evidence.layoutConfidence {
+                    Text("Layout confidence: \(layout.formatted(.percent.precision(.fractionLength(0))))")
+                        .font(.caption2)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
+                }
+                if let alternatives = evidence.alternateSourceTexts, !alternatives.isEmpty {
+                    Text("OCR alternatives")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(SmartCartTheme.amber)
+                    ForEach(Array(alternatives.enumerated()), id: \.offset) { _, alternative in
+                        Text(alternative)
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(SmartCartTheme.secondaryInk)
+                    }
+                }
+            }
+            .padding(.top, 7)
+        } label: {
+            Label("Source evidence", systemImage: "doc.text.magnifyingglass")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(SmartCartTheme.walmartBlue)
+                .frame(minHeight: 44)
+        }
+    }
+
+    private var needsAttention: Bool {
+        ingredient.quantityReviewRequired == true || ingredient.confidence != .high
+    }
+
+    private var compactDetail: String {
+        var parts = [appModel.scaledQuantityText(for: ingredient)]
+        if !ingredient.preparation.isEmpty { parts.append(ingredient.preparation) }
+        if !ingredient.includeInList { parts.append("Excluded") }
+        return parts.joined(separator: " · ")
+    }
+
+    private var summaryAccessibilityLabel: String {
+        var value = "\(ingredient.name), \(compactDetail)"
+        if ingredient.quantityReviewRequired == true { value += ", quantity must be confirmed" }
+        else if ingredient.confidence != .high { value += ", \(ingredient.confidence.label)" }
+        return value
     }
 }
 

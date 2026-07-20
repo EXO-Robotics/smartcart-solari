@@ -479,7 +479,9 @@ final class AppModel {
     }
 
     var includedIngredientCount: Int {
-        if let plan = currentShoppingMealPrepSnapshot { return plan.lines.count }
+        if let plan = currentShoppingMealPrepSnapshot {
+            return plan.lines.filter(\.participatesInCurrentTrip).count
+        }
         return activeRecipe.ingredients.filter(\.includeInList).count
     }
 
@@ -749,7 +751,7 @@ final class AppModel {
         guidedIndex = 0
         selectedTab = .home
         presentedSheet = nil
-        homePath = [.ingredientReview]
+        homePath = [.recipeReady]
         track(
             .extractionCompleted,
             properties: [
@@ -842,7 +844,7 @@ final class AppModel {
         if let plan = currentMealPrepPlan {
             homePath = [.mealPrepSelection, .mealPrepReview]
             if plan.unresolvedReviewCount == 0 {
-                homePath.append(.mealPrepDashboard)
+                homePath.append(.recipeReady)
             }
         } else {
             homePath = [.mealPrepSelection]
@@ -986,19 +988,11 @@ final class AppModel {
             showToast("Review every possible duplicate before shopping")
             return
         }
-        homePath.append(.mealPrepDashboard)
+        homePath.append(.recipeReady)
     }
 
     func beginMealPrepShopping() {
-        guard currentMealPrepPlan?.unresolvedReviewCount == 0 else {
-            showToast("Review every possible duplicate before shopping")
-            return
-        }
-        shoppingItems = []
-        matchProgress = 0
-        matchStage = "Ready to match"
-        selectedTab = .home
-        homePath.append(.storeSelection)
+        beginShoppingFromRecipeReady()
     }
 
     private func mealPrepIngredient(_ line: CombinedIngredientLine) -> Ingredient? {
@@ -1274,6 +1268,116 @@ final class AppModel {
             ]
         )
         continueTo(.servingAdjustment)
+    }
+
+    var recipeReadyBlockingIssueCount: Int {
+        if isMealPrepShopping {
+            return currentShoppingMealPrepSnapshot?.unresolvedReviewCount ?? 0
+        }
+        return unresolvedQuantityReviewCount + unresolvedAlternativeCount
+    }
+
+    var recipeReadyPantrySuggestionCount: Int {
+        if isMealPrepShopping {
+            return currentShoppingMealPrepSnapshot?.lines.filter {
+                $0.participatesInCurrentTrip && !$0.pantryDeductions.isEmpty
+            }.count ?? 0
+        }
+        return activeRecipe.ingredients.filter {
+            $0.includeInList && $0.pantrySuggestion != nil
+        }.count
+    }
+
+    var recipeReadyExpectedPurchaseCount: Int {
+        ingredientsToBuy.count
+    }
+
+    var recipeReadyCanStartShopping: Bool {
+        recipeReadyBlockingIssueCount == 0 && !ingredientsToBuy.isEmpty
+    }
+
+    var recipeReadyDisabledExplanation: String? {
+        if recipeReadyBlockingIssueCount > 0 {
+            return "Resolve \(recipeReadyBlockingIssueCount) ingredient issue\(recipeReadyBlockingIssueCount == 1 ? "" : "s") before shopping."
+        }
+        if ingredientsToBuy.isEmpty {
+            return "Include at least one ingredient that still needs to be purchased."
+        }
+        return nil
+    }
+
+    func useSafePantrySuggestions() {
+        guard !isMealPrepShopping else { return }
+        var remainingInventory = pantryInventory
+
+        // Rebuild safe allocations as one transaction so two recipe rows
+        // cannot both consume the same pantry quantity.
+        for index in activeRecipe.ingredients.indices {
+            let ingredient = activeRecipe.ingredients[index]
+            guard ingredient.includeInList,
+                  ingredient.pantrySuggestion?.coverage != .possible else { continue }
+
+            activeRecipe.ingredients[index].pantryDecision = .buyFull
+            activeRecipe.ingredients[index].pantryState = .needToBuy
+
+            guard let suggestion = PantryMatchingService.bestSuggestion(
+                for: ingredient,
+                requiredQuantity: scaledQuantity(for: ingredient),
+                inventory: remainingInventory
+            ), suggestion.coverage != .possible,
+               suggestion.availableQuantity > 0,
+               let pantryIndex = remainingInventory.firstIndex(where: { $0.id == suggestion.pantryItemID }) else { continue }
+
+            var pantryItem = remainingInventory[pantryIndex]
+
+            let amountUsed = min(scaledQuantity(for: ingredient), suggestion.availableQuantity)
+            guard let pantryAmountUsed = PantryMatchingService.convertedQuantity(
+                amountUsed,
+                from: ingredient.unit,
+                to: pantryItem.remainingUnit
+            ) else { continue }
+
+            activeRecipe.ingredients[index].pantrySuggestion = suggestion
+            activeRecipe.ingredients[index].pantryDecision = .useAvailable
+            activeRecipe.ingredients[index].pantryState = .runningLow
+            pantryItem.remainingAmount = max(0, pantryItem.remainingAmount - pantryAmountUsed)
+            remainingInventory[pantryIndex] = pantryItem
+        }
+        invalidateShoppingPlan()
+    }
+
+    func buyFullRecipeReadyIngredients() {
+        guard !isMealPrepShopping else { return }
+        for index in activeRecipe.ingredients.indices where activeRecipe.ingredients[index].includeInList {
+            activeRecipe.ingredients[index].pantryDecision = .buyFull
+            activeRecipe.ingredients[index].pantryState = .needToBuy
+        }
+        invalidateShoppingPlan()
+    }
+
+    func beginShoppingFromRecipeReady() {
+        guard recipeReadyCanStartShopping else {
+            if let explanation = recipeReadyDisabledExplanation {
+                showToast(explanation)
+            }
+            return
+        }
+        if !isMealPrepShopping {
+            synchronizeActiveRecipeRecord()
+            track(
+                .ingredientsCorrected,
+                properties: [
+                    "included": String(includedIngredientCount),
+                    "review_required": String(unresolvedQuantityReviewCount)
+                ]
+            )
+        }
+        prepareRetailerSafariWorkflow()
+        invalidateShoppingPlan()
+        selectedTab = .home
+        if homePath.last != .matching {
+            homePath.append(.matching)
+        }
     }
 
     private func synchronizeActiveRecipeRecord() {

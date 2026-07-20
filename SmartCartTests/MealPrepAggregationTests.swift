@@ -247,14 +247,31 @@ final class MealPrepAggregationTests: XCTestCase {
             scope: scope,
             pantryInventory: [PantryInventoryItem(name: "Flour", remainingAmount: 16, remainingUnit: "fl oz")]
         )
-        XCTAssertEqual(full.lines[0].quantityToBuy, 0, accuracy: 0.000_001)
+        XCTAssertNil(full.lines[0].buyFullOverride)
+        XCTAssertEqual(full.lines[0].quantityToBuy, 2, accuracy: 0.000_001)
+        XCTAssertFalse(full.lines[0].pantryDeductions.isEmpty)
+        var fullAfterUsePantry = full.lines
+        fullAfterUsePantry[0].buyFullOverride = false
+        MealPrepAggregationService.recomputePantry(
+            [PantryInventoryItem(name: "Flour", remainingAmount: 16, remainingUnit: "fl oz")],
+            for: &fullAfterUsePantry
+        )
+        XCTAssertEqual(fullAfterUsePantry[0].quantityToBuy, 0, accuracy: 0.000_001)
 
         let partial = try MealPrepAggregationService.aggregate(
             selections: selected,
             scope: scope,
             pantryInventory: [PantryInventoryItem(name: "Flour", remainingAmount: 1, remainingUnit: "cup")]
         )
-        XCTAssertEqual(partial.lines[0].quantityToBuy, 1, accuracy: 0.000_001)
+        XCTAssertNil(partial.lines[0].buyFullOverride)
+        XCTAssertEqual(partial.lines[0].quantityToBuy, 2, accuracy: 0.000_001)
+        var partialAfterUsePantry = partial.lines
+        partialAfterUsePantry[0].buyFullOverride = false
+        MealPrepAggregationService.recomputePantry(
+            [PantryInventoryItem(name: "Flour", remainingAmount: 1, remainingUnit: "cup")],
+            for: &partialAfterUsePantry
+        )
+        XCTAssertEqual(partialAfterUsePantry[0].quantityToBuy, 1, accuracy: 0.000_001)
 
         let unsafe = try MealPrepAggregationService.aggregate(
             selections: selected,
@@ -286,8 +303,13 @@ final class MealPrepAggregationTests: XCTestCase {
             pantryInventory: [inventory]
         )
 
-        XCTAssertEqual(result.lines[0].quantityToBuy, 0, accuracy: 0.000_001)
+        XCTAssertNil(result.lines[0].buyFullOverride)
+        XCTAssertEqual(result.lines[0].quantityToBuy, 1, accuracy: 0.000_001)
         XCTAssertEqual(result.lines[0].pantryDeductions.first?.pantryItemID, inventory.id)
+        var usePantryLines = result.lines
+        usePantryLines[0].buyFullOverride = false
+        MealPrepAggregationService.recomputePantry([inventory], for: &usePantryLines)
+        XCTAssertEqual(usePantryLines[0].quantityToBuy, 0, accuracy: 0.000_001)
     }
 
     @MainActor
@@ -300,16 +322,18 @@ final class MealPrepAggregationTests: XCTestCase {
         model.mealPrepDraft = MealPrepDraft(selections: [selection(bake, target: 1)])
         XCTAssertTrue(model.buildMealPrepPlan())
         let lineID = try XCTUnwrap(model.mealPrepPlan?.lines.first?.id)
-        XCTAssertEqual(model.mealPrepPlan?.lines.first?.quantityToBuy, 1)
-
-        model.setMealPrepPantryOverride(lineID: lineID, buyFull: true)
+        XCTAssertNil(model.mealPrepPlan?.lines.first?.buyFullOverride)
         XCTAssertEqual(model.mealPrepPlan?.lines.first?.quantityToBuy, 2)
-        XCTAssertTrue(model.mealPrepPlan?.lines.first?.isBuyingFullQuantity == true)
         XCTAssertTrue(model.mealPrepPlan?.lines.first?.hasPantryChoice == true)
 
         model.setMealPrepPantryOverride(lineID: lineID, buyFull: false)
         XCTAssertEqual(model.mealPrepPlan?.lines.first?.quantityToBuy, 1)
         XCTAssertFalse(model.mealPrepPlan?.lines.first?.pantryDeductions.isEmpty == true)
+
+        model.setMealPrepPantryOverride(lineID: lineID, buyFull: true)
+        XCTAssertEqual(model.mealPrepPlan?.lines.first?.quantityToBuy, 2)
+        XCTAssertTrue(model.mealPrepPlan?.lines.first?.isBuyingFullQuantity == true)
+        XCTAssertTrue(model.mealPrepPlan?.lines.first?.hasPantryChoice == true)
     }
 
     func testFrozenSnapshotSurvivesSourceRecipeDeletion() throws {
@@ -510,7 +534,7 @@ final class MealPrepAggregationTests: XCTestCase {
         } == true)
         XCTAssertTrue(model.ingredientsToBuy.isEmpty)
         model.openMealPrepDashboard()
-        XCTAssertEqual(model.homePath.last, .mealPrepDashboard)
+        XCTAssertEqual(model.homePath.last, .recipeReady)
 
         let restored = AppModel(stateStore: store)
         XCTAssertTrue(restored.mealPrepPlan?.lines.allSatisfy {
@@ -568,6 +592,8 @@ final class MealPrepAggregationTests: XCTestCase {
         }?.id)
         model.confirmMealPrepQuantity(firstID)
         model.confirmMealPrepLineSeparate(secondID)
+        model.setMealPrepPantryOverride(lineID: firstID, buyFull: false)
+        model.setMealPrepPantryOverride(lineID: secondID, buyFull: false)
         let initiallyCoveredID = try XCTUnwrap(model.mealPrepPlan?.lines.first {
             !$0.pantryDeductions.isEmpty
         }?.id)
@@ -624,7 +650,7 @@ final class MealPrepAggregationTests: XCTestCase {
             .selectedAlternative
         )
         model.openMealPrepDashboard()
-        XCTAssertEqual(model.homePath.last, .mealPrepDashboard)
+        XCTAssertEqual(model.homePath.last, .recipeReady)
     }
 
     @MainActor
@@ -645,10 +671,16 @@ final class MealPrepAggregationTests: XCTestCase {
         let flourID = try XCTUnwrap(model.mealPrepPlan?.lines.first { $0.canonicalName == "flour" }?.id)
         XCTAssertEqual(model.mealPrepPlan?.lines.first { $0.id == flourID }?.quantityToBuy, 2)
         model.confirmMealPrepQuantity(flourID)
+        XCTAssertNil(model.mealPrepPlan?.lines.first { $0.id == flourID }?.buyFullOverride)
+        XCTAssertEqual(model.mealPrepPlan?.lines.first { $0.id == flourID }?.quantityToBuy, 2)
+        model.setMealPrepPantryOverride(lineID: flourID, buyFull: false)
         XCTAssertEqual(model.mealPrepPlan?.lines.first { $0.id == flourID }?.quantityToBuy, 1)
 
         let milkID = try XCTUnwrap(model.mealPrepPlan?.lines.first { $0.name.lowercased() == "milk" }?.id)
         model.selectMealPrepAlternative(milkID)
+        XCTAssertNil(model.mealPrepPlan?.lines.first { $0.id == milkID }?.buyFullOverride)
+        XCTAssertEqual(model.mealPrepPlan?.lines.first { $0.id == milkID }?.quantityToBuy, 1)
+        model.setMealPrepPantryOverride(lineID: milkID, buyFull: false)
         XCTAssertEqual(model.mealPrepPlan?.lines.first { $0.id == milkID }?.quantityToBuy, 0)
 
         var reducedFlour = flourStock
@@ -686,7 +718,7 @@ final class MealPrepAggregationTests: XCTestCase {
             restored.mealPrepPlan?.lines.first { $0.id == selectedID }?.mergeReviewState,
             .selectedAlternative
         )
-        XCTAssertEqual(restored.homePath, [.mealPrepSelection, .mealPrepReview, .mealPrepDashboard])
+        XCTAssertEqual(restored.homePath, [.mealPrepSelection, .mealPrepReview, .recipeReady])
     }
 
     private func aggregate(_ selections: [MealPrepSelection]) throws -> MealPrepAggregationResult {

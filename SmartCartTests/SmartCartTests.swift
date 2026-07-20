@@ -1275,6 +1275,44 @@ final class SmartCartTests: XCTestCase {
     }
 
     @MainActor
+    func testBulkUsePantryAllocatesOneSharedStockAmountAcrossDuplicateIngredients() throws {
+        let model = AppModel(stateStore: InMemorySmartCartStateStore())
+        model.pantryInventory = [
+            PantryInventoryItem(name: "All-purpose flour", remainingAmount: 1, remainingUnit: "cup")
+        ]
+        let recipe = Recipe(
+            title: "Two-Part Bake",
+            source: .text,
+            sourceDetail: "Test",
+            heroSymbol: "fork.knife",
+            servings: 1,
+            prepMinutes: 0,
+            cookMinutes: 0,
+            ingredients: [
+                Ingredient(name: "All-purpose flour", quantity: 1, unit: "cup"),
+                Ingredient(name: "All-purpose flour", quantity: 1, unit: "cup")
+            ]
+        )
+        model.beginRecipe(recipe)
+
+        XCTAssertEqual(
+            model.activeRecipe.ingredients.reduce(0) { $0 + model.quantityToBuy(for: $1) },
+            2,
+            accuracy: 0.001,
+            "Suggestions must buy full until Use Pantry is explicit"
+        )
+
+        model.useSafePantrySuggestions()
+
+        let required = model.activeRecipe.ingredients.reduce(0) { $0 + model.scaledQuantity(for: $1) }
+        let quantityToBuy = model.activeRecipe.ingredients.reduce(0) { $0 + model.quantityToBuy(for: $1) }
+        XCTAssertEqual(required, 2, accuracy: 0.001)
+        XCTAssertEqual(quantityToBuy, 1, accuracy: 0.001)
+        XCTAssertEqual(required - quantityToBuy, 1, accuracy: 0.001)
+        XCTAssertTrue(model.activeRecipe.ingredients.allSatisfy { model.quantityToBuy(for: $0) >= 0 })
+    }
+
+    @MainActor
     func testPantryAutocompleteAndCaseInsensitiveNameMerge() throws {
         let model = AppModel(stateStore: InMemorySmartCartStateStore())
         model.pantryInventory = [
@@ -2941,6 +2979,102 @@ final class SmartCartTests: XCTestCase {
         let productSessionID = try model.ensureCurrentShoppingSession().firstUnwrapped()
         XCTAssertEqual(productSessionID, quantitySessionID)
         XCTAssertEqual(model.shoppingItems.map(\.id), originalItemIDs)
+    }
+
+    @MainActor
+    func testBeginRecipeEntersRecipeReadyAndPantrySuggestionDefaultsToBuyingFullAmount() throws {
+        let model = AppModel(stateStore: InMemorySmartCartStateStore())
+        model.pantryInventory = [
+            PantryInventoryItem(
+                name: "All-purpose flour",
+                quantity: 1,
+                unit: "bag",
+                packageSize: 1,
+                packageUnit: "cup"
+            )
+        ]
+
+        model.beginRecipe(RecipeParser.parse(title: "Cookies", text: "2 cups all-purpose flour"))
+
+        let ingredient = try model.activeRecipe.ingredients.firstUnwrapped()
+        XCTAssertEqual(model.homePath, [.recipeReady])
+        XCTAssertEqual(ingredient.pantryDecision, .review)
+        XCTAssertEqual(model.quantityToBuy(for: ingredient), 2, accuracy: 0.001)
+        XCTAssertEqual(model.recipeReadyPantrySuggestionCount, 1)
+        XCTAssertTrue(model.recipeReadyCanStartShopping)
+    }
+
+    @MainActor
+    func testRecipeReadyServingChangeUpdatesScaledQuantityAndRefreshesPantrySuggestion() throws {
+        let model = AppModel(stateStore: InMemorySmartCartStateStore())
+        model.pantryInventory = [
+            PantryInventoryItem(name: "Flour", remainingAmount: 1, remainingUnit: "cup")
+        ]
+        let recipe = Recipe(
+            title: "Bread",
+            source: .text,
+            sourceDetail: "Test",
+            heroSymbol: "fork.knife",
+            servings: 2,
+            prepMinutes: 0,
+            cookMinutes: 0,
+            ingredients: [Ingredient(name: "Flour", quantity: 2, unit: "cup")]
+        )
+        model.beginRecipe(recipe)
+        let ingredientID = try model.activeRecipe.ingredients.firstUnwrapped().id
+
+        model.updateServings(by: 2)
+
+        let updated = try model.activeRecipe.ingredients.first { $0.id == ingredientID }.firstUnwrapped()
+        XCTAssertEqual(model.desiredServings, 4)
+        XCTAssertEqual(model.scaledQuantity(for: updated), 4, accuracy: 0.001)
+        XCTAssertEqual(updated.pantrySuggestion?.coverage, .partial)
+        XCTAssertEqual(updated.pantryDecision, .review)
+        XCTAssertEqual(model.quantityToBuy(for: updated), 4, accuracy: 0.001)
+    }
+
+    @MainActor
+    func testRecipeReadyReusesPersistedRetailerPreferencesAndDetectsMissingSetup() {
+        let store = InMemorySmartCartStateStore()
+        let defaults = isolatedCommerceDefaults()
+        let fresh = AppModel(stateStore: store, commerceDefaults: defaults)
+        XCTAssertFalse(fresh.retailerSetupIsComplete)
+
+        fresh.preferences.organicPolicy = .only
+        fresh.preferences.dietaryRestrictions = [.glutenFree]
+        fresh.startRetailerGuide(.target)
+        fresh.completeRetailerSetup()
+
+        let restored = AppModel(stateStore: store, commerceDefaults: defaults)
+        XCTAssertEqual(restored.selectedRetailer, .target)
+        XCTAssertEqual(restored.preferences.organicPolicy, .only)
+        XCTAssertEqual(restored.preferences.dietaryRestrictions, [.glutenFree])
+        XCTAssertTrue(restored.retailerSetupIsComplete)
+    }
+
+    @MainActor
+    func testMealPrepReviewConvergesIntoRecipeReady() {
+        let model = AppModel(stateStore: InMemorySmartCartStateStore())
+        let recipe = Recipe(
+            title: "Pasta",
+            source: .text,
+            sourceDetail: "Test",
+            heroSymbol: "fork.knife",
+            servings: 2,
+            prepMinutes: 0,
+            cookMinutes: 0,
+            ingredients: [Ingredient(name: "Penne pasta", quantity: 8, unit: "oz")]
+        )
+        model.mealPrepDraft = MealPrepDraft(selections: [
+            MealPrepSelection(recipe: recipe, targetServings: 2)
+        ])
+
+        XCTAssertTrue(model.buildMealPrepPlan())
+        model.openMealPrepDashboard()
+
+        XCTAssertEqual(model.homePath.last, .recipeReady)
+        XCTAssertEqual(model.recipeReadyBlockingIssueCount, 0)
+        XCTAssertEqual(model.recipeReadyExpectedPurchaseCount, 1)
     }
 
     private func searchRequest(
