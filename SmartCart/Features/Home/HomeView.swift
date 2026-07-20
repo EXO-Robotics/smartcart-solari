@@ -3,6 +3,7 @@ import UIKit
 
 struct HomeView: View {
     @Environment(AppModel.self) private var appModel
+    @Environment(\.colorScheme) private var colorScheme
     @State private var pendingDiscardSession: ShoppingSession?
     @State private var shoppingTripsExpanded = false
     @GestureState private var shoppingTripsDrag: CGFloat = 0
@@ -16,7 +17,8 @@ struct HomeView: View {
             let hasPausedTrips = !pausedShoppingSessions.isEmpty
 
             ZStack(alignment: .bottom) {
-                HomePhotoBackground()
+                SmartCartFoodBackground()
+                    .ignoresSafeArea()
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
@@ -103,7 +105,7 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Start a Shopping Trip")
                 .font(.system(.largeTitle, design: .rounded, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(homeInk)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
@@ -116,13 +118,13 @@ struct HomeView: View {
         VStack(spacing: 14) {
             Image(systemName: "camera")
                 .font(.system(size: 31, weight: .medium))
-                .foregroundStyle(.white)
+                .foregroundStyle(homeInk)
                 .frame(width: 72, height: 72)
-                .background(Color.black.opacity(0.28))
+                .background(homeIconBackground)
                 .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .stroke(Color.white.opacity(0.18), lineWidth: 1)
+                        .stroke(homeBorder, lineWidth: 1)
                 }
                 .accessibilityHidden(true)
 
@@ -157,7 +159,7 @@ struct HomeView: View {
                         .accessibilityHidden(true)
                 }
                 .font(.system(.body, design: .rounded, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(homeInk)
                 .frame(maxWidth: .infinity, minHeight: 82)
                 .contentShape(Rectangle())
             }
@@ -166,7 +168,7 @@ struct HomeView: View {
             .accessibilityHint("Pastes recipe text or a copied recipe link")
 
             Divider()
-                .overlay(Color.white.opacity(0.16))
+                .overlay(homeBorder)
 
             mealPrepLaunchButton
         }
@@ -187,17 +189,17 @@ struct HomeView: View {
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(SmartCartTheme.green)
                     .frame(width: 44, height: 44)
-                    .background(Color.black.opacity(0.22))
+                    .background(homeIconBackground)
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Meal Prep Mode")
                         .font(.headline)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(homeInk)
                     Text("Combine up to five saved recipes")
                         .font(.caption)
-                        .foregroundStyle(.white.opacity(0.72))
+                        .foregroundStyle(homeSecondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
@@ -205,7 +207,7 @@ struct HomeView: View {
 
                 Image(systemName: "chevron.right")
                     .font(.caption.bold())
-                    .foregroundStyle(.white.opacity(0.72))
+                    .foregroundStyle(homeSecondaryInk)
                     .accessibilityHidden(true)
             }
             .frame(maxWidth: .infinity, minHeight: 96, alignment: .leading)
@@ -235,7 +237,7 @@ struct HomeView: View {
         } label: {
             Image(systemName: "ellipsis")
                 .font(.title3.bold())
-                .foregroundStyle(.white)
+                .foregroundStyle(homeInk)
                 .rotationEffect(.degrees(90))
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
@@ -263,17 +265,17 @@ struct HomeView: View {
                     .font(.headline.bold())
                     .foregroundStyle(SmartCartTheme.green)
                     .frame(width: 42, height: 42)
-                    .background(Color.black.opacity(0.24))
+                    .background(homeIconBackground)
                     .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Finish your last trip")
                         .font(.headline)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(homeInk)
                     Text(pantryUpdateStatusDetail(session))
                         .font(.caption)
-                        .foregroundStyle(.white.opacity(0.74))
+                        .foregroundStyle(homeSecondaryInk)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -282,7 +284,7 @@ struct HomeView: View {
 
                 Image(systemName: "chevron.right")
                     .font(.caption.bold())
-                    .foregroundStyle(.white.opacity(0.74))
+                    .foregroundStyle(homeSecondaryInk)
                     .accessibilityHidden(true)
             }
             .padding(.horizontal, 14)
@@ -312,7 +314,7 @@ struct HomeView: View {
             continueShoppingTripsHandle(collapsedOffset: collapsedOffset)
 
             Divider()
-                .overlay(Color.white.opacity(0.16))
+                .overlay(SmartCartTheme.border)
 
             if shoppingTripsExpanded {
                 ScrollView(.vertical, showsIndicators: false) {
@@ -334,7 +336,7 @@ struct HomeView: View {
         .frame(maxWidth: .infinity)
         .frame(height: height, alignment: .top)
         .background {
-            HomePullUpGlassSurface()
+            WoodGrainBackground()
         }
         .clipShape(HomePullUpShape())
         .shadow(color: .black.opacity(0.34), radius: 22, y: -8)
@@ -353,13 +355,13 @@ struct HomeView: View {
             HStack(spacing: 9) {
                 Label("Continue Shopping", systemImage: "cart.badge.clock")
                     .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(homeInk)
 
                 Spacer()
 
                 Text(shoppingTripsExpanded ? "Swipe down to hide" : pausedOrdersCountText)
                     .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.68))
+                    .foregroundStyle(homeSecondaryInk)
             }
             .padding(.horizontal, 18)
             .padding(.bottom, 10)
@@ -396,7 +398,7 @@ struct HomeView: View {
                         .font(.headline.bold())
                         .foregroundStyle(SmartCartTheme.green)
                         .frame(width: 42, height: 42)
-                        .background(Color.black.opacity(0.24))
+                        .background(homeIconBackground)
                         .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
                         .accessibilityHidden(true)
 
@@ -405,18 +407,18 @@ struct HomeView: View {
                             .smartEyebrow(SmartCartTheme.green)
                         Text(session.recipeTitle)
                             .font(.headline)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(homeInk)
                             .multilineTextAlignment(.leading)
                         Text(pausedShoppingTripDetail(session))
                             .font(.caption)
-                            .foregroundStyle(.white.opacity(0.70))
+                            .foregroundStyle(homeSecondaryInk)
                     }
 
                     Spacer(minLength: 4)
 
                     Image(systemName: "chevron.right")
                         .font(.caption.bold())
-                        .foregroundStyle(.white.opacity(0.70))
+                        .foregroundStyle(homeSecondaryInk)
                         .accessibilityHidden(true)
                 }
                 .contentShape(Rectangle())
@@ -429,9 +431,9 @@ struct HomeView: View {
             } label: {
                 Image(systemName: "trash")
                     .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.white.opacity(0.82))
+                    .foregroundStyle(homeInk.opacity(0.82))
                     .frame(width: 36, height: 36)
-                    .background(Color.white.opacity(0.10))
+                    .background(homeIconBackground)
                     .clipShape(Circle())
                     .frame(width: 44, height: 44)
             }
@@ -450,6 +452,22 @@ struct HomeView: View {
         let completed = session.items.filter(\.status.isCompleted).count
         let remaining = max(session.items.count - completed, 0)
         return "\(remaining) item\(remaining == 1 ? "" : "s") remaining"
+    }
+
+    private var homeInk: Color {
+        colorScheme == .light ? SmartCartTheme.ink : .white
+    }
+
+    private var homeSecondaryInk: Color {
+        colorScheme == .light ? SmartCartTheme.secondaryInk : .white.opacity(0.72)
+    }
+
+    private var homeIconBackground: Color {
+        colorScheme == .light ? .white.opacity(0.48) : .black.opacity(0.24)
+    }
+
+    private var homeBorder: Color {
+        colorScheme == .light ? .black.opacity(0.13) : .white.opacity(0.18)
     }
 
     private func shoppingTripsDrawerOffset(collapsedOffset: CGFloat) -> CGFloat {
@@ -491,40 +509,9 @@ struct HomeView: View {
     }
 }
 
-private struct HomePhotoBackground: View {
+private struct HomeGlassSurface: View {
     @Environment(\.colorScheme) private var colorScheme
 
-    var body: some View {
-        GeometryReader { geometry in
-            ZStack {
-                Color.black
-
-                Image("SmartCartHomeBackground")
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: geometry.size.width, height: geometry.size.height)
-                    .clipped()
-
-                Color.black.opacity(colorScheme == .light ? 0.50 : 0.42)
-
-                LinearGradient(
-                    colors: [
-                        Color.black.opacity(0.34),
-                        Color.clear,
-                        Color.black.opacity(0.24)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            }
-        }
-        .ignoresSafeArea()
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
-}
-
-private struct HomeGlassSurface: View {
     let radius: CGFloat
     let darkness: Double
 
@@ -534,53 +521,34 @@ private struct HomeGlassSurface: View {
         shape
             .fill(.ultraThinMaterial)
             .overlay {
-                shape.fill(Color.black.opacity(darkness))
+                shape.fill(
+                    colorScheme == .light
+                        ? Color.white.opacity(min(0.82, 0.62 + darkness * 0.25))
+                        : Color.black.opacity(darkness)
+                )
             }
             .overlay {
                 shape.fill(
                     LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.10),
-                            Color.clear,
-                            Color.black.opacity(0.10)
-                        ],
+                        colors: colorScheme == .light
+                            ? [Color.white.opacity(0.44), Color.clear, Color.black.opacity(0.04)]
+                            : [Color.white.opacity(0.10), Color.clear, Color.black.opacity(0.10)],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
                 )
             }
             .overlay {
-                shape.stroke(Color.white.opacity(0.22), lineWidth: 1)
-            }
-            .shadow(color: .black.opacity(0.28), radius: 20, y: 10)
-    }
-}
-
-private struct HomePullUpGlassSurface: View {
-    var body: some View {
-        let shape = HomePullUpShape()
-
-        shape
-            .fill(.ultraThinMaterial)
-            .overlay {
-                shape.fill(Color.black.opacity(0.34))
-            }
-            .overlay {
-                shape.fill(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.10),
-                            Color.clear,
-                            Color.black.opacity(0.12)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
+                shape.stroke(
+                    colorScheme == .light ? Color.black.opacity(0.12) : Color.white.opacity(0.22),
+                    lineWidth: 1
                 )
             }
-            .overlay {
-                shape.stroke(Color.white.opacity(0.22), lineWidth: 1)
-            }
+            .shadow(
+                color: .black.opacity(colorScheme == .light ? 0.14 : 0.28),
+                radius: 20,
+                y: 10
+            )
     }
 }
 
@@ -644,20 +612,27 @@ private struct HomePrimaryButtonStyle: ButtonStyle {
 }
 
 private struct HomeSecondaryButtonStyle: ButtonStyle {
+    @Environment(\.colorScheme) private var colorScheme
+
     func makeBody(configuration: Configuration) -> some View {
         let shape = RoundedRectangle(cornerRadius: 17, style: .continuous)
 
         configuration.label
             .font(.system(.headline, design: .rounded, weight: .semibold))
-            .foregroundStyle(.white)
+            .foregroundStyle(colorScheme == .light ? SmartCartTheme.ink : .white)
             .background(
-                configuration.isPressed
-                    ? Color.white.opacity(0.14)
-                    : Color.black.opacity(0.22)
+                colorScheme == .light
+                    ? Color.white.opacity(configuration.isPressed ? 0.62 : 0.42)
+                    : (configuration.isPressed ? Color.white.opacity(0.14) : Color.black.opacity(0.22))
             )
             .clipShape(shape)
             .overlay {
-                shape.stroke(Color.white.opacity(configuration.isPressed ? 0.34 : 0.22), lineWidth: 1)
+                shape.stroke(
+                    colorScheme == .light
+                        ? Color.black.opacity(configuration.isPressed ? 0.20 : 0.13)
+                        : Color.white.opacity(configuration.isPressed ? 0.34 : 0.22),
+                    lineWidth: 1
+                )
             }
             .scaleEffect(configuration.isPressed ? 0.985 : 1)
     }
