@@ -4223,13 +4223,19 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(tripSource.contains(".background(SmartCartTheme.herbLight)"))
     }
 
-    func testHomeStartsWithOneAdaptiveRecipeGroupAndOneShoppingTripsSection() throws {
+    func testHomeUsesEc24LayoutAndRecipeImportersAutoPresentMediaTools() throws {
         let repositoryRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
         let homeSource = try String(
             contentsOf: repositoryRoot.appendingPathComponent(
                 "SmartCart/Features/Home/HomeView.swift"
+            ),
+            encoding: .utf8
+        )
+        let composerSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "SmartCart/Features/Home/RecipeComposerSheet.swift"
             ),
             encoding: .utf8
         )
@@ -4243,32 +4249,54 @@ final class SmartCartTests: XCTestCase {
         let bodyStart = try XCTUnwrap(homeSource.range(of: "    var body: some View")?.lowerBound)
         let headerStart = try XCTUnwrap(homeSource.range(of: "    private var header", range: bodyStart..<homeSource.endIndex)?.lowerBound)
         let body = homeSource[bodyStart..<headerStart]
-        let startIndex = try XCTUnwrap(body.range(of: "startNewRecipeSection")?.lowerBound)
-        let tripsIndex = try XCTUnwrap(body.range(of: "shoppingTripsSection")?.lowerBound)
+        let headerIndex = try XCTUnwrap(body.range(of: "header")?.lowerBound)
+        let startIndex = try XCTUnwrap(body.range(of: "startShoppingSection")?.lowerBound)
         let shopAgainIndex = try XCTUnwrap(body.range(of: "shopAgainCard")?.lowerBound)
-        let storeIndex = try XCTUnwrap(body.range(of: "storeCard")?.lowerBound)
+        let drawerIndex = try XCTUnwrap(body.range(of: "continueShoppingTripsDrawer")?.lowerBound)
 
-        XCTAssertLessThan(startIndex, tripsIndex)
-        XCTAssertLessThan(tripsIndex, shopAgainIndex)
+        XCTAssertLessThan(headerIndex, startIndex)
         XCTAssertLessThan(startIndex, shopAgainIndex)
-        XCTAssertLessThan(shopAgainIndex, storeIndex)
-        XCTAssertTrue(homeSource.contains("title: \"Start New Recipe\""))
+        XCTAssertLessThan(shopAgainIndex, drawerIndex)
+        XCTAssertTrue(homeSource.contains("GeometryReader { geometry in"))
+        XCTAssertTrue(homeSource.contains("ZStack(alignment: .bottom)"))
+        XCTAssertTrue(homeSource.contains("Text(\"Start a Shopping Trip\")"))
         XCTAssertTrue(homeSource.contains("Text(method == .camera ? \"Take Photo\" : \"Choose Photo\")"))
-        XCTAssertTrue(homeSource.contains("Grid(horizontalSpacing: 10, verticalSpacing: 10)"))
-        XCTAssertTrue(homeSource.contains("maxHeight: .infinity"))
-        XCTAssertFalse(homeSource.contains("primaryImportCardMinimumHeight"))
-        XCTAssertFalse(homeSource.contains("homeActionCardMinimumHeight"))
+        XCTAssertTrue(homeSource.contains("homeActionCardContentMinHeight: CGFloat = 116"))
+        XCTAssertTrue(homeSource.contains("minHeight: homeActionCardContentMinHeight"))
         XCTAssertTrue(homeSource.contains("if dynamicTypeSize.isAccessibilitySize"))
-        XCTAssertTrue(homeSource.contains("title: \"Shopping Trips\""))
+        XCTAssertTrue(homeSource.contains("pasteIngredientsCard"))
+        XCTAssertTrue(homeSource.contains("accessibilityIdentifier(\"home-paste-ingredients-continue\")"))
+        XCTAssertTrue(homeSource.contains("appModel.openImporter(.recipeText, initialText: pastedIngredients)"))
+        XCTAssertTrue(homeSource.contains("clipboardContainsProbableWebURL"))
+        XCTAssertTrue(homeSource.contains("Text(\"Paste Copied Link\")"))
+        XCTAssertTrue(homeSource.contains("UIPasteboard.general.detectPatterns"))
+        XCTAssertTrue(homeSource.contains("let drawerHeight = max(420, geometry.size.height - 88)"))
+        XCTAssertTrue(homeSource.contains("collapsedShoppingTripsDrawerHeight: CGFloat = 92"))
+        XCTAssertTrue(homeSource.contains("HomePullUpShape()"))
+        XCTAssertTrue(homeSource.contains("SMARTCART_HOME_TRIPS_DRAWER"))
         XCTAssertTrue(homeSource.contains("appModel.pendingShoppingSessions"))
-        XCTAssertTrue(homeSource.contains(".scrollTargetBehavior(.viewAligned)"))
+        XCTAssertTrue(homeSource.contains("@State private var pendingDiscardSession: ShoppingSession?"))
+        XCTAssertTrue(homeSource.contains("pendingDiscardSession = session"))
+        XCTAssertTrue(homeSource.contains(".confirmationDialog(\n            \"Discard this paused trip?\""))
+        XCTAssertTrue(homeSource.contains("Button(\"Discard Trip\", role: .destructive)"))
+        XCTAssertTrue(homeSource.contains("appModel.discardPendingShoppingSession(pendingDiscardSession.id)"))
+        XCTAssertTrue(homeSource.contains("Completed shopping history is never deleted here."))
+        XCTAssertTrue(homeSource.contains("appModel.archivePantryUpdateReminder(sessionID: session.id)"))
         XCTAssertTrue(homeSource.contains("accessibilityIdentifier(\"home-start-meal-prep\")"))
-        XCTAssertFalse(homeSource.contains("Other Shopping Trips"))
-        XCTAssertFalse(homeSource.contains("primaryResumeSession"))
-        XCTAssertFalse(homeSource.contains("secondaryPendingSessions"))
-        XCTAssertFalse(homeSource.contains("clipboardContainsProbableWebURL"))
-        XCTAssertFalse(homeSource.contains("Paste Copied Link"))
-        XCTAssertFalse(homeSource.contains("promiseCard"))
+        XCTAssertFalse(homeSource.contains("storeCard"))
+        XCTAssertFalse(homeSource.contains("trustStrip"))
+
+        XCTAssertTrue(composerSource.contains("@State private var showPhotoLibrary = false"))
+        XCTAssertTrue(composerSource.contains("@State private var hasAttemptedInitialMediaPresentation = false"))
+        XCTAssertTrue(composerSource.contains(".photosPicker(\n            isPresented: $showPhotoLibrary"))
+        XCTAssertTrue(composerSource.contains("await presentInitialMediaToolIfNeeded()"))
+        XCTAssertTrue(composerSource.contains("guard initialMethod == .camera || initialMethod == .photoLibrary else { return }"))
+        XCTAssertTrue(composerSource.contains("try? await Task.sleep(for: .milliseconds(300))"))
+        XCTAssertTrue(composerSource.contains("guard !Task.isCancelled, selectedMethod == initialMethod else { return }"))
+        XCTAssertTrue(composerSource.contains("showCamera = true"))
+        XCTAssertTrue(composerSource.contains("showPhotoLibrary = true"))
+        XCTAssertTrue(composerSource.contains("initialValue: visibleInitialMethod == .recipeText ? trimmedInitialText : \"\""))
+        XCTAssertTrue(composerSource.contains(".frame(maxWidth: .infinity, minHeight: 220, alignment: .topLeading)"))
         XCTAssertFalse(recipesSource.contains("private var mealPrepLaunchCard"))
     }
 
@@ -4326,6 +4354,125 @@ final class SmartCartTests: XCTestCase {
         model.activeShoppingSessionID = olderCompleted.id
         XCTAssertTrue(olderCompleted.isGuideComplete)
         XCTAssertEqual(model.pendingShoppingSessions.first?.id, newerIncomplete.id)
+    }
+
+    @MainActor
+    func testDiscardPendingShoppingSessionRemovesActiveTripAndPersistsAcrossRelaunch() throws {
+        let store = InMemorySmartCartStateStore()
+        let defaults = isolatedCommerceDefaults()
+        let started = try startIncompleteShoppingTrip(
+            stateStore: store,
+            commerceDefaults: defaults
+        )
+        let model = started.model
+
+        XCTAssertNotNil(model.shoppingSession(id: started.sessionID))
+        XCTAssertTrue(model.savedLists.contains { $0.manifest.id == started.manifestID })
+        XCTAssertEqual(model.activeShoppingSessionID, started.sessionID)
+        XCTAssertFalse(model.shoppingItems.isEmpty)
+
+        XCTAssertTrue(model.discardPendingShoppingSession(started.sessionID))
+
+        XCTAssertNil(model.shoppingSession(id: started.sessionID))
+        XCTAssertFalse(model.savedLists.contains { $0.manifest.id == started.manifestID })
+        XCTAssertNil(model.activeShoppingSessionID)
+        XCTAssertTrue(model.shoppingItems.isEmpty)
+        XCTAssertEqual(model.guidedIndex, 0)
+
+        let restored = AppModel(stateStore: store, commerceDefaults: defaults)
+        XCTAssertNil(restored.shoppingSession(id: started.sessionID))
+        XCTAssertFalse(restored.savedLists.contains { $0.manifest.id == started.manifestID })
+        XCTAssertNil(restored.activeShoppingSessionID)
+        XCTAssertTrue(restored.shoppingItems.isEmpty)
+        XCTAssertEqual(restored.guidedIndex, 0)
+    }
+
+    @MainActor
+    func testDiscardPendingShoppingSessionSaveFailureRollsBackEveryMutatedSurface() throws {
+        let store = ControllableSmartCartStateStore()
+        let started = try startIncompleteShoppingTrip(
+            stateStore: store,
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        let model = started.model
+        let sessionsBefore = model.shoppingSessions
+        let listsBefore = model.savedLists
+        let activeSessionBefore = model.activeShoppingSessionID
+        let itemsBefore = model.shoppingItems
+        let guidedIndexBefore = model.guidedIndex
+        let persistedBefore = store.state
+        store.failNextSave = true
+
+        XCTAssertFalse(model.discardPendingShoppingSession(started.sessionID))
+
+        XCTAssertEqual(model.shoppingSessions, sessionsBefore)
+        XCTAssertEqual(model.savedLists, listsBefore)
+        XCTAssertEqual(model.activeShoppingSessionID, activeSessionBefore)
+        XCTAssertEqual(model.shoppingItems, itemsBefore)
+        XCTAssertEqual(model.guidedIndex, guidedIndexBefore)
+        XCTAssertEqual(store.state, persistedBefore)
+        XCTAssertNotNil(model.persistenceIssue)
+    }
+
+    @MainActor
+    func testDiscardPendingShoppingSessionRejectsGuideCompleteHistory() throws {
+        let store = InMemorySmartCartStateStore()
+        let completed = try completePhase4Trip(
+            stateStore: store,
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        let sessionsBefore = completed.model.shoppingSessions
+        let listsBefore = completed.model.savedLists
+        let activeSessionBefore = completed.model.activeShoppingSessionID
+        let itemsBefore = completed.model.shoppingItems
+        let persistedBefore = store.state
+
+        XCTAssertTrue(
+            completed.model.shoppingSession(id: completed.sessionID)?.isGuideComplete == true
+        )
+        XCTAssertFalse(completed.model.discardPendingShoppingSession(completed.sessionID))
+
+        XCTAssertEqual(completed.model.shoppingSessions, sessionsBefore)
+        XCTAssertEqual(completed.model.savedLists, listsBefore)
+        XCTAssertEqual(completed.model.activeShoppingSessionID, activeSessionBefore)
+        XCTAssertEqual(completed.model.shoppingItems, itemsBefore)
+        XCTAssertEqual(store.state, persistedBefore)
+        XCTAssertTrue(
+            completed.model.shoppingSession(id: completed.sessionID)?.hasPendingPantryUpdateReminder == true
+        )
+    }
+
+    @MainActor
+    func testDiscardPendingShoppingSessionRejectsMixedCompletedAliasCluster() throws {
+        let store = InMemorySmartCartStateStore()
+        let started = try startIncompleteShoppingTrip(
+            stateStore: store,
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        let model = started.model
+        let unfinished = try XCTUnwrap(model.shoppingSession(id: started.sessionID))
+        var completedAlias = phase4Alias(of: unfinished)
+        completedAlias.items = completedAlias.items.map { item in
+            var completed = item
+            completed.status = .visited
+            return completed
+        }
+        XCTAssertTrue(completedAlias.isGuideComplete)
+
+        model.shoppingSessions = [unfinished, completedAlias]
+        model.activeShoppingSessionID = unfinished.id
+        let sessionsBefore = model.shoppingSessions
+        let listsBefore = model.savedLists
+        let persistedBefore = store.state
+
+        XCTAssertFalse(model.discardPendingShoppingSession(unfinished.id))
+
+        XCTAssertEqual(model.shoppingSessions, sessionsBefore)
+        XCTAssertEqual(model.savedLists, listsBefore)
+        XCTAssertEqual(model.activeShoppingSessionID, unfinished.id)
+        XCTAssertEqual(store.state, persistedBefore)
+        XCTAssertTrue(model.savedLists.contains { $0.manifest.id == started.manifestID })
+        XCTAssertTrue(model.shoppingSession(id: completedAlias.id)?.isGuideComplete == true)
     }
 
     func testRecipesTabUsesSavedLibraryAndRecentRecipeDrawer() throws {
@@ -5875,6 +6022,27 @@ final class SmartCartTests: XCTestCase {
             cookMinutes: 0,
             ingredients: [Ingredient(name: "Rice", quantity: 1, unit: "cup")]
         )
+    }
+
+    @MainActor
+    private func startIncompleteShoppingTrip(
+        stateStore: any SmartCartStateStoring,
+        commerceDefaults: UserDefaults
+    ) throws -> (model: AppModel, sessionID: UUID, manifestID: UUID) {
+        let model = AppModel(
+            stateStore: stateStore,
+            commerceDefaults: commerceDefaults,
+            seedDemoShoppingState: true
+        )
+        model.completeRetailerSetup()
+        model.shoppingItems = [try model.shoppingItems.firstUnwrapped()]
+        XCTAssertTrue(model.startOrResumeRetailerShoppingSession())
+        let sessionID = try XCTUnwrap(model.activeShoppingSessionID)
+        let session = try XCTUnwrap(model.shoppingSession(id: sessionID))
+        XCTAssertFalse(session.isGuideComplete)
+        let manifestID = try XCTUnwrap(session.manifestID)
+        XCTAssertTrue(model.savedLists.contains { $0.manifest.id == manifestID })
+        return (model, sessionID, manifestID)
     }
 
     @MainActor

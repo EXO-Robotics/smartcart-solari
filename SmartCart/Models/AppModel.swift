@@ -2667,6 +2667,70 @@ final class AppModel {
         }
     }
 
+    /// Permanently discards an unfinished shopping trip and its generated
+    /// manifest. Guide-complete and committed trips are history and must use
+    /// the reminder archive or reconciliation paths instead.
+    @discardableResult
+    func discardPendingShoppingSession(_ sessionID: UUID) -> Bool {
+        guard persistenceReady else {
+            showToast(persistenceIssue ?? "SmartCart storage is unavailable")
+            return false
+        }
+        guard let target = shoppingSession(id: sessionID),
+              !target.isGuideComplete,
+              !target.isCommitted else {
+            showToast("Completed shopping trips stay in history")
+            return false
+        }
+
+        let relatedSessions = shoppingSessions.filter {
+            shoppingSessionsRepresentSameTrip($0, target)
+        }
+        guard relatedSessions.allSatisfy({ !$0.isGuideComplete && !$0.isCommitted }) else {
+            showToast("Completed shopping trips stay in history")
+            return false
+        }
+        let relatedSessionIDs = Set(relatedSessions.map(\.id))
+        let relatedManifestIDs = Set(relatedSessions.compactMap(\.manifestID))
+        let relatedLogicalTripIDs = Set(relatedSessions.compactMap(\.reconciliationIdentity))
+
+        let originalSessions = shoppingSessions
+        let originalLists = savedLists
+        let originalActiveSessionID = activeShoppingSessionID
+        let originalItems = shoppingItems
+        let originalGuidedIndex = guidedIndex
+
+        suppressPersistence = true
+        shoppingSessions.removeAll { relatedSessionIDs.contains($0.id) }
+        savedLists.removeAll { list in
+            relatedManifestIDs.contains(list.manifest.id) ||
+                list.manifest.logicalTripID.map(relatedLogicalTripIDs.contains) == true
+        }
+        if let activeShoppingSessionID, relatedSessionIDs.contains(activeShoppingSessionID) {
+            self.activeShoppingSessionID = nil
+            shoppingItems = []
+            guidedIndex = 0
+        }
+
+        do {
+            try stateStore.save(stateSnapshot())
+            suppressPersistence = false
+            persistenceIssue = nil
+            showToast("Shopping trip deleted")
+            return true
+        } catch {
+            shoppingSessions = originalSessions
+            savedLists = originalLists
+            activeShoppingSessionID = originalActiveSessionID
+            shoppingItems = originalItems
+            guidedIndex = originalGuidedIndex
+            suppressPersistence = false
+            persistenceIssue = error.localizedDescription
+            showToast("Shopping trip could not be deleted")
+            return false
+        }
+    }
+
     func commitShoppingReconciliation(
         sessionID: UUID,
         outcome: ShoppingTripOutcome,

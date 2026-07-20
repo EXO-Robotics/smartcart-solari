@@ -28,6 +28,8 @@ struct RecipeComposerSheet: View {
     @State private var photoItems: [PhotosPickerItem] = []
     @State private var selectedImages: [UIImage] = []
     @State private var showCamera = false
+    @State private var showPhotoLibrary = false
+    @State private var hasAttemptedInitialMediaPresentation = false
     @State private var isProcessing = false
     @State private var processingMessage = ""
     @State private var errorMessage: String?
@@ -52,16 +54,19 @@ struct RecipeComposerSheet: View {
 
     init(initialMethod: ImportMethod, initialText: String? = nil) {
         let visibleInitialMethod = initialMethod == .pinterest ? .recipeLink : initialMethod
+        let trimmedInitialText = initialText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         self.initialMethod = visibleInitialMethod
         _selectedMethod = State(initialValue: visibleInitialMethod)
         _linkText = State(
-            initialValue: initialText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            initialValue: visibleInitialMethod == .recipeLink ? trimmedInitialText : ""
         )
         if visibleInitialMethod == .sample {
             _title = State(initialValue: "Lemon Herb Chicken Pasta")
         } else {
             _title = State(initialValue: "Imported Recipe")
-            _recipeText = State(initialValue: "")
+            _recipeText = State(
+                initialValue: visibleInitialMethod == .recipeText ? trimmedInitialText : ""
+            )
         }
     }
 
@@ -262,6 +267,15 @@ struct RecipeComposerSheet: View {
             }
             .ignoresSafeArea()
         }
+        .photosPicker(
+            isPresented: $showPhotoLibrary,
+            selection: $photoItems,
+            maxSelectionCount: 8,
+            matching: .images
+        )
+        .task {
+            await presentInitialMediaToolIfNeeded()
+        }
         .onChange(of: photoItems) {
             guard !photoItems.isEmpty else { return }
             beginPhotoLoad(photoItems)
@@ -324,77 +338,99 @@ struct RecipeComposerSheet: View {
             }
 
         case .photoLibrary:
-            VStack(alignment: .leading, spacing: 12) {
-                mediaPreview
-                PhotosPicker(selection: $photoItems, maxSelectionCount: 8, matching: .images) {
-                    Label(selectedImages.isEmpty ? "Choose recipe photos" : "Choose different photos", systemImage: "photo.stack.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(SecondaryButtonStyle())
+            largeImportCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    mediaPreview
+                    PhotosPicker(selection: $photoItems, maxSelectionCount: 8, matching: .images) {
+                        Label(selectedImages.isEmpty ? "Choose recipe photos" : "Choose different photos", systemImage: "photo.stack.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(SecondaryButtonStyle())
 
-                Text("Select up to 8 pages. SmartCart combines them in selection order.")
-                    .font(.caption)
-                    .foregroundStyle(SmartCartTheme.secondaryInk)
+                    Text("Select up to 8 pages. SmartCart combines them in selection order.")
+                        .font(.caption)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
+                }
             }
 
         case .recipeLink, .pinterest:
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: 12) {
-                    Image(systemName: selectedMethod.symbol)
-                        .font(.title2.bold())
-                        .foregroundStyle(selectedMethod.tint)
-                        .frame(width: 48, height: 48)
-                        .background(selectedMethod.tint.opacity(0.10))
-                        .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+            largeImportCard {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(spacing: 12) {
+                        Image(systemName: selectedMethod.symbol)
+                            .font(.title2.bold())
+                            .foregroundStyle(selectedMethod.tint)
+                            .frame(width: 48, height: 48)
+                            .background(selectedMethod.tint.opacity(0.10))
+                            .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
 
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Import from a recipe page")
-                            .font(.headline)
-                            .foregroundStyle(SmartCartTheme.navy)
-                        Text("SmartCart looks for standard recipe ingredients embedded in the page.")
-                            .font(.caption)
-                            .foregroundStyle(SmartCartTheme.secondaryInk)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Import from a recipe page")
+                                .font(.headline)
+                                .foregroundStyle(SmartCartTheme.navy)
+                            Text("SmartCart looks for standard recipe ingredients embedded in the page.")
+                                .font(.caption)
+                                .foregroundStyle(SmartCartTheme.secondaryInk)
+                        }
                     }
+
+                    TextField("https://example.com/recipe", text: $linkText)
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.URL)
+                        .autocorrectionDisabled()
+                        .focused($focusedField, equals: .link)
+                        .smartField()
+                        .accessibilityIdentifier("recipe-import-link-field")
+
+                    if !linkText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                       validURL == nil {
+                        Label("Enter a complete HTTPS recipe link", systemImage: "exclamationmark.circle.fill")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(SmartCartTheme.coral)
+                    }
+
+                    if let validURL,
+                       RecipeLinkInput.source(for: validURL) == .pinterest {
+                        Label("Pinterest recipe link detected", systemImage: "link.badge.plus")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(SmartCartTheme.green)
+                    }
+
+                    InfoBanner(
+                        symbol: "lock.shield.fill",
+                        title: "No account sign-in",
+                        message: "SmartCart reads public recipe metadata only. Some sites may block access; photo and text import remain available.",
+                        color: SmartCartTheme.green
+                    )
                 }
-
-                TextField("https://example.com/recipe", text: $linkText)
-                    .textInputAutocapitalization(.never)
-                    .keyboardType(.URL)
-                    .autocorrectionDisabled()
-                    .focused($focusedField, equals: .link)
-                    .smartField()
-                    .accessibilityIdentifier("recipe-import-link-field")
-
-                if !linkText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                   validURL == nil {
-                    Label("Enter a complete HTTPS recipe link", systemImage: "exclamationmark.circle.fill")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(SmartCartTheme.coral)
-                }
-
-                if let validURL,
-                   RecipeLinkInput.source(for: validURL) == .pinterest {
-                    Label("Pinterest recipe link detected", systemImage: "link.badge.plus")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(SmartCartTheme.green)
-                }
-
-                InfoBanner(
-                    symbol: "lock.shield.fill",
-                    title: "No account sign-in",
-                    message: "SmartCart reads public recipe metadata only. Some sites may block access; photo and text import remain available.",
-                    color: SmartCartTheme.green
-                )
             }
-            .smartCartCard()
 
         case .recipeText:
-            InfoBanner(
-                symbol: "doc.on.clipboard.fill",
-                title: "Paste and go",
-                message: "One ingredient per line works best. You can correct names, quantities, and pantry status next.",
-                color: SmartCartTheme.green
-            )
+            largeImportCard {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "doc.on.clipboard.fill")
+                            .font(.title2.bold())
+                            .foregroundStyle(SmartCartTheme.green)
+                            .frame(width: 48, height: 48)
+                            .background(SmartCartTheme.herbLight)
+                            .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Paste recipe text")
+                                .font(.headline)
+                                .foregroundStyle(SmartCartTheme.navy)
+                            Text("One ingredient per line works best.")
+                                .font(.caption)
+                                .foregroundStyle(SmartCartTheme.secondaryInk)
+                        }
+                    }
+
+                    Text("Correct names, quantities, and pantry status below before reviewing the recipe.")
+                        .font(.caption)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
+                }
+            }
 
         case .sample:
             samplePicker
@@ -467,6 +503,35 @@ struct RecipeComposerSheet: View {
             .buttonStyle(SecondaryButtonStyle())
         }
         .smartCartCard()
+    }
+
+    private func largeImportCard<Content: View>(
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        content()
+            .frame(maxWidth: .infinity, minHeight: 220, alignment: .topLeading)
+            .smartCartCard()
+    }
+
+    @MainActor
+    private func presentInitialMediaToolIfNeeded() async {
+        guard !hasAttemptedInitialMediaPresentation else { return }
+        hasAttemptedInitialMediaPresentation = true
+        guard initialMethod == .camera || initialMethod == .photoLibrary else { return }
+
+        // Let the importer sheet finish presenting before it launches the requested system tool.
+        try? await Task.sleep(for: .milliseconds(300))
+        guard !Task.isCancelled, selectedMethod == initialMethod else { return }
+
+        if initialMethod == .camera {
+            if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                showCamera = true
+            } else {
+                errorMessage = "Camera capture is unavailable in the iOS Simulator. Upload a saved recipe image instead."
+            }
+        } else {
+            showPhotoLibrary = true
+        }
     }
 
     @ViewBuilder
