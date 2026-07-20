@@ -11,6 +11,7 @@ struct HomeView: View {
     @State private var shoppingTripsExpanded =
         ProcessInfo.processInfo.environment["SMARTCART_HOME_TRIPS_DRAWER"] == "shopping-trips"
     @GestureState private var shoppingTripsDrag: CGFloat = 0
+    @FocusState private var pasteIngredientsFocused: Bool
 
     private let homeActionCardContentMinHeight: CGFloat = 116
     private let collapsedShoppingTripsDrawerHeight: CGFloat = 92
@@ -32,6 +33,10 @@ struct HomeView: View {
                     }
                     .padding(.horizontal, 18)
                     .padding(.bottom, collapsedShoppingTripsDrawerHeight + 34)
+                }
+                .scrollDismissesKeyboard(.interactively)
+                .onTapGesture {
+                    pasteIngredientsFocused = false
                 }
 
                 continueShoppingTripsDrawer(
@@ -218,6 +223,7 @@ struct HomeView: View {
                         .foregroundStyle(SmartCartTheme.navy)
                         .scrollContentBackground(.hidden)
                         .frame(maxWidth: .infinity, minHeight: 62, maxHeight: 62)
+                        .focused($pasteIngredientsFocused)
                 }
 
                 Spacer(minLength: 4)
@@ -449,6 +455,7 @@ struct HomeView: View {
         .frame(height: collapsedShoppingTripsDrawerHeight)
         .contentShape(Rectangle())
         .onTapGesture {
+            pasteIngredientsFocused = false
             shoppingTripsExpanded.toggle()
         }
         .gesture(shoppingTripsDragGesture(collapsedOffset: collapsedOffset))
