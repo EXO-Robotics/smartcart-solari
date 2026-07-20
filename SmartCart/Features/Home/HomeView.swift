@@ -3,25 +3,80 @@ import UIKit
 
 struct HomeView: View {
     @Environment(AppModel.self) private var appModel
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var pendingDiscardSession: ShoppingSession?
+    @State private var shoppingTripsExpanded = false
+    @GestureState private var shoppingTripsDrag: CGFloat = 0
+
+    private let collapsedShoppingTripsDrawerHeight: CGFloat = 92
 
     var body: some View {
-        ZStack {
-            HomePhotoBackground()
+        GeometryReader { geometry in
+            let drawerHeight = max(420, geometry.size.height - 88)
+            let collapsedOffset = drawerHeight - collapsedShoppingTripsDrawerHeight
+            let hasPausedTrips = !pausedShoppingSessions.isEmpty
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    header
-                    shoppingTripStatusSection
-                    startShoppingSection
+            ZStack(alignment: .bottom) {
+                HomePhotoBackground()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 24) {
+                        header
+                        shoppingTripStatusSection
+                        startShoppingSection
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 10)
+                    .padding(
+                        .bottom,
+                        hasPausedTrips ? collapsedShoppingTripsDrawerHeight + 24 : 36
+                    )
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 10)
-                .padding(.bottom, 36)
+                .scrollIndicators(.hidden)
+
+                if hasPausedTrips {
+                    continueShoppingTripsDrawer(
+                        height: drawerHeight,
+                        collapsedOffset: collapsedOffset
+                    )
+                    .offset(y: shoppingTripsDrawerOffset(collapsedOffset: collapsedOffset))
+                    .animation(
+                        .spring(response: 0.42, dampingFraction: 0.86),
+                        value: shoppingTripsExpanded
+                    )
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
-            .scrollIndicators(.hidden)
         }
         .toolbar(.hidden, for: .navigationBar)
+        .sensoryFeedback(.selection, trigger: shoppingTripsExpanded)
+        .onChange(of: pausedShoppingSessions.map(\.id)) { _, sessionIDs in
+            if sessionIDs.isEmpty {
+                shoppingTripsExpanded = false
+                pendingDiscardSession = nil
+            }
+        }
+        .confirmationDialog(
+            "Clear this paused order?",
+            isPresented: Binding(
+                get: { pendingDiscardSession != nil },
+                set: { isPresented in
+                    if !isPresented { pendingDiscardSession = nil }
+                }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let pendingDiscardSession {
+                Button("Clear Order", role: .destructive) {
+                    appModel.discardPendingShoppingSession(pendingDiscardSession.id)
+                    self.pendingDiscardSession = nil
+                }
+            }
+            Button("Cancel", role: .cancel) {
+                pendingDiscardSession = nil
+            }
+        } message: {
+            Text("This removes the paused shopping trip and its generated list. Completed order history is not affected.")
+        }
     }
 
     private var header: some View {
@@ -41,33 +96,8 @@ struct HomeView: View {
 
     @ViewBuilder
     private var shoppingTripStatusSection: some View {
-        if let resumableShoppingSession, let pantryUpdateShoppingSession {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Shopping Trips")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.82))
-
-                if dynamicTypeSize.isAccessibilitySize {
-                    VStack(spacing: 10) {
-                        shoppingTripStatusCard(resumableShoppingSession, kind: .resume)
-                        shoppingTripStatusCard(pantryUpdateShoppingSession, kind: .pantryUpdate)
-                    }
-                } else {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 12) {
-                            shoppingTripStatusCard(resumableShoppingSession, kind: .resume)
-                                .frame(width: 294)
-                            shoppingTripStatusCard(pantryUpdateShoppingSession, kind: .pantryUpdate)
-                                .frame(width: 294)
-                        }
-                    }
-                }
-            }
-            .accessibilityIdentifier("home-shopping-trips-strip")
-        } else if let resumableShoppingSession {
-            shoppingTripStatusCard(resumableShoppingSession, kind: .resume)
-        } else if let pantryUpdateShoppingSession {
-            shoppingTripStatusCard(pantryUpdateShoppingSession, kind: .pantryUpdate)
+        if let pantryUpdateShoppingSession {
+            pantryUpdateStatusCard(pantryUpdateShoppingSession)
         }
     }
 
@@ -215,23 +245,21 @@ struct HomeView: View {
         .accessibilityHint("Shows manual entry and sample recipe options")
     }
 
-    private var resumableShoppingSession: ShoppingSession? {
-        appModel.pendingShoppingSessions.first(where: \.isReusable)
+    private var pausedShoppingSessions: [ShoppingSession] {
+        appModel.pendingShoppingSessions.filter(\.isReusable)
     }
 
     private var pantryUpdateShoppingSession: ShoppingSession? {
         appModel.pendingShoppingSessions.first(where: \.hasPendingPantryUpdateReminder)
     }
 
-    private func shoppingTripStatusCard(
-        _ session: ShoppingSession,
-        kind: HomeShoppingTripStatusKind
-    ) -> some View {
+    private func pantryUpdateStatusCard(_ session: ShoppingSession) -> some View {
         Button {
-            openShoppingTripStatus(session, kind: kind)
+            guard appModel.openShoppingSession(session.id) else { return }
+            appModel.startShoppingReconciliation()
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: kind.symbol)
+                Image(systemName: "checkmark.circle.fill")
                     .font(.headline.bold())
                     .foregroundStyle(SmartCartTheme.green)
                     .frame(width: 42, height: 42)
@@ -240,10 +268,10 @@ struct HomeView: View {
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(kind.title)
+                    Text("Finish your last trip")
                         .font(.headline)
                         .foregroundStyle(.white)
-                    Text(shoppingTripStatusDetail(session, kind: kind))
+                    Text(pantryUpdateStatusDetail(session))
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.74))
                         .lineLimit(2)
@@ -267,32 +295,185 @@ struct HomeView: View {
         }
         .buttonStyle(PressableButtonStyle())
         .accessibilityElement(children: .combine)
-        .accessibilityIdentifier(kind.accessibilityIdentifier)
-        .accessibilityLabel("\(kind.title), \(shoppingTripStatusDetail(session, kind: kind))")
+        .accessibilityIdentifier("home-finish-last-trip")
+        .accessibilityLabel("Finish your last trip, \(pantryUpdateStatusDetail(session))")
     }
 
-    private func shoppingTripStatusDetail(
-        _ session: ShoppingSession,
-        kind: HomeShoppingTripStatusKind
-    ) -> String {
-        switch kind {
-        case .resume:
-            let completed = session.items.filter(\.status.isCompleted).count
-            return "\(completed) of \(session.items.count) items · \(session.recipeTitle)"
-        case .pantryUpdate:
-            let count = session.items.count
-            return "Review \(count) trip item\(count == 1 ? "" : "s") and update pantry"
+    private func pantryUpdateStatusDetail(_ session: ShoppingSession) -> String {
+        let count = session.items.count
+        return "Review \(count) trip item\(count == 1 ? "" : "s") and update pantry"
+    }
+
+    private func continueShoppingTripsDrawer(
+        height: CGFloat,
+        collapsedOffset: CGFloat
+    ) -> some View {
+        VStack(spacing: 0) {
+            continueShoppingTripsHandle(collapsedOffset: collapsedOffset)
+
+            Divider()
+                .overlay(Color.white.opacity(0.16))
+
+            if shoppingTripsExpanded {
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(pausedShoppingSessions) { session in
+                            pausedShoppingTripRow(session)
+                        }
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.top, 14)
+                    .padding(.bottom, 28)
+                }
+                .transition(.opacity)
+            } else {
+                Color.clear
+                    .allowsHitTesting(false)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: height, alignment: .top)
+        .background {
+            HomePullUpGlassSurface()
+        }
+        .clipShape(HomePullUpShape())
+        .shadow(color: .black.opacity(0.34), radius: 22, y: -8)
+        .padding(.horizontal, 8)
+        .accessibilityElement(children: .contain)
+    }
+
+    private func continueShoppingTripsHandle(collapsedOffset: CGFloat) -> some View {
+        VStack(spacing: 4) {
+            Image(systemName: shoppingTripsExpanded ? "chevron.compact.down" : "chevron.compact.up")
+                .font(.system(size: 24, weight: .bold))
+                .foregroundStyle(SmartCartTheme.green)
+                .frame(height: 35)
+                .accessibilityHidden(true)
+
+            HStack(spacing: 9) {
+                Label("Continue Shopping", systemImage: "cart.badge.clock")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.white)
+
+                Spacer()
+
+                Text(shoppingTripsExpanded ? "Swipe down to hide" : pausedOrdersCountText)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.68))
+            }
+            .padding(.horizontal, 18)
+            .padding(.bottom, 10)
+        }
+        .frame(height: collapsedShoppingTripsDrawerHeight)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            shoppingTripsExpanded.toggle()
+        }
+        .gesture(shoppingTripsDragGesture(collapsedOffset: collapsedOffset))
+        .accessibilityLabel("Continue Shopping drawer")
+        .accessibilityValue(shoppingTripsExpanded ? "Expanded" : "Collapsed, \(pausedOrdersCountText)")
+        .accessibilityHint(
+            shoppingTripsExpanded
+                ? "Swipe down or double tap to hide paused orders"
+                : "Swipe up or double tap to show paused orders"
+        )
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("home-continue-shopping-drawer")
+    }
+
+    private var pausedOrdersCountText: String {
+        let count = pausedShoppingSessions.count
+        return "\(count) paused order\(count == 1 ? "" : "s")"
+    }
+
+    private func pausedShoppingTripRow(_ session: ShoppingSession) -> some View {
+        HStack(spacing: 10) {
+            Button {
+                appModel.openShoppingSession(session.id)
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "cart.fill")
+                        .font(.headline.bold())
+                        .foregroundStyle(SmartCartTheme.green)
+                        .frame(width: 42, height: 42)
+                        .background(Color.black.opacity(0.24))
+                        .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                        .accessibilityHidden(true)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("RESUME SHOPPING")
+                            .smartEyebrow(SmartCartTheme.green)
+                        Text(session.recipeTitle)
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                            .multilineTextAlignment(.leading)
+                        Text(pausedShoppingTripDetail(session))
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.70))
+                    }
+
+                    Spacer(minLength: 4)
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption.bold())
+                        .foregroundStyle(.white.opacity(0.70))
+                        .accessibilityHidden(true)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("home-continue-shopping-\(session.id.uuidString)")
+
+            Button(role: .destructive) {
+                pendingDiscardSession = session
+            } label: {
+                Image(systemName: "trash")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.white.opacity(0.82))
+                    .frame(width: 36, height: 36)
+                    .background(Color.white.opacity(0.10))
+                    .clipShape(Circle())
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("home-clear-paused-\(session.id.uuidString)")
+            .accessibilityLabel("Clear paused order for \(session.recipeTitle)")
+            .accessibilityHint("Removes this paused order after confirmation")
+        }
+        .padding(13)
+        .background {
+            HomeGlassSurface(radius: 18, darkness: 0.28)
         }
     }
 
-    private func openShoppingTripStatus(
-        _ session: ShoppingSession,
-        kind: HomeShoppingTripStatusKind
-    ) {
-        guard appModel.openShoppingSession(session.id) else { return }
-        if kind == .pantryUpdate {
-            appModel.startShoppingReconciliation()
-        }
+    private func pausedShoppingTripDetail(_ session: ShoppingSession) -> String {
+        let completed = session.items.filter(\.status.isCompleted).count
+        let remaining = max(session.items.count - completed, 0)
+        return "\(remaining) item\(remaining == 1 ? "" : "s") remaining"
+    }
+
+    private func shoppingTripsDrawerOffset(collapsedOffset: CGFloat) -> CGFloat {
+        let restingOffset = shoppingTripsExpanded ? 0 : collapsedOffset
+        return min(max(restingOffset + shoppingTripsDrag, 0), collapsedOffset)
+    }
+
+    private func shoppingTripsDragGesture(collapsedOffset: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 6)
+            .updating($shoppingTripsDrag) { value, state, _ in
+                state = value.translation.height
+            }
+            .onEnded { value in
+                let projected = value.predictedEndTranslation.height
+                let decisiveDistance = min(96, collapsedOffset * 0.22)
+
+                if shoppingTripsExpanded {
+                    if projected > decisiveDistance {
+                        shoppingTripsExpanded = false
+                    }
+                } else if projected < -decisiveDistance {
+                    shoppingTripsExpanded = true
+                }
+            }
     }
 
     private func pasteRecipeFromClipboard() {
@@ -306,32 +487,6 @@ struct HomeView: View {
             appModel.openImporter(.recipeLink, initialText: validatedURL.absoluteString)
         } else {
             appModel.openImporter(.recipeText, initialText: trimmedText)
-        }
-    }
-}
-
-private enum HomeShoppingTripStatusKind: Equatable {
-    case resume
-    case pantryUpdate
-
-    var title: String {
-        switch self {
-        case .resume: "Resume Shopping"
-        case .pantryUpdate: "Finish your last trip"
-        }
-    }
-
-    var symbol: String {
-        switch self {
-        case .resume: "cart.fill"
-        case .pantryUpdate: "checkmark.circle.fill"
-        }
-    }
-
-    var accessibilityIdentifier: String {
-        switch self {
-        case .resume: "home-resume-shopping"
-        case .pantryUpdate: "home-finish-last-trip"
         }
     }
 }
@@ -398,6 +553,81 @@ private struct HomeGlassSurface: View {
                 shape.stroke(Color.white.opacity(0.22), lineWidth: 1)
             }
             .shadow(color: .black.opacity(0.28), radius: 20, y: 10)
+    }
+}
+
+private struct HomePullUpGlassSurface: View {
+    var body: some View {
+        let shape = HomePullUpShape()
+
+        shape
+            .fill(.ultraThinMaterial)
+            .overlay {
+                shape.fill(Color.black.opacity(0.34))
+            }
+            .overlay {
+                shape.fill(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.10),
+                            Color.clear,
+                            Color.black.opacity(0.12)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+            }
+            .overlay {
+                shape.stroke(Color.white.opacity(0.22), lineWidth: 1)
+            }
+    }
+}
+
+/// Raised center handle keeps the conditional Continue Shopping drawer
+/// discoverable above the tab bar without adding another navigation control.
+private struct HomePullUpShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let top: CGFloat = 34
+        let cornerRadius: CGFloat = 26
+        let handleRadius: CGFloat = 36
+        let centerX = rect.midX
+
+        var path = Path()
+        path.move(to: CGPoint(x: cornerRadius, y: top))
+        path.addLine(to: CGPoint(x: centerX - handleRadius, y: top))
+        path.addCurve(
+            to: CGPoint(x: centerX, y: 0),
+            control1: CGPoint(x: centerX - 23, y: top),
+            control2: CGPoint(x: centerX - 28, y: 0)
+        )
+        path.addCurve(
+            to: CGPoint(x: centerX + handleRadius, y: top),
+            control1: CGPoint(x: centerX + 28, y: 0),
+            control2: CGPoint(x: centerX + 23, y: top)
+        )
+        path.addLine(to: CGPoint(x: rect.maxX - cornerRadius, y: top))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX, y: top + cornerRadius),
+            control: CGPoint(x: rect.maxX, y: top)
+        )
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - cornerRadius))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX - cornerRadius, y: rect.maxY),
+            control: CGPoint(x: rect.maxX, y: rect.maxY)
+        )
+        path.addLine(to: CGPoint(x: cornerRadius, y: rect.maxY))
+        path.addQuadCurve(
+            to: CGPoint(x: 0, y: rect.maxY - cornerRadius),
+            control: CGPoint(x: 0, y: rect.maxY)
+        )
+        path.addLine(to: CGPoint(x: 0, y: top + cornerRadius))
+        path.addQuadCurve(
+            to: CGPoint(x: cornerRadius, y: top),
+            control: CGPoint(x: 0, y: top)
+        )
+        path.closeSubpath()
+        return path
     }
 }
 
