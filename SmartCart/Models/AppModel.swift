@@ -188,6 +188,8 @@ final class AppModel {
     private var persistenceReady = false
     @ObservationIgnored
     private var suppressPersistence = false
+    @ObservationIgnored
+    private var matchingGeneration: UInt = 0
 
     init(
         stateStore: any SmartCartStateStoring = JSONSmartCartStateStore(),
@@ -1290,6 +1292,29 @@ final class AppModel {
         invalidateShoppingPlan()
     }
 
+    @discardableResult
+    func updateIngredient(id: UUID, with updatedIngredient: Ingredient) -> Bool {
+        guard updatedIngredient.id == id,
+              let index = activeRecipe.ingredients.firstIndex(where: { $0.id == id })
+        else { return false }
+        activeRecipe.ingredients[index] = updatedIngredient
+        return true
+    }
+
+    @discardableResult
+    func removeIngredient(id: UUID) -> Bool {
+        guard let index = activeRecipe.ingredients.firstIndex(where: { $0.id == id }) else {
+            return false
+        }
+
+        activeRecipe.ingredients.remove(at: index)
+        if activeShoppingSessionID == nil {
+            shoppingItems.removeAll { $0.ingredient.id == id }
+        }
+        invalidateShoppingPlan()
+        return true
+    }
+
     func setPantryDecision(_ decision: PantryDecision, for ingredientID: UUID) {
         guard let index = activeRecipe.ingredients.firstIndex(where: { $0.id == ingredientID }) else { return }
         activeRecipe.ingredients[index].pantryDecision = decision
@@ -1499,6 +1524,7 @@ final class AppModel {
     }
 
     private func invalidateShoppingPlan(preservingMatches: Bool = true) {
+        matchingGeneration &+= 1
         // Waiting pre-trip matches are a cache. Keep them long enough for the
         // next matching pass to reconcile unchanged inputs selectively. Once
         // a retailer session exists, its snapshot is historical trip state and
@@ -1582,6 +1608,8 @@ final class AppModel {
 
     func startMatching(force: Bool = false) async {
         prepareRetailerSafariWorkflow()
+        matchingGeneration &+= 1
+        let generation = matchingGeneration
         let mayReusePreTripItems = activeShoppingSessionID == nil && !force
         let reusableItems = mayReusePreTripItems ? shoppingItems : []
         if activeShoppingSessionID != nil {
@@ -1595,7 +1623,9 @@ final class AppModel {
         matchStage = "Matching products"
         matchProgress = 0.1
 
-        shoppingItems = await buildShoppingItems(reusing: reusableItems)
+        let matchedItems = await buildShoppingItems(reusing: reusableItems)
+        guard !Task.isCancelled, generation == matchingGeneration else { return }
+        shoppingItems = matchedItems
         withAnimation(.easeOut(duration: 0.35)) {
             matchProgress = 1
         }

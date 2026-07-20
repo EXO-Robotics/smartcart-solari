@@ -13,11 +13,10 @@ struct RecipeReadyView: View {
     @State private var tripSettingsConfirmed = false
     @State private var issueCursor = 0
     @State private var isPreparingProducts = false
+    @State private var pendingIngredientDeletion: PendingIngredientDeletion?
     @AccessibilityFocusState private var focusedIssueID: UUID?
 
     var body: some View {
-        @Bindable var appModel = appModel
-
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
@@ -27,7 +26,7 @@ struct RecipeReadyView: View {
                         mealPrepIngredientSummary
                     } else {
                         recipeHeader
-                        ingredientSection(proxy: proxy, appModel: $appModel)
+                        ingredientSection(proxy: proxy)
                     }
 
                     pantrySummary
@@ -145,6 +144,21 @@ struct RecipeReadyView: View {
                 .presentationDragIndicator(.visible)
             }
         }
+        .confirmationDialog(
+            pendingIngredientDeletion.map {
+                "Remove “\($0.name)” from this recipe?"
+            } ?? "Remove ingredient?",
+            isPresented: Binding(
+                get: { pendingIngredientDeletion != nil },
+                set: { isPresented in
+                    if !isPresented { pendingIngredientDeletion = nil }
+                }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Remove", role: .destructive, action: confirmIngredientDeletion)
+            Button("Cancel", role: .cancel) { pendingIngredientDeletion = nil }
+        }
     }
 
     private var recipeHeader: some View {
@@ -234,7 +248,7 @@ struct RecipeReadyView: View {
     }
 
     @ViewBuilder
-    private func ingredientSection(proxy: ScrollViewProxy, appModel: Bindable<AppModel>) -> some View {
+    private func ingredientSection(proxy: ScrollViewProxy) -> some View {
         VStack(alignment: .leading, spacing: 11) {
             ViewThatFits(in: .horizontal) {
                 HStack {
@@ -249,13 +263,21 @@ struct RecipeReadyView: View {
             }
 
             LazyVStack(spacing: 10) {
-                ForEach(appModel.activeRecipe.ingredients) { $ingredient in
+                ForEach(appModel.activeRecipe.ingredients) { ingredient in
                     RecipeReadyIngredientRow(
-                        ingredient: $ingredient,
+                        ingredient: ingredient,
                         isExpanded: expansionBinding(for: ingredient.id),
+                        onUpdate: { updatedIngredient in
+                            self.appModel.updateIngredient(
+                                id: ingredient.id,
+                                with: updatedIngredient
+                            )
+                        },
                         onDelete: {
-                            self.appModel.activeRecipe.ingredients.removeAll { $0.id == ingredient.id }
-                            expandedIngredientIDs.remove(ingredient.id)
+                            pendingIngredientDeletion = PendingIngredientDeletion(
+                                id: ingredient.id,
+                                name: ingredient.name
+                            )
                         }
                     )
                     .id(ingredient.id)
@@ -557,6 +579,18 @@ struct RecipeReadyView: View {
         expandedIngredientIDs.formUnion(attentionIngredientIDs)
     }
 
+    private func confirmIngredientDeletion() {
+        guard let deletion = pendingIngredientDeletion else { return }
+        pendingIngredientDeletion = nil
+        guard appModel.removeIngredient(id: deletion.id) else { return }
+
+        expandedIngredientIDs.remove(deletion.id)
+        if focusedIssueID == deletion.id {
+            focusedIssueID = nil
+        }
+        issueCursor = 0
+    }
+
     private func focusNextIssue(proxy: ScrollViewProxy) {
         let issues = blockingIngredientIDs
         guard !issues.isEmpty else { return }
@@ -567,6 +601,9 @@ struct RecipeReadyView: View {
             proxy.scrollTo(issueID, anchor: .center)
         }
         DispatchQueue.main.async {
+            guard appModel.activeRecipe.ingredients.contains(where: { $0.id == issueID }) else {
+                return
+            }
             focusedIssueID = issueID
         }
     }
@@ -626,6 +663,11 @@ private enum RecipeReadySheet: String, Identifiable {
     case sourceText
 
     var id: String { rawValue }
+}
+
+private struct PendingIngredientDeletion: Identifiable {
+    let id: UUID
+    let name: String
 }
 
 private struct RecipeReadySummaryRow: View {
@@ -700,8 +742,9 @@ private struct RecipeReadySummaryRow: View {
 
 private struct RecipeReadyIngredientRow: View {
     @Environment(AppModel.self) private var appModel
-    @Binding var ingredient: Ingredient
+    let ingredient: Ingredient
     @Binding var isExpanded: Bool
+    let onUpdate: (Ingredient) -> Void
     let onDelete: () -> Void
     @State private var showSourceEvidence = false
 
@@ -778,11 +821,14 @@ private struct RecipeReadyIngredientRow: View {
 
     private var editor: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Toggle("Include in this shopping trip", isOn: $ingredient.includeInList)
+            Toggle(
+                "Include in this shopping trip",
+                isOn: binding(for: \.includeInList)
+            )
                 .tint(SmartCartTheme.green)
                 .accessibilityValue(ingredient.includeInList ? "Included" : "Excluded")
 
-            TextField("Ingredient name", text: $ingredient.name)
+            TextField("Ingredient name", text: binding(for: \.name))
                 .font(.subheadline.weight(.bold))
                 .textInputAutocapitalization(.words)
                 .smartField()
@@ -820,13 +866,17 @@ private struct RecipeReadyIngredientRow: View {
     }
 
     @ViewBuilder private var measurementFields: some View {
-        TextField("Quantity", value: $ingredient.quantity, format: .number.precision(.fractionLength(0...2)))
+        TextField(
+            "Quantity",
+            value: binding(for: \.quantity),
+            format: .number.precision(.fractionLength(0...2))
+        )
             .keyboardType(.decimalPad)
             .smartField()
-        TextField("Unit", text: $ingredient.unit)
+        TextField("Unit", text: binding(for: \.unit))
             .textInputAutocapitalization(.never)
             .smartField()
-        TextField("Preparation (optional)", text: $ingredient.preparation)
+        TextField("Preparation (optional)", text: binding(for: \.preparation))
             .smartField()
     }
 
@@ -834,7 +884,7 @@ private struct RecipeReadyIngredientRow: View {
         Menu {
             ForEach(IngredientConfidence.allCases) { confidence in
                 Button {
-                    ingredient.confidence = confidence
+                    updateIngredient { $0.confidence = confidence }
                 } label: {
                     Label(confidence.rawValue, systemImage: confidence.symbol)
                 }
@@ -847,7 +897,7 @@ private struct RecipeReadyIngredientRow: View {
         Menu {
             ForEach(GroceryCategory.allCases, id: \.self) { category in
                 Button(category.rawValue) {
-                    ingredient.category = category
+                    updateIngredient { $0.category = category }
                 }
             }
         } label: {
@@ -870,8 +920,10 @@ private struct RecipeReadyIngredientRow: View {
                 Menu {
                     ForEach(Array(candidates.enumerated()), id: \.offset) { _, candidate in
                         Button(Ingredient.quantityText(candidate, unit: ingredient.unit)) {
-                            ingredient.quantity = candidate
-                            ingredient.quantityReviewRequired = false
+                            updateIngredient {
+                                $0.quantity = candidate
+                                $0.quantityReviewRequired = false
+                            }
                         }
                     }
                 } label: {
@@ -881,7 +933,7 @@ private struct RecipeReadyIngredientRow: View {
                 .buttonStyle(.bordered)
             } else {
                 Button("Confirm \(ingredient.displayQuantity)") {
-                    ingredient.quantityReviewRequired = false
+                    updateIngredient { $0.quantityReviewRequired = false }
                 }
                 .buttonStyle(.bordered)
                 .frame(minHeight: 44)
@@ -935,6 +987,23 @@ private struct RecipeReadyIngredientRow: View {
                 .foregroundStyle(SmartCartTheme.walmartBlue)
                 .frame(minHeight: 44)
         }
+    }
+
+    private func binding<Value>(
+        for keyPath: WritableKeyPath<Ingredient, Value>
+    ) -> Binding<Value> {
+        Binding(
+            get: { ingredient[keyPath: keyPath] },
+            set: { newValue in
+                updateIngredient { $0[keyPath: keyPath] = newValue }
+            }
+        )
+    }
+
+    private func updateIngredient(_ update: (inout Ingredient) -> Void) {
+        var updatedIngredient = ingredient
+        update(&updatedIngredient)
+        onUpdate(updatedIngredient)
     }
 
     private var needsAttention: Bool {

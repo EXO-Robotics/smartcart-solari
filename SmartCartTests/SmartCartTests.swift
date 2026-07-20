@@ -3985,6 +3985,187 @@ final class SmartCartTests: XCTestCase {
     }
 
     @MainActor
+    func testRemoveIngredientByStableIDHandlesEveryArrayPositionAndRepeatedRequests() {
+        for targetIndex in 0..<3 {
+            let ingredients = [
+                Ingredient(name: "First", quantity: 1, unit: "cup"),
+                Ingredient(name: "Middle", quantity: 2, unit: "tbsp"),
+                Ingredient(name: "Last", quantity: 3, unit: "tsp")
+            ]
+            let model = AppModel(stateStore: InMemorySmartCartStateStore())
+            XCTAssertTrue(model.beginRecipe(phase2Recipe(ingredients: ingredients)))
+            let removedID = ingredients[targetIndex].id
+
+            XCTAssertTrue(model.removeIngredient(id: removedID))
+            XCTAssertEqual(
+                model.activeRecipe.ingredients.map(\.id),
+                ingredients.map(\.id).filter { $0 != removedID }
+            )
+            XCTAssertFalse(model.removeIngredient(id: removedID))
+        }
+
+        let onlyIngredient = Ingredient(name: "Only ingredient")
+        let onlyModel = AppModel(stateStore: InMemorySmartCartStateStore())
+        XCTAssertTrue(onlyModel.beginRecipe(phase2Recipe(ingredients: [onlyIngredient])))
+        XCTAssertTrue(onlyModel.removeIngredient(id: onlyIngredient.id))
+        XCTAssertTrue(onlyModel.activeRecipe.ingredients.isEmpty)
+        XCTAssertFalse(onlyModel.recipeReadyCanStartShopping)
+        XCTAssertEqual(
+            onlyModel.recipeReadyDisabledExplanation,
+            "Include at least one ingredient that still needs to be purchased."
+        )
+    }
+
+    func testRecipeReadyDeletionUsesParentOwnedStableIDConfirmation() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "SmartCart/Features/Cart/CartView.swift"
+            ),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(source.contains("ForEach(appModel.activeRecipe.ingredients) { ingredient in"))
+        XCTAssertFalse(source.contains("ForEach(appModel.activeRecipe.ingredients) { $ingredient in"))
+        XCTAssertTrue(source.contains("pendingIngredientDeletion = PendingIngredientDeletion"))
+        XCTAssertTrue(source.contains("appModel.removeIngredient(id: deletion.id)"))
+        XCTAssertTrue(source.contains("Remove “\\($0.name)” from this recipe?"))
+        XCTAssertTrue(source.contains("Button(\"Remove\", role: .destructive"))
+    }
+
+    @MainActor
+    func testIngredientRemovalPersistsActiveDraftWithoutMutatingStoredRecipeOrPantryState() throws {
+        let store = InMemorySmartCartStateStore()
+        let removed = Ingredient(name: "Flaky Sea Salt", quantity: 1, unit: "tsp")
+        let survivor = Ingredient(name: "Olive oil", quantity: 2, unit: "tbsp")
+        let model = AppModel(stateStore: store)
+        model.pantryInventory = [
+            PantryInventoryItem(
+                name: "Sea Salt",
+                quantity: 1,
+                unit: "jar",
+                packageCount: 1,
+                packageSize: 12,
+                packageUnit: "oz",
+                remainingAmount: 8,
+                remainingUnit: "oz"
+            )
+        ]
+        XCTAssertTrue(model.beginRecipe(phase2Recipe(ingredients: [removed, survivor])))
+
+        var draft = model.activeRecipe
+        draft.ingredients[0].pantrySuggestion = PantrySuggestion(
+            pantryItemID: try XCTUnwrap(model.pantryInventory.first?.id),
+            pantryItemName: "Sea Salt",
+            coverage: .partial,
+            availableQuantity: 1,
+            availableUnit: "tsp",
+            requiredQuantity: 2,
+            requiredUnit: "tsp",
+            matchScore: 0.95
+        )
+        draft.ingredients[0].pantryDecision = .review
+        draft.ingredients[1].pantryDecision = .buyFull
+        model.activeRecipe = draft
+        let pantrySnapshot = model.pantryInventory
+        let storedSnapshot = try XCTUnwrap(model.recipes.first)
+
+        XCTAssertTrue(model.removeIngredient(id: removed.id))
+        XCTAssertEqual(model.activeRecipe.ingredients.map(\.id), [survivor.id])
+        XCTAssertEqual(model.activeRecipe.ingredients.first?.pantryDecision, .buyFull)
+        XCTAssertEqual(model.pantryInventory, pantrySnapshot)
+        XCTAssertEqual(model.recipes.first, storedSnapshot)
+
+        let restored = AppModel(stateStore: store)
+        XCTAssertEqual(restored.activeRecipe.ingredients.map(\.id), [survivor.id])
+        XCTAssertEqual(restored.recipes.first, storedSnapshot)
+        XCTAssertEqual(restored.pantryInventory, pantrySnapshot)
+    }
+
+    @MainActor
+    func testIngredientRemovalInvalidatesOnlyItsPreTripProductMatch() async throws {
+        let removed = Ingredient(name: "Penne pasta", quantity: 16, unit: "oz")
+        let survivor = Ingredient(name: "Olive oil", quantity: 2, unit: "tbsp")
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        XCTAssertTrue(model.beginRecipe(phase2Recipe(ingredients: [removed, survivor])))
+        await model.startMatching()
+
+        let survivorItem = try model.shoppingItems
+            .first(where: { $0.ingredient.id == survivor.id })
+            .firstUnwrapped()
+        let alternative = try survivorItem.alternatives
+            .first(where: { $0.isExactProductLink })
+            .firstUnwrapped()
+        model.selectAlternative(itemID: survivorItem.id, candidateID: alternative.id)
+        let selectedSurvivor = try model.shoppingItems
+            .first(where: { $0.ingredient.id == survivor.id })
+            .firstUnwrapped()
+        model.preferredProductIDsByIngredient = [:]
+
+        XCTAssertTrue(model.removeIngredient(id: removed.id))
+        XCTAssertEqual(model.shoppingItems.map(\.ingredient.id), [survivor.id])
+        XCTAssertEqual(model.shoppingItems.first?.product.id, selectedSurvivor.product.id)
+
+        await model.startMatching()
+        XCTAssertEqual(model.shoppingItems.map(\.ingredient.id), [survivor.id])
+        XCTAssertEqual(model.shoppingItems.first?.product.id, selectedSurvivor.product.id)
+    }
+
+    @MainActor
+    func testIngredientRemovalNeverMutatesCommittedTripState() async throws {
+        let removed = Ingredient(name: "Penne pasta", quantity: 16, unit: "oz")
+        let survivor = Ingredient(name: "Olive oil", quantity: 2, unit: "tbsp")
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        XCTAssertTrue(model.beginRecipe(phase2Recipe(ingredients: [removed, survivor])))
+        await model.startMatching()
+        model.completeRetailerSetup()
+        XCTAssertTrue(model.startOrResumeRetailerShoppingSession())
+        let sessionID = try XCTUnwrap(model.activeShoppingSessionID)
+        for ingredientID in [removed.id, survivor.id] {
+            model.recordRetailerOutcome(.visited, for: ingredientID, sessionID: sessionID)
+        }
+        let sessionsSnapshot = model.shoppingSessions
+        let savedListsSnapshot = model.savedLists
+        let pantrySnapshot = model.pantryInventory
+        let preferenceSnapshot = model.preferredProductIDsByIngredient
+
+        XCTAssertTrue(model.removeIngredient(id: removed.id))
+        XCTAssertEqual(model.shoppingSessions, sessionsSnapshot)
+        XCTAssertEqual(model.savedLists, savedListsSnapshot)
+        XCTAssertEqual(model.pantryInventory, pantrySnapshot)
+        XCTAssertEqual(model.preferredProductIDsByIngredient, preferenceSnapshot)
+        XCTAssertNil(model.activeShoppingSessionID)
+    }
+
+    @MainActor
+    func testIngredientRemovalRejectsStaleInFlightMatchingResults() async throws {
+        let removed = Ingredient(name: "Penne pasta", quantity: 16, unit: "oz")
+        let survivor = Ingredient(name: "Olive oil", quantity: 2, unit: "tbsp")
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            retailerAdapters: [.walmart: DelayedWalmartGuideAdapter()],
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        XCTAssertTrue(model.beginRecipe(phase2Recipe(ingredients: [removed, survivor])))
+
+        let matchingTask = Task { await model.startMatching() }
+        try await Task.sleep(for: .milliseconds(20))
+        XCTAssertTrue(model.removeIngredient(id: removed.id))
+        await matchingTask.value
+
+        XCTAssertFalse(model.isMatching)
+        XCTAssertFalse(model.shoppingItems.contains { $0.ingredient.id == removed.id })
+    }
+
+    @MainActor
     func testActiveAndCompletedSessionItemsAreNeverReusedOrMutated() async throws {
         let activePasta = Ingredient(name: "Penne pasta", quantity: 16, unit: "oz")
         let activeOil = Ingredient(name: "Olive oil", quantity: 2, unit: "tbsp")
@@ -4686,6 +4867,51 @@ final class SmartCartTests: XCTestCase {
             defaults.removePersistentDomain(forName: name)
         }
         return defaults
+    }
+}
+
+private struct DelayedWalmartGuideAdapter: RetailerGuideAdapter {
+    private let base = DemoWalmartCatalogService()
+
+    var retailer: ShoppingRetailer { .walmart }
+    var retailerID: String { base.retailerID }
+    var capabilities: RetailerCapabilities { base.capabilities }
+
+    func searchProducts(
+        for request: RetailerProductSearchRequest
+    ) async throws -> [RetailerProductRecord] {
+        try await Task.sleep(for: .milliseconds(120))
+        return try await base.searchProducts(for: request)
+    }
+
+    func resolveProduct(
+        retailerProductID: String,
+        storeID: String?
+    ) async throws -> RetailerProductRecord {
+        try await base.resolveProduct(
+            retailerProductID: retailerProductID,
+            storeID: storeID
+        )
+    }
+
+    func refresh(product: RetailerProductRecord) async throws -> RetailerProductRecord {
+        try await base.refresh(product: product)
+    }
+
+    func createHandoff(manifest: ShoppingManifest) async throws -> RetailerHandoff {
+        try await base.createHandoff(manifest: manifest)
+    }
+
+    func searchFallback(
+        for ingredient: Ingredient,
+        storeID: String,
+        preferences: ShoppingPreferences
+    ) -> RetailerProductRecord {
+        base.searchFallback(
+            for: ingredient,
+            storeID: storeID,
+            preferences: preferences
+        )
     }
 }
 
