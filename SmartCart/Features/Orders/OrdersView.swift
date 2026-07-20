@@ -95,7 +95,7 @@ struct ProductExceptionReviewSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AppModel.self) private var appModel
     @State private var activeSheet: ProductExceptionSheetDestination?
-    @State private var sheetReturnFocusItemID: UUID?
+    @State private var shouldOrderByItemID: [UUID: Bool] = [:]
     @AccessibilityFocusState private var focusedExceptionItemID: UUID?
 
     private var unresolvedItems: [ShoppingListItem] {
@@ -125,13 +125,7 @@ struct ProductExceptionReviewSheet: View {
                             ProductExceptionCard(
                                 item: item,
                                 reasons: appModel.matchingExceptionReasons(for: item),
-                                onSearchManually: {
-                                    sheetReturnFocusItemID = item.id
-                                    activeSheet = .manualSearch(
-                                        itemID: item.id,
-                                        url: manualSearchURL(for: item)
-                                    )
-                                },
+                                shouldOrder: orderBinding(for: item.id),
                                 onDecision: {
                                     focusAfterResolving(item.id, previousItems: reviewItems)
                                 }
@@ -144,6 +138,9 @@ struct ProductExceptionReviewSheet: View {
                 .padding(.bottom, 28)
             }
             .smartCartBackground()
+            .safeAreaInset(edge: .bottom) {
+                confirmationBar(for: reviewItems)
+            }
             .navigationTitle("Review product choices")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -158,17 +155,10 @@ struct ProductExceptionReviewSheet: View {
             }
             .accessibilityIdentifier("product-exception-review")
         }
-        .sheet(item: $activeSheet, onDismiss: restoreFocusAfterSheet) { sheet in
+        .sheet(item: $activeSheet) { sheet in
             switch sheet {
             case .allProducts:
                 AllPreparedProductsSheet()
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
-            case .manualSearch(_, let url):
-                RetailerSafariSheet(
-                    url: url,
-                    configuration: appModel.retailerConfiguration
-                )
                     .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
             }
@@ -182,7 +172,7 @@ struct ProductExceptionReviewSheet: View {
             Text("Review \(unresolvedItems.count) product \(unresolvedItems.count == 1 ? "choice" : "choices")")
                 .font(.system(.title2, design: .rounded, weight: .bold))
                 .foregroundStyle(SmartCartTheme.navy)
-            Text("Everything else is ready. SmartCart stopped only where a fallback or product selection needs your approval.")
+            Text("Products default to Order. Turn off only the ingredients you do not want, then continue once.")
                 .font(.subheadline)
                 .foregroundStyle(SmartCartTheme.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
@@ -191,6 +181,51 @@ struct ProductExceptionReviewSheet: View {
         .smartCartCard()
         .smartCartShadow()
         .accessibilityIdentifier("product-exception-header")
+    }
+
+    private func confirmationBar(for reviewItems: [ShoppingListItem]) -> some View {
+        let orderCount = reviewItems.filter { shouldOrderByItemID[$0.id] ?? true }.count
+        let skipCount = reviewItems.count - orderCount
+
+        return VStack(spacing: 8) {
+            HStack {
+                Label("\(orderCount) to order", systemImage: "cart.fill")
+                Spacer()
+                Text("\(skipCount) skipped")
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(SmartCartTheme.secondaryInk)
+
+            Button {
+                let decisions = Dictionary(
+                    uniqueKeysWithValues: reviewItems.map {
+                        ($0.id, shouldOrderByItemID[$0.id] ?? true)
+                    }
+                )
+                guard appModel.applyMatchingExceptionDecisions(decisions) else { return }
+                continueIfResolved()
+            } label: {
+                Label("Continue to products", systemImage: "arrow.right.circle.fill")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .disabled(reviewItems.isEmpty)
+            .accessibilityIdentifier("product-exception-continue")
+            .accessibilityHint("Applies every Order or Skip choice and opens the product list")
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 12)
+        .background(.ultraThinMaterial)
+        .overlay(alignment: .top) {
+            Divider()
+        }
+    }
+
+    private func orderBinding(for itemID: UUID) -> Binding<Bool> {
+        Binding(
+            get: { shouldOrderByItemID[itemID] ?? true },
+            set: { shouldOrderByItemID[itemID] = $0 }
+        )
     }
 
     private func continueIfResolved() {
@@ -229,46 +264,6 @@ struct ProductExceptionReviewSheet: View {
         }
     }
 
-    private func restoreFocusAfterSheet() {
-        continueIfResolved()
-        guard let itemID = sheetReturnFocusItemID,
-              unresolvedItems.contains(where: { $0.id == itemID }) else {
-            sheetReturnFocusItemID = nil
-            return
-        }
-        sheetReturnFocusItemID = nil
-        Task { @MainActor in
-            await Task.yield()
-            focusedExceptionItemID = itemID
-        }
-    }
-
-    private func manualSearchURL(for item: ShoppingListItem) -> URL {
-        let query = item.ingredient.name.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        switch appModel.retailerConfiguration.retailer {
-        case .walmart:
-            var components = URLComponents(string: "https://www.walmart.com/search")
-            components?.queryItems = [URLQueryItem(name: "q", value: query)]
-            return components?.url ?? appModel.retailerURL()
-        case .target:
-            let terms = query
-                .components(separatedBy: CharacterSet.alphanumerics.inverted)
-                .filter { !$0.isEmpty }
-                .map { $0.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? $0 }
-                .joined(separator: "%2B")
-            var components = URLComponents()
-            components.scheme = "https"
-            components.host = "www.target.com"
-            components.percentEncodedPath = "/s/\(terms)"
-            return components.url ?? appModel.retailerURL()
-        case .kroger:
-            var components = URLComponents(string: "https://www.kroger.com/search")
-            components?.queryItems = [URLQueryItem(name: "query", value: query)]
-            return components?.url ?? appModel.retailerURL()
-        }
-    }
-
     private func returnToRecipeReady() {
         dismiss()
         guard appModel.homePath.last != .recipeReady else { return }
@@ -279,14 +274,11 @@ struct ProductExceptionReviewSheet: View {
 
 private enum ProductExceptionSheetDestination: Identifiable {
     case allProducts
-    case manualSearch(itemID: UUID, url: URL)
 
     var id: String {
         switch self {
         case .allProducts:
             "all-products"
-        case .manualSearch(let itemID, _):
-            "manual-search-\(itemID.uuidString)"
         }
     }
 }
@@ -296,21 +288,13 @@ private struct ProductExceptionCard: View {
 
     let item: ShoppingListItem
     let reasons: [String]
-    let onSearchManually: () -> Void
+    @Binding var shouldOrder: Bool
     let onDecision: () -> Void
 
     private var safeAlternatives: [RetailerProductRecord] {
         ReplacementOptionPolicy.resolvedCandidates(from: item.alternatives) { candidate in
             appModel.resolvedReplacementPackageCount(for: item, product: candidate)
         }
-    }
-
-    private var acceptTitle: String {
-        item.product.isExactProductLink ? "Use this product" : "Add Search to Shopping Trip"
-    }
-
-    private var acceptSymbol: String {
-        item.product.isExactProductLink ? "checkmark.circle.fill" : "plus.circle.fill"
     }
 
     var body: some View {
@@ -352,33 +336,25 @@ private struct ProductExceptionCard: View {
                 .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
             }
 
-            Button {
-                guard appModel.acceptMatchingException(itemID: item.id) else { return }
-                onDecision()
-            } label: {
-                Label(acceptTitle, systemImage: acceptSymbol)
-                    .frame(maxWidth: .infinity)
+            Toggle(isOn: $shouldOrder) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(shouldOrder ? "Order" : "Skip")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(SmartCartTheme.navy)
+                    Text(shouldOrder ? "Included in this shopping trip" : "Not included in this shopping trip")
+                        .font(.caption)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
+                }
             }
-            .buttonStyle(PrimaryButtonStyle())
-            .accessibilityIdentifier("product-exception-accept-\(item.id.uuidString)")
-            .accessibilityHint(
-                item.product.isExactProductLink
-                    ? "Uses this product for the current shopping trip"
-                    : "Adds this retailer search as the product page for this ingredient in the current shopping trip"
-            )
+            .toggleStyle(.switch)
+            .tint(SmartCartTheme.green)
+            .padding(11)
+            .background(SmartCartTheme.green.opacity(shouldOrder ? 0.08 : 0.03))
+            .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .accessibilityIdentifier("product-exception-order-toggle-\(item.id.uuidString)")
+            .accessibilityHint("On orders this product. Off skips it. Order is selected by default.")
 
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 9) {
-                    alternativeMenu
-                    manualSearchButton
-                    skipButton
-                }
-                VStack(spacing: 9) {
-                    alternativeMenu
-                    manualSearchButton
-                    skipButton
-                }
-            }
+            alternativeMenu
         }
         .padding(14)
         .background(SmartCartTheme.paper)
@@ -409,29 +385,6 @@ private struct ProductExceptionCard: View {
             .accessibilityIdentifier("product-exception-alternative-\(item.id.uuidString)")
             .accessibilityHint("Shows compatible alternatives with a resolved package quantity")
         }
-    }
-
-    private var manualSearchButton: some View {
-        Button(action: onSearchManually) {
-            Label("Search at \(appModel.retailerConfiguration.displayName)", systemImage: "safari.fill")
-                .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(SecondaryButtonStyle())
-        .accessibilityIdentifier("product-exception-search-\(item.id.uuidString)")
-        .accessibilityHint("Opens the retailer search. Returning does not resolve this product decision.")
-    }
-
-    private var skipButton: some View {
-        Button {
-            guard appModel.skipMatchingException(itemID: item.id) else { return }
-            onDecision()
-        } label: {
-            Label("Skip this item", systemImage: "forward.fill")
-                .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(SecondaryButtonStyle())
-        .accessibilityIdentifier("product-exception-skip-\(item.id.uuidString)")
-        .accessibilityHint("Excludes this item from the current shopping trip")
     }
 
     private func alternativeLabel(_ candidate: RetailerProductRecord) -> String {

@@ -1931,6 +1931,55 @@ final class AppModel {
     }
 
     @discardableResult
+    func applyMatchingExceptionDecisions(_ shouldOrderByItemID: [UUID: Bool]) -> Bool {
+        guard persistenceReady, activeShoppingSessionID == nil else { return false }
+
+        let unresolvedIDs = Set(unresolvedMatchingExceptionItems.map(\.id))
+        guard !unresolvedIDs.isEmpty,
+              Set(shouldOrderByItemID.keys) == unresolvedIDs else {
+            showToast("Product choices changed. Review the updated list and try again.")
+            return false
+        }
+
+        let originalItems = shoppingItems
+        suppressPersistence = true
+
+        for itemID in unresolvedIDs {
+            guard let index = shoppingItems.firstIndex(where: { $0.id == itemID }) else {
+                shoppingItems = originalItems
+                suppressPersistence = false
+                return false
+            }
+            ensureMatchingFingerprints(at: index)
+            shoppingItems[index].reviewedMatchingFingerprint = shoppingItems[index].matchingInputFingerprint
+            if shouldOrderByItemID[itemID] == false {
+                shoppingItems[index].status = .skipped
+            }
+        }
+
+        guard shoppingItems.contains(where: { $0.status == .waiting }) else {
+            shoppingItems = originalItems
+            suppressPersistence = false
+            showToast("Keep at least one shopping item before continuing")
+            return false
+        }
+
+        suppressPersistence = false
+        do {
+            try stateStore.save(stateSnapshot())
+            persistenceIssue = nil
+            return true
+        } catch {
+            suppressPersistence = true
+            shoppingItems = originalItems
+            suppressPersistence = false
+            persistenceIssue = error.localizedDescription
+            showToast("Product choices could not be saved")
+            return false
+        }
+    }
+
+    @discardableResult
     func continueToShoppingTrip() -> Bool {
         guard !shoppingItems.isEmpty else {
             showToast("Match at least one shopping item before continuing")

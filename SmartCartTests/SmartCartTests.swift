@@ -4566,6 +4566,80 @@ final class SmartCartTests: XCTestCase {
     }
 
     @MainActor
+    func testMatchingExceptionDecisionsApplyOrderDefaultsAndSkipsTogether() async throws {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        model.beginRecipe(
+            phase2Recipe(ingredients: [
+                Ingredient(name: "Dragon fruit jam", quantity: 1, unit: "jar"),
+                Ingredient(name: "Garlic", quantity: 2, unit: "count")
+            ])
+        )
+        model.startRetailerGuide(.target)
+        await model.startMatching()
+
+        let exceptions = model.unresolvedMatchingExceptionItems
+        let skippedID = try exceptions.firstUnwrapped().id
+        let decisions = Dictionary(
+            uniqueKeysWithValues: exceptions.map { ($0.id, $0.id != skippedID) }
+        )
+
+        XCTAssertTrue(model.applyMatchingExceptionDecisions(decisions))
+        XCTAssertTrue(model.unresolvedMatchingExceptionItems.isEmpty)
+        XCTAssertEqual(model.shoppingItems.first(where: { $0.id == skippedID })?.status, .skipped)
+        XCTAssertTrue(model.shoppingItems.filter { $0.id != skippedID }.allSatisfy { $0.status == .waiting })
+        XCTAssertTrue(model.continueToShoppingTrip())
+        XCTAssertEqual(model.homePath.last, .shoppingTrip)
+    }
+
+    @MainActor
+    func testMatchingExceptionDecisionBatchRollsBackWhenPersistenceFails() async throws {
+        let store = ControllableSmartCartStateStore()
+        let model = AppModel(
+            stateStore: store,
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        model.beginRecipe(
+            phase2Recipe(ingredients: [
+                Ingredient(name: "Dragon fruit jam", quantity: 1, unit: "jar"),
+                Ingredient(name: "Garlic", quantity: 2, unit: "count")
+            ])
+        )
+        model.startRetailerGuide(.target)
+        await model.startMatching()
+
+        let originalItems = model.shoppingItems
+        let exceptions = model.unresolvedMatchingExceptionItems
+        let decisions = Dictionary(uniqueKeysWithValues: exceptions.map { ($0.id, true) })
+        store.failNextSave = true
+
+        XCTAssertFalse(model.applyMatchingExceptionDecisions(decisions))
+        XCTAssertEqual(model.shoppingItems, originalItems)
+        XCTAssertEqual(model.unresolvedMatchingExceptionItems.map(\.id), exceptions.map(\.id))
+        XCTAssertNotNil(model.persistenceIssue)
+    }
+
+    func testProductExceptionReviewUsesDefaultOrderTogglesAndOneContinueAction() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let ordersSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "SmartCart/Features/Orders/OrdersView.swift"
+            ),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(ordersSource.contains("shouldOrderByItemID[$0.id] ?? true"))
+        XCTAssertTrue(ordersSource.contains("product-exception-order-toggle-"))
+        XCTAssertTrue(ordersSource.contains("product-exception-continue"))
+        XCTAssertFalse(ordersSource.contains("product-exception-search-"))
+        XCTAssertFalse(ordersSource.contains("Search at "))
+    }
+
+    @MainActor
     func testManualProductSelectionSurvivesUnrelatedIngredientEdit() async throws {
         let pasta = Ingredient(name: "Penne pasta", quantity: 8, unit: "oz")
         let oil = Ingredient(name: "Olive oil", quantity: 2, unit: "tbsp")
