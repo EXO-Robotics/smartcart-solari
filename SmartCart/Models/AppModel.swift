@@ -1318,6 +1318,17 @@ final class AppModel {
         var pantryInventory: [PantryInventoryItem]
     }
 
+    private struct IngredientDeletionBackup {
+        var activeRecipe: Recipe
+        var recipes: [Recipe]
+        var shoppingItems: [ShoppingListItem]
+        var activeShoppingSessionID: UUID?
+        var guidedIndex: Int
+        var matchProgress: Double
+        var matchStage: String
+        var isMatching: Bool
+    }
+
     @discardableResult
     private func performAtomicMealPrepTransition(
         _ mutation: () throws -> Void
@@ -1396,12 +1407,209 @@ final class AppModel {
             return false
         }
 
-        activeRecipe.ingredients.remove(at: index)
-        if activeShoppingSessionID == nil {
-            shoppingItems.removeAll { $0.ingredient.id == id }
+        var updatedRecipe = activeRecipe
+        updatedRecipe.ingredients.remove(at: index)
+        rebuildSharedPantryAllocations(in: &updatedRecipe, mode: .deletionRebuild)
+
+        var updatedRecipes = recipes
+        if let recipeIndex = updatedRecipes.firstIndex(where: { $0.id == updatedRecipe.id }) {
+            updatedRecipes[recipeIndex] = updatedRecipe
+        } else {
+            updatedRecipes.insert(updatedRecipe, at: 0)
         }
-        invalidateShoppingPlan()
+
+        let hadActiveSession = activeShoppingSessionID != nil
+        let updatedShoppingItems = hadActiveSession
+            ? []
+            : refreshedPreTripItems(
+                afterRemoving: id,
+                using: updatedRecipe
+            )
+        let backup = IngredientDeletionBackup(
+            activeRecipe: activeRecipe,
+            recipes: recipes,
+            shoppingItems: shoppingItems,
+            activeShoppingSessionID: activeShoppingSessionID,
+            guidedIndex: guidedIndex,
+            matchProgress: matchProgress,
+            matchStage: matchStage,
+            isMatching: isMatching
+        )
+
+        guard persistIngredientDeletion(
+            recipe: updatedRecipe,
+            recipes: updatedRecipes,
+            shoppingItems: updatedShoppingItems,
+            activeShoppingSessionID: hadActiveSession ? nil : activeShoppingSessionID,
+            backup: backup
+        ) else { return false }
+
+        matchingGeneration &+= 1
+        matchProgress = 0
+        matchStage = "Ready to match"
+        isMatching = false
         return true
+    }
+
+    private enum SharedPantryAllocationMode {
+        case deletionRebuild
+        case explicitUseSafeMatches
+    }
+
+    private func rebuildSharedPantryAllocations(
+        in recipe: inout Recipe,
+        mode: SharedPantryAllocationMode
+    ) {
+        var remainingInventory = pantryInventory
+        let multiplier = Double(desiredServings) / Double(max(1, recipe.servings))
+
+        for index in recipe.ingredients.indices {
+            let previousDecision = recipe.ingredients[index].pantryDecision
+            let previousSuggestion = recipe.ingredients[index].pantrySuggestion
+            let requiredQuantity = recipe.ingredients[index].quantity * multiplier
+            let suggestion = PantryMatchingService.bestSuggestion(
+                for: recipe.ingredients[index],
+                requiredQuantity: requiredQuantity,
+                inventory: remainingInventory
+            )
+            recipe.ingredients[index].pantrySuggestion = suggestion
+
+            if mode == .deletionRebuild, previousDecision == .buyFull {
+                recipe.ingredients[index].pantryDecision = .buyFull
+                recipe.ingredients[index].pantryState = .needToBuy
+                continue
+            }
+
+            guard recipe.ingredients[index].includeInList,
+                  let suggestion,
+                  suggestion.coverage != .possible,
+                  suggestion.availableQuantity > 0,
+                  let pantryIndex = remainingInventory.firstIndex(where: {
+                      $0.id == suggestion.pantryItemID
+                  }) else {
+                if previousDecision == .useAvailable || suggestion != nil {
+                    recipe.ingredients[index].pantryDecision = .review
+                    recipe.ingredients[index].pantryState = .alwaysAsk
+                } else {
+                    recipe.ingredients[index].pantryDecision = nil
+                }
+                continue
+            }
+
+            let wasBlockedByExhaustedSharedStock = previousDecision == .review &&
+                previousSuggestion?.pantryItemID == suggestion.pantryItemID &&
+                (previousSuggestion?.availableQuantity ?? .infinity) <= 0.0001
+            let shouldUseAvailable = mode == .explicitUseSafeMatches ||
+                previousDecision == .useAvailable ||
+                wasBlockedByExhaustedSharedStock
+            guard shouldUseAvailable else {
+                recipe.ingredients[index].pantryDecision = .review
+                recipe.ingredients[index].pantryState = .alwaysAsk
+                continue
+            }
+
+            var pantryItem = remainingInventory[pantryIndex]
+            let amountUsed = min(requiredQuantity, suggestion.availableQuantity)
+            guard let pantryAmountUsed = PantryMatchingService.convertedQuantity(
+                amountUsed,
+                from: recipe.ingredients[index].unit,
+                to: pantryItem.remainingUnit
+            ) else {
+                recipe.ingredients[index].pantryDecision = .review
+                recipe.ingredients[index].pantryState = .alwaysAsk
+                continue
+            }
+
+            recipe.ingredients[index].pantryDecision = .useAvailable
+            recipe.ingredients[index].pantryState = .runningLow
+            pantryItem.remainingAmount = max(0, pantryItem.remainingAmount - pantryAmountUsed)
+            remainingInventory[pantryIndex] = pantryItem
+        }
+    }
+
+    private func refreshedPreTripItems(
+        afterRemoving removedIngredientID: UUID,
+        using recipe: Recipe
+    ) -> [ShoppingListItem] {
+        let ingredientsByID = Dictionary(
+            uniqueKeysWithValues: recipe.ingredients.map { ($0.id, $0) }
+        )
+        let multiplier = Double(desiredServings) / Double(max(1, recipe.servings))
+
+        return shoppingItems.compactMap { existing in
+            guard existing.ingredient.id != removedIngredientID,
+                  let ingredient = ingredientsByID[existing.ingredient.id] else { return nil }
+            guard ingredient != existing.ingredient else { return existing }
+
+            let requestedQuantity = PantryMatchingService.quantityToBuy(
+                for: ingredient,
+                requiredQuantity: ingredient.quantity * multiplier
+            )
+            guard requestedQuantity > 0 else { return nil }
+
+            var refreshed = existing
+            refreshed.ingredient = ingredient
+            refreshed.requestedQuantity = Ingredient.quantityText(
+                requestedQuantity,
+                unit: ingredient.unit
+            )
+            refreshed.requestedAmount = requestedQuantity
+            refreshed.purchaseQuantity = PackageMath.packageCount(
+                product: refreshed.product,
+                requestedQuantity: requestedQuantity,
+                requestedUnit: ingredient.unit
+            )
+            refreshed.matchingInputFingerprint = matchingInputFingerprint(
+                contextFingerprint: refreshed.matchingContextFingerprint ?? matchingContextFingerprint(
+                    for: ingredient,
+                    retailerID: selectedRetailer.rawValue,
+                    store: primaryStore,
+                    fulfillmentMethod: fulfillmentMode == .pickup ? .pickup : .delivery,
+                    preferences: preferences
+                ),
+                requestedQuantity: requestedQuantity,
+                pantryDecision: ingredient.pantryDecision,
+                pantryState: ingredient.pantryState
+            )
+            return refreshed
+        }
+    }
+
+    private func persistIngredientDeletion(
+        recipe: Recipe,
+        recipes updatedRecipes: [Recipe],
+        shoppingItems updatedShoppingItems: [ShoppingListItem],
+        activeShoppingSessionID updatedSessionID: UUID?,
+        backup: IngredientDeletionBackup
+    ) -> Bool {
+        guard persistenceReady else { return false }
+
+        suppressPersistence = true
+        activeRecipe = recipe
+        recipes = updatedRecipes
+        shoppingItems = updatedShoppingItems
+        activeShoppingSessionID = updatedSessionID
+        guidedIndex = 0
+        suppressPersistence = false
+
+        do {
+            try stateStore.save(stateSnapshot())
+            persistenceIssue = nil
+            return true
+        } catch {
+            suppressPersistence = true
+            activeRecipe = backup.activeRecipe
+            recipes = backup.recipes
+            shoppingItems = backup.shoppingItems
+            activeShoppingSessionID = backup.activeShoppingSessionID
+            guidedIndex = backup.guidedIndex
+            suppressPersistence = false
+            matchProgress = backup.matchProgress
+            matchStage = backup.matchStage
+            isMatching = backup.isMatching
+            persistenceIssue = error.localizedDescription
+            return false
+        }
     }
 
     func setPantryDecision(_ decision: PantryDecision, for ingredientID: UUID) {
@@ -1533,41 +1741,9 @@ final class AppModel {
 
     func useSafePantrySuggestions() {
         guard !isMealPrepShopping else { return }
-        var remainingInventory = pantryInventory
-
-        // Rebuild safe allocations as one transaction so two recipe rows
-        // cannot both consume the same pantry quantity.
-        for index in activeRecipe.ingredients.indices {
-            let ingredient = activeRecipe.ingredients[index]
-            guard ingredient.includeInList,
-                  ingredient.pantrySuggestion?.coverage != .possible else { continue }
-
-            activeRecipe.ingredients[index].pantryDecision = .buyFull
-            activeRecipe.ingredients[index].pantryState = .needToBuy
-
-            guard let suggestion = PantryMatchingService.bestSuggestion(
-                for: ingredient,
-                requiredQuantity: scaledQuantity(for: ingredient),
-                inventory: remainingInventory
-            ), suggestion.coverage != .possible,
-               suggestion.availableQuantity > 0,
-               let pantryIndex = remainingInventory.firstIndex(where: { $0.id == suggestion.pantryItemID }) else { continue }
-
-            var pantryItem = remainingInventory[pantryIndex]
-
-            let amountUsed = min(scaledQuantity(for: ingredient), suggestion.availableQuantity)
-            guard let pantryAmountUsed = PantryMatchingService.convertedQuantity(
-                amountUsed,
-                from: ingredient.unit,
-                to: pantryItem.remainingUnit
-            ) else { continue }
-
-            activeRecipe.ingredients[index].pantrySuggestion = suggestion
-            activeRecipe.ingredients[index].pantryDecision = .useAvailable
-            activeRecipe.ingredients[index].pantryState = .runningLow
-            pantryItem.remainingAmount = max(0, pantryItem.remainingAmount - pantryAmountUsed)
-            remainingInventory[pantryIndex] = pantryItem
-        }
+        var recipe = activeRecipe
+        rebuildSharedPantryAllocations(in: &recipe, mode: .explicitUseSafeMatches)
+        activeRecipe = recipe
         invalidateShoppingPlan()
     }
 

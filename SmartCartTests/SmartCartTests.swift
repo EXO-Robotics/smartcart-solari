@@ -4415,7 +4415,7 @@ final class SmartCartTests: XCTestCase {
     }
 
     @MainActor
-    func testIngredientRemovalPersistsActiveDraftWithoutMutatingStoredRecipeOrPantryState() throws {
+    func testIngredientRemovalPersistsAndSynchronizesRetainedRecipeWithoutMutatingPantry() throws {
         let store = InMemorySmartCartStateStore()
         let removed = Ingredient(name: "Flaky Sea Salt", quantity: 1, unit: "tsp")
         let survivor = Ingredient(name: "Olive oil", quantity: 2, unit: "tbsp")
@@ -4449,18 +4449,307 @@ final class SmartCartTests: XCTestCase {
         draft.ingredients[1].pantryDecision = .buyFull
         model.activeRecipe = draft
         let pantrySnapshot = model.pantryInventory
-        let storedSnapshot = try XCTUnwrap(model.recipes.first)
 
         XCTAssertTrue(model.removeIngredient(id: removed.id))
         XCTAssertEqual(model.activeRecipe.ingredients.map(\.id), [survivor.id])
         XCTAssertEqual(model.activeRecipe.ingredients.first?.pantryDecision, .buyFull)
         XCTAssertEqual(model.pantryInventory, pantrySnapshot)
-        XCTAssertEqual(model.recipes.first, storedSnapshot)
+        XCTAssertEqual(
+            model.recipes.first(where: { $0.id == model.activeRecipe.id }),
+            model.activeRecipe
+        )
 
         let restored = AppModel(stateStore: store)
         XCTAssertEqual(restored.activeRecipe.ingredients.map(\.id), [survivor.id])
-        XCTAssertEqual(restored.recipes.first, storedSnapshot)
+        XCTAssertEqual(
+            restored.recipes.first(where: { $0.id == restored.activeRecipe.id }),
+            restored.activeRecipe
+        )
         XCTAssertEqual(restored.pantryInventory, pantrySnapshot)
+    }
+
+    @MainActor
+    func testSharedPantryAllocationLetsOnlyOneDuplicateClaimFiniteInventory() {
+        let first = Ingredient(name: "Sea salt", quantity: 1, unit: "tsp")
+        let second = Ingredient(name: "Sea salt", quantity: 1, unit: "tsp")
+        let model = pantryAllocationModel(
+            ingredients: [first, second],
+            remainingAmount: 1
+        )
+
+        model.useSafePantrySuggestions()
+
+        XCTAssertEqual(model.activeRecipe.ingredients[0].pantryDecision, .useAvailable)
+        XCTAssertEqual(model.activeRecipe.ingredients[1].pantryDecision, .review)
+        XCTAssertEqual(
+            model.activeRecipe.ingredients
+                .filter { $0.pantryDecision == .useAvailable }
+                .compactMap(\.pantrySuggestion)
+                .reduce(0) { $0 + $1.availableQuantity },
+            1,
+            accuracy: 0.000_001
+        )
+    }
+
+    @MainActor
+    func testDeletingAllocatedDuplicateReallocatesPantryAndRefreshesPurchaseQuantity() async throws {
+        let first = Ingredient(name: "Sea salt", quantity: 1, unit: "tsp")
+        let second = Ingredient(name: "Sea salt", quantity: 1, unit: "tsp")
+        let model = pantryAllocationModel(
+            ingredients: [first, second],
+            remainingAmount: 1
+        )
+        model.useSafePantrySuggestions()
+        await model.startMatching()
+        XCTAssertEqual(model.shoppingItems.map(\.ingredient.id), [second.id])
+
+        XCTAssertTrue(model.removeIngredient(id: first.id))
+
+        let survivor = try XCTUnwrap(model.activeRecipe.ingredients.first)
+        XCTAssertEqual(survivor.id, second.id)
+        XCTAssertEqual(survivor.pantryDecision, .useAvailable)
+        XCTAssertEqual(model.quantityToBuy(for: survivor), 0, accuracy: 0.000_001)
+        XCTAssertTrue(model.shoppingItems.isEmpty)
+    }
+
+    @MainActor
+    func testDeletingUnallocatedDuplicateDoesNotDisturbValidAllocation() {
+        let first = Ingredient(name: "Sea salt", quantity: 1, unit: "tsp")
+        let second = Ingredient(name: "Sea salt", quantity: 1, unit: "tsp")
+        let model = pantryAllocationModel(
+            ingredients: [first, second],
+            remainingAmount: 1
+        )
+        model.useSafePantrySuggestions()
+        let firstSuggestion = model.activeRecipe.ingredients[0].pantrySuggestion
+
+        XCTAssertTrue(model.removeIngredient(id: second.id))
+
+        XCTAssertEqual(model.activeRecipe.ingredients.first?.id, first.id)
+        XCTAssertEqual(model.activeRecipe.ingredients.first?.pantryDecision, .useAvailable)
+        XCTAssertEqual(model.activeRecipe.ingredients.first?.pantrySuggestion, firstSuggestion)
+    }
+
+    @MainActor
+    func testThreeDuplicateRowsWithPartialInventoryNeverOverallocate() {
+        let ingredients = (0..<3).map { _ in
+            Ingredient(name: "Sea salt", quantity: 1, unit: "tsp")
+        }
+        let model = pantryAllocationModel(
+            ingredients: ingredients,
+            remainingAmount: 1.5
+        )
+
+        model.useSafePantrySuggestions()
+
+        XCTAssertEqual(
+            model.activeRecipe.ingredients.map(\.pantryDecision),
+            [.useAvailable, .useAvailable, .review]
+        )
+        let allocated = model.activeRecipe.ingredients
+            .filter { $0.pantryDecision == .useAvailable }
+            .compactMap(\.pantrySuggestion)
+            .reduce(0) { $0 + min($1.requiredQuantity, $1.availableQuantity) }
+        XCTAssertEqual(allocated, 1.5, accuracy: 0.000_001)
+    }
+
+    @MainActor
+    func testExplicitBuyFullSurvivesSharedPantryRebuild() {
+        let buyFull = Ingredient(
+            name: "Sea salt",
+            quantity: 1,
+            unit: "tsp",
+            pantryDecision: .buyFull
+        )
+        let survivor = Ingredient(name: "Sea salt", quantity: 1, unit: "tsp")
+        let removed = Ingredient(name: "Olive oil", quantity: 1, unit: "tbsp")
+        let model = pantryAllocationModel(
+            ingredients: [buyFull, survivor, removed],
+            remainingAmount: 1
+        )
+        model.activeRecipe.ingredients[0].pantryDecision = .buyFull
+        model.activeRecipe.ingredients[0].pantryState = .needToBuy
+
+        XCTAssertTrue(model.removeIngredient(id: removed.id))
+
+        XCTAssertEqual(model.activeRecipe.ingredients[0].pantryDecision, .buyFull)
+        XCTAssertEqual(model.activeRecipe.ingredients[1].pantryDecision, .review)
+    }
+
+    @MainActor
+    func testDeletingUnrelatedRowDoesNotOptUnreviewedSafeMatchIntoPantryUse() {
+        let unresolved = Ingredient(name: "Sea salt", quantity: 1, unit: "tsp")
+        let removed = Ingredient(name: "Olive oil", quantity: 1, unit: "tbsp")
+        let model = pantryAllocationModel(
+            ingredients: [unresolved, removed],
+            remainingAmount: 1
+        )
+        XCTAssertEqual(model.activeRecipe.ingredients[0].pantryDecision, .review)
+
+        XCTAssertTrue(model.removeIngredient(id: removed.id))
+
+        XCTAssertEqual(model.activeRecipe.ingredients[0].pantryDecision, .review)
+        XCTAssertEqual(model.quantityToBuy(for: model.activeRecipe.ingredients[0]), 1)
+    }
+
+    @MainActor
+    func testExplicitUseSafeMatchesOverridesEarlierBuyFullChoice() {
+        let ingredient = Ingredient(name: "Sea salt", quantity: 1, unit: "tsp")
+        let model = pantryAllocationModel(
+            ingredients: [ingredient],
+            remainingAmount: 1
+        )
+        model.setPantryDecision(.buyFull, for: ingredient.id)
+
+        model.useSafePantrySuggestions()
+
+        XCTAssertEqual(model.activeRecipe.ingredients[0].pantryDecision, .useAvailable)
+        XCTAssertEqual(model.quantityToBuy(for: model.activeRecipe.ingredients[0]), 0)
+    }
+
+    @MainActor
+    func testInvalidUseAvailableBecomesReviewDuringSharedPantryRebuild() {
+        let stale = Ingredient(
+            name: "Garlic",
+            quantity: 1,
+            unit: "clove",
+            pantryState: .runningLow,
+            pantryDecision: .useAvailable
+        )
+        let removed = Ingredient(name: "Olive oil", quantity: 1, unit: "tbsp")
+        let model = pantryAllocationModel(
+            ingredients: [stale, removed],
+            remainingAmount: 1
+        )
+        model.activeRecipe.ingredients[0].pantryDecision = .useAvailable
+        model.activeRecipe.ingredients[0].pantryState = .runningLow
+
+        XCTAssertTrue(model.removeIngredient(id: removed.id))
+
+        XCTAssertNil(model.activeRecipe.ingredients[0].pantrySuggestion)
+        XCTAssertEqual(model.activeRecipe.ingredients[0].pantryDecision, .review)
+        XCTAssertEqual(model.activeRecipe.ingredients[0].pantryState, .alwaysAsk)
+    }
+
+    @MainActor
+    func testPossiblePantryMatchRemainsOptInDuringSharedRebuild() {
+        let oil = Ingredient(name: "Olive oil", quantity: 1, unit: "tbsp")
+        let removed = Ingredient(name: "Garlic", quantity: 1, unit: "clove")
+        let model = AppModel(stateStore: InMemorySmartCartStateStore())
+        model.pantryInventory = [
+            PantryInventoryItem(
+                name: "Olive oil",
+                quantity: 1,
+                unit: "package",
+                remainingAmount: 1,
+                remainingUnit: "package",
+                hasUnknownPackageMass: true
+            )
+        ]
+        XCTAssertTrue(model.beginRecipe(phase2Recipe(ingredients: [oil, removed])))
+
+        XCTAssertTrue(model.removeIngredient(id: removed.id))
+
+        XCTAssertEqual(model.activeRecipe.ingredients[0].pantrySuggestion?.coverage, .possible)
+        XCTAssertEqual(model.activeRecipe.ingredients[0].pantryDecision, .review)
+        XCTAssertEqual(model.quantityToBuy(for: model.activeRecipe.ingredients[0]), 1)
+    }
+
+    @MainActor
+    func testRelaunchPreservesRebuiltSharedPantryAllocations() throws {
+        let store = InMemorySmartCartStateStore()
+        let first = Ingredient(name: "Sea salt", quantity: 1, unit: "tsp")
+        let second = Ingredient(name: "Sea salt", quantity: 1, unit: "tsp")
+        let model = pantryAllocationModel(
+            ingredients: [first, second],
+            remainingAmount: 1,
+            store: store
+        )
+        model.useSafePantrySuggestions()
+        XCTAssertTrue(model.removeIngredient(id: first.id))
+
+        let restored = AppModel(stateStore: store)
+        let survivor = try XCTUnwrap(restored.activeRecipe.ingredients.first)
+        XCTAssertEqual(survivor.id, second.id)
+        XCTAssertEqual(survivor.pantryDecision, .useAvailable)
+        XCTAssertEqual(survivor.pantrySuggestion?.availableQuantity, 1)
+        XCTAssertEqual(
+            restored.recipes.first(where: { $0.id == restored.activeRecipe.id }),
+            restored.activeRecipe
+        )
+    }
+
+    @MainActor
+    func testDeletionReallocationDoesNotMutateCompletedTripSnapshots() async throws {
+        let first = Ingredient(name: "Sea salt", quantity: 1, unit: "tsp")
+        let second = Ingredient(name: "Sea salt", quantity: 1, unit: "tsp")
+        let model = pantryAllocationModel(
+            ingredients: [first, second],
+            remainingAmount: 1
+        )
+        model.useSafePantrySuggestions()
+        await model.startMatching()
+        model.completeRetailerSetup()
+        XCTAssertTrue(model.startOrResumeRetailerShoppingSession())
+        let sessionID = try XCTUnwrap(model.activeShoppingSessionID)
+        let sessionsBefore = model.shoppingSessions
+        let listsBefore = model.savedLists
+
+        XCTAssertTrue(model.removeIngredient(id: first.id))
+
+        XCTAssertEqual(model.shoppingSessions, sessionsBefore)
+        XCTAssertEqual(model.savedLists, listsBefore)
+        XCTAssertEqual(model.shoppingSession(id: sessionID), sessionsBefore.first { $0.id == sessionID })
+    }
+
+    @MainActor
+    func testDeletionPersistenceFailureRollsBackRecipeAllocationAndPreTripState() async throws {
+        let store = ControllableSmartCartStateStore()
+        let first = Ingredient(name: "Sea salt", quantity: 1, unit: "tsp")
+        let second = Ingredient(name: "Sea salt", quantity: 1, unit: "tsp")
+        let model = pantryAllocationModel(
+            ingredients: [first, second],
+            remainingAmount: 1,
+            store: store
+        )
+        model.useSafePantrySuggestions()
+        await model.startMatching()
+        let activeBefore = model.activeRecipe
+        let recipesBefore = model.recipes
+        let itemsBefore = model.shoppingItems
+        let persistedBefore = store.state
+        store.failNextSave = true
+
+        XCTAssertFalse(model.removeIngredient(id: first.id))
+
+        XCTAssertEqual(model.activeRecipe, activeBefore)
+        XCTAssertEqual(model.recipes, recipesBefore)
+        XCTAssertEqual(model.shoppingItems, itemsBefore)
+        XCTAssertEqual(store.state, persistedBefore)
+        XCTAssertNotNil(model.persistenceIssue)
+    }
+
+    @MainActor
+    private func pantryAllocationModel(
+        ingredients: [Ingredient],
+        remainingAmount: Double,
+        store: any SmartCartStateStoring = InMemorySmartCartStateStore()
+    ) -> AppModel {
+        let model = AppModel(
+            stateStore: store,
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        model.pantryInventory = [
+            PantryInventoryItem(
+                name: "Sea salt",
+                quantity: 1,
+                unit: "tsp",
+                remainingAmount: remainingAmount,
+                remainingUnit: "tsp"
+            )
+        ]
+        XCTAssertTrue(model.beginRecipe(phase2Recipe(ingredients: ingredients)))
+        return model
     }
 
     @MainActor
