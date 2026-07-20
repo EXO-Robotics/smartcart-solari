@@ -145,8 +145,10 @@ In addition to the 25-recipe inventory, run these named acceptance checks:
 5. Confirm that instruction text never becomes a grocery, including text from
    an adjacent column or disconnected card region, and that a failed import
    never manufactures fallback ingredients. If a proven instruction suffix is
-   removed from an otherwise valid ingredient, verify the original line and
-   removal reason remain reviewable.
+   removed from an otherwise valid ingredient, verify the original line remains
+   reviewable in Recipe Ready. Verify the persisted removed suffix and reason
+   through direct XCTest/debug inspection; they are not rendered in the
+   shipping disclosure.
 6. Adjust servings and verify range/package quantities remain understandable.
 7. Review pantry suggestions. Test `use available`, `buy remainder`, and
    `buy full`; no suggestion may silently remove a purchase.

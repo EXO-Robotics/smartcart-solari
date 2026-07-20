@@ -106,9 +106,11 @@ shopping-flow matrix below:
 3. With zero, one, and multiple pending trips, verify Home renders zero or one
    **Shopping Trips** section, never separate primary and secondary trip
    sections. Every pending trip must remain reachable.
-4. Verify Recipes shows only Saved Recipes membership, with title/ingredient
-   search and the pull-up **Recent Recipes** drawer. **Try a Sample** must use
-   its dedicated sample catalog and must not populate the saved library.
+4. Verify the primary Recipes library shows only Saved Recipes membership, with
+   title/ingredient search and the pull-up **Recent Recipes** drawer. The drawer
+   may show a retained unsaved recipe after an intentional **Shop Again** open.
+   **Try a Sample** must use its dedicated sample catalog and must not populate
+   the saved library.
 5. Import a new non-sample recipe, verify it is saved by default, and complete
    a Shopping Trip so **Shop Again** remains a reachable historical route.
    Remove it from Saved Recipes, relaunch, and verify its retained recipe
