@@ -29,7 +29,6 @@ struct HomeView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
                         header
-                        shoppingTripStatusSection
                         startShoppingSection
                     }
                     .padding(.horizontal, 20)
@@ -98,13 +97,6 @@ struct HomeView: View {
             }
         }
         .padding(.top, 8)
-    }
-
-    @ViewBuilder
-    private var shoppingTripStatusSection: some View {
-        if let pantryUpdateShoppingSession {
-            pantryUpdateStatusCard(pantryUpdateShoppingSession)
-        }
     }
 
     private var startShoppingSection: some View {
@@ -265,61 +257,6 @@ struct HomeView: View {
 
     private var pausedShoppingSessions: [ShoppingSession] {
         appModel.pendingShoppingSessions.filter(\.isReusable)
-    }
-
-    private var pantryUpdateShoppingSession: ShoppingSession? {
-        appModel.pendingShoppingSessions.first(where: \.hasPendingPantryUpdateReminder)
-    }
-
-    private func pantryUpdateStatusCard(_ session: ShoppingSession) -> some View {
-        Button {
-            guard appModel.openShoppingSession(session.id) else { return }
-            appModel.startShoppingReconciliation()
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.headline.bold())
-                    .foregroundStyle(SmartCartTheme.green)
-                    .frame(width: 42, height: 42)
-                    .background(homeIconBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
-                    .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Finish your last trip")
-                        .font(.headline)
-                        .foregroundStyle(homeInk)
-                    Text(pantryUpdateStatusDetail(session))
-                        .font(.caption)
-                        .foregroundStyle(homeSecondaryInk)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer(minLength: 4)
-
-                Image(systemName: "chevron.right")
-                    .font(.caption.bold())
-                    .foregroundStyle(homeSecondaryInk)
-                    .accessibilityHidden(true)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .frame(maxWidth: .infinity, minHeight: 76, alignment: .leading)
-            .background {
-                HomeGlassSurface(radius: 20, darkness: 0.40)
-            }
-            .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        }
-        .buttonStyle(PressableButtonStyle())
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("home-finish-last-trip")
-        .accessibilityLabel("Finish your last trip, \(pantryUpdateStatusDetail(session))")
-    }
-
-    private func pantryUpdateStatusDetail(_ session: ShoppingSession) -> String {
-        let count = session.items.count
-        return "Review \(count) trip item\(count == 1 ? "" : "s") and update pantry"
     }
 
     private func continueShoppingTripsDrawer(

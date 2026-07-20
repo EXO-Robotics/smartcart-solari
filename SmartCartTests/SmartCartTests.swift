@@ -4377,11 +4377,9 @@ final class SmartCartTests: XCTestCase {
         )
         let body = homeSource[bodyStart..<headerStart]
         let headerIndex = try XCTUnwrap(body.range(of: "header")?.lowerBound)
-        let statusIndex = try XCTUnwrap(body.range(of: "shoppingTripStatusSection")?.lowerBound)
         let startIndex = try XCTUnwrap(body.range(of: "startShoppingSection")?.lowerBound)
 
-        XCTAssertLessThan(headerIndex, statusIndex)
-        XCTAssertLessThan(statusIndex, startIndex)
+        XCTAssertLessThan(headerIndex, startIndex)
         XCTAssertTrue(homeSource.contains("SmartCartFoodBackground()"))
         XCTAssertTrue(homeSource.contains("@Environment(\\.colorScheme) private var colorScheme"))
         XCTAssertTrue(homeSource.contains("colorScheme == .light ? SmartCartTheme.ink : .white"))
@@ -4434,7 +4432,6 @@ final class SmartCartTests: XCTestCase {
         XCTAssertLessThan(pasteIndex, mealPrepIndex)
 
         XCTAssertTrue(homeSource.contains("appModel.pendingShoppingSessions.filter(\\.isReusable)"))
-        XCTAssertTrue(homeSource.contains("appModel.pendingShoppingSessions.first(where: \\.hasPendingPantryUpdateReminder)"))
         XCTAssertTrue(homeSource.contains("let hasPausedTrips = !pausedShoppingSessions.isEmpty"))
         XCTAssertTrue(homeSource.contains("if hasPausedTrips {"))
         XCTAssertTrue(homeSource.contains("continueShoppingTripsDrawer("))
@@ -4445,7 +4442,10 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(homeSource.contains("Label(\"Continue Shopping\", systemImage: \"cart.badge.clock\")"))
         XCTAssertTrue(homeSource.contains("ForEach(pausedShoppingSessions)"))
         XCTAssertTrue(homeSource.contains("appModel.openShoppingSession(session.id)"))
-        XCTAssertTrue(homeSource.contains("appModel.startShoppingReconciliation()"))
+        XCTAssertFalse(homeSource.contains("hasPendingPantryUpdateReminder"))
+        XCTAssertFalse(homeSource.contains("home-finish-last-trip"))
+        XCTAssertFalse(homeSource.contains("Finish your last trip"))
+        XCTAssertFalse(homeSource.contains("appModel.startShoppingReconciliation()"))
         XCTAssertTrue(homeSource.contains("@State private var pendingDiscardSession: ShoppingSession?"))
         XCTAssertTrue(homeSource.contains("pendingDiscardSession = session"))
         XCTAssertTrue(homeSource.contains("\"Clear this paused order?\""))
