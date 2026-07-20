@@ -4,11 +4,17 @@ import UIKit
 struct HomeView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var pendingDiscardSession: ShoppingSession?
     @State private var shoppingTripsExpanded = false
     @GestureState private var shoppingTripsDrag: CGFloat = 0
 
     private let collapsedShoppingTripsDrawerHeight: CGFloat = 92
+    private let workspaceTransition: Namespace.ID?
+
+    init(workspaceTransition: Namespace.ID? = nil) {
+        self.workspaceTransition = workspaceTransition
+    }
 
     var body: some View {
         GeometryReader { geometry in
@@ -42,7 +48,7 @@ struct HomeView: View {
                     )
                     .offset(y: shoppingTripsDrawerOffset(collapsedOffset: collapsedOffset))
                     .animation(
-                        .spring(response: 0.42, dampingFraction: 0.86),
+                        reduceMotion ? nil : SmartCartMotion.signature,
                         value: shoppingTripsExpanded
                     )
                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -114,8 +120,9 @@ struct HomeView: View {
         }
     }
 
+    @ViewBuilder
     private var startShoppingPanel: some View {
-        VStack(spacing: 14) {
+        let panel = VStack(spacing: 14) {
             Image(systemName: "camera")
                 .font(.system(size: 31, weight: .medium))
                 .foregroundStyle(homeInk)
@@ -177,6 +184,15 @@ struct HomeView: View {
         .padding(.bottom, 24)
         .background {
             HomeGlassSurface(radius: 30, darkness: 0.16)
+        }
+
+        if let workspaceTransition {
+            panel.smartCartTransitionSource(
+                id: SmartCartTransitionID.recipeWorkspace,
+                in: workspaceTransition
+            )
+        } else {
+            panel
         }
     }
 

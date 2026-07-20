@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ShoppingReconciliationView: View {
     @Environment(AppModel.self) private var appModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let sessionID: UUID
 
@@ -24,6 +25,7 @@ struct ShoppingReconciliationView: View {
             VStack(alignment: .leading, spacing: 20) {
                 if let committed = session?.reconciliation {
                     committedView(committed)
+                        .transition(.scale(scale: 0.94).combined(with: .opacity))
                 } else if let session {
                     WorkflowHeader(
                         step: 1,
@@ -83,6 +85,11 @@ struct ShoppingReconciliationView: View {
             .presentationDragIndicator(.visible)
         }
         .onAppear(perform: restoreDraftDefaults)
+        .animation(
+            reduceMotion ? nil : SmartCartMotion.signature,
+            value: session?.isCommitted
+        )
+        .sensoryFeedback(.success, trigger: session?.isCommitted)
     }
 
     private var outcomeChoices: some View {
@@ -309,6 +316,7 @@ struct ShoppingReconciliationView: View {
             Image(systemName: "checkmark.seal.fill")
                 .font(.system(size: 58))
                 .foregroundStyle(SmartCartTheme.green)
+                .symbolEffect(.bounce, value: record.committedAt)
             Text(record.outcome == .didNotShop ? "Pantry left unchanged" : "Pantry updated")
                 .font(.system(size: 27, weight: .bold, design: .rounded))
                 .foregroundStyle(SmartCartTheme.navy)
@@ -337,14 +345,16 @@ struct ShoppingReconciliationView: View {
     }
 
     private func choose(_ candidate: ShoppingTripOutcome) {
-        outcome = candidate
-        purchasedItemIDs = appModel.defaultPurchasedItemIDs(for: candidate, sessionID: sessionID)
-        substitutions = Dictionary(
-            uniqueKeysWithValues: substitutions
-                .filter { purchasedItemIDs.contains($0.key) }
-                .map { ($0.key, $0.value) }
-        )
-        errorMessage = nil
+        withAnimation(reduceMotion ? nil : SmartCartMotion.standard) {
+            outcome = candidate
+            purchasedItemIDs = appModel.defaultPurchasedItemIDs(for: candidate, sessionID: sessionID)
+            substitutions = Dictionary(
+                uniqueKeysWithValues: substitutions
+                    .filter { purchasedItemIDs.contains($0.key) }
+                    .map { ($0.key, $0.value) }
+            )
+            errorMessage = nil
+        }
         persistDraft()
     }
 

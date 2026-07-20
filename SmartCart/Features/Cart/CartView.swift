@@ -7,6 +7,7 @@ import UIKit
 struct RecipeReadyView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var expandedIngredientIDs: Set<UUID> = []
     @State private var activeSheet: RecipeReadySheet?
     @State private var continueAfterRetailerSetup = false
@@ -159,6 +160,19 @@ struct RecipeReadyView: View {
             Button("Remove", role: .destructive, action: confirmIngredientDeletion)
             Button("Cancel", role: .cancel) { pendingIngredientDeletion = nil }
         }
+        .overlay {
+            if isPreparingProducts {
+                ShoppingLaunchOverlay(
+                    stage: appModel.matchStage,
+                    progress: appModel.matchProgress
+                )
+                .transition(.scale(scale: 0.96).combined(with: .opacity))
+            }
+        }
+        .animation(
+            reduceMotion ? nil : SmartCartMotion.signature,
+            value: isPreparingProducts
+        )
     }
 
     private var recipeHeader: some View {
@@ -657,6 +671,63 @@ struct RecipeReadyView: View {
     }
 }
 
+private struct ShoppingLaunchOverlay: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var cartPulse = false
+
+    let stage: String
+    let progress: Double
+
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .overlay(Color.black.opacity(0.32))
+                .ignoresSafeArea()
+
+            VStack(spacing: 18) {
+                Image(systemName: "cart.fill.badge.plus")
+                    .font(.system(size: 54, weight: .bold))
+                    .foregroundStyle(SmartCartTheme.green)
+                    .shadow(color: SmartCartTheme.mintGlow, radius: 18)
+                    .scaleEffect(cartPulse ? 1.06 : 0.96)
+
+                VStack(spacing: 6) {
+                    Text("Launching Shopping Trip")
+                        .font(.system(.title2, design: .rounded, weight: .bold))
+                        .foregroundStyle(.white)
+                    Text(stage)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.76))
+                        .contentTransition(.numericText())
+                }
+
+                ProgressView(value: max(0.06, progress))
+                    .tint(SmartCartTheme.green)
+                    .frame(maxWidth: 240)
+            }
+            .padding(.horizontal, 28)
+            .padding(.vertical, 34)
+            .background(Color.black.opacity(0.50))
+            .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 30, style: .continuous)
+                    .stroke(Color.white.opacity(0.18), lineWidth: 1)
+            }
+            .shadow(color: .black.opacity(0.34), radius: 24, y: 12)
+        }
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
+                cartPulse = true
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Launching Shopping Trip, \(stage)")
+        .accessibilityIdentifier("shopping-launch-transition")
+    }
+}
+
 /// Kept so schema-era navigation values and older tests can still construct
 /// the legacy destination while the live funnel enters Recipe Ready directly.
 struct IngredientReviewView: View {
@@ -1039,6 +1110,7 @@ private struct RecipeReadyIngredientRow: View {
 
 struct RecipesView: View {
     @Environment(AppModel.self) private var appModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var searchText = ""
     @State private var pendingRecipeRemoval: Recipe?
     @State private var recentDrawerExpanded = {
@@ -1061,7 +1133,7 @@ struct RecipesView: View {
                 recentRecipesDrawer(height: drawerHeight, collapsedOffset: collapsedOffset)
                     .offset(y: recentDrawerOffset(collapsedOffset: collapsedOffset))
                     .animation(
-                        .spring(response: 0.42, dampingFraction: 0.86),
+                        reduceMotion ? nil : SmartCartMotion.signature,
                         value: recentDrawerExpanded
                     )
             }

@@ -112,6 +112,19 @@ enum SmartCartTheme {
 
 }
 
+/// One restrained motion language for the app: tactile controls, workspace
+/// changes, and the small number of signature transformations.
+enum SmartCartMotion {
+    static let quick = Animation.easeOut(duration: 0.12)
+    static let standard = Animation.spring(response: 0.30, dampingFraction: 0.88)
+    static let signature = Animation.spring(response: 0.52, dampingFraction: 0.86)
+}
+
+enum SmartCartTransitionID: Hashable {
+    case recipeWorkspace
+    case shoppingWorkspace
+}
+
 /// Viewport-fixed wood texture. Scroll views move over this image instead of
 /// stretching or repeating it, which keeps the grain stable during scrolling.
 struct WoodGrainBackground: View {
@@ -314,14 +327,64 @@ extension View {
             .textCase(.uppercase)
             .foregroundStyle(color)
     }
+
+    /// Uses the platform's spatial navigation transition on iOS 18 and newer.
+    /// Earlier systems retain the native NavigationStack push animation.
+    func smartCartTransitionSource<ID: Hashable>(
+        id: ID,
+        in namespace: Namespace.ID
+    ) -> some View {
+        modifier(SmartCartTransitionSourceModifier(id: id, namespace: namespace))
+    }
+
+    func smartCartNavigationZoom<ID: Hashable>(
+        sourceID: ID,
+        in namespace: Namespace.ID
+    ) -> some View {
+        modifier(SmartCartNavigationZoomModifier(sourceID: sourceID, namespace: namespace))
+    }
+}
+
+private struct SmartCartTransitionSourceModifier<ID: Hashable>: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    let id: ID
+    let namespace: Namespace.ID
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *), !reduceMotion {
+            content.matchedTransitionSource(id: id, in: namespace)
+        } else {
+            content
+        }
+    }
+}
+
+private struct SmartCartNavigationZoomModifier<ID: Hashable>: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    let sourceID: ID
+    let namespace: Namespace.ID
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *), !reduceMotion {
+            content.navigationTransition(.zoom(sourceID: sourceID, in: namespace))
+        } else {
+            content
+        }
+    }
 }
 
 struct PressableButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.975 : 1)
             .opacity(configuration.isPressed ? 0.88 : 1)
-            .animation(.spring(response: 0.24, dampingFraction: 0.78), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : SmartCartMotion.quick, value: configuration.isPressed)
     }
 }
 

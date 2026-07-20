@@ -8,6 +8,7 @@ import UIKit
 struct RecipeComposerSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AppModel.self) private var appModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let initialMethod: ImportMethod
 
@@ -301,7 +302,7 @@ struct RecipeComposerSheet: View {
                 HStack(spacing: 8) {
                     ForEach(visibleImportMethods) { method in
                         Button {
-                            withAnimation(.easeInOut(duration: 0.2)) {
+                            withAnimation(reduceMotion ? nil : SmartCartMotion.standard) {
                                 switchImportMethod(to: method)
                             }
                         } label: {
@@ -550,6 +551,10 @@ struct RecipeComposerSheet: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 210)
                 .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+                .overlay {
+                    RecipeScanningLine(isActive: isProcessing)
+                        .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+                }
                 .overlay(alignment: .bottomLeading) {
                     if isProcessing {
                         Label(processingMessage, systemImage: "text.viewfinder")
@@ -561,6 +566,7 @@ struct RecipeComposerSheet: View {
                             .clipShape(Capsule())
                             .overlay { Capsule().stroke(SmartCartTheme.border, lineWidth: 1) }
                             .padding(10)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                 }
                 .overlay(alignment: .topTrailing) {
@@ -639,7 +645,7 @@ struct RecipeComposerSheet: View {
         VStack(alignment: .leading, spacing: 11) {
             SectionHeader(title: "Detected ingredients", subtitle: "You’ll confirm these on the next screen")
 
-            ForEach(recipe.ingredients.prefix(6)) { ingredient in
+            ForEach(Array(recipe.ingredients.prefix(6).enumerated()), id: \.element.id) { index, ingredient in
                 HStack(spacing: 11) {
                     Image(systemName: ingredient.category.symbol)
                         .font(.subheadline.bold())
@@ -671,6 +677,11 @@ struct RecipeComposerSheet: View {
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .stroke(SmartCartTheme.border, lineWidth: 1)
                 }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .animation(
+                    reduceMotion ? nil : SmartCartMotion.standard.delay(Double(index) * 0.045),
+                    value: recognizedImageSetID
+                )
             }
 
             if recipe.ingredients.count > 6 {
@@ -680,6 +691,10 @@ struct RecipeComposerSheet: View {
                     .padding(.leading, 4)
             }
         }
+        .animation(
+            reduceMotion ? nil : SmartCartMotion.standard,
+            value: recipe.ingredients.map(\.id)
+        )
     }
 
     private func currentImportReport(for recipe: Recipe) -> RecipeImportReport {
@@ -1038,6 +1053,44 @@ struct RecipeComposerSheet: View {
         // Reuse the parser's existing usable-state boundary. Any ingredient-level
         // blockers remain visible and actionable on Recipe Ready.
         !recipe.ingredients.isEmpty
+    }
+}
+
+private struct RecipeScanningLine: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var atBottom = false
+
+    let isActive: Bool
+
+    var body: some View {
+        GeometryReader { geometry in
+            if isActive {
+                Rectangle()
+                    .fill(
+                        LinearGradient(
+                            colors: [.clear, SmartCartTheme.green, .clear],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .frame(height: 2)
+                    .shadow(color: SmartCartTheme.green, radius: 7)
+                    .offset(
+                        y: reduceMotion
+                            ? geometry.size.height * 0.5
+                            : (atBottom ? geometry.size.height - 8 : 8)
+                    )
+                    .opacity(reduceMotion ? 0.72 : 1)
+                    .onAppear {
+                        guard !reduceMotion else { return }
+                        withAnimation(.linear(duration: 1.45).repeatForever(autoreverses: true)) {
+                            atBottom = true
+                        }
+                    }
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 

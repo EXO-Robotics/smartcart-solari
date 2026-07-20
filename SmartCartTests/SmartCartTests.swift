@@ -4710,6 +4710,66 @@ final class SmartCartTests: XCTestCase {
         XCTAssertFalse(recipesSource.contains("private var currentListCard"))
     }
 
+    func testPremiumMotionUsesNativeWorkspaceTransitionsAndReduceMotionFallbacks() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let themeSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "SmartCart/Theme/SmartCartTheme.swift"
+            ),
+            encoding: .utf8
+        )
+        let rootSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("SmartCart/RootView.swift"),
+            encoding: .utf8
+        )
+        let homeSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "SmartCart/Features/Home/HomeView.swift"
+            ),
+            encoding: .utf8
+        )
+        let composerSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "SmartCart/Features/Home/RecipeComposerSheet.swift"
+            ),
+            encoding: .utf8
+        )
+        let cartSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "SmartCart/Features/Cart/CartView.swift"
+            ),
+            encoding: .utf8
+        )
+        let reconciliationSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "SmartCart/Features/Orders/ShoppingReconciliationView.swift"
+            ),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(themeSource.contains("enum SmartCartMotion"))
+        XCTAssertTrue(themeSource.contains("static let quick = Animation.easeOut(duration: 0.12)"))
+        XCTAssertTrue(themeSource.contains("static let standard = Animation.spring(response: 0.30"))
+        XCTAssertTrue(themeSource.contains("static let signature = Animation.spring(response: 0.52"))
+        XCTAssertTrue(themeSource.contains("@Environment(\\.accessibilityReduceMotion)"))
+        XCTAssertTrue(themeSource.contains("content.navigationTransition(.zoom"))
+        XCTAssertTrue(themeSource.contains("content.matchedTransitionSource"))
+        XCTAssertTrue(rootSource.contains("@Namespace private var workspaceTransition"))
+        XCTAssertTrue(rootSource.contains("SmartCartTransitionID.recipeWorkspace"))
+        XCTAssertTrue(rootSource.contains("SmartCartTransitionID.shoppingWorkspace"))
+        XCTAssertTrue(homeSource.contains("SmartCartMotion.signature"))
+        XCTAssertTrue(composerSource.contains("RecipeScanningLine(isActive: isProcessing)"))
+        XCTAssertTrue(composerSource.contains("repeatForever(autoreverses: true)"))
+        XCTAssertTrue(composerSource.contains("Double(index) * 0.045"))
+        XCTAssertTrue(cartSource.contains("ShoppingLaunchOverlay("))
+        XCTAssertTrue(cartSource.contains("Launching Shopping Trip"))
+        XCTAssertTrue(cartSource.contains("accessibilityIdentifier(\"shopping-launch-transition\")"))
+        XCTAssertTrue(reconciliationSource.contains(".sensoryFeedback(.success"))
+        XCTAssertTrue(reconciliationSource.contains(".symbolEffect(.bounce"))
+    }
+
     @MainActor
     func testAllHighConfidenceExactMatchesHaveNoExceptions() async throws {
         let model = AppModel(

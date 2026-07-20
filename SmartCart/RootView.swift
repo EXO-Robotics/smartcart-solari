@@ -4,6 +4,7 @@ struct RootView: View {
     @Environment(AppModel.self) private var appModel
     @AppStorage("smartcart.hasSeenJourneyIntro") private var hasSeenJourneyIntro = false
     @State private var showIntro = false
+    @Namespace private var workspaceTransition
 
     var body: some View {
         @Bindable var appModel = appModel
@@ -14,7 +15,7 @@ struct RootView: View {
 
             TabView(selection: $appModel.selectedTab) {
                 NavigationStack(path: $appModel.homePath) {
-                    HomeView()
+                    HomeView(workspaceTransition: workspaceTransition)
                         .navigationDestination(for: SmartRoute.self) { route in
                             destination(for: route)
                         }
@@ -102,8 +103,20 @@ struct RootView: View {
             MealPrepDashboardView()
         case .recipeReady:
             RecipeReadyView()
+                .smartCartNavigationZoom(
+                    sourceID: SmartCartTransitionID.recipeWorkspace,
+                    in: workspaceTransition
+                )
+                .smartCartTransitionSource(
+                    id: SmartCartTransitionID.shoppingWorkspace,
+                    in: workspaceTransition
+                )
         case .shoppingTrip:
             RetailerSafariHandoffView()
+                .smartCartNavigationZoom(
+                    sourceID: SmartCartTransitionID.shoppingWorkspace,
+                    in: workspaceTransition
+                )
         case .ingredientReview:
             IngredientReviewView()
         case .servingAdjustment:
@@ -120,6 +133,10 @@ struct RootView: View {
             ShoppingListReviewView()
         case .guidedShopping:
             RetailerSafariHandoffView()
+                .smartCartNavigationZoom(
+                    sourceID: SmartCartTransitionID.shoppingWorkspace,
+                    in: workspaceTransition
+                )
         case .shoppingReconciliation(let sessionID):
             ShoppingReconciliationView(sessionID: sessionID)
         }
