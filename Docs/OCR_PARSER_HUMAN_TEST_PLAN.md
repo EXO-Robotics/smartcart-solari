@@ -7,19 +7,22 @@ This is the first hands-on acceptance run for SmartCart's critical path:
 It is intentionally small enough to finish with real devices before the larger
 promotion corpus in `PHOTO_PARSER_RELEASE_GATES.md`. Passing this run is
 necessary but does not by itself permit a closed human beta. The eligible
-development suite, the separately invoked frozen held-out aggregate gate, this
-human
-walkthrough, and the physical-device/accessibility checks must all pass on the
-same candidate before a `GO`.
+authoritative-path suite, this human walkthrough, and the
+physical-device/accessibility checks must all pass on the same candidate before
+a closed-beta application `GO`. Contextual-filter promotion has a separate
+frozen held-out gate.
 
 ## Current candidate status
 
-**Closed-beta verdict: NO-GO.** The development-focused gates are green, but
-the frozen held-out aggregate selector failed on the latest frozen code
-candidate with exit 65. Case-level output remains suppressed. The contextual
-classifier remains a `DEBUG` shadow comparison; the legacy `RecipeParser` path is still the
-authoritative app parser, and contextual classification is not a production
-default.
+**Closed-beta application verdict: NO-GO.** The eligible authoritative-path
+tests are green, but the required live and physical/accessibility walkthroughs
+are incomplete.
+
+**Contextual-filter promotion verdict: NO-GO.** The frozen held-out aggregate
+selector failed on the latest frozen code candidate with exit 65. Case-level
+output remains suppressed. The contextual classifier remains a `DEBUG` shadow
+comparison; the legacy `RecipeParser` path is still the authoritative app
+parser, and contextual classification is not a production default.
 
 ## Automated evidence boundary
 
@@ -202,12 +205,17 @@ visible crop.
 
 ## Closed-beta acceptance gates
 
-Automated prerequisites on the exact candidate:
+Closed-beta application automated prerequisites on the exact candidate:
 
 - eligible development suite: `PASS`, with the frozen held-out selector explicitly
   skipped;
-- separate frozen held-out aggregate selector: `PASS`; and
-- no report may flatten those two results into a single suite status.
+- legacy authoritative OCR contamination regression: `PASS`.
+
+The separate frozen held-out aggregate selector is a contextual-filter
+promotion prerequisite. Its current failure must be reported truthfully, but it
+does not replace or veto the authoritative legacy parser checks while the
+contextual filter remains shadow-only. No report may flatten the eligible suite
+and separate frozen held-out invocation into a single suite status.
 
 - Ingredient-line recall: at least 97% overall and at least 93% in every class.
 - Exact quantity and unit: at least 95% overall.
@@ -225,9 +233,10 @@ Automated prerequisites on the exact candidate:
 - Saved-flow restoration: 25 of 25.
 
 Any silent quantity error, invented item, false pantry removal, conflicting
-dietary match, or duplicate pantry commit blocks the beta regardless of the
-aggregate score. A frozen-held-out-gate failure also blocks the beta regardless of green
-development or human metrics.
+dietary match, or duplicate pantry commit blocks the closed-beta application
+regardless of the aggregate score. A frozen-held-out-gate failure independently
+blocks contextual-filter promotion regardless of green development or human
+metrics.
 
 ## Device and accessibility spot checks
 
@@ -241,10 +250,13 @@ development or human metrics.
 ## Exit artifact
 
 Keep the completed receipt locally with the candidate commit SHA, separate
-eligible-suite and frozen-held-out-gate statuses, physical-device/accessibility results,
-and a final `GO` or `NO-GO` verdict. List human-run blocking fixture IDs and
+eligible-suite and frozen-held-out-gate statuses, physical-device/accessibility
+results, and separate closed-beta application and contextual-filter promotion
+verdicts. List human-run blocking fixture IDs and
 assign them to OCR, layout, parser, pantry, matching, retailer trip,
 persistence, or accessibility. Keep held-out case IDs and content out of this
-artifact. A `GO` is prohibited until both automated invocations and the human
-and physical walkthrough pass on the same candidate; the current verdict is
-`NO-GO`.
+artifact. A closed-beta application `GO` is prohibited until its authoritative
+automated checks and the human and physical walkthrough pass on the same
+candidate; the current application verdict is `NO-GO`. Contextual-filter
+promotion remains `NO-GO` until its separate frozen gate passes and explicit
+authority is approved.

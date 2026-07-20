@@ -2,12 +2,21 @@
 
 ## Current verdict
 
-**NO-GO. Do not recruit the cohort or distribute this candidate as a closed
-beta.** Development-focused automated gates pass, but the separately invoked
-frozen held-out aggregate gate failed on the latest frozen code candidate with
-exit 65 and case-level output suppressed. The contextual classifier remains a `DEBUG`
-shadow comparison, while the legacy `RecipeParser` path remains authoritative
-for app output.
+**SmartCart closed-beta application gate: NO-GO. Do not recruit the cohort or
+distribute this candidate yet.** The eligible authoritative-path tests pass,
+but the required live Shopping/Home/Recipes, physical-iPhone, and VoiceOver
+walkthroughs are not complete on one frozen candidate.
+
+**Contextual-filter promotion gate: NO-GO.** The separately invoked frozen
+held-out aggregate selector failed on the latest frozen code candidate with
+exit 65. The contextual classifier remains a discarded `DEBUG` shadow
+comparison, while the legacy `RecipeParser` path remains authoritative for app
+output. This failed promotion gate must remain visible, but it does not veto the
+closed-beta application gate while contextual output is non-authoritative.
+
+**Public/App Store gate: NO-GO.** Partner, legal, production-service, broad
+corpus, physical-device, and App Store requirements remain outside this
+closed-beta application decision.
 
 Before changing this verdict, freeze one candidate and record all of the
 following against that same commit:
@@ -15,16 +24,20 @@ following against that same commit:
 1. The eligible development suite passes with
    `SmartCartTests/ContextualIngredientFilterTests/testFrozenHeldOutCorpusDoesNotRegressAgainstLegacy`
    explicitly skipped.
-2. That frozen held-out selector passes in a separate `xcodebuild test`
-   invocation.
-3. `OCR_PARSER_HUMAN_TEST_PLAN.md` passes, including its physical-iPhone and
+2. The authoritative legacy OCR contamination regression and required human
+   OCR cases pass while the contextual filter remains shadow-only.
+3. Ingredient deletion and shared pantry reallocation pass, including
+   persistence rollback and completed-trip immutability.
+4. `OCR_PARSER_HUMAN_TEST_PLAN.md` passes, including its physical-iPhone and
    provenance checks.
-4. The Home/Recipes, Shopping Trip, barcode, Meal Prep, Dynamic Type, and
+5. The Home/Recipes, Shopping Trip, barcode, Meal Prep, Dynamic Type, and
    VoiceOver walkthroughs below pass.
 
 Never report the eligible result as a complete-suite pass while the frozen
-held-out selector is excluded. Keep its receipts aggregate-only and do not place
-held-out case content in beta artifacts.
+held-out selector is excluded. Run and report the held-out selector separately,
+keep its receipts aggregate-only, and do not place held-out case content in beta
+artifacts. A held-out failure blocks contextual-filter promotion, not the
+shadow-only closed-beta application path.
 
 ## Cohort
 
@@ -79,11 +92,15 @@ ingredients have stable, known IDs:
    **Start Shopping** is disabled with the explicit explanation to include at
    least one ingredient that still needs purchasing.
 4. Relaunch and verify the empty active draft remains coherent. If the retained
-   record is intentionally unsaved, verify it is not silently resaved or
-   overwritten.
+   record is not a Saved Recipes member, verify deletion synchronizes its
+   retained working record without silently restoring Saved Recipes membership.
 5. Verify pantry state and unchanged editable pre-trip matches survive, only
-   the removed ingredient's match is invalidated, and any in-flight stale match
-   is rejected.
+   affected matches and purchase quantities refresh, and any in-flight stale
+   match is rejected. With duplicate ingredients competing for finite pantry
+   inventory, deleting the allocated row must release and deterministically
+   reassign safe stock; deleting an unallocated row must not disturb a valid
+   allocation. `buyFull` must survive, stale `useAvailable` must become
+   `review`, and possible/name-only matches must remain opt-in.
 6. Repeat against a recipe with a committed Shopping Trip. The session,
    manifest, outcomes, pantry, and product preferences must remain immutable.
 
@@ -190,7 +207,9 @@ With VoiceOver enabled, verify logical focus order; meaningful labels, values, t
 | Crash-free trips | at least 99% | any reproducible data-loss crash |
 
 The thresholds are product hypotheses, not claims. They cannot override a
-failed frozen held-out gate or a failed physical/accessibility walkthrough.
+failed authoritative-path safety check or a failed physical/accessibility
+walkthrough. They also cannot promote the contextual filter past its separately
+failed frozen held-out gate.
 Revisit them after the first ten tester trips only after the candidate has a recorded
 `GO`.
 
@@ -200,11 +219,14 @@ The diagnostic funnel stays on device and excludes recipe text, URLs, addresses,
 
 ## Exit gate
 
-Enter or advance beyond closed beta only after the eligible suite and separately
-run frozen held-out gate both pass on the same candidate, the required
-human/physical walkthrough passes, the import-to-pantry loop meets the targets,
-reconciliation never double-increments stock, the Home/Recipes and Dynamic
-Type/VoiceOver matrices pass, and every non-safety miss is documented and
-accepted. Silent purchasing errors, false pantry changes, inaccessible required
-actions, and data loss cannot be accepted as metric tradeoffs. The current
-verdict remains `NO-GO`.
+Enter or advance beyond closed beta only after the eligible authoritative-path
+suite, legacy OCR contamination regression, deletion/pantry reallocation, and
+required human/physical walkthrough pass on the same candidate; the
+import-to-pantry loop meets the targets; reconciliation never double-increments
+stock; the Home/Recipes and Dynamic Type/VoiceOver matrices pass; and every
+non-safety miss is documented and accepted. Silent purchasing errors, false
+pantry changes, inaccessible required actions, and data loss cannot be accepted
+as metric tradeoffs. The contextual promotion verdict remains independently
+`NO-GO` until its frozen held-out selector and other promotion gates pass. The
+current closed-beta application verdict also remains `NO-GO` because its live,
+physical-device, and accessibility evidence is incomplete.

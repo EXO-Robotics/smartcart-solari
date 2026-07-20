@@ -4,6 +4,21 @@ SmartCart treats photo parsing as a purchasing-safety feature. A failed or
 ambiguous parse must remain recoverable, and it must never manufacture a
 plausible grocery item.
 
+## Independent release gates
+
+- **Contextual-filter promotion: NO-GO.** Promotion requires the frozen
+  held-out selector, development corpus, and human parser validation to pass,
+  followed by explicit approval to make the filter authoritative. The current
+  frozen held-out selector fails, so the filter remains a discarded `DEBUG`
+  shadow.
+- **SmartCart closed-beta application: independently evaluated.** It may pass
+  with the contextual filter shadow-only when the eligible authoritative-path
+  suite, legacy OCR contamination regression, required human OCR cases,
+  deletion/pantry repair, shopping and persistence paths, accessibility,
+  barcode, and physical-device checks all pass on one frozen candidate.
+- **Public/App Store: NO-GO.** The broader corpus below plus partner, legal,
+  production-service, device, and App Store requirements remain mandatory.
+
 ## Automated safety invariants
 
 - Empty, instruction-only, or unreadable imports produce zero ingredients.
@@ -72,4 +87,6 @@ ingredient manually without SmartCart silently continuing.
   on a physical phone; `localhost` on the phone does not refer to the Mac.
 
 Public release remains blocked until the measured corpus meets the applicable
-thresholds. Passing unit tests alone does not satisfy this gate.
+thresholds. Passing unit tests alone does not satisfy this gate. These public
+thresholds do not relabel a contextual-filter failure or substitute for the
+closed-beta application matrix.
