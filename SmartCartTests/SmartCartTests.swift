@@ -4348,7 +4348,7 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(tripSource.contains(".background(SmartCartTheme.herbLight)"))
     }
 
-    func testHomeUsesEc24LayoutAndRecipeImportersAutoPresentMediaTools() throws {
+    func testHomeUsesActionFirstLayoutAndRecipeImportersAutoPresentMediaTools() throws {
         let repositoryRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -4372,49 +4372,86 @@ final class SmartCartTests: XCTestCase {
         )
 
         let bodyStart = try XCTUnwrap(homeSource.range(of: "    var body: some View")?.lowerBound)
-        let headerStart = try XCTUnwrap(homeSource.range(of: "    private var header", range: bodyStart..<homeSource.endIndex)?.lowerBound)
+        let headerStart = try XCTUnwrap(
+            homeSource.range(of: "    private var header", range: bodyStart..<homeSource.endIndex)?.lowerBound
+        )
         let body = homeSource[bodyStart..<headerStart]
         let headerIndex = try XCTUnwrap(body.range(of: "header")?.lowerBound)
+        let statusIndex = try XCTUnwrap(body.range(of: "shoppingTripStatusSection")?.lowerBound)
         let startIndex = try XCTUnwrap(body.range(of: "startShoppingSection")?.lowerBound)
-        let drawerIndex = try XCTUnwrap(body.range(of: "continueShoppingTripsDrawer")?.lowerBound)
 
-        XCTAssertLessThan(headerIndex, startIndex)
-        XCTAssertLessThan(startIndex, drawerIndex)
-        XCTAssertTrue(homeSource.contains("GeometryReader { geometry in"))
-        XCTAssertTrue(homeSource.contains("ZStack(alignment: .bottom)"))
+        XCTAssertLessThan(headerIndex, statusIndex)
+        XCTAssertLessThan(statusIndex, startIndex)
+        XCTAssertTrue(homeSource.contains("HomePhotoBackground()"))
+        XCTAssertTrue(homeSource.contains("Image(\"SmartCartHomeBackground\")"))
+        XCTAssertTrue(homeSource.contains("Color.black.opacity(colorScheme == .light ? 0.50 : 0.42)"))
+        XCTAssertTrue(homeSource.contains(".allowsHitTesting(false)"))
+        XCTAssertTrue(homeSource.contains(".accessibilityHidden(true)"))
+        XCTAssertTrue(homeSource.contains("ScrollView {"))
+        XCTAssertTrue(homeSource.contains(".scrollIndicators(.hidden)"))
         XCTAssertTrue(homeSource.contains("Text(\"Start a Shopping Trip\")"))
-        XCTAssertTrue(homeSource.contains("Text(method == .camera ? \"Take Photo\" : \"Choose Photo\")"))
-        XCTAssertTrue(homeSource.contains("homeActionCardContentMinHeight: CGFloat = 116"))
-        XCTAssertTrue(homeSource.contains("minHeight: homeActionCardContentMinHeight"))
-        XCTAssertTrue(homeSource.contains("if dynamicTypeSize.isAccessibilitySize"))
-        XCTAssertTrue(homeSource.contains("pasteIngredientsCard"))
-        XCTAssertTrue(homeSource.contains("accessibilityIdentifier(\"home-paste-ingredients-continue\")"))
-        XCTAssertTrue(homeSource.contains("appModel.openImporter(.recipeText, initialText: pastedIngredients)"))
-        XCTAssertTrue(homeSource.contains("@FocusState private var pasteIngredientsFocused: Bool"))
-        XCTAssertTrue(homeSource.contains(".focused($pasteIngredientsFocused)"))
-        XCTAssertTrue(homeSource.contains(".scrollDismissesKeyboard(.interactively)"))
-        XCTAssertTrue(homeSource.contains("pasteIngredientsFocused = false"))
-        XCTAssertTrue(homeSource.contains("clipboardContainsProbableWebURL"))
-        XCTAssertTrue(homeSource.contains("Text(\"Paste Copied Link\")"))
-        XCTAssertTrue(homeSource.contains("UIPasteboard.general.detectPatterns"))
-        XCTAssertTrue(homeSource.contains("let drawerHeight = max(420, geometry.size.height - 88)"))
-        XCTAssertTrue(homeSource.contains("collapsedShoppingTripsDrawerHeight: CGFloat = 92"))
-        XCTAssertTrue(homeSource.contains("HomePullUpShape()"))
-        XCTAssertTrue(homeSource.contains("SMARTCART_HOME_TRIPS_DRAWER"))
-        XCTAssertTrue(homeSource.contains("appModel.pendingShoppingSessions"))
-        XCTAssertTrue(homeSource.contains("@State private var pendingDiscardSession: ShoppingSession?"))
-        XCTAssertTrue(homeSource.contains("pendingDiscardSession = session"))
-        XCTAssertTrue(homeSource.contains(".confirmationDialog(\n            \"Discard this paused trip?\""))
-        XCTAssertTrue(homeSource.contains("Button(\"Discard Trip\", role: .destructive)"))
-        XCTAssertTrue(homeSource.contains("appModel.discardPendingShoppingSession(pendingDiscardSession.id)"))
-        XCTAssertTrue(homeSource.contains("Completed shopping history is never deleted here."))
-        XCTAssertTrue(homeSource.contains("appModel.archivePantryUpdateReminder(sessionID: session.id)"))
+        XCTAssertTrue(homeSource.contains("Text(\"Take Photo\")"))
+        XCTAssertTrue(homeSource.contains("Text(\"Choose Photo\")"))
+        XCTAssertTrue(homeSource.contains("Text(\"Paste Recipe\")"))
+        XCTAssertTrue(homeSource.contains("Text(\"Meal Prep Mode\")"))
+        XCTAssertTrue(homeSource.contains("Text(\"Combine up to five saved recipes\")"))
+        XCTAssertTrue(homeSource.contains("accessibilityIdentifier(\"home-import-camera\")"))
+        XCTAssertTrue(homeSource.contains("accessibilityIdentifier(\"home-import-photos\")"))
+        XCTAssertTrue(homeSource.contains("accessibilityIdentifier(\"home-paste-recipe\")"))
         XCTAssertTrue(homeSource.contains("accessibilityIdentifier(\"home-start-meal-prep\")"))
+        XCTAssertTrue(homeSource.contains("accessibilityIdentifier(\"home-import-more\")"))
+        XCTAssertTrue(homeSource.contains("appModel.openImporter(.camera)"))
+        XCTAssertTrue(homeSource.contains("appModel.openImporter(.photoLibrary)"))
+        XCTAssertTrue(homeSource.contains("appModel.startMealPrepDraft()"))
+        XCTAssertTrue(homeSource.contains("pasteRecipeFromClipboard"))
+        XCTAssertTrue(homeSource.contains("RecipeLinkInput.validHTTPSURL(from:)"))
+        XCTAssertTrue(homeSource.contains("appModel.openImporter(.recipeLink, initialText: validatedURL.absoluteString)"))
+        XCTAssertTrue(homeSource.contains("appModel.openImporter(.recipeText, initialText: trimmedText)"))
+        XCTAssertTrue(homeSource.contains("Label(\"Enter Manually\", systemImage: \"keyboard\")"))
+        XCTAssertTrue(homeSource.contains("Label(\"Try a Sample\", systemImage: \"takeoutbag.and.cup.and.straw.fill\")"))
+
+        let panelStart = try XCTUnwrap(homeSource.range(of: "    private var startShoppingPanel")?.lowerBound)
+        let mealPrepStart = try XCTUnwrap(
+            homeSource.range(of: "    private var mealPrepLaunchButton", range: panelStart..<homeSource.endIndex)?.lowerBound
+        )
+        let panel = homeSource[panelStart..<mealPrepStart]
+        let cameraIndex = try XCTUnwrap(panel.range(of: "Text(\"Take Photo\")")?.lowerBound)
+        let photosIndex = try XCTUnwrap(panel.range(of: "Text(\"Choose Photo\")")?.lowerBound)
+        let pasteIndex = try XCTUnwrap(panel.range(of: "Text(\"Paste Recipe\")")?.lowerBound)
+        let mealPrepIndex = try XCTUnwrap(panel.range(of: "mealPrepLaunchButton")?.lowerBound)
+        XCTAssertLessThan(cameraIndex, photosIndex)
+        XCTAssertLessThan(photosIndex, pasteIndex)
+        XCTAssertLessThan(pasteIndex, mealPrepIndex)
+
+        XCTAssertTrue(homeSource.contains("appModel.pendingShoppingSessions.first(where: \\.isReusable)"))
+        XCTAssertTrue(homeSource.contains("appModel.pendingShoppingSessions.first(where: \\.hasPendingPantryUpdateReminder)"))
+        XCTAssertTrue(homeSource.contains("case .resume: \"Resume Shopping\""))
+        XCTAssertTrue(homeSource.contains("case .pantryUpdate: \"Finish your last trip\""))
+        XCTAssertTrue(homeSource.contains("ScrollView(.horizontal, showsIndicators: false)"))
+        XCTAssertTrue(homeSource.contains("if dynamicTypeSize.isAccessibilitySize"))
+        XCTAssertTrue(homeSource.contains("appModel.openShoppingSession(session.id)"))
+        XCTAssertTrue(homeSource.contains("appModel.startShoppingReconciliation()"))
+        XCTAssertFalse(homeSource.contains("Toggle("))
+        XCTAssertFalse(homeSource.contains("Paste Ingredients"))
+        XCTAssertFalse(homeSource.contains("TextEditor("))
+        XCTAssertFalse(homeSource.contains("Text(\"Paste Link\")"))
+        XCTAssertFalse(homeSource.contains("Text(\"Paste Copied Link\")"))
+        XCTAssertFalse(homeSource.contains("Label(\"Saved Recipes\""))
+        XCTAssertFalse(homeSource.contains("selectedTab = .lists"))
+        XCTAssertFalse(homeSource.contains("HomePullUpShape"))
+        XCTAssertFalse(homeSource.contains("continueShoppingTripsDrawer"))
+        XCTAssertFalse(homeSource.contains("SMARTCART_HOME_TRIPS_DRAWER"))
+        XCTAssertFalse(homeSource.contains("PageTabViewStyle"))
         XCTAssertFalse(homeSource.contains("shopAgainCard"))
         XCTAssertFalse(homeSource.contains("home-shop-again"))
         XCTAssertFalse(homeSource.contains("Shop Again"))
         XCTAssertFalse(homeSource.contains("storeCard"))
         XCTAssertFalse(homeSource.contains("trustStrip"))
+
+        let homeBackgroundAsset = repositoryRoot.appendingPathComponent(
+            "SmartCart/Assets.xcassets/SmartCartHomeBackground.imageset/smartcart-home-food-background.png"
+        )
+        XCTAssertTrue(FileManager.default.fileExists(atPath: homeBackgroundAsset.path))
 
         XCTAssertTrue(composerSource.contains("@State private var showPhotoLibrary = false"))
         XCTAssertTrue(composerSource.contains("@State private var hasAttemptedInitialMediaPresentation = false"))
@@ -4484,6 +4521,14 @@ final class SmartCartTests: XCTestCase {
         model.activeShoppingSessionID = olderCompleted.id
         XCTAssertTrue(olderCompleted.isGuideComplete)
         XCTAssertEqual(model.pendingShoppingSessions.first?.id, newerIncomplete.id)
+        XCTAssertEqual(
+            model.pendingShoppingSessions.first(where: \.isReusable)?.id,
+            newerIncomplete.id
+        )
+        XCTAssertEqual(
+            model.pendingShoppingSessions.first(where: \.hasPendingPantryUpdateReminder)?.id,
+            olderCompleted.id
+        )
     }
 
     @MainActor

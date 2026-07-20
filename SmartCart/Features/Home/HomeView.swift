@@ -4,287 +4,195 @@ import UIKit
 struct HomeView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Environment(\.scenePhase) private var scenePhase
-    @State private var clipboardContainsProbableWebURL = false
-    @State private var pastedIngredients = ""
-    @State private var pendingDiscardSession: ShoppingSession?
-    @State private var shoppingTripsExpanded =
-        ProcessInfo.processInfo.environment["SMARTCART_HOME_TRIPS_DRAWER"] == "shopping-trips"
-    @GestureState private var shoppingTripsDrag: CGFloat = 0
-    @FocusState private var pasteIngredientsFocused: Bool
-
-    private let homeActionCardContentMinHeight: CGFloat = 116
-    private let collapsedShoppingTripsDrawerHeight: CGFloat = 92
 
     var body: some View {
-        GeometryReader { geometry in
-            let drawerHeight = max(420, geometry.size.height - 88)
-            let collapsedOffset = drawerHeight - collapsedShoppingTripsDrawerHeight
+        ZStack {
+            HomePhotoBackground()
 
-            ZStack(alignment: .bottom) {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 24) {
-                        header
-                        startShoppingSection
-                    }
-                    .padding(.horizontal, 18)
-                    .padding(.bottom, collapsedShoppingTripsDrawerHeight + 34)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    header
+                    shoppingTripStatusSection
+                    startShoppingSection
                 }
-                .scrollDismissesKeyboard(.interactively)
-                .onTapGesture {
-                    pasteIngredientsFocused = false
-                }
-
-                continueShoppingTripsDrawer(
-                    height: drawerHeight,
-                    collapsedOffset: collapsedOffset
-                )
-                .offset(y: shoppingTripsDrawerOffset(collapsedOffset: collapsedOffset))
-                .animation(
-                    .spring(response: 0.42, dampingFraction: 0.86),
-                    value: shoppingTripsExpanded
-                )
+                .padding(.horizontal, 20)
+                .padding(.top, 10)
+                .padding(.bottom, 36)
             }
+            .scrollIndicators(.hidden)
         }
-        .scrollIndicators(.hidden)
-        .smartCartBackground()
         .toolbar(.hidden, for: .navigationBar)
-        .sensoryFeedback(.selection, trigger: shoppingTripsExpanded)
-        .onAppear(perform: refreshClipboardDetection)
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active {
-                refreshClipboardDetection()
-            }
-        }
-        .confirmationDialog(
-            "Discard this paused trip?",
-            isPresented: Binding(
-                get: { pendingDiscardSession != nil },
-                set: { isPresented in
-                    if !isPresented { pendingDiscardSession = nil }
-                }
-            ),
-            titleVisibility: .visible
-        ) {
-            if let pendingDiscardSession {
-                Button("Discard Trip", role: .destructive) {
-                    appModel.discardPendingShoppingSession(pendingDiscardSession.id)
-                    self.pendingDiscardSession = nil
-                }
-            }
-            Button("Cancel", role: .cancel) {
-                pendingDiscardSession = nil
-            }
-        } message: {
-            Text("This removes the unfinished trip and its generated list. Completed shopping history is never deleted here.")
-        }
     }
 
     private var header: some View {
-        SmartCartLogo()
-            .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.top, 8)
+        HStack {
+            Image(systemName: "leaf.fill")
+                .font(.system(size: 30, weight: .semibold))
+                .foregroundStyle(SmartCartTheme.green)
+                .shadow(color: SmartCartTheme.green.opacity(0.34), radius: 12)
+                .frame(width: 44, height: 44, alignment: .leading)
+                .accessibilityLabel("SmartCart")
+
+            Spacer()
+
+            moreImportMenu
+        }
+    }
+
+    @ViewBuilder
+    private var shoppingTripStatusSection: some View {
+        if let resumableShoppingSession, let pantryUpdateShoppingSession {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Shopping Trips")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.82))
+
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(spacing: 10) {
+                        shoppingTripStatusCard(resumableShoppingSession, kind: .resume)
+                        shoppingTripStatusCard(pantryUpdateShoppingSession, kind: .pantryUpdate)
+                    }
+                } else {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 12) {
+                            shoppingTripStatusCard(resumableShoppingSession, kind: .resume)
+                                .frame(width: 294)
+                            shoppingTripStatusCard(pantryUpdateShoppingSession, kind: .pantryUpdate)
+                                .frame(width: 294)
+                        }
+                    }
+                }
+            }
+            .accessibilityIdentifier("home-shopping-trips-strip")
+        } else if let resumableShoppingSession {
+            shoppingTripStatusCard(resumableShoppingSession, kind: .resume)
+        } else if let pantryUpdateShoppingSession {
+            shoppingTripStatusCard(pantryUpdateShoppingSession, kind: .pantryUpdate)
+        }
     }
 
     private var startShoppingSection: some View {
-        VStack(alignment: .leading, spacing: 13) {
+        VStack(alignment: .leading, spacing: 16) {
             Text("Start a Shopping Trip")
-                .font(.system(.title3, design: .rounded, weight: .bold))
-                .foregroundStyle(SmartCartTheme.ink)
-                .frame(maxWidth: .infinity, alignment: .center)
+                .font(.system(.largeTitle, design: .rounded, weight: .bold))
+                .foregroundStyle(.white)
+                .fixedSize(horizontal: false, vertical: true)
 
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(spacing: 10) {
-                    primaryImportButton(.camera)
-                    primaryImportButton(.photoLibrary)
-                }
-            } else {
-                HStack(alignment: .top, spacing: 10) {
-                    primaryImportButton(.camera)
-                    primaryImportButton(.photoLibrary)
-                }
-            }
-
-            pasteIngredientsCard
-
-            if clipboardContainsProbableWebURL {
-                pasteCopiedLinkButton
-            }
-
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 10) {
-                    pasteLinkButton
-                    moreImportMenu
-                }
-                VStack(spacing: 10) {
-                    pasteLinkButton
-                    moreImportMenu
-                }
-            }
-
-            mealPrepLaunchButton
+            startShoppingPanel
         }
     }
 
-    private func primaryImportButton(_ method: ImportMethod) -> some View {
-        Button {
-            appModel.openImporter(method)
-        } label: {
-            VStack(alignment: .leading, spacing: 12) {
-                Image(systemName: method.symbol)
-                    .font(.title2.bold())
-                    .foregroundStyle(SmartCartTheme.onAccent)
-                    .frame(width: 48, height: 48)
-                    .background(method.tint)
-                    .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(method == .camera ? "Take Photo" : "Choose Photo")
-                        .font(.headline)
-                        .foregroundStyle(SmartCartTheme.navy)
-                    Text(method == .camera ? "Snap a cookbook or card" : "Choose a saved recipe image")
-                        .font(.caption)
-                        .foregroundStyle(SmartCartTheme.secondaryInk)
-                        .fixedSize(horizontal: false, vertical: true)
+    private var startShoppingPanel: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "camera")
+                .font(.system(size: 31, weight: .medium))
+                .foregroundStyle(.white)
+                .frame(width: 72, height: 72)
+                .background(Color.black.opacity(0.28))
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .stroke(Color.white.opacity(0.18), lineWidth: 1)
                 }
+                .accessibilityHidden(true)
+
+            Button {
+                appModel.openImporter(.camera)
+            } label: {
+                Text("Take Photo")
+                    .frame(maxWidth: .infinity, minHeight: 56)
             }
-            .frame(
-                maxWidth: .infinity,
-                minHeight: homeActionCardContentMinHeight,
-                alignment: .topLeading
-            )
-            .smartCartCard(padding: 16)
-            .smartCartShadow()
+            .buttonStyle(HomePrimaryButtonStyle())
+            .accessibilityIdentifier("home-import-camera")
+            .accessibilityHint("Opens the camera recipe importer")
+
+            Button {
+                appModel.openImporter(.photoLibrary)
+            } label: {
+                Text("Choose Photo")
+                    .frame(maxWidth: .infinity, minHeight: 54)
+            }
+            .buttonStyle(HomeSecondaryButtonStyle())
+            .accessibilityIdentifier("home-import-photos")
+            .accessibilityHint("Opens the photo recipe importer")
+
+            Button(action: pasteRecipeFromClipboard) {
+                HStack(spacing: 11) {
+                    Image(systemName: "doc.on.clipboard")
+                        .accessibilityHidden(true)
+                    Text("Paste Recipe")
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.bold())
+                        .accessibilityHidden(true)
+                }
+                .font(.system(.body, design: .rounded, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity, minHeight: 50)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PressableButtonStyle())
+            .accessibilityIdentifier("home-paste-recipe")
+            .accessibilityHint("Pastes recipe text or a copied recipe link")
+
+            Divider()
+                .overlay(Color.white.opacity(0.16))
+
+            mealPrepLaunchButton
         }
-        .buttonStyle(PressableButtonStyle())
-        .accessibilityIdentifier(method == .camera ? "home-import-camera" : "home-import-photos")
-        .accessibilityHint(method == .camera ? "Opens the camera recipe importer" : "Opens the photo recipe importer")
+        .padding(18)
+        .background {
+            HomeGlassSurface(radius: 30, darkness: 0.31)
+        }
     }
 
     private var mealPrepLaunchButton: some View {
         Button {
             appModel.startMealPrepDraft()
         } label: {
-            HStack(spacing: 14) {
-                Image(systemName: "calendar.badge.plus")
-                    .font(.title2.bold())
-                    .foregroundStyle(SmartCartTheme.onAccent)
-                    .frame(width: 50, height: 50)
-                    .background(SmartCartTheme.green)
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            HStack(spacing: 13) {
+                Image(systemName: "square.stack.3d.up.fill")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(SmartCartTheme.green)
+                    .frame(width: 44, height: 44)
+                    .background(Color.black.opacity(0.22))
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Meal Prep Mode")
                         .font(.headline)
-                        .foregroundStyle(SmartCartTheme.navy)
+                        .foregroundStyle(.white)
                     Text("Combine up to five saved recipes")
                         .font(.caption)
-                        .foregroundStyle(SmartCartTheme.secondaryInk)
+                        .foregroundStyle(.white.opacity(0.72))
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
-                Spacer(minLength: 4)
+                Spacer(minLength: 6)
+
                 Image(systemName: "chevron.right")
                     .font(.caption.bold())
-                    .foregroundStyle(SmartCartTheme.green)
+                    .foregroundStyle(.white.opacity(0.72))
+                    .accessibilityHidden(true)
             }
-            .frame(maxWidth: .infinity, minHeight: homeActionCardContentMinHeight, alignment: .leading)
-            .smartCartCard(padding: 16)
+            .frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
+            .contentShape(Rectangle())
         }
         .buttonStyle(PressableButtonStyle())
+        .accessibilityElement(children: .combine)
         .accessibilityIdentifier("home-start-meal-prep")
-        .accessibilityLabel("Meal Prep Mode")
-        .accessibilityHint("Combine up to five saved recipes into one shopping trip")
-    }
-
-    private var pasteIngredientsCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 14) {
-                Image(systemName: "doc.on.clipboard")
-                    .font(.title2.bold())
-                    .foregroundStyle(SmartCartTheme.onAccent)
-                    .frame(width: 50, height: 50)
-                    .background(SmartCartTheme.green)
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-
-                ZStack(alignment: .leading) {
-                    if pastedIngredients.isEmpty {
-                        Text("Paste Ingredients Here")
-                            .foregroundStyle(SmartCartTheme.secondaryInk)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                            .multilineTextAlignment(.leading)
-                    }
-
-                    TextEditor(text: $pastedIngredients)
-                        .font(.body)
-                        .foregroundStyle(SmartCartTheme.navy)
-                        .scrollContentBackground(.hidden)
-                        .frame(maxWidth: .infinity, minHeight: 62, maxHeight: 62)
-                        .focused($pasteIngredientsFocused)
-                }
-
-                Spacer(minLength: 4)
-
-                Button {
-                    appModel.openImporter(.recipeText, initialText: pastedIngredients)
-                } label: {
-                    Image(systemName: "chevron.right")
-                        .font(.caption.bold())
-                        .foregroundStyle(SmartCartTheme.green)
-                        .frame(width: 44, height: 44, alignment: .trailing)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .padding(.leading, -36)
-                .accessibilityIdentifier("home-paste-ingredients-continue")
-                .accessibilityLabel("Continue with pasted ingredients")
-                .accessibilityHint("Opens the recipe text importer with these ingredients")
-            }
-            .frame(maxWidth: .infinity, minHeight: homeActionCardContentMinHeight, alignment: .leading)
-        }
-        .smartCartCard(padding: 16)
-        .accessibilityIdentifier("home-paste-ingredients")
-    }
-
-    private var pasteLinkButton: some View {
-        Button {
-            appModel.openImporter(.recipeLink)
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: "link")
-                Text("Paste Link")
-                Spacer(minLength: 0)
-            }
-        }
-        .buttonStyle(SecondaryButtonStyle())
-        .accessibilityIdentifier("home-import-paste-link")
-        .accessibilityHint("Opens the recipe link importer without reading the clipboard")
-    }
-
-    private var pasteCopiedLinkButton: some View {
-        Button(action: pasteLinkFromClipboard) {
-            HStack(spacing: 10) {
-                Image(systemName: "link.badge.plus")
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Paste Copied Link")
-                    Text("A web link is ready")
-                        .font(.caption2.weight(.semibold))
-                }
-                Spacer(minLength: 0)
-            }
-        }
-        .buttonStyle(SecondaryButtonStyle())
-        .accessibilityIdentifier("home-paste-copied-link")
-        .accessibilityHint("Reads the copied web link and opens the recipe link importer")
+        .accessibilityHint("Starts a separate workflow that combines up to five saved recipes")
     }
 
     private var moreImportMenu: some View {
         Menu {
             Button {
-                appModel.selectedTab = .lists
+                appModel.openImporter(.recipeText)
             } label: {
-                Label("Saved Recipes", systemImage: "book.fill")
+                Label("Enter Manually", systemImage: "keyboard")
             }
-            .accessibilityIdentifier("home-open-saved-recipes")
+            .accessibilityIdentifier("home-import-manual")
 
             Button {
                 appModel.openImporter(.sample)
@@ -293,258 +201,219 @@ struct HomeView: View {
             }
             .accessibilityIdentifier("home-import-sample")
         } label: {
-            HStack {
-                Label("More", systemImage: "ellipsis.circle.fill")
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.down")
-                    .font(.caption.bold())
-            }
+            Image(systemName: "ellipsis")
+                .font(.title3.bold())
+                .foregroundStyle(.white)
+                .rotationEffect(.degrees(90))
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
         }
-        .buttonStyle(SecondaryButtonStyle())
         .accessibilityIdentifier("home-import-more")
-        .accessibilityHint("Shows saved recipe and sample options")
+        .accessibilityLabel("More options")
+        .accessibilityHint("Shows manual entry and sample recipe options")
     }
 
-    private func refreshClipboardDetection() {
-        let probableWebURL: PartialKeyPath<UIPasteboard.DetectedValues> = \.probableWebURL
-        UIPasteboard.general.detectPatterns(for: [probableWebURL]) { result in
-            let containsWebURL = (try? result.get())?.contains(probableWebURL) == true
-            DispatchQueue.main.async {
-                clipboardContainsProbableWebURL = containsWebURL
+    private var resumableShoppingSession: ShoppingSession? {
+        appModel.pendingShoppingSessions.first(where: \.isReusable)
+    }
+
+    private var pantryUpdateShoppingSession: ShoppingSession? {
+        appModel.pendingShoppingSessions.first(where: \.hasPendingPantryUpdateReminder)
+    }
+
+    private func shoppingTripStatusCard(
+        _ session: ShoppingSession,
+        kind: HomeShoppingTripStatusKind
+    ) -> some View {
+        Button {
+            openShoppingTripStatus(session, kind: kind)
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: kind.symbol)
+                    .font(.headline.bold())
+                    .foregroundStyle(SmartCartTheme.green)
+                    .frame(width: 42, height: 42)
+                    .background(Color.black.opacity(0.24))
+                    .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(kind.title)
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                    Text(shoppingTripStatusDetail(session, kind: kind))
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.74))
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 4)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.bold())
+                    .foregroundStyle(.white.opacity(0.74))
+                    .accessibilityHidden(true)
             }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, minHeight: 76, alignment: .leading)
+            .background {
+                HomeGlassSurface(radius: 20, darkness: 0.40)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        }
+        .buttonStyle(PressableButtonStyle())
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(kind.accessibilityIdentifier)
+        .accessibilityLabel("\(kind.title), \(shoppingTripStatusDetail(session, kind: kind))")
+    }
+
+    private func shoppingTripStatusDetail(
+        _ session: ShoppingSession,
+        kind: HomeShoppingTripStatusKind
+    ) -> String {
+        switch kind {
+        case .resume:
+            let completed = session.items.filter(\.status.isCompleted).count
+            return "\(completed) of \(session.items.count) items · \(session.recipeTitle)"
+        case .pantryUpdate:
+            let count = session.items.count
+            return "Review \(count) trip item\(count == 1 ? "" : "s") and update pantry"
         }
     }
 
-    private func pasteLinkFromClipboard() {
-        // Reading pasteboard contents is intentionally confined to this explicit tap.
+    private func openShoppingTripStatus(
+        _ session: ShoppingSession,
+        kind: HomeShoppingTripStatusKind
+    ) {
+        guard appModel.openShoppingSession(session.id) else { return }
+        if kind == .pantryUpdate {
+            appModel.startShoppingReconciliation()
+        }
+    }
+
+    private func pasteRecipeFromClipboard() {
+        // Pasteboard contents are read only after the shopper explicitly taps Paste Recipe.
         let pasteboard = UIPasteboard.general
         let copiedText = pasteboard.url?.absoluteString ?? pasteboard.string
-        let validatedText = copiedText.flatMap(RecipeLinkInput.validHTTPSURL(from:))?.absoluteString
-        appModel.openImporter(.recipeLink, initialText: validatedText)
-    }
+        let normalizedText = copiedText?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedText = normalizedText?.isEmpty == false ? normalizedText : nil
 
-    private func continueShoppingTripsDrawer(height: CGFloat, collapsedOffset: CGFloat) -> some View {
-        VStack(spacing: 0) {
-            continueShoppingTripsHandle(collapsedOffset: collapsedOffset)
-
-            Divider()
-                .overlay(SmartCartTheme.border)
-
-            if shoppingTripsExpanded {
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        if appModel.pendingShoppingSessions.isEmpty {
-                            InfoBanner(
-                                symbol: "cart.badge.clock",
-                                title: "No paused trips",
-                                message: "Start a shopping trip and SmartCart will keep it here if you pause before finishing.",
-                                color: SmartCartTheme.green
-                            )
-                        } else {
-                            ForEach(appModel.pendingShoppingSessions) { session in
-                                continueShoppingTripRow(session)
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 18)
-                    .padding(.top, 14)
-                    .padding(.bottom, 28)
-                }
-                .transition(.opacity)
-            } else {
-                Color.clear
-                    .allowsHitTesting(false)
-            }
+        if let validatedURL = trimmedText.flatMap(RecipeLinkInput.validHTTPSURL(from:)) {
+            appModel.openImporter(.recipeLink, initialText: validatedURL.absoluteString)
+        } else {
+            appModel.openImporter(.recipeText, initialText: trimmedText)
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: height, alignment: .top)
-        .background(SmartCartTheme.scannerSurface)
-        .clipShape(HomePullUpShape())
-        .overlay {
-            HomePullUpShape()
-                .stroke(SmartCartTheme.borderStrong.opacity(0.72), lineWidth: 1)
-        }
-        .shadow(color: .black.opacity(0.28), radius: 22, y: -8)
-        .padding(.horizontal, 8)
-        .accessibilityElement(children: .contain)
-    }
-
-    private func continueShoppingTripsHandle(collapsedOffset: CGFloat) -> some View {
-        VStack(spacing: 4) {
-            Image(systemName: shoppingTripsExpanded ? "chevron.compact.down" : "chevron.compact.up")
-                .font(.system(size: 24, weight: .bold))
-                .foregroundStyle(SmartCartTheme.green)
-                .frame(height: 35)
-
-            HStack(spacing: 9) {
-                Label("Continue Shopping Trips", systemImage: "cart.badge.clock")
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(SmartCartTheme.ink)
-
-                Spacer()
-
-                Text(shoppingTripsExpanded ? "Swipe down to hide" : "Swipe up to continue")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(SmartCartTheme.secondaryInk)
-            }
-            .padding(.horizontal, 18)
-            .padding(.bottom, 10)
-        }
-        .frame(height: collapsedShoppingTripsDrawerHeight)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            pasteIngredientsFocused = false
-            shoppingTripsExpanded.toggle()
-        }
-        .gesture(shoppingTripsDragGesture(collapsedOffset: collapsedOffset))
-        .accessibilityLabel("Continue Shopping Trips drawer")
-        .accessibilityValue(shoppingTripsExpanded ? "Expanded" : "Collapsed")
-        .accessibilityHint(shoppingTripsExpanded ? "Swipe down to hide paused shopping trips" : "Swipe up to show paused shopping trips")
-        .accessibilityAddTraits(.isButton)
-    }
-
-    private func continueShoppingTripRow(_ session: ShoppingSession) -> some View {
-        HStack(spacing: 12) {
-            Button {
-                appModel.openShoppingSession(session.id)
-            } label: {
-                HStack(spacing: 13) {
-                    Image(systemName: session.isGuideComplete ? "checkmark.circle.fill" : "cart.fill")
-                        .font(.title3.bold())
-                        .foregroundStyle(SmartCartTheme.green)
-                        .frame(width: 42, height: 42)
-                        .background(SmartCartTheme.herbLight)
-                        .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
-
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(session.isGuideComplete ? "PANTRY UPDATE PENDING" : "RESUME SHOPPING")
-                            .smartEyebrow()
-                        Text(session.recipeTitle)
-                            .font(.headline)
-                            .foregroundStyle(SmartCartTheme.navy)
-                            .multilineTextAlignment(.leading)
-                        Text(continueShoppingTripDetail(session))
-                            .font(.caption)
-                            .foregroundStyle(SmartCartTheme.secondaryInk)
-                    }
-
-                    Spacer(minLength: 4)
-                    Image(systemName: "chevron.right")
-                        .font(.caption.bold())
-                        .foregroundStyle(SmartCartTheme.green)
-                }
-            }
-            .buttonStyle(PlainButtonStyle())
-            .accessibilityIdentifier("home-continue-shopping-\(session.id.uuidString)")
-
-            Button(role: .destructive) {
-                if session.isGuideComplete {
-                    appModel.archivePantryUpdateReminder(sessionID: session.id)
-                } else {
-                    pendingDiscardSession = session
-                }
-            } label: {
-                Image(systemName: "trash")
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(SmartCartTheme.secondaryInk)
-                    .frame(width: 36, height: 36)
-                    .background(SmartCartTheme.paper.opacity(0.64))
-                    .clipShape(Circle())
-                    .frame(width: 44, height: 44)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(
-                session.isGuideComplete
-                    ? "Archive pantry update reminder for \(session.recipeTitle)"
-                    : "Discard \(session.recipeTitle)"
-            )
-            .accessibilityHint(
-                session.isGuideComplete
-                    ? "Hides this reminder while retaining the completed shopping trip in history"
-                    : "Removes this paused shopping trip from SmartCart"
-            )
-        }
-        .smartCartCard(padding: 13)
-    }
-
-    private func continueShoppingTripDetail(_ session: ShoppingSession) -> String {
-        let completed = session.items.filter(\.status.isCompleted).count
-        if session.isGuideComplete {
-            return "Shopping results ready"
-        }
-        let remaining = session.items.count - completed
-        return "\(remaining) item\(remaining == 1 ? "" : "s") remaining"
-    }
-
-    private func shoppingTripsDrawerOffset(collapsedOffset: CGFloat) -> CGFloat {
-        let restingOffset = shoppingTripsExpanded ? 0 : collapsedOffset
-        return min(max(restingOffset + shoppingTripsDrag, 0), collapsedOffset)
-    }
-
-    private func shoppingTripsDragGesture(collapsedOffset: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 6)
-            .updating($shoppingTripsDrag) { value, state, _ in
-                state = value.translation.height
-            }
-            .onEnded { value in
-                let projected = value.predictedEndTranslation.height
-                let decisiveDistance = min(96, collapsedOffset * 0.22)
-
-                if shoppingTripsExpanded {
-                    if projected > decisiveDistance {
-                        shoppingTripsExpanded = false
-                    }
-                } else if projected < -decisiveDistance {
-                    shoppingTripsExpanded = true
-                }
-            }
     }
 }
 
-/// A bottom drawer shape shared only by Home's retained shopping-trip surface.
-/// The raised center handle makes the vertical swipe affordance visible above
-/// the tab bar without introducing a second navigation control.
-private struct HomePullUpShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        let top: CGFloat = 34
-        let cornerRadius: CGFloat = 26
-        let handleRadius: CGFloat = 36
-        let centerX = rect.midX
+private enum HomeShoppingTripStatusKind: Equatable {
+    case resume
+    case pantryUpdate
 
-        var path = Path()
-        path.move(to: CGPoint(x: cornerRadius, y: top))
-        path.addLine(to: CGPoint(x: centerX - handleRadius, y: top))
-        path.addCurve(
-            to: CGPoint(x: centerX, y: 0),
-            control1: CGPoint(x: centerX - 23, y: top),
-            control2: CGPoint(x: centerX - 28, y: 0)
-        )
-        path.addCurve(
-            to: CGPoint(x: centerX + handleRadius, y: top),
-            control1: CGPoint(x: centerX + 28, y: 0),
-            control2: CGPoint(x: centerX + 23, y: top)
-        )
-        path.addLine(to: CGPoint(x: rect.maxX - cornerRadius, y: top))
-        path.addQuadCurve(
-            to: CGPoint(x: rect.maxX, y: top + cornerRadius),
-            control: CGPoint(x: rect.maxX, y: top)
-        )
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - cornerRadius))
-        path.addQuadCurve(
-            to: CGPoint(x: rect.maxX - cornerRadius, y: rect.maxY),
-            control: CGPoint(x: rect.maxX, y: rect.maxY)
-        )
-        path.addLine(to: CGPoint(x: cornerRadius, y: rect.maxY))
-        path.addQuadCurve(
-            to: CGPoint(x: 0, y: rect.maxY - cornerRadius),
-            control: CGPoint(x: 0, y: rect.maxY)
-        )
-        path.addLine(to: CGPoint(x: 0, y: top + cornerRadius))
-        path.addQuadCurve(
-            to: CGPoint(x: cornerRadius, y: top),
-            control: CGPoint(x: 0, y: top)
-        )
-        path.closeSubpath()
-        return path
+    var title: String {
+        switch self {
+        case .resume: "Resume Shopping"
+        case .pantryUpdate: "Finish your last trip"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .resume: "cart.fill"
+        case .pantryUpdate: "checkmark.circle.fill"
+        }
+    }
+
+    var accessibilityIdentifier: String {
+        switch self {
+        case .resume: "home-resume-shopping"
+        case .pantryUpdate: "home-finish-last-trip"
+        }
+    }
+}
+
+private struct HomePhotoBackground: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                Color.black
+
+                Image("SmartCartHomeBackground")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .clipped()
+
+                Color.black.opacity(colorScheme == .light ? 0.50 : 0.42)
+
+                LinearGradient(
+                    colors: [
+                        Color.black.opacity(0.34),
+                        Color.clear,
+                        Color.black.opacity(0.24)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+        }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+private struct HomeGlassSurface: View {
+    let radius: CGFloat
+    let darkness: Double
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+
+        shape
+            .fill(.ultraThinMaterial)
+            .overlay {
+                shape.fill(Color.black.opacity(darkness))
+            }
+            .overlay {
+                shape.stroke(Color.white.opacity(0.18), lineWidth: 1)
+            }
+            .shadow(color: .black.opacity(0.28), radius: 20, y: 10)
+    }
+}
+
+private struct HomePrimaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(.headline, design: .rounded, weight: .bold))
+            .foregroundStyle(Color.black.opacity(0.88))
+            .background(configuration.isPressed ? Color.white.opacity(0.84) : Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+            .shadow(color: .black.opacity(0.18), radius: configuration.isPressed ? 5 : 11, y: 5)
+            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+    }
+}
+
+private struct HomeSecondaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 17, style: .continuous)
+
+        configuration.label
+            .font(.system(.headline, design: .rounded, weight: .semibold))
+            .foregroundStyle(.white)
+            .background(
+                configuration.isPressed
+                    ? Color.white.opacity(0.14)
+                    : Color.black.opacity(0.22)
+            )
+            .clipShape(shape)
+            .overlay {
+                shape.stroke(Color.white.opacity(configuration.isPressed ? 0.34 : 0.22), lineWidth: 1)
+            }
+            .scaleEffect(configuration.isPressed ? 0.985 : 1)
     }
 }
