@@ -1,28 +1,25 @@
 import SwiftUI
-import UIKit
 
 struct HomeView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Environment(\.scenePhase) private var scenePhase
-    @State private var clipboardContainsProbableWebURL = false
+
+    private let primaryImportCardMinimumHeight: CGFloat = 154
+    private let homeActionCardMinimumHeight: CGFloat = 104
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 header
-                if let session = primaryResumeSession {
-                    pendingShoppingCard(session, compact: true)
+                startNewRecipeSection
+                if !appModel.pendingShoppingSessions.isEmpty {
+                    shoppingTripsSection
                 }
-                startShoppingSection
                 if appModel.hasCompletedShoppingTrip,
                    let recipe = appModel.mostRecentShoppedRecipe {
                     shopAgainCard(recipe)
                 }
                 storeCard
-                if !secondaryPendingSessions.isEmpty {
-                    pendingShoppingSection(secondaryPendingSessions)
-                }
                 trustStrip
             }
             .padding(.horizontal, 18)
@@ -31,12 +28,6 @@ struct HomeView: View {
         .scrollIndicators(.hidden)
         .smartCartBackground()
         .toolbar(.hidden, for: .navigationBar)
-        .onAppear(perform: refreshClipboardDetection)
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active {
-                refreshClipboardDetection()
-            }
-        }
     }
 
     private var header: some View {
@@ -63,42 +54,36 @@ struct HomeView: View {
         .padding(.top, 8)
     }
 
-    private var startShoppingSection: some View {
+    private var startNewRecipeSection: some View {
         VStack(alignment: .leading, spacing: 13) {
             SectionHeader(
-                title: "Start a Shopping Trip",
-                subtitle: "Shop one recipe or combine up to five"
+                title: "Start New Recipe",
+                subtitle: "Choose how to bring in the recipe you want to shop"
             )
 
             if dynamicTypeSize.isAccessibilitySize {
                 VStack(spacing: 10) {
                     primaryImportButton(.camera)
                     primaryImportButton(.photoLibrary)
+                    pasteLinkButton
+                    moreImportMenu
                 }
             } else {
-                HStack(alignment: .top, spacing: 10) {
-                    primaryImportButton(.camera)
-                    primaryImportButton(.photoLibrary)
+                Grid(horizontalSpacing: 10, verticalSpacing: 10) {
+                    GridRow {
+                        primaryImportButton(.camera)
+                        primaryImportButton(.photoLibrary)
+                    }
+                    GridRow {
+                        pasteLinkButton
+                        moreImportMenu
+                    }
                 }
             }
 
             mealPrepLaunchButton
-
-            if clipboardContainsProbableWebURL {
-                pasteCopiedLinkButton
-            }
-
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 10) {
-                    pasteLinkButton
-                    moreImportMenu
-                }
-                VStack(spacing: 10) {
-                    pasteLinkButton
-                    moreImportMenu
-                }
-            }
         }
+        .accessibilityIdentifier("home-start-new-recipe")
     }
 
     private func primaryImportButton(_ method: ImportMethod) -> some View {
@@ -123,7 +108,14 @@ struct HomeView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(
+                maxWidth: .infinity,
+                minHeight: dynamicTypeSize.isAccessibilitySize
+                    ? nil
+                    : primaryImportCardMinimumHeight,
+                maxHeight: .infinity,
+                alignment: .topLeading
+            )
             .smartCartCard(padding: 16)
             .smartCartShadow()
         }
@@ -158,6 +150,7 @@ struct HomeView: View {
                     .font(.caption.bold())
                     .foregroundStyle(SmartCartTheme.green)
             }
+            .frame(minHeight: homeActionCardMinimumHeight)
             .smartCartCard(padding: 14)
         }
         .buttonStyle(PressableButtonStyle())
@@ -179,23 +172,6 @@ struct HomeView: View {
         .buttonStyle(SecondaryButtonStyle())
         .accessibilityIdentifier("home-import-paste-link")
         .accessibilityHint("Opens the recipe link importer without reading the clipboard")
-    }
-
-    private var pasteCopiedLinkButton: some View {
-        Button(action: pasteLinkFromClipboard) {
-            HStack(spacing: 10) {
-                Image(systemName: "link.badge.plus")
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Paste Copied Link")
-                    Text("A web link is ready")
-                        .font(.caption2.weight(.semibold))
-                }
-                Spacer(minLength: 0)
-            }
-        }
-        .buttonStyle(SecondaryButtonStyle())
-        .accessibilityIdentifier("home-paste-copied-link")
-        .accessibilityHint("Reads the copied web link and opens the recipe link importer")
     }
 
     private var moreImportMenu: some View {
@@ -291,25 +267,7 @@ struct HomeView: View {
         }
     }
 
-    private func refreshClipboardDetection() {
-        let probableWebURL: PartialKeyPath<UIPasteboard.DetectedValues> = \.probableWebURL
-        UIPasteboard.general.detectPatterns(for: [probableWebURL]) { result in
-            let containsWebURL = (try? result.get())?.contains(probableWebURL) == true
-            DispatchQueue.main.async {
-                clipboardContainsProbableWebURL = containsWebURL
-            }
-        }
-    }
-
-    private func pasteLinkFromClipboard() {
-        // Reading pasteboard contents is intentionally confined to this explicit tap.
-        let pasteboard = UIPasteboard.general
-        let copiedText = pasteboard.url?.absoluteString ?? pasteboard.string
-        let validatedText = copiedText.flatMap(RecipeLinkInput.validHTTPSURL(from:))?.absoluteString
-        appModel.openImporter(.recipeLink, initialText: validatedText)
-    }
-
-    private func pendingShoppingCard(_ session: ShoppingSession, compact: Bool = false) -> some View {
+    private func pendingShoppingCard(_ session: ShoppingSession) -> some View {
         let completed = session.items.filter { $0.status.isCompleted }.count
         let isGuideComplete = !session.items.isEmpty && completed == session.items.count
         let retailerName = session.items.first
@@ -327,10 +285,10 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(isGuideComplete ? "PANTRY UPDATE PENDING" : "RESUME SHOPPING")
                         .smartEyebrow()
-                    Text(isGuideComplete ? "Finish \(session.recipeTitle)" : "Continue \(session.recipeTitle)")
+                    Text(isGuideComplete ? "Update pantry for \(session.recipeTitle)" : "Continue \(session.recipeTitle)")
                         .font(.headline)
                         .foregroundStyle(SmartCartTheme.navy)
-                    Text("\(retailerName) · \(isGuideComplete ? "shopping results ready" : "\(session.items.count - completed) remaining")")
+                    Text("\(retailerName) · \(isGuideComplete ? "Shopping complete" : "\(session.items.count - completed) remaining")")
                         .font(.caption)
                         .foregroundStyle(SmartCartTheme.secondaryInk)
                 }
@@ -339,35 +297,55 @@ struct HomeView: View {
                 Image(systemName: "chevron.right")
                     .foregroundStyle(SmartCartTheme.green)
             }
+            .frame(minHeight: homeActionCardMinimumHeight)
             .smartCartCard(padding: 16)
-            .shadow(
-                color: compact ? .clear : SmartCartTheme.softShadow,
-                radius: compact ? 0 : 12,
-                y: compact ? 0 : 6
-            )
+            .shadow(color: SmartCartTheme.softShadow, radius: 12, y: 6)
         }
         .buttonStyle(PressableButtonStyle())
-        .accessibilityIdentifier(isGuideComplete ? "home-pantry-update-pending" : "home-resume-shopping")
+        .accessibilityIdentifier(
+            "\(isGuideComplete ? "home-pantry-update-pending" : "home-resume-shopping")-\(session.id.uuidString)"
+        )
     }
 
-    private func pendingShoppingSection(_ sessions: [ShoppingSession]) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+    private var shoppingTripsSection: some View {
+        let sessions = appModel.pendingShoppingSessions
+
+        return VStack(alignment: .leading, spacing: 10) {
             SectionHeader(
-                title: "Other Shopping Trips",
+                title: "Shopping Trips",
                 subtitle: "Resume a trip or finish its pantry update"
             )
-            ForEach(sessions) { session in
+
+            if sessions.count == 1, let session = sessions.first {
                 pendingShoppingCard(session)
+            } else if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: 10) {
+                    ForEach(sessions) { session in
+                        pendingShoppingCard(session)
+                    }
+                }
+            } else {
+                ScrollView(.horizontal) {
+                    LazyHStack(spacing: 10) {
+                        ForEach(sessions) { session in
+                            pendingShoppingCard(session)
+                                .containerRelativeFrame(
+                                    .horizontal,
+                                    count: 10,
+                                    span: 9,
+                                    spacing: 10
+                                )
+                                .id(session.id)
+                        }
+                    }
+                    .scrollTargetLayout()
+                }
+                .contentMargins(.horizontal, 1, for: .scrollContent)
+                .scrollIndicators(.hidden)
+                .scrollTargetBehavior(.viewAligned)
             }
         }
-    }
-
-    private var primaryResumeSession: ShoppingSession? {
-        appModel.pendingShoppingSessions.first { !$0.isGuideComplete }
-    }
-
-    private var secondaryPendingSessions: [ShoppingSession] {
-        appModel.pendingShoppingSessions.filter { $0.id != primaryResumeSession?.id }
+        .accessibilityIdentifier("home-shopping-trips")
     }
 
     private var storeCard: some View {

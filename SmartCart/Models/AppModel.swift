@@ -774,8 +774,11 @@ final class AppModel {
                     !committed.contains { shoppingSessionsRepresentSameTrip($0, session) }
             }
             .sorted { lhs, rhs in
-                if lhs.id == activeShoppingSessionID { return true }
-                if rhs.id == activeShoppingSessionID { return false }
+                let lhsIsActiveIncomplete = lhs.id == activeShoppingSessionID && !lhs.isGuideComplete
+                let rhsIsActiveIncomplete = rhs.id == activeShoppingSessionID && !rhs.isGuideComplete
+                if lhsIsActiveIncomplete != rhsIsActiveIncomplete {
+                    return lhsIsActiveIncomplete
+                }
                 return lhs.startedAt > rhs.startedAt
             }
         return candidates.reduce(into: []) { result, session in

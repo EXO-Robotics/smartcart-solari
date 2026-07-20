@@ -3926,7 +3926,7 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(tripSource.contains(".background(SmartCartTheme.herbLight)"))
     }
 
-    func testHomePrioritizesPhotoAndMealPrepStartsBeforeSecondaryContent() throws {
+    func testHomeStartsWithOneAdaptiveRecipeGroupAndOneShoppingTripsSection() throws {
         let repositoryRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -3946,17 +3946,87 @@ final class SmartCartTests: XCTestCase {
         let bodyStart = try XCTUnwrap(homeSource.range(of: "    var body: some View")?.lowerBound)
         let headerStart = try XCTUnwrap(homeSource.range(of: "    private var header", range: bodyStart..<homeSource.endIndex)?.lowerBound)
         let body = homeSource[bodyStart..<headerStart]
-        let startIndex = try XCTUnwrap(body.range(of: "startShoppingSection")?.lowerBound)
+        let startIndex = try XCTUnwrap(body.range(of: "startNewRecipeSection")?.lowerBound)
+        let tripsIndex = try XCTUnwrap(body.range(of: "shoppingTripsSection")?.lowerBound)
         let shopAgainIndex = try XCTUnwrap(body.range(of: "shopAgainCard")?.lowerBound)
         let storeIndex = try XCTUnwrap(body.range(of: "storeCard")?.lowerBound)
 
+        XCTAssertLessThan(startIndex, tripsIndex)
+        XCTAssertLessThan(tripsIndex, shopAgainIndex)
         XCTAssertLessThan(startIndex, shopAgainIndex)
         XCTAssertLessThan(shopAgainIndex, storeIndex)
-        XCTAssertTrue(homeSource.contains("title: \"Start a Shopping Trip\""))
+        XCTAssertTrue(homeSource.contains("title: \"Start New Recipe\""))
         XCTAssertTrue(homeSource.contains("Text(method == .camera ? \"Take Photo\" : \"Choose Photo\")"))
+        XCTAssertTrue(homeSource.contains("Grid(horizontalSpacing: 10, verticalSpacing: 10)"))
+        XCTAssertTrue(homeSource.contains("primaryImportCardMinimumHeight"))
+        XCTAssertTrue(homeSource.contains("if dynamicTypeSize.isAccessibilitySize"))
+        XCTAssertTrue(homeSource.contains("title: \"Shopping Trips\""))
+        XCTAssertTrue(homeSource.contains("appModel.pendingShoppingSessions"))
+        XCTAssertTrue(homeSource.contains(".scrollTargetBehavior(.viewAligned)"))
         XCTAssertTrue(homeSource.contains("accessibilityIdentifier(\"home-start-meal-prep\")"))
+        XCTAssertFalse(homeSource.contains("Other Shopping Trips"))
+        XCTAssertFalse(homeSource.contains("primaryResumeSession"))
+        XCTAssertFalse(homeSource.contains("secondaryPendingSessions"))
+        XCTAssertFalse(homeSource.contains("clipboardContainsProbableWebURL"))
+        XCTAssertFalse(homeSource.contains("Paste Copied Link"))
         XCTAssertFalse(homeSource.contains("promiseCard"))
         XCTAssertFalse(recipesSource.contains("private var mealPrepLaunchCard"))
+    }
+
+    @MainActor
+    func testPendingShoppingSessionsAreUniqueAndOnlyActiveIncompleteTripIsPromoted() throws {
+        let state = try makeState()
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(state: state),
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        let waitingItem = try state.shoppingItems.firstUnwrapped()
+        var completedItem = waitingItem
+        completedItem.status = .visited
+        let olderDate = Date(timeIntervalSince1970: 1_700_000_000)
+        let newerDate = olderDate.addingTimeInterval(60)
+
+        let olderIncomplete = ShoppingSession(
+            tripID: UUID(),
+            recipeID: state.activeRecipe.id,
+            recipeTitle: "Older active",
+            storeID: "walmart-5206",
+            startedAt: olderDate,
+            items: [waitingItem]
+        )
+        let newerIncomplete = ShoppingSession(
+            tripID: UUID(),
+            recipeID: state.activeRecipe.id,
+            recipeTitle: "Newer waiting",
+            storeID: "walmart-5206",
+            startedAt: newerDate,
+            items: [waitingItem]
+        )
+        let duplicateNewer = phase4Alias(of: newerIncomplete)
+
+        model.shoppingSessions = [newerIncomplete, olderIncomplete, duplicateNewer]
+        model.activeShoppingSessionID = olderIncomplete.id
+        XCTAssertEqual(model.pendingShoppingSessions.first?.id, olderIncomplete.id)
+        XCTAssertEqual(model.pendingShoppingSessions.count, 2)
+        XCTAssertEqual(
+            Set(model.pendingShoppingSessions.map(\.id)).count,
+            model.pendingShoppingSessions.count
+        )
+
+        let olderCompleted = ShoppingSession(
+            id: olderIncomplete.id,
+            tripID: olderIncomplete.tripID,
+            logicalTripID: olderIncomplete.logicalTripID,
+            recipeID: olderIncomplete.recipeID,
+            recipeTitle: "Older pantry update",
+            storeID: olderIncomplete.storeID,
+            startedAt: olderDate,
+            items: [completedItem]
+        )
+        model.shoppingSessions = [olderCompleted, newerIncomplete]
+        model.activeShoppingSessionID = olderCompleted.id
+        XCTAssertTrue(olderCompleted.isGuideComplete)
+        XCTAssertEqual(model.pendingShoppingSessions.first?.id, newerIncomplete.id)
     }
 
     func testRecipesTabUsesSavedLibraryAndRecentRecipeDrawer() throws {
@@ -4709,6 +4779,27 @@ final class SmartCartTests: XCTestCase {
 
         let originalRecents = model.recentRecipeRecords
         let sessionID = try XCTUnwrap(model.activeShoppingSessionID)
+        let currentItemID = try XCTUnwrap(model.currentGuidedItem?.id)
+
+        model.recordRetailerProductOpened(itemID: currentItemID)
+        XCTAssertEqual(model.recentRecipeRecords, originalRecents)
+        if let currentItem = model.currentGuidedItem,
+           let alternative = currentItem.alternatives.first(where: {
+               model.resolvedReplacementPackageCount(for: currentItem, product: $0) != nil
+           }) {
+            XCTAssertTrue(model.selectAlternative(itemID: currentItemID, candidateID: alternative.id))
+            XCTAssertEqual(model.recentRecipeRecords, originalRecents)
+        }
+
+        XCTAssertTrue(
+            model.handleAmbiguousRetailerBrowserDismissal(
+                sessionID: sessionID,
+                itemID: currentItemID
+            )
+        )
+        XCTAssertEqual(model.recentRecipeRecords, originalRecents)
+        XCTAssertTrue(model.openShoppingSession(sessionID))
+        XCTAssertTrue(model.startOrResumeRetailerShoppingSession())
 
         model.advanceGuidedItem()
         XCTAssertEqual(model.recentRecipeRecords, originalRecents)
@@ -4717,6 +4808,14 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(model.openShoppingSession(sessionID))
         XCTAssertEqual(model.recentRecipeRecords, originalRecents)
         XCTAssertTrue(model.startOrResumeRetailerShoppingSession())
+        XCTAssertEqual(model.recentRecipeRecords, originalRecents)
+
+        model.toggleMealPrepRecipe(recipe)
+        XCTAssertEqual(model.recentRecipeRecords, originalRecents)
+        for item in model.shoppingItems where item.status == .waiting {
+            XCTAssertTrue(model.recordRetailerOutcome(.visited, for: item.id, sessionID: sessionID))
+        }
+        model.startShoppingReconciliation()
         XCTAssertEqual(model.recentRecipeRecords, originalRecents)
     }
 
