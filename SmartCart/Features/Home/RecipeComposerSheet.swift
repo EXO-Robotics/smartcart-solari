@@ -29,6 +29,8 @@ struct RecipeComposerSheet: View {
     @State private var selectedImages: [UIImage] = []
     @State private var showCamera = false
     @State private var showPhotoLibrary = false
+    @State private var pendingCameraImage: UIImage?
+    @State private var focusSession: IngredientFocusSession?
     @State private var hasAttemptedInitialMediaPresentation = false
     @State private var isProcessing = false
     @State private var processingMessage = ""
@@ -261,11 +263,16 @@ struct RecipeComposerSheet: View {
         }
         .presentationDetents([.large])
         .interactiveDismissDisabled(isProcessing)
-        .fullScreenCover(isPresented: $showCamera) {
+        .fullScreenCover(isPresented: $showCamera, onDismiss: presentCapturedImageForFocus) {
             CameraPicker { image in
-                beginRecognition(in: [image])
+                pendingCameraImage = image
             }
             .ignoresSafeArea()
+        }
+        .fullScreenCover(item: $focusSession) { session in
+            IngredientFocusView(images: session.images) { result in
+                handleFocusCompletion(result, session: session)
+            }
         }
         .photosPicker(
             isPresented: $showPhotoLibrary,
@@ -761,6 +768,8 @@ struct RecipeComposerSheet: View {
         guard selectedMethod != method else { return }
         recognitionTask?.cancel()
         recognitionTask = nil
+        focusSession = nil
+        pendingCameraImage = nil
         selectedImages = []
         photoItems = []
         selectedImageSetID = nil
@@ -779,11 +788,26 @@ struct RecipeComposerSheet: View {
         }
     }
 
-    private func beginRecognition(in images: [UIImage]) {
+    private func presentImagesForFocus(_ images: [UIImage]) {
         recognitionTask?.cancel()
         let imageSetID = UUID()
-        let boundedImages = images.map { RecipeImagePreprocessor.resizedForOCR($0) }
-        selectedImages = boundedImages
+        selectedImages = images
+        selectedImageSetID = imageSetID
+        recognizedImageSetID = nil
+        recipeText = ""
+        title = "Imported Recipe"
+        clearVisionResult()
+        errorMessage = nil
+        focusSession = IngredientFocusSession(id: imageSetID, images: images)
+    }
+
+    private func beginRecognition(
+        in images: [UIImage],
+        focusRegions: [OCRFocusRegion],
+        imageSetID: UUID
+    ) {
+        recognitionTask?.cancel()
+        selectedImages = images
         selectedImageSetID = imageSetID
         recognizedImageSetID = nil
         recipeText = ""
@@ -791,8 +815,38 @@ struct RecipeComposerSheet: View {
         clearVisionResult()
         errorMessage = nil
         recognitionTask = Task {
-            await recognizeRecipe(in: boundedImages, imageSetID: imageSetID)
+            await recognizeRecipe(
+                in: images,
+                focusRegions: focusRegions,
+                imageSetID: imageSetID
+            )
         }
+    }
+
+    private func presentCapturedImageForFocus() {
+        guard let image = pendingCameraImage else { return }
+        pendingCameraImage = nil
+        presentImagesForFocus([image])
+    }
+
+    private func handleFocusCompletion(
+        _ result: IngredientFocusResult?,
+        session: IngredientFocusSession
+    ) {
+        focusSession = nil
+        guard let result else {
+            selectedImages = []
+            selectedImageSetID = nil
+            recognizedImageSetID = nil
+            photoItems = []
+            clearVisionResult()
+            return
+        }
+        beginRecognition(
+            in: session.images,
+            focusRegions: result.regions,
+            imageSetID: session.id
+        )
     }
 
     private func beginPhotoLoad(_ items: [PhotosPickerItem]) {
@@ -825,7 +879,7 @@ struct RecipeComposerSheet: View {
             for item in items {
                 try Task.checkCancellation()
                 guard let data = try await item.loadTransferable(type: Data.self),
-                      let image = RecipeImagePreprocessor.downsampledImage(from: data)
+                      let image = UIImage(data: data)
                 else {
                     throw RecipeVisionError.unreadableImage
                 }
@@ -834,7 +888,7 @@ struct RecipeComposerSheet: View {
             }
             guard !Task.isCancelled, selectedImageSetID == imageSetID else { return }
             selectedImages = images
-            await recognizeRecipe(in: images, imageSetID: imageSetID)
+            focusSession = IngredientFocusSession(id: imageSetID, images: images)
         } catch {
             guard !Task.isCancelled, selectedImageSetID == imageSetID else { return }
             selectedImages = []
@@ -843,7 +897,11 @@ struct RecipeComposerSheet: View {
         }
     }
 
-    private func recognizeRecipe(in images: [UIImage], imageSetID: UUID) async {
+    private func recognizeRecipe(
+        in images: [UIImage],
+        focusRegions: [OCRFocusRegion],
+        imageSetID: UUID
+    ) async {
         isProcessing = true
         processingMessage = "Reading recipe text…"
         errorMessage = nil
@@ -857,7 +915,8 @@ struct RecipeComposerSheet: View {
             let customWords = [title] + appModel.pantryInventory.map(\.name)
             let result = try await RecipeVisionReader.recognizeText(
                 in: images,
-                contextualWords: customWords
+                contextualWords: customWords,
+                focusRegions: focusRegions
             )
             guard !Task.isCancelled, selectedImageSetID == imageSetID else { return }
             processingMessage = "Normalizing ingredients…"
@@ -1023,7 +1082,8 @@ enum RecipeVisionReader {
 
     static func recognizeText(
         in images: [UIImage],
-        contextualWords: [String] = []
+        contextualWords: [String] = [],
+        focusRegions: [OCRFocusRegion] = []
     ) async throws -> Result {
         let startedAt = Date()
         var pages: [String] = []
@@ -1040,13 +1100,25 @@ enum RecipeVisionReader {
         var layoutAmbiguityCount = 0
         var ignoredInstructionLineCount = 0
         let customWords = RecipeOCRPolicy.boundedCustomWords(contextualWords)
+        let resolvedFocusRegions = images.indices.map { index in
+            focusRegions.indices.contains(index)
+                ? focusRegions[index].normalized()
+                : OCRFocusRegion.fullImage
+        }
 
         for (pageIndex, image) in images.enumerated() {
             let normalizedImage = RecipeImagePreprocessor.normalizeOrientation(image)
-            let page: PageResult
+            let focusRegion = resolvedFocusRegions[pageIndex]
+            let focusedImage = RecipeImagePreprocessor.resizedForOCR(
+                RecipeImagePreprocessor.focusedImage(
+                    normalizedImage,
+                    region: focusRegion
+                )
+            )
+            let recognizedPage: PageResult
             do {
                 let primary = try await recognizeText(
-                    in: normalizedImage,
+                    in: focusedImage,
                     pageIndex: pageIndex,
                     level: .accurate,
                     minimumTextHeight: 0.008,
@@ -1061,27 +1133,27 @@ enum RecipeVisionReader {
                     retryCount += 1
                     do {
                         let enhanced = try await recognizeText(
-                            in: RecipeImagePreprocessor.contrastEnhanced(normalizedImage),
+                            in: RecipeImagePreprocessor.contrastEnhanced(focusedImage),
                             pageIndex: pageIndex,
                             level: .accurate,
                             minimumTextHeight: 0.004,
                             customWords: customWords
                         )
-                        page = enhanced.qualityScore > primary.qualityScore
+                        recognizedPage = enhanced.qualityScore > primary.qualityScore
                             ? enhanced
                             : primary
                     } catch {
                         // A usable primary pass is always safer than discarding
                         // the page because an optional enhancement failed.
-                        page = primary
+                        recognizedPage = primary
                     }
                 } else {
-                    page = primary
+                    recognizedPage = primary
                 }
             } catch {
                 retryCount += 1
-                let correctedImage = RecipeImagePreprocessor.contrastEnhanced(normalizedImage)
-                page = try await recognizeText(
+                let correctedImage = RecipeImagePreprocessor.contrastEnhanced(focusedImage)
+                recognizedPage = try await recognizeText(
                     in: correctedImage,
                     pageIndex: pageIndex,
                     level: .accurate,
@@ -1090,6 +1162,7 @@ enum RecipeVisionReader {
                 )
             }
             try Task.checkCancellation()
+            let page = remappingPage(recognizedPage, to: focusRegion)
             if suggestedTitle == nil {
                 suggestedTitle = page.suggestedTitle
             }
@@ -1118,7 +1191,8 @@ enum RecipeVisionReader {
                 reconstructedText: reconstructedPages.joined(separator: "\n"),
                 filteredIngredientLines: filteredIngredientLines,
                 ignoredSourceLines: ignoredSourceLines,
-                observations: sourceObservations
+                observations: sourceObservations,
+                focusRegions: resolvedFocusRegions
             ),
             pageCount: images.count,
             retryCount: retryCount,
@@ -1128,6 +1202,25 @@ enum RecipeVisionReader {
             layoutAmbiguityCount: layoutAmbiguityCount,
             ignoredInstructionLineCount: ignoredInstructionLineCount
         )
+    }
+
+    private static func remappingPage(
+        _ page: PageResult,
+        to focusRegion: OCRFocusRegion
+    ) -> PageResult {
+        guard !focusRegion.isFullImage else { return page }
+        var remapped = page
+        remapped.sourceLines = page.sourceLines.map { line in
+            var line = line
+            line.boundingBox = focusRegion.remappingVisionBox(line.boundingBox)
+            return line
+        }
+        remapped.sourceObservations = page.sourceObservations.map { observation in
+            var observation = observation
+            observation.boundingBox = focusRegion.remappingVisionRect(observation.boundingBox)
+            return observation
+        }
+        return remapped
     }
 
     private static func recognizeText(
@@ -1456,6 +1549,20 @@ enum RecipeImagePreprocessor {
         }
     }
 
+    static func focusedImage(_ image: UIImage, region: OCRFocusRegion) -> UIImage {
+        let normalized = normalizeOrientation(image)
+        let focus = region.normalized()
+        guard !focus.isFullImage, let cgImage = normalized.cgImage else { return normalized }
+        let pixelSize = CGSize(width: cgImage.width, height: cgImage.height)
+        let cropRect = focus.cropRect(for: pixelSize)
+            .intersection(CGRect(origin: .zero, size: pixelSize))
+            .integral
+        guard cropRect.width > 1,
+              cropRect.height > 1,
+              let crop = cgImage.cropping(to: cropRect) else { return normalized }
+        return UIImage(cgImage: crop, scale: 1, orientation: .up)
+    }
+
     static func contrastEnhanced(_ image: UIImage) -> UIImage {
         let normalized = normalizeOrientation(image)
         guard let input = CIImage(image: normalized) else { return normalized }
@@ -1484,6 +1591,11 @@ private enum RecipeVisionError: LocalizedError {
             "No readable recipe text was found. Try a brighter, flatter image or paste the ingredient text."
         }
     }
+}
+
+private struct IngredientFocusSession: Identifiable {
+    let id: UUID
+    let images: [UIImage]
 }
 
 private struct CameraPicker: UIViewControllerRepresentable {

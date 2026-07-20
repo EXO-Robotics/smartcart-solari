@@ -36,6 +36,9 @@
 		A1000000000000000000001C /* MealPrepAggregationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001C /* MealPrepAggregationService.swift */; };
 		A1000000000000000000001D /* MealPrepViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001D /* MealPrepViews.swift */; };
 		A1000000000000000000001E /* ContextualIngredientFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001E /* ContextualIngredientFilter.swift */; };
+		A1000000000000000000001F /* OCRFocusRegion.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000020 /* OCRFocusRegion.swift */; };
+		A10000000000000000000020 /* OCRFocusRegionSuggester.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000021 /* OCRFocusRegionSuggester.swift */; };
+		A10000000000000000000021 /* IngredientFocusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000022 /* IngredientFocusView.swift */; };
 		A20000000000000000000001 /* SmartCartTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000001 /* SmartCartTests.swift */; };
 		A20000000000000000000002 /* MealPrepAggregationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000003 /* MealPrepAggregationTests.swift */; };
 		A20000000000000000000003 /* ReleaseBlockerMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000004 /* ReleaseBlockerMigrationTests.swift */; };
@@ -85,6 +88,9 @@
 		B1000000000000000000001D /* MealPrepViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealPrepViews.swift; sourceTree = "<group>"; };
 		B1000000000000000000001E /* ContextualIngredientFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContextualIngredientFilter.swift; sourceTree = "<group>"; };
 		B1000000000000000000001F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B10000000000000000000020 /* OCRFocusRegion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRFocusRegion.swift; sourceTree = "<group>"; };
+		B10000000000000000000021 /* OCRFocusRegionSuggester.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRFocusRegionSuggester.swift; sourceTree = "<group>"; };
+		B10000000000000000000022 /* IngredientFocusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IngredientFocusView.swift; sourceTree = "<group>"; };
 		B20000000000000000000001 /* SmartCartTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartCartTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000002 /* SmartCartTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SmartCartTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B20000000000000000000003 /* MealPrepAggregationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealPrepAggregationTests.swift; sourceTree = "<group>"; };
@@ -163,6 +169,7 @@
 				B10000000000000000000003 /* AppModel.swift */,
 				B1000000000000000000000D /* RetailerModels.swift */,
 				B1000000000000000000001B /* MealPrepModels.swift */,
+				B10000000000000000000020 /* OCRFocusRegion.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -188,6 +195,7 @@
 			children = (
 				B10000000000000000000007 /* HomeView.swift */,
 				B10000000000000000000008 /* RecipeComposerSheet.swift */,
+				B10000000000000000000022 /* IngredientFocusView.swift */,
 			);
 			path = Features/Home;
 			sourceTree = "<group>";
@@ -228,6 +236,7 @@
 				B10000000000000000000014 /* PantryMatchingService.swift */,
 				B10000000000000000000015 /* BarcodeResolutionService.swift */,
 				B10000000000000000000016 /* OCRLayoutReconstructor.swift */,
+				B10000000000000000000021 /* OCRFocusRegionSuggester.swift */,
 				B1000000000000000000001E /* ContextualIngredientFilter.swift */,
 				B10000000000000000000017 /* RecipePageClient.swift */,
 				B1000000000000000000001C /* MealPrepAggregationService.swift */,
@@ -404,6 +413,9 @@
 				A1000000000000000000001C /* MealPrepAggregationService.swift in Sources */,
 				A1000000000000000000001D /* MealPrepViews.swift in Sources */,
 				A1000000000000000000001E /* ContextualIngredientFilter.swift in Sources */,
+				A1000000000000000000001F /* OCRFocusRegion.swift in Sources */,
+				A10000000000000000000020 /* OCRFocusRegionSuggester.swift in Sources */,
+				A10000000000000000000021 /* IngredientFocusView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

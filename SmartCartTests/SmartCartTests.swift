@@ -1138,6 +1138,7 @@ final class SmartCartTests: XCTestCase {
     }
 
     func testRecipeSourceDocumentCodableRoundTripPreservesRawAndDerivedRepresentations() throws {
+        let focusRegion = OCRFocusRegion(x: 0.12, y: 0.18, width: 0.72, height: 0.54)
         let sourceDocument = RecipeSourceDocument(
             rawRecognizedText: "INGREDIENTS\n1 cup flour\nINSTRUCTIONS\nWhisk until smooth",
             reconstructedText: "1 cup flour",
@@ -1154,7 +1155,8 @@ final class SmartCartTests: XCTestCase {
                         .init(text: "I cup flour", confidence: 0.61)
                     ]
                 )
-            ]
+            ],
+            focusRegions: [focusRegion]
         )
         let recipe = Recipe(
             title: "Source preservation",
@@ -1178,6 +1180,99 @@ final class SmartCartTests: XCTestCase {
         XCTAssertNotEqual(decoded.sourceDocument?.rawRecognizedText, decoded.sourceDocument?.reconstructedText)
         XCTAssertEqual(decoded.sourceDocument?.ignoredSourceLines.count, 2)
         XCTAssertEqual(decoded.sourceDocument?.observations.first?.observationID, "page-0-vision-0")
+        XCTAssertEqual(decoded.sourceDocument?.focusRegions, [focusRegion])
+    }
+
+    func testRecipeSourceDocumentDecodesLegacyPayloadWithoutFocusRegions() throws {
+        let json = """
+        {
+          "rawRecognizedText": "1 cup flour",
+          "reconstructedText": "1 cup flour",
+          "filteredIngredientLines": ["1 cup flour"],
+          "ignoredSourceLines": [],
+          "observations": []
+        }
+        """
+
+        let decoded = try JSONDecoder().decode(
+            RecipeSourceDocument.self,
+            from: Data(json.utf8)
+        )
+
+        XCTAssertNil(decoded.focusRegions)
+    }
+
+    func testOCRFocusRegionClampsAndRemapsVisionCoordinates() {
+        let invalid = OCRFocusRegion(x: .nan, y: 0, width: 0.5, height: 0.5)
+        XCTAssertEqual(invalid.normalized(), .fullImage)
+
+        let tiny = OCRFocusRegion(x: 0.98, y: 0.99, width: 0.001, height: 0.001).normalized()
+        XCTAssertEqual(tiny.width, 0.08, accuracy: 0.0001)
+        XCTAssertEqual(tiny.height, 0.08, accuracy: 0.0001)
+        XCTAssertEqual(tiny.x, 0.92, accuracy: 0.0001)
+        XCTAssertEqual(tiny.y, 0.92, accuracy: 0.0001)
+
+        let focus = OCRFocusRegion(x: 0.20, y: 0.10, width: 0.50, height: 0.60)
+        let remapped = focus.remappingVisionBox(
+            OCRNormalizedBoundingBox(x: 0.10, y: 0.20, width: 0.40, height: 0.30)
+        )
+        XCTAssertEqual(remapped.x, 0.25, accuracy: 0.0001)
+        XCTAssertEqual(remapped.y, 0.42, accuracy: 0.0001)
+        XCTAssertEqual(remapped.width, 0.20, accuracy: 0.0001)
+        XCTAssertEqual(remapped.height, 0.18, accuracy: 0.0001)
+    }
+
+    func testOCRFocusSuggestionFindsPaddedIngredientBlock() {
+        let candidates = [
+            focusCandidate("Ingredients", x: 0.12, y: 0.88, width: 0.30),
+            focusCandidate("2 cups flour", x: 0.12, y: 0.79, width: 0.42),
+            focusCandidate("1 tsp salt", x: 0.12, y: 0.71, width: 0.36),
+            focusCandidate("2 large eggs", x: 0.12, y: 0.63, width: 0.38),
+            focusCandidate("1 tbsp olive oil", x: 0.12, y: 0.55, width: 0.44),
+            focusCandidate("Instructions", x: 0.10, y: 0.42, width: 0.34),
+            focusCandidate("Whisk the eggs until smooth and then fold everything together.", x: 0.10, y: 0.34, width: 0.78)
+        ]
+
+        let suggestion = OCRFocusRegionSuggester.suggestion(from: candidates)
+
+        XCTAssertGreaterThanOrEqual(suggestion.confidence, 0.70)
+        XCTAssertFalse(suggestion.region.isFullImage)
+        XCTAssertLessThan(suggestion.region.x, 0.12)
+        XCTAssertGreaterThan(suggestion.region.width, 0.44)
+        XCTAssertLessThan(suggestion.region.y, 0.07)
+        XCTAssertLessThan(suggestion.region.y + suggestion.region.height, 0.50)
+    }
+
+    func testOCRFocusSuggestionFallsBackToFullImageWhenUncertain() {
+        let suggestion = OCRFocusRegionSuggester.suggestion(
+            from: [focusCandidate("A family recipe passed down for generations", x: 0.08, y: 0.75, width: 0.80)]
+        )
+
+        XCTAssertEqual(suggestion.region, .fullImage)
+        XCTAssertLessThan(suggestion.confidence, 0.70)
+    }
+
+    func testFocusedImageUsesTransientAxisAlignedCrop() throws {
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        let image = UIGraphicsImageRenderer(
+            size: CGSize(width: 100, height: 200),
+            format: format
+        ).image { context in
+            UIColor.systemRed.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 100, height: 200))
+        }
+
+        let cropped = RecipeImagePreprocessor.focusedImage(
+            image,
+            region: OCRFocusRegion(x: 0.25, y: 0.25, width: 0.50, height: 0.50)
+        )
+
+        let cgImage = try cropped.cgImage.firstUnwrapped()
+        XCTAssertEqual(cgImage.width, 50)
+        XCTAssertEqual(cgImage.height, 100)
+        XCTAssertEqual(image.cgImage?.width, 100, "The original image must remain intact")
+        XCTAssertEqual(image.cgImage?.height, 200, "The original image must remain intact")
     }
 
     func testChocolateChipCookieBarsGoldenVisionObservationsReconstructAndParse() throws {
@@ -1335,6 +1430,36 @@ final class SmartCartTests: XCTestCase {
         XCTAssertFalse(recipe.ingredients.contains {
             $0.name.localizedCaseInsensitiveContains("cookie bars")
                 || $0.name.localizedCaseInsensitiveContains("brown sugar chips")
+        })
+    }
+
+    func testFocusedChocolateChipJPEGScansCropAndRemapsEvidenceToOriginalImage() async throws {
+        let imageURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/OCR/chocolate_chip_cookie_bars_exact.jpeg")
+        let image = try UIImage(contentsOfFile: imageURL.path).firstUnwrapped()
+        let focus = OCRFocusRegion(x: 0.08, y: 0.56, width: 0.84, height: 0.27)
+
+        let result = try await RecipeVisionReader.recognizeText(
+            in: [image],
+            focusRegions: [focus]
+        )
+
+        XCTAssertEqual(result.sourceDocument.focusRegions, [focus])
+        XCTAssertTrue(result.text.localizedCaseInsensitiveContains("unsalted butter"))
+        XCTAssertTrue(result.text.localizedCaseInsensitiveContains("vanilla extract"))
+        XCTAssertFalse(result.text.localizedCaseInsensitiveContains("preheat oven"))
+        XCTAssertFalse(result.sourceDocument.observations.isEmpty)
+
+        let visionBottom = 1 - focus.y - focus.height
+        let tolerance = 0.025
+        XCTAssertTrue(result.sourceDocument.observations.allSatisfy { observation in
+            observation.boundingBox.x >= focus.x - tolerance
+                && observation.boundingBox.x + observation.boundingBox.width
+                    <= focus.x + focus.width + tolerance
+                && observation.boundingBox.y >= visionBottom - tolerance
+                && observation.boundingBox.y + observation.boundingBox.height
+                    <= 1 - focus.y + tolerance
         })
     }
 
@@ -6297,6 +6422,26 @@ final class SmartCartTests: XCTestCase {
             defaults.removePersistentDomain(forName: name)
         }
         return defaults
+    }
+
+    private func focusCandidate(
+        _ text: String,
+        x: Double,
+        y: Double,
+        width: Double,
+        height: Double = 0.05,
+        confidence: Double = 0.95
+    ) -> OCRFocusTextCandidate {
+        OCRFocusTextCandidate(
+            text: text,
+            boundingBox: OCRNormalizedBoundingBox(
+                x: x,
+                y: y,
+                width: width,
+                height: height
+            ),
+            confidence: confidence
+        )
     }
 }
 

@@ -175,6 +175,8 @@ struct RecipeSourceDocument: Hashable, Codable {
     var filteredIngredientLines: [String]
     var ignoredSourceLines: [String]
     var observations: [RecipeSourceObservation]
+    /// Per-page, non-destructive OCR focus regions in top-left normalized coordinates.
+    var focusRegions: [OCRFocusRegion]? = nil
 }
 
 struct Recipe: Identifiable, Hashable, Codable {
