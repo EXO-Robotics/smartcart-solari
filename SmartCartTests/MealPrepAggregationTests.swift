@@ -469,6 +469,7 @@ final class MealPrepAggregationTests: XCTestCase {
         model.mealPrepDraft = MealPrepDraft(selections: [selection(source, target: 8)])
         XCTAssertTrue(model.buildMealPrepPlan())
         model.recipes.removeAll()
+        model.persistNow()
 
         let restored = AppModel(stateStore: store)
         XCTAssertTrue(restored.recipes.isEmpty)
@@ -559,6 +560,7 @@ final class MealPrepAggregationTests: XCTestCase {
     func testMealPrepAtomicWriteFailureRollsBackScopePlanAndItemsTogether() throws {
         let store = ReleaseBlockerFailingStateStore()
         let model = AppModel(stateStore: store, seedDemoShoppingState: true)
+        model.persistNow()
         let originalScope = model.shoppingScope
         let originalItems = model.shoppingItems
         model.mealPrepDraft = MealPrepDraft(selections: [
