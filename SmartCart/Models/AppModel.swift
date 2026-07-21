@@ -2,6 +2,12 @@ import Foundation
 import Observation
 import SwiftUI
 
+struct DomainUndoAction: Identifiable, Equatable {
+    let id: UUID
+    let message: String
+    let actionTitle: String
+}
+
 @MainActor
 @Observable
 final class AppModel {
@@ -126,6 +132,7 @@ final class AppModel {
     var lastImportReport: RecipeImportReport?
     var toastMessage: String?
     private(set) var persistenceIssue: String?
+    private(set) var domainUndoAction: DomainUndoAction?
 
     /// Whole-recipe opens, newest first. Stored in UserDefaults rather than
     /// the JSON state schema because this is UI history, not shopping state.
@@ -210,6 +217,16 @@ final class AppModel {
     private var matchingGeneration: UInt = 0
     @ObservationIgnored
     private var retailerMatchingGeneration = RetailerMatchingGeneration()
+    @ObservationIgnored
+    private var pendingDomainUndo: PendingDomainUndo?
+
+    private struct PendingDomainUndo {
+        let id: UUID
+        let message: String
+        let priorState: SmartCartPersistedState
+        let priorRecentRecipeRecords: [RecentRecipeRecord]
+        let committedRevision: UInt64
+    }
 
     init(
         stateStore: any SmartCartStateStoring = JSONSmartCartStateStore(),
@@ -1105,6 +1122,8 @@ final class AppModel {
     @discardableResult
     func removeRecipeFromLibrary(_ id: UUID) -> Bool {
         guard savedRecipeIDs.contains(id) else { return false }
+        let undoState = stateSnapshot()
+        let undoRecents = recentRecipeRecords
         let previousRecipes = recipes
         let previousSavedRecipeIDs = savedRecipeIDs
         var updatedSavedRecipeIDs = savedRecipeIDs
@@ -1121,6 +1140,11 @@ final class AppModel {
         // only after membership persistence succeeds so a failed removal never
         // leaves the two surfaces disagreeing.
         recentRecipeRecords.removeAll { $0.recipeID == id }
+        registerDomainUndo(
+            message: "Recipe removed from Saved Recipes",
+            priorState: undoState,
+            priorRecentRecipeRecords: undoRecents
+        )
         return true
     }
 
@@ -1233,10 +1257,15 @@ final class AppModel {
 
     func toggleMealPrepRecipe(_ recipe: Recipe) {
         var draft = mealPrepDraft ?? MealPrepDraft()
+        let undoState = stateSnapshot()
+        let undoRecents = recentRecipeRecords
+        let removesSelection: Bool
         if let index = draft.selections.firstIndex(where: { $0.recipeSnapshot.id == recipe.id }) {
+            removesSelection = true
             draft.selections.remove(at: index)
             draft.updatedAt = .now
         } else if draft.selections.count < MealPrepDraft.selectionLimit {
+            removesSelection = false
             draft.selections.append(
                 MealPrepSelection(recipe: recipe, targetServings: Double(max(1, recipe.servings)))
             )
@@ -1245,7 +1274,14 @@ final class AppModel {
             showToast("Meal Prep supports up to five recipes in this beta")
             return
         }
-        updateMealPrepDraftAndPlan(draft)
+        guard updateMealPrepDraftAndPlan(draft) else { return }
+        if removesSelection {
+            registerDomainUndo(
+                message: "Recipe removed from Meal Prep",
+                priorState: undoState,
+                priorRecentRecipeRecords: undoRecents
+            )
+        }
     }
 
     func updateMealPrepServings(selectionID: UUID, delta: Double) {
@@ -1420,7 +1456,8 @@ final class AppModel {
         rebuildMealPrepPlanPreservingDecisions(decisions)
     }
 
-    private func updateMealPrepDraftAndPlan(_ draft: MealPrepDraft) {
+    @discardableResult
+    private func updateMealPrepDraftAndPlan(_ draft: MealPrepDraft) -> Bool {
         let succeeded = performAtomicMealPrepTransition {
             let rebuilt = try mealPrepPlan.map {
                 try rebuiltMealPrepPlan(
@@ -1437,6 +1474,7 @@ final class AppModel {
         if !succeeded {
             showToast("Meal Prep changes could not be saved")
         }
+        return succeeded
     }
 
     private func rebuildMealPrepPlanPreservingDecisions(
@@ -1529,6 +1567,7 @@ final class AppModel {
             try persistenceCoordinator.saveCompatibility(stateSnapshot())
             persistenceIssue = nil
             suppressPersistence = false
+            clearPendingDomainUndo()
             return true
         } catch {
             activeRecipe = backup.activeRecipe
@@ -2188,6 +2227,8 @@ final class AppModel {
               case .unresolved = ingredientResolutions[index].resolution
         else { return false }
 
+        let undoState = stateSnapshot()
+        let undoRecents = recentRecipeRecords
         let originalResolutions = ingredientResolutions
         let current = ingredientResolutions[index]
         suppressPersistence = true
@@ -2200,8 +2241,14 @@ final class AppModel {
         )
         suppressPersistence = false
         do {
-            try persistenceCoordinator.saveCompatibility(stateSnapshot())
+            let revision = try persistenceCoordinator.saveCompatibility(stateSnapshot())
             persistenceIssue = nil
+            registerDomainUndo(
+                message: "Ingredient excluded",
+                priorState: undoState,
+                priorRecentRecipeRecords: undoRecents,
+                committedRevision: revision
+            )
             return true
         } catch {
             suppressPersistence = true
@@ -2226,16 +2273,41 @@ final class AppModel {
 
     @discardableResult
     func skipMatchingException(itemID: UUID) -> Bool {
-        guard activeShoppingSessionID == nil,
+        guard persistenceReady,
+              activeShoppingSessionID == nil,
               let index = shoppingItems.firstIndex(where: { $0.id == itemID }),
               shoppingItems[index].status == .waiting,
               !matchingExceptionReasons(for: shoppingItems[index]).isEmpty else { return false }
+        let undoState = stateSnapshot()
+        let undoRecents = recentRecipeRecords
+        let originalItems = shoppingItems
+        let originalResolutions = ingredientResolutions
+        suppressPersistence = true
         ensureMatchingFingerprints(at: index)
         materializeCompatibleIngredientResolutionsIfNeeded()
         shoppingItems[index].reviewedMatchingFingerprint = shoppingItems[index].matchingInputFingerprint
         shoppingItems[index].status = .skipped
         replaceIngredientResolution(itemID: itemID, with: .userExcluded)
-        return true
+        suppressPersistence = false
+        do {
+            let revision = try persistenceCoordinator.saveCompatibility(stateSnapshot())
+            persistenceIssue = nil
+            registerDomainUndo(
+                message: "Shopping item skipped",
+                priorState: undoState,
+                priorRecentRecipeRecords: undoRecents,
+                committedRevision: revision
+            )
+            return true
+        } catch {
+            suppressPersistence = true
+            shoppingItems = originalItems
+            ingredientResolutions = originalResolutions
+            suppressPersistence = false
+            persistenceIssue = error.localizedDescription
+            showToast("That choice could not be saved")
+            return false
+        }
     }
 
     @discardableResult
@@ -2249,6 +2321,8 @@ final class AppModel {
             return false
         }
 
+        let undoState = stateSnapshot()
+        let undoRecents = recentRecipeRecords
         let originalItems = shoppingItems
         let originalResolutions = ingredientResolutions
         suppressPersistence = true
@@ -2279,8 +2353,16 @@ final class AppModel {
 
         suppressPersistence = false
         do {
-            try persistenceCoordinator.saveCompatibility(stateSnapshot())
+            let revision = try persistenceCoordinator.saveCompatibility(stateSnapshot())
             persistenceIssue = nil
+            if shouldOrderByItemID.values.contains(false) {
+                registerDomainUndo(
+                    message: "Shopping choices updated",
+                    priorState: undoState,
+                    priorRecentRecipeRecords: undoRecents,
+                    committedRevision: revision
+                )
+            }
             return true
         } catch {
             suppressPersistence = true
@@ -3168,6 +3250,8 @@ final class AppModel {
             return true
         }
 
+        let undoState = stateSnapshot()
+        let undoRecents = recentRecipeRecords
         var updatedSessions = shoppingSessions
         let archivedAt = Date.now
         for index in relatedIndices {
@@ -3175,13 +3259,19 @@ final class AppModel {
         }
 
         do {
-            try persistenceCoordinator.saveCompatibility(
+            let revision = try persistenceCoordinator.saveCompatibility(
                 stateSnapshot(shoppingSessions: updatedSessions)
             )
             suppressPersistence = true
             shoppingSessions = updatedSessions
             suppressPersistence = false
             persistenceIssue = nil
+            registerDomainUndo(
+                message: "Pantry reminder archived",
+                priorState: undoState,
+                priorRecentRecipeRecords: undoRecents,
+                committedRevision: revision
+            )
             return true
         } catch {
             persistenceIssue = error.localizedDescription
@@ -4295,11 +4385,21 @@ final class AppModel {
     }
 
     func removePantryItems(at offsets: IndexSet) {
+        let validOffsets = IndexSet(offsets.filter { pantryInventory.indices.contains($0) })
+        guard !validOffsets.isEmpty else { return }
+        let undoState = stateSnapshot()
+        let undoRecents = recentRecipeRecords
         var updatedInventory = pantryInventory
-        updatedInventory.remove(atOffsets: offsets)
+        updatedInventory.remove(atOffsets: validOffsets)
         if !commitPantryInventoryChange(updatedInventory) {
             showToast("Pantry change could not be saved")
+            return
         }
+        registerDomainUndo(
+            message: validOffsets.count == 1 ? "Pantry item removed" : "Pantry items removed",
+            priorState: undoState,
+            priorRecentRecipeRecords: undoRecents
+        )
     }
 
     /// Existing pantry items whose names match a partial query, prefix
@@ -5074,6 +5174,92 @@ final class AppModel {
         }
     }
 
+    @discardableResult
+    func undoPendingDomainAction() async -> Bool {
+        guard let pendingDomainUndo else { return false }
+        guard persistenceCoordinator.latestDurableRevision == pendingDomainUndo.committedRevision else {
+            clearPendingDomainUndo()
+            showToast("Undo is no longer available")
+            return false
+        }
+
+        do {
+            _ = try await persistenceCoordinator.saveCritical(pendingDomainUndo.priorState)
+            applyDomainState(pendingDomainUndo.priorState)
+            recentRecipeRecords = pendingDomainUndo.priorRecentRecipeRecords
+            persistenceIssue = nil
+            clearPendingDomainUndo()
+            return true
+        } catch {
+            persistenceIssue = error.localizedDescription
+            domainUndoAction = DomainUndoAction(
+                id: pendingDomainUndo.id,
+                message: "Couldn’t restore this change.",
+                actionTitle: "Retry"
+            )
+            showToast("Couldn’t save this change.")
+            return false
+        }
+    }
+
+    private func registerDomainUndo(
+        message: String,
+        priorState: SmartCartPersistedState,
+        priorRecentRecipeRecords: [RecentRecipeRecord],
+        committedRevision: UInt64? = nil
+    ) {
+        let revision = committedRevision ?? persistenceCoordinator.latestDurableRevision
+        let id = UUID()
+        pendingDomainUndo = PendingDomainUndo(
+            id: id,
+            message: message,
+            priorState: priorState,
+            priorRecentRecipeRecords: priorRecentRecipeRecords,
+            committedRevision: revision
+        )
+        domainUndoAction = DomainUndoAction(
+            id: id,
+            message: message,
+            actionTitle: "Undo"
+        )
+    }
+
+    private func clearPendingDomainUndo() {
+        pendingDomainUndo = nil
+        domainUndoAction = nil
+    }
+
+    private func applyDomainState(_ state: SmartCartPersistedState) {
+        suppressPersistence = true
+        recipes = state.recipes
+        activeRecipe = state.activeRecipe
+        desiredServings = state.desiredServings
+        preferences = state.preferences
+        featureFlags = state.featureFlags
+        storeStrategy = state.storeStrategy
+        fulfillmentMode = state.fulfillmentMode
+        selectedStoreIDs = state.selectedStoreIDs
+        zipCode = state.zipCode
+        pickupDay = state.pickupDay
+        pickupTime = state.pickupTime
+        shoppingItems = state.shoppingItems
+        ingredientResolutions = state.ingredientResolutions
+        guidedIndex = state.guidedIndex
+        savedLists = state.savedLists
+        preferredDeliveryPartnerName = state.preferredDeliveryPartnerName
+        pantryInventory = state.pantryInventory
+        preferredProductIDsByIngredient = state.preferredProductIDsByIngredient
+        analyticsEvents = state.analyticsEvents
+        walmartWishlistReference = state.walmartWishlistReference
+        shoppingSessions = state.shoppingSessions
+        activeShoppingSessionID = state.activeShoppingSessionID
+        shoppingScope = state.shoppingScope
+        mealPrepDraft = state.mealPrepDraft
+        mealPrepPlan = state.mealPrepPlan
+        savedRecipeIDs = state.savedRecipeIDs ?? Set(state.recipes.map(\.id))
+        suppressPersistence = false
+    }
+
     private func persistLibraryMutation(
         recipes updatedRecipes: [Recipe],
         savedRecipeIDs updatedSavedRecipeIDs: Set<UUID>,
@@ -5090,6 +5276,7 @@ final class AppModel {
         do {
             try persistenceCoordinator.saveCompatibility(stateSnapshot())
             persistenceIssue = nil
+            clearPendingDomainUndo()
             return true
         } catch {
             suppressPersistence = true

@@ -1021,6 +1021,7 @@ struct PantryDashboardView: View {
                 }
             }
         }
+        .domainUndoOverlay()
     }
 
     private var header: some View {

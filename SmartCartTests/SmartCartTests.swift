@@ -7331,6 +7331,197 @@ final class SmartCartTests: XCTestCase {
         XCTAssertEqual(acquisitions?.first?.amount, Double(row.purchaseQuantity))
     }
 
+    @MainActor
+    func testDomainUndoRestoresRemovedPantryItemDurablyAndIsIdempotent() async throws {
+        let store = InMemorySmartCartStateStore()
+        let model = AppModel(stateStore: store, commerceDefaults: isolatedCommerceDefaults())
+        let inventory = [
+            PantryInventoryItem(name: "Rice", quantity: 2, unit: "cup"),
+            PantryInventoryItem(name: "Beans", quantity: 1, unit: "can")
+        ]
+        model.pantryInventory = inventory
+        await model.flushPendingPersistence()
+
+        model.removePantryItems(at: IndexSet(integer: 0))
+        XCTAssertEqual(model.pantryInventory.map(\.name), ["Beans"])
+        XCTAssertEqual(model.domainUndoAction?.actionTitle, "Undo")
+
+        let didUndo = await model.undoPendingDomainAction()
+        XCTAssertTrue(didUndo)
+        XCTAssertEqual(model.pantryInventory, inventory)
+        XCTAssertEqual(store.state?.pantryInventory, inventory)
+        XCTAssertNil(model.domainUndoAction)
+        let repeatedUndo = await model.undoPendingDomainAction()
+        XCTAssertFalse(repeatedUndo)
+
+        let restored = AppModel(stateStore: store, commerceDefaults: isolatedCommerceDefaults())
+        XCTAssertEqual(restored.pantryInventory, inventory)
+        XCTAssertNil(restored.domainUndoAction)
+    }
+
+    @MainActor
+    func testDomainUndoRestoresSavedRecipeMembershipAndRecency() async throws {
+        let store = InMemorySmartCartStateStore()
+        let defaults = isolatedCommerceDefaults()
+        let model = AppModel(stateStore: store, commerceDefaults: defaults)
+        let recipe = phase4Recipe(title: "Undo library recipe")
+        XCTAssertTrue(model.beginRecipe(recipe))
+        model.recordRecipeOpened(recipe.id)
+        let recipesBefore = model.recipes
+        let recentsBefore = model.recentRecipeRecords
+
+        XCTAssertTrue(model.removeRecipeFromLibrary(recipe.id))
+        XCTAssertFalse(model.isRecipeSaved(recipe.id))
+        XCTAssertFalse(model.recentRecipeIDs.contains(recipe.id))
+
+        let didUndo = await model.undoPendingDomainAction()
+        XCTAssertTrue(didUndo)
+        XCTAssertTrue(model.isRecipeSaved(recipe.id))
+        XCTAssertEqual(model.recipes, recipesBefore)
+        XCTAssertEqual(model.recentRecipeRecords, recentsBefore)
+        XCTAssertEqual(store.state?.savedRecipeIDs, model.savedRecipeIDs)
+    }
+
+    @MainActor
+    func testDomainUndoRestoresRemovedMealPrepRecipe() async throws {
+        let store = InMemorySmartCartStateStore()
+        let model = AppModel(stateStore: store, commerceDefaults: isolatedCommerceDefaults())
+        let recipe = phase4Recipe(title: "Undo Meal Prep recipe")
+        XCTAssertTrue(model.beginRecipe(recipe))
+        model.startMealPrepDraft()
+        model.toggleMealPrepRecipe(recipe)
+        let draftBeforeRemoval = try XCTUnwrap(model.mealPrepDraft)
+
+        model.toggleMealPrepRecipe(recipe)
+        XCTAssertFalse(model.isRecipeSelectedForMealPrep(recipe.id))
+        XCTAssertEqual(model.domainUndoAction?.message, "Recipe removed from Meal Prep")
+
+        let didUndo = await model.undoPendingDomainAction()
+        XCTAssertTrue(didUndo)
+        XCTAssertEqual(model.mealPrepDraft, draftBeforeRemoval)
+        XCTAssertEqual(store.state?.mealPrepDraft, draftBeforeRemoval)
+    }
+
+    @MainActor
+    func testFailedDomainUndoPreservesOpportunityAndRetryRestoresState() async throws {
+        let store = ControllableSmartCartStateStore()
+        let model = AppModel(stateStore: store, commerceDefaults: isolatedCommerceDefaults())
+        let item = PantryInventoryItem(name: "Oats", quantity: 1, unit: "bag")
+        model.pantryInventory = [item]
+        await model.flushPendingPersistence()
+        model.removePantryItems(at: IndexSet(integer: 0))
+
+        store.failNextSave = true
+        let failedUndo = await model.undoPendingDomainAction()
+        XCTAssertFalse(failedUndo)
+        XCTAssertTrue(model.pantryInventory.isEmpty)
+        XCTAssertEqual(model.domainUndoAction?.actionTitle, "Retry")
+
+        let retrySucceeded = await model.undoPendingDomainAction()
+        XCTAssertTrue(retrySucceeded)
+        XCTAssertEqual(model.pantryInventory, [item])
+        XCTAssertNil(model.domainUndoAction)
+    }
+
+    @MainActor
+    func testDomainUndoRejectsStaleRevisionAndClearsSensitiveSnapshot() async throws {
+        let store = InMemorySmartCartStateStore()
+        let model = AppModel(stateStore: store, commerceDefaults: isolatedCommerceDefaults())
+        model.pantryInventory = [PantryInventoryItem(name: "Flour")]
+        await model.flushPendingPersistence()
+        model.removePantryItems(at: IndexSet(integer: 0))
+
+        model.zipCode = "10001"
+        await model.flushPendingPersistence()
+
+        let didUndo = await model.undoPendingDomainAction()
+        XCTAssertFalse(didUndo)
+        XCTAssertTrue(model.pantryInventory.isEmpty)
+        XCTAssertNil(model.domainUndoAction)
+        XCTAssertTrue(store.state?.pantryInventory.isEmpty == true)
+    }
+
+    @MainActor
+    func testNewerDomainOperationInvalidatesOlderUndo() async throws {
+        let store = InMemorySmartCartStateStore()
+        let model = AppModel(stateStore: store, commerceDefaults: isolatedCommerceDefaults())
+        let rice = PantryInventoryItem(name: "Rice")
+        let beans = PantryInventoryItem(name: "Beans")
+        let oats = PantryInventoryItem(name: "Oats")
+        model.pantryInventory = [rice, beans, oats]
+        await model.flushPendingPersistence()
+
+        model.removePantryItems(at: IndexSet(integer: 0))
+        let firstUndoID = try XCTUnwrap(model.domainUndoAction?.id)
+        model.removePantryItems(at: IndexSet(integer: 0))
+        XCTAssertNotEqual(model.domainUndoAction?.id, firstUndoID)
+
+        let didUndo = await model.undoPendingDomainAction()
+        XCTAssertTrue(didUndo)
+        XCTAssertEqual(model.pantryInventory, [beans, oats])
+        XCTAssertFalse(model.pantryInventory.contains(rice))
+    }
+
+    @MainActor
+    func testPreTripSkipUndoRestoresCompleteShoppingItemAndResolutionState() async throws {
+        let store = InMemorySmartCartStateStore()
+        let model = AppModel(
+            stateStore: store,
+            commerceDefaults: isolatedCommerceDefaults(),
+            seedDemoShoppingState: true
+        )
+        var item = try model.shoppingItems.firstUnwrapped()
+        item.product.confidence = .review
+        model.shoppingItems = [item]
+        await model.flushPendingPersistence()
+        let itemsBefore = model.shoppingItems
+        let resolutionsBefore = model.ingredientResolutions
+
+        XCTAssertTrue(model.skipMatchingException(itemID: item.id))
+        XCTAssertEqual(model.shoppingItems.first?.status, .skipped)
+        let didUndo = await model.undoPendingDomainAction()
+        XCTAssertTrue(didUndo)
+
+        XCTAssertEqual(model.shoppingItems, itemsBefore)
+        XCTAssertEqual(model.ingredientResolutions, resolutionsBefore)
+        XCTAssertEqual(store.state?.shoppingItems, itemsBefore)
+    }
+
+    @MainActor
+    func testArchiveUndoRestoresFrozenTripExactlyAndRelaunchDoesNotOfferOldUndo() async throws {
+        let store = InMemorySmartCartStateStore()
+        let defaults = isolatedCommerceDefaults()
+        let completed = try completePhase4Trip(stateStore: store, commerceDefaults: defaults)
+        let sessionsBefore = completed.model.shoppingSessions
+        let listsBefore = completed.model.savedLists
+
+        XCTAssertTrue(completed.model.archivePantryUpdateReminder(sessionID: completed.sessionID))
+        let didUndo = await completed.model.undoPendingDomainAction()
+        XCTAssertTrue(didUndo)
+        XCTAssertEqual(completed.model.shoppingSessions, sessionsBefore)
+        XCTAssertEqual(completed.model.savedLists, listsBefore)
+
+        let restored = AppModel(stateStore: store, commerceDefaults: defaults)
+        XCTAssertEqual(restored.shoppingSessions, sessionsBefore)
+        XCTAssertEqual(restored.savedLists, listsBefore)
+        XCTAssertNil(restored.domainUndoAction)
+    }
+
+    @MainActor
+    func testUnappliedDomainUndoDoesNotSurviveRelaunch() async throws {
+        let store = InMemorySmartCartStateStore()
+        let defaults = isolatedCommerceDefaults()
+        let model = AppModel(stateStore: store, commerceDefaults: defaults)
+        model.pantryInventory = [PantryInventoryItem(name: "Sugar")]
+        await model.flushPendingPersistence()
+        model.removePantryItems(at: IndexSet(integer: 0))
+        XCTAssertNotNil(model.domainUndoAction)
+
+        let restored = AppModel(stateStore: store, commerceDefaults: defaults)
+        XCTAssertTrue(restored.pantryInventory.isEmpty)
+        XCTAssertNil(restored.domainUndoAction)
+    }
+
     private func phase4Recipe(
         title: String,
         source: RecipeSource = .text

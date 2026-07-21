@@ -27,6 +27,7 @@ struct MealPrepSelectionView: View {
         .smartCartBackground()
         .navigationTitle("Weekly Meal Prep")
         .navigationBarTitleDisplayMode(.inline)
+        .domainUndoOverlay()
     }
 
     private var selectionCount: Int { appModel.mealPrepDraft?.selections.count ?? 0 }

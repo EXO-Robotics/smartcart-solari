@@ -1166,6 +1166,7 @@ struct RecipesView: View {
         } message: {
             Text("Existing Shopping Trips and pantry history will remain available.")
         }
+        .domainUndoOverlay()
     }
 
     private var recipeLibrary: some View {

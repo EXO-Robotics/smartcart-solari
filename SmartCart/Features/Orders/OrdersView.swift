@@ -201,6 +201,7 @@ struct ProductExceptionReviewSheet: View {
                     .presentationDragIndicator(.visible)
             }
         }
+        .domainUndoOverlay()
     }
 
     private var exceptionHeader: some View {

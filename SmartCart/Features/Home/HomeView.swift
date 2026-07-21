@@ -92,6 +92,7 @@ struct HomeView: View {
         } message: {
             Text("This removes the paused shopping trip and its generated list. Completed order history is not affected.")
         }
+        .domainUndoOverlay()
     }
 
     private var header: some View {

@@ -369,6 +369,60 @@ struct ToastView: View {
     }
 }
 
+private struct DomainUndoOverlayModifier: ViewModifier {
+    @Environment(AppModel.self) private var appModel
+    @State private var isApplying = false
+
+    func body(content: Content) -> some View {
+        content.overlay(alignment: .bottom) {
+            if let action = appModel.domainUndoAction {
+                HStack(spacing: 12) {
+                    Text(action.message)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(SmartCartTheme.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Spacer(minLength: 8)
+
+                    Button(action.actionTitle) {
+                        guard !isApplying else { return }
+                        isApplying = true
+                        Task { @MainActor in
+                            _ = await appModel.undoPendingDomainAction()
+                            isApplying = false
+                        }
+                    }
+                    .font(.subheadline.bold())
+                    .foregroundStyle(SmartCartTheme.green)
+                    .disabled(isApplying)
+                    .accessibilityIdentifier("domain-undo-action")
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 13)
+                .background(SmartCartTheme.paperElevated.opacity(0.98))
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(SmartCartTheme.borderStrong, lineWidth: 1)
+                }
+                .shadow(color: Color.black.opacity(0.35), radius: 14, y: 7)
+                .padding(.horizontal, 18)
+                .padding(.bottom, 12)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("domain-undo-banner")
+            }
+        }
+        .animation(.spring(response: 0.35, dampingFraction: 0.86), value: appModel.domainUndoAction)
+    }
+}
+
+extension View {
+    func domainUndoOverlay() -> some View {
+        modifier(DomainUndoOverlayModifier())
+    }
+}
+
 struct EmptyStateView: View {
     let symbol: String
     let title: String
