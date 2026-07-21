@@ -1288,6 +1288,31 @@ struct ShoppingReconciliationDraft: Codable, Hashable {
     var updatedAt: Date
 }
 
+/// The only two pieces of durable trip work Home is allowed to expose.
+/// Display details are projected separately so the view never interprets a
+/// complete shopping session or persists presentation state.
+enum HomeTripAction: Identifiable, Equatable {
+    case resume(sessionID: UUID)
+    case updatePantry(sessionID: UUID)
+
+    var sessionID: UUID {
+        switch self {
+        case .resume(let sessionID), .updatePantry(let sessionID):
+            sessionID
+        }
+    }
+
+    var id: UUID { sessionID }
+}
+
+struct HomeTripActionPresentation: Identifiable, Equatable {
+    let action: HomeTripAction
+    let title: String
+    let detail: String
+
+    var id: UUID { action.id }
+}
+
 struct ShoppingSession: Identifiable, Codable, Hashable {
     let id: UUID
     /// Retained for decoding repair-candidate state written before the

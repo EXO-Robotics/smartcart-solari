@@ -894,6 +894,45 @@ final class AppModel {
         }
     }
 
+    /// Projects durable session state into local Home actions. Committed,
+    /// archived, empty, superseded, and otherwise invalid records are already
+    /// excluded by `pendingShoppingSessions` and cannot become drawer rows.
+    var homeTripActions: [HomeTripAction] {
+        pendingShoppingSessions.compactMap { session in
+            if session.isReusable {
+                return .resume(sessionID: session.id)
+            }
+            if session.hasPendingPantryUpdateReminder {
+                return .updatePantry(sessionID: session.id)
+            }
+            return nil
+        }
+    }
+
+    var homeTripActionPresentations: [HomeTripActionPresentation] {
+        homeTripActions.compactMap { action in
+            guard let session = shoppingSession(id: action.sessionID) else { return nil }
+            switch action {
+            case .resume:
+                let remaining = session.items.filter { !$0.status.isCompleted }.count
+                return HomeTripActionPresentation(
+                    action: action,
+                    title: session.recipeTitle,
+                    detail: "\(remaining) item\(remaining == 1 ? "" : "s") remaining"
+                )
+            case .updatePantry:
+                let purchased = session.items.filter {
+                    $0.status != .unavailable && $0.status != .skipped
+                }.count
+                return HomeTripActionPresentation(
+                    action: action,
+                    title: session.recipeTitle,
+                    detail: "Review \(purchased) purchased item\(purchased == 1 ? "" : "s")"
+                )
+            }
+        }
+    }
+
     var mostRecentPendingShoppingSession: ShoppingSession? { pendingShoppingSessions.first }
 
     var retailerSessionRemainingCount: Int {
@@ -2607,6 +2646,25 @@ final class AppModel {
             persistenceIssue = error.localizedDescription
             showToast("Shopping trip could not be opened")
             return false
+        }
+    }
+
+    /// Revalidates the projected action against current state before opening
+    /// it, so stale or fabricated session identifiers fail closed.
+    @discardableResult
+    func performHomeTripAction(_ action: HomeTripAction) -> Bool {
+        guard let session = shoppingSession(id: action.sessionID),
+              !session.items.isEmpty else { return false }
+
+        switch action {
+        case .resume:
+            guard session.isReusable else { return false }
+            return openShoppingSession(session.id)
+        case .updatePantry:
+            guard session.hasPendingPantryUpdateReminder,
+                  openShoppingSession(session.id) else { return false }
+            homePath = [.shoppingReconciliation(session.id)]
+            return true
         }
     }
 

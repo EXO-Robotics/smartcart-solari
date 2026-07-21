@@ -5,11 +5,14 @@ struct HomeView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var pendingDiscardSession: ShoppingSession?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var pendingDiscardAction: HomeTripActionPresentation?
     @State private var shoppingTripsExpanded = false
     @State private var shoppingTripsDrag: CGFloat = 0
 
-    private let collapsedShoppingTripsDrawerHeight: CGFloat = 92
+    private var collapsedShoppingTripsDrawerHeight: CGFloat {
+        dynamicTypeSize.isAccessibilitySize ? 148 : 92
+    }
     private let workspaceTransition: Namespace.ID?
 
     init(workspaceTransition: Namespace.ID? = nil) {
@@ -20,7 +23,7 @@ struct HomeView: View {
         GeometryReader { geometry in
             let drawerHeight = max(420, geometry.size.height - 88)
             let collapsedOffset = drawerHeight - collapsedShoppingTripsDrawerHeight
-            let hasPausedTrips = !pausedShoppingSessions.isEmpty
+            let hasTripActions = !tripActionPresentations.isEmpty
 
             ZStack(alignment: .bottom) {
                 SmartCartFoodBackground()
@@ -35,12 +38,12 @@ struct HomeView: View {
                     .padding(.top, 10)
                     .padding(
                         .bottom,
-                        hasPausedTrips ? collapsedShoppingTripsDrawerHeight + 24 : 36
+                        hasTripActions ? collapsedShoppingTripsDrawerHeight + 24 : 36
                     )
                 }
                 .scrollIndicators(.hidden)
 
-                if hasPausedTrips {
+                if hasTripActions {
                     continueShoppingTripsDrawer(
                         height: drawerHeight,
                         collapsedOffset: collapsedOffset
@@ -60,31 +63,31 @@ struct HomeView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .sensoryFeedback(.selection, trigger: shoppingTripsExpanded)
-        .onChange(of: pausedShoppingSessions.map(\.id)) { _, sessionIDs in
-            if sessionIDs.isEmpty {
+        .onChange(of: tripActionPresentations.map(\.id)) { _, actionIDs in
+            if actionIDs.isEmpty {
                 shoppingTripsExpanded = false
                 shoppingTripsDrag = 0
-                pendingDiscardSession = nil
+                pendingDiscardAction = nil
             }
         }
         .confirmationDialog(
             "Clear this paused order?",
             isPresented: Binding(
-                get: { pendingDiscardSession != nil },
+                get: { pendingDiscardAction != nil },
                 set: { isPresented in
-                    if !isPresented { pendingDiscardSession = nil }
+                    if !isPresented { pendingDiscardAction = nil }
                 }
             ),
             titleVisibility: .visible
         ) {
-            if let pendingDiscardSession {
+            if let pendingDiscardAction {
                 Button("Clear Order", role: .destructive) {
-                    appModel.discardPendingShoppingSession(pendingDiscardSession.id)
-                    self.pendingDiscardSession = nil
+                    appModel.discardPendingShoppingSession(pendingDiscardAction.id)
+                    self.pendingDiscardAction = nil
                 }
             }
             Button("Cancel", role: .cancel) {
-                pendingDiscardSession = nil
+                pendingDiscardAction = nil
             }
         } message: {
             Text("This removes the paused shopping trip and its generated list. Completed order history is not affected.")
@@ -260,8 +263,8 @@ struct HomeView: View {
         .accessibilityHint("Shows manual entry and sample recipe options")
     }
 
-    private var pausedShoppingSessions: [ShoppingSession] {
-        appModel.pendingShoppingSessions.filter(\.isReusable)
+    private var tripActionPresentations: [HomeTripActionPresentation] {
+        appModel.homeTripActionPresentations
     }
 
     private func continueShoppingTripsDrawer(
@@ -277,8 +280,8 @@ struct HomeView: View {
             if shoppingTripsExpanded {
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 12) {
-                        ForEach(pausedShoppingSessions) { session in
-                            pausedShoppingTripRow(session)
+                        ForEach(tripActionPresentations) { presentation in
+                            homeTripActionRow(presentation)
                         }
                     }
                     .padding(.horizontal, 18)
@@ -332,16 +335,20 @@ struct HomeView: View {
                 .frame(height: 35)
                 .accessibilityHidden(true)
 
-            HStack(spacing: 9) {
-                Label("Continue Shopping", systemImage: "cart.badge.clock")
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(homeInk)
-
-                Spacer()
-
-                Text(shoppingTripsExpanded ? "Swipe down to hide" : pausedOrdersCountText)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(homeSecondaryInk)
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: 3) {
+                        shoppingTripsHandleTitle
+                        shoppingTripsHandleSummary
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    HStack(spacing: 9) {
+                        shoppingTripsHandleTitle
+                        Spacer()
+                        shoppingTripsHandleSummary
+                    }
+                }
             }
             .padding(.horizontal, 18)
             .padding(.bottom, 10)
@@ -352,8 +359,8 @@ struct HomeView: View {
             settleShoppingTripsDrawer(expanded: !shoppingTripsExpanded)
         }
         .gesture(shoppingTripsDragGesture(collapsedOffset: collapsedOffset))
-        .accessibilityLabel("Continue Shopping drawer")
-        .accessibilityValue(shoppingTripsExpanded ? "Expanded" : "Collapsed, \(pausedOrdersCountText)")
+        .accessibilityLabel("Shopping Trips drawer")
+        .accessibilityValue(shoppingTripsExpanded ? "Expanded" : "Collapsed, \(shoppingTripsSummaryText)")
         .accessibilityHint(
             shoppingTripsExpanded
                 ? "Swipe down or double tap to hide paused orders"
@@ -363,15 +370,50 @@ struct HomeView: View {
         .accessibilityIdentifier("home-continue-shopping-drawer")
     }
 
-    private var pausedOrdersCountText: String {
-        let count = pausedShoppingSessions.count
-        return "\(count) paused order\(count == 1 ? "" : "s")"
+    private var shoppingTripsHandleTitle: some View {
+        Label(shoppingTripsTitle, systemImage: "cart.badge.clock")
+            .font(.subheadline.weight(.bold))
+            .foregroundStyle(homeInk)
     }
 
-    private func pausedShoppingTripRow(_ session: ShoppingSession) -> some View {
+    private var shoppingTripsHandleSummary: some View {
+        Text(shoppingTripsExpanded ? "Swipe down to hide" : shoppingTripsSummaryText)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(homeSecondaryInk)
+    }
+
+    private var shoppingTripsTitle: String {
+        let actions = tripActionPresentations.map(\.action)
+        guard actions.count == 1, let action = actions.first else {
+            return "Shopping Trips · \(actions.count)"
+        }
+        switch action {
+        case .resume: return "Resume Shopping"
+        case .updatePantry: return "Update Pantry"
+        }
+    }
+
+    private var shoppingTripsSummaryText: String {
+        let actions = tripActionPresentations.map(\.action)
+        let resumeCount = actions.filter {
+            if case .resume = $0 { return true }
+            return false
+        }.count
+        let pantryCount = actions.count - resumeCount
+
+        if resumeCount > 0, pantryCount > 0 {
+            return "\(resumeCount) paused · \(pantryCount) pantry update\(pantryCount == 1 ? "" : "s")"
+        }
+        if pantryCount > 0 {
+            return "\(pantryCount) pantry update\(pantryCount == 1 ? "" : "s")"
+        }
+        return "\(resumeCount) paused order\(resumeCount == 1 ? "" : "s")"
+    }
+
+    private func homeTripActionRow(_ presentation: HomeTripActionPresentation) -> some View {
         HStack(spacing: 10) {
             Button {
-                appModel.openShoppingSession(session.id)
+                appModel.performHomeTripAction(presentation.action)
             } label: {
                 HStack(spacing: 12) {
                     Image(systemName: "cart.fill")
@@ -383,13 +425,13 @@ struct HomeView: View {
                         .accessibilityHidden(true)
 
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("RESUME SHOPPING")
+                        Text(homeTripActionEyebrow(presentation.action))
                             .smartEyebrow(SmartCartTheme.green)
-                        Text(session.recipeTitle)
+                        Text(presentation.title)
                             .font(.headline)
                             .foregroundStyle(homeInk)
                             .multilineTextAlignment(.leading)
-                        Text(pausedShoppingTripDetail(session))
+                        Text(presentation.detail)
                             .font(.caption)
                             .foregroundStyle(homeSecondaryInk)
                     }
@@ -404,23 +446,25 @@ struct HomeView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityIdentifier("home-continue-shopping-\(session.id.uuidString)")
+            .accessibilityIdentifier("home-continue-shopping-\(presentation.id.uuidString)")
 
-            Button(role: .destructive) {
-                pendingDiscardSession = session
-            } label: {
-                Image(systemName: "trash")
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(homeInk.opacity(0.82))
-                    .frame(width: 36, height: 36)
-                    .background(homeIconBackground)
-                    .clipShape(Circle())
-                    .frame(width: 44, height: 44)
+            if case .resume = presentation.action {
+                Button(role: .destructive) {
+                    pendingDiscardAction = presentation
+                } label: {
+                    Image(systemName: "trash")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(homeInk.opacity(0.82))
+                        .frame(width: 36, height: 36)
+                        .background(homeIconBackground)
+                        .clipShape(Circle())
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("home-clear-paused-\(presentation.id.uuidString)")
+                .accessibilityLabel("Clear paused order for \(presentation.title)")
+                .accessibilityHint("Removes this paused order after confirmation")
             }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("home-clear-paused-\(session.id.uuidString)")
-            .accessibilityLabel("Clear paused order for \(session.recipeTitle)")
-            .accessibilityHint("Removes this paused order after confirmation")
         }
         .padding(13)
         .background {
@@ -428,10 +472,11 @@ struct HomeView: View {
         }
     }
 
-    private func pausedShoppingTripDetail(_ session: ShoppingSession) -> String {
-        let completed = session.items.filter(\.status.isCompleted).count
-        let remaining = max(session.items.count - completed, 0)
-        return "\(remaining) item\(remaining == 1 ? "" : "s") remaining"
+    private func homeTripActionEyebrow(_ action: HomeTripAction) -> String {
+        switch action {
+        case .resume: return "RESUME SHOPPING"
+        case .updatePantry: return "UPDATE PANTRY"
+        }
     }
 
     private var homeInk: Color {

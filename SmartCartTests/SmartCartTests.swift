@@ -4574,9 +4574,9 @@ final class SmartCartTests: XCTestCase {
         XCTAssertLessThan(photosIndex, pasteIndex)
         XCTAssertLessThan(pasteIndex, mealPrepIndex)
 
-        XCTAssertTrue(homeSource.contains("appModel.pendingShoppingSessions.filter(\\.isReusable)"))
-        XCTAssertTrue(homeSource.contains("let hasPausedTrips = !pausedShoppingSessions.isEmpty"))
-        XCTAssertTrue(homeSource.contains("if hasPausedTrips {"))
+        XCTAssertFalse(homeSource.contains("appModel.pendingShoppingSessions"))
+        XCTAssertTrue(homeSource.contains("let hasTripActions = !tripActionPresentations.isEmpty"))
+        XCTAssertTrue(homeSource.contains("if hasTripActions {"))
         XCTAssertTrue(homeSource.contains("continueShoppingTripsDrawer("))
         XCTAssertTrue(homeSource.contains("HomePullUpShape"))
         XCTAssertTrue(homeSource.contains("ZStack(alignment: .top)"))
@@ -4593,19 +4593,21 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(homeSource.contains(".frame(height: collapsedShoppingTripsDrawerHeight)"))
         XCTAssertFalse(homeSource.contains("HomePullUpGlassSurface"))
         XCTAssertTrue(homeSource.contains("accessibilityIdentifier(\"home-continue-shopping-drawer\")"))
-        XCTAssertTrue(homeSource.contains("Label(\"Continue Shopping\", systemImage: \"cart.badge.clock\")"))
-        XCTAssertTrue(homeSource.contains("ForEach(pausedShoppingSessions)"))
-        XCTAssertTrue(homeSource.contains("appModel.openShoppingSession(session.id)"))
+        XCTAssertTrue(homeSource.contains("Label(shoppingTripsTitle, systemImage: \"cart.badge.clock\")"))
+        XCTAssertTrue(homeSource.contains("ForEach(tripActionPresentations)"))
+        XCTAssertTrue(homeSource.contains("appModel.performHomeTripAction(presentation.action)"))
         XCTAssertFalse(homeSource.contains("hasPendingPantryUpdateReminder"))
         XCTAssertFalse(homeSource.contains("home-finish-last-trip"))
         XCTAssertFalse(homeSource.contains("Finish your last trip"))
         XCTAssertFalse(homeSource.contains("appModel.startShoppingReconciliation()"))
-        XCTAssertTrue(homeSource.contains("@State private var pendingDiscardSession: ShoppingSession?"))
-        XCTAssertTrue(homeSource.contains("pendingDiscardSession = session"))
+        XCTAssertTrue(homeSource.contains("@State private var pendingDiscardAction: HomeTripActionPresentation?"))
+        XCTAssertTrue(homeSource.contains("pendingDiscardAction = presentation"))
         XCTAssertTrue(homeSource.contains("\"Clear this paused order?\""))
         XCTAssertTrue(homeSource.contains("Button(\"Clear Order\", role: .destructive)"))
-        XCTAssertTrue(homeSource.contains("appModel.discardPendingShoppingSession(pendingDiscardSession.id)"))
+        XCTAssertTrue(homeSource.contains("appModel.discardPendingShoppingSession(pendingDiscardAction.id)"))
         XCTAssertTrue(homeSource.contains("accessibilityIdentifier(\"home-clear-paused-"))
+        XCTAssertTrue(homeSource.contains("dynamicTypeSize.isAccessibilitySize ? 148 : 92"))
+        XCTAssertFalse(homeSource.contains("measuredShoppingTripsHandleHeight"))
         XCTAssertFalse(homeSource.contains("home-resume-shopping"))
         XCTAssertFalse(homeSource.contains("home-shopping-trips-strip"))
         XCTAssertFalse(homeSource.contains("No paused trips"))
@@ -4704,6 +4706,174 @@ final class SmartCartTests: XCTestCase {
         XCTAssertEqual(
             model.pendingShoppingSessions.first(where: \.hasPendingPantryUpdateReminder)?.id,
             olderCompleted.id
+        )
+        XCTAssertEqual(
+            model.homeTripActions,
+            [
+                .resume(sessionID: newerIncomplete.id),
+                .updatePantry(sessionID: olderCompleted.id)
+            ]
+        )
+        XCTAssertEqual(
+            model.homeTripActionPresentations.map(\.title),
+            [newerIncomplete.recipeTitle, olderCompleted.recipeTitle]
+        )
+        XCTAssertEqual(
+            model.shoppingSessions,
+            [olderCompleted, newerIncomplete],
+            "Home projection must not rewrite frozen sessions"
+        )
+    }
+
+    @MainActor
+    func testHomeTripActionsPersistResumeAndPantryUpdateAcrossRelaunch() throws {
+        let resumeStore = InMemorySmartCartStateStore()
+        let resumeDefaults = isolatedCommerceDefaults()
+        let started = try startIncompleteShoppingTrip(
+            stateStore: resumeStore,
+            commerceDefaults: resumeDefaults
+        )
+        XCTAssertEqual(started.model.homeTripActions, [.resume(sessionID: started.sessionID)])
+
+        let restoredResume = AppModel(
+            stateStore: resumeStore,
+            commerceDefaults: resumeDefaults
+        )
+        XCTAssertEqual(restoredResume.homeTripActions, [.resume(sessionID: started.sessionID)])
+
+        let pantryStore = InMemorySmartCartStateStore()
+        let pantryDefaults = isolatedCommerceDefaults()
+        let completed = try completePhase4Trip(
+            stateStore: pantryStore,
+            commerceDefaults: pantryDefaults
+        )
+        XCTAssertEqual(
+            completed.model.homeTripActions,
+            [.updatePantry(sessionID: completed.sessionID)]
+        )
+
+        let restoredPantry = AppModel(
+            stateStore: pantryStore,
+            commerceDefaults: pantryDefaults
+        )
+        XCTAssertEqual(
+            restoredPantry.homeTripActions,
+            [.updatePantry(sessionID: completed.sessionID)]
+        )
+        XCTAssertTrue(restoredPantry.pantryInventory.isEmpty)
+    }
+
+    @MainActor
+    func testHomeTripActionsExcludeCommittedArchivedEmptyAndAliasedHistory() throws {
+        let state = try makeState()
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(state: state),
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        let waitingItem = try state.shoppingItems.firstUnwrapped()
+        var completedItem = waitingItem
+        completedItem.status = .visited
+        let logicalTripID = UUID()
+        let completed = ShoppingSession(
+            tripID: logicalTripID,
+            logicalTripID: logicalTripID,
+            recipeID: state.activeRecipe.id,
+            recipeTitle: "Completed",
+            storeID: "walmart-5206",
+            items: [completedItem]
+        )
+        var archived = completed
+        archived.pantryUpdateReminderArchivedAt = .now
+        var committed = completed
+        committed.reconciliation = ShoppingReconciliationRecord(
+            outcome: .boughtEverything,
+            purchasedItemIDs: [completedItem.id],
+            substitutions: [],
+            pantryItemIDs: [],
+            committedAt: .now,
+            logicalTripID: logicalTripID
+        )
+        let empty = ShoppingSession(
+            tripID: UUID(),
+            recipeID: state.activeRecipe.id,
+            recipeTitle: "Empty",
+            storeID: "walmart-5206",
+            items: []
+        )
+
+        model.shoppingSessions = [archived, committed, empty]
+
+        XCTAssertTrue(model.pendingShoppingSessions.isEmpty)
+        XCTAssertTrue(model.homeTripActions.isEmpty)
+        XCTAssertTrue(model.homeTripActionPresentations.isEmpty)
+    }
+
+    @MainActor
+    func testHomeTripActionsKeepRepeatedTripsDistinctAndRejectDanglingOrStaleActions() throws {
+        let state = try makeState()
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(state: state),
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        let waitingItem = try state.shoppingItems.firstUnwrapped()
+        let earlier = ShoppingSession(
+            tripID: UUID(),
+            recipeID: state.activeRecipe.id,
+            recipeTitle: "Weekly Dinner",
+            storeID: "walmart-5206",
+            startedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            items: [waitingItem]
+        )
+        let later = ShoppingSession(
+            tripID: UUID(),
+            recipeID: state.activeRecipe.id,
+            recipeTitle: "Weekly Dinner",
+            storeID: "walmart-5206",
+            startedAt: Date(timeIntervalSince1970: 1_700_000_060),
+            items: [waitingItem]
+        )
+        model.shoppingSessions = [earlier, later]
+        model.activeShoppingSessionID = nil
+
+        XCTAssertEqual(
+            model.homeTripActions,
+            [.resume(sessionID: later.id), .resume(sessionID: earlier.id)]
+        )
+        let originalPath = model.homePath
+        let originalActiveSessionID = model.activeShoppingSessionID
+        XCTAssertFalse(model.performHomeTripAction(.resume(sessionID: UUID())))
+        XCTAssertFalse(model.performHomeTripAction(.updatePantry(sessionID: later.id)))
+        XCTAssertEqual(model.homePath, originalPath)
+        XCTAssertEqual(model.activeShoppingSessionID, originalActiveSessionID)
+    }
+
+    @MainActor
+    func testHomeTripActionsRouteResumeAndUpdatePantryLocally() throws {
+        let resumeStore = InMemorySmartCartStateStore()
+        let resumeDefaults = isolatedCommerceDefaults()
+        let started = try startIncompleteShoppingTrip(
+            stateStore: resumeStore,
+            commerceDefaults: resumeDefaults
+        )
+        started.model.homePath = []
+        XCTAssertTrue(started.model.performHomeTripAction(.resume(sessionID: started.sessionID)))
+        XCTAssertEqual(started.model.activeShoppingSessionID, started.sessionID)
+        XCTAssertEqual(started.model.homePath, [.shoppingTrip])
+
+        let pantryStore = InMemorySmartCartStateStore()
+        let pantryDefaults = isolatedCommerceDefaults()
+        let completed = try completePhase4Trip(
+            stateStore: pantryStore,
+            commerceDefaults: pantryDefaults
+        )
+        completed.model.homePath = []
+        XCTAssertTrue(
+            completed.model.performHomeTripAction(.updatePantry(sessionID: completed.sessionID))
+        )
+        XCTAssertEqual(completed.model.activeShoppingSessionID, completed.sessionID)
+        XCTAssertEqual(
+            completed.model.homePath,
+            [.shoppingReconciliation(completed.sessionID)]
         )
     }
 
