@@ -30,6 +30,37 @@ protocol RetailerGuideAdapter: RetailerCatalogService {
         storeID: String,
         preferences: ShoppingPreferences
     ) -> RetailerProductRecord
+
+    /// Additive batch-matching seam. Existing adapters retain their current
+    /// fallback behavior; test and future adapters may explicitly report that
+    /// no fallback is available without changing the live matching path.
+    func batchSearchFallback(
+        for ingredient: Ingredient,
+        storeID: String,
+        preferences: ShoppingPreferences
+    ) -> RetailerProductRecord?
+}
+
+extension RetailerGuideAdapter {
+    func batchSearchFallback(
+        for ingredient: Ingredient,
+        storeID: String,
+        preferences: ShoppingPreferences
+    ) -> RetailerProductRecord? {
+        searchFallback(
+            for: ingredient,
+            storeID: storeID,
+            preferences: preferences
+        )
+    }
+}
+
+/// Raw catalog evidence consumed only by the new bounded batch matcher.
+/// Provider failures remain thrown so cancellation and transient failures are
+/// classified at the coordinating boundary.
+enum RetailerCandidateFetch: Hashable {
+    case candidates([RetailerProductRecord])
+    case failed(MatchingFailureReason)
 }
 
 enum RetailerServiceError: LocalizedError, Equatable {
@@ -139,6 +170,70 @@ struct RetailerGuideEngine {
 
     func supports(_ retailer: ShoppingRetailer) -> Bool {
         retailer.configuration.isAvailable && adapters[retailer] != nil
+    }
+
+    /// Additive raw-fetch seam for bounded matching. The existing
+    /// `rankedProducts` runtime path below is intentionally unchanged.
+    func fetchCandidates(
+        for request: RetailerProductSearchRequest
+    ) async throws -> RetailerCandidateFetch {
+        try Task.checkCancellation()
+        guard let retailer = ShoppingRetailer(rawValue: request.retailerID),
+              let adapter = adapters[retailer]
+        else {
+            return .failed(.adapterUnavailable(retailerID: request.retailerID))
+        }
+
+        let candidates = try await adapter.searchProducts(for: request)
+        try Task.checkCancellation()
+        return .candidates(candidates)
+    }
+
+    /// Ranks one demand after raw work has optionally been shared. This runs
+    /// independently for every demand, so quantity and preference differences
+    /// cannot disappear during query coalescing.
+    func rankCandidates(
+        _ fetch: RetailerCandidateFetch,
+        for request: RetailerProductSearchRequest,
+        preferences: ShoppingPreferences
+    ) -> IngredientMatchingOutcome {
+        switch fetch {
+        case .failed(let reason):
+            return .failed(reason)
+
+        case .candidates(let candidates):
+            let ranked = RetailerProductMatcher.rank(
+                candidates,
+                for: request,
+                preferences: preferences
+            )
+            if !ranked.isEmpty {
+                return .ranked(ranked)
+            }
+
+            guard let retailer = ShoppingRetailer(rawValue: request.retailerID),
+                  let adapter = adapters[retailer]
+            else {
+                return .failed(.adapterUnavailable(retailerID: request.retailerID))
+            }
+            guard let fallback = adapter.batchSearchFallback(
+                for: request.ingredient,
+                storeID: request.storeID,
+                preferences: preferences
+            ) else {
+                return .failed(.fallbackUnavailable)
+            }
+
+            let fallbackRanked = RetailerProductMatcher.rank(
+                [fallback],
+                for: request,
+                preferences: preferences
+            )
+            if !fallbackRanked.isEmpty {
+                return .ranked(fallbackRanked)
+            }
+            return .failed(candidates.isEmpty ? .noCandidates : .fallbackUnavailable)
+        }
     }
 
     func rankedProducts(
