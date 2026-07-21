@@ -6497,6 +6497,185 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(composer.contains("appModel.sampleRecipes"))
     }
 
+    @MainActor
+    func testExhaustiveMatchingPublishesMixedTerminalStatesInDemandOrder() async throws {
+        let recorder = Slice3MatchingRequestRecorder()
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            retailerAdapters: [.walmart: Slice3GuideAdapter(recorder: recorder)],
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        let exact = Ingredient(name: "Penne pasta", quantity: 16, unit: "oz")
+        let fallback = Ingredient(name: "Dragon fruit jam", quantity: 1, unit: "jar")
+        let unresolved = Ingredient(name: "Mystery ingredient", quantity: 1, unit: "item")
+        XCTAssertTrue(model.beginRecipe(phase2Recipe(ingredients: [exact, fallback, unresolved])))
+
+        await model.startMatching()
+
+        XCTAssertEqual(model.ingredientResolutions.map(\.id), [exact.id, fallback.id, unresolved.id])
+        XCTAssertEqual(model.ingredientResolutions.count, 3)
+        XCTAssertEqual(model.shoppingItems.map(\.ingredient.id), [exact.id, fallback.id])
+        if case .exactProduct = model.ingredientResolutions[0].resolution {} else {
+            XCTFail("The first demand should be an exact product")
+        }
+        if case .searchFallback = model.ingredientResolutions[1].resolution {} else {
+            XCTFail("The second demand should remain a labeled search fallback")
+        }
+        XCTAssertEqual(
+            model.ingredientResolutions[2].resolution,
+            .unresolved(.fallbackUnavailable)
+        )
+        XCTAssertEqual(model.unresolvedIngredientResolutions.map(\.id), [unresolved.id])
+    }
+
+    @MainActor
+    func testZeroCandidatesAndProviderFailureRemainTypedAndVisible() async throws {
+        let zeroModel = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            retailerAdapters: [.walmart: Slice3GuideAdapter()],
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        let zero = Ingredient(name: "Mystery ingredient", quantity: 1, unit: "item")
+        XCTAssertTrue(zeroModel.beginRecipe(phase2Recipe(ingredients: [zero])))
+        await zeroModel.startMatching()
+        XCTAssertEqual(
+            zeroModel.ingredientResolutions.first?.resolution,
+            .unresolved(.fallbackUnavailable)
+        )
+        XCTAssertTrue(zeroModel.shoppingItems.isEmpty)
+
+        let failureModel = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            retailerAdapters: [.walmart: Slice3GuideAdapter()],
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        let failure = Ingredient(name: "Provider failure", quantity: 1, unit: "item")
+        XCTAssertTrue(failureModel.beginRecipe(phase2Recipe(ingredients: [failure])))
+        await failureModel.startMatching()
+        XCTAssertEqual(
+            failureModel.ingredientResolutions.first?.resolution,
+            .unresolved(.transientProviderFailure)
+        )
+        XCTAssertEqual(
+            failureModel.matchingFailureDescription(for: try failureModel.ingredientResolutions.firstUnwrapped()),
+            "The retailer catalog could not be reached."
+        )
+    }
+
+    @MainActor
+    func testUnresolvedBlocksTripUntilDeliberateExclusion() async throws {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            retailerAdapters: [.walmart: Slice3GuideAdapter()],
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        let exact = Ingredient(name: "Penne pasta", quantity: 16, unit: "oz")
+        let unresolved = Ingredient(name: "Mystery ingredient", quantity: 1, unit: "item")
+        XCTAssertTrue(model.beginRecipe(phase2Recipe(ingredients: [exact, unresolved])))
+        await model.startMatching()
+
+        XCTAssertFalse(model.continueToShoppingTrip())
+        XCTAssertTrue(model.excludeUnresolvedIngredient(unresolved.id))
+        for item in model.unresolvedMatchingExceptionItems {
+            XCTAssertTrue(model.acceptMatchingException(itemID: item.id))
+        }
+        XCTAssertFalse(model.hasUnresolvedMatchingWork)
+        XCTAssertEqual(
+            model.ingredientResolutions.first(where: { $0.id == unresolved.id })?.resolution,
+            .userExcluded
+        )
+        XCTAssertTrue(model.continueToShoppingTrip())
+    }
+
+    @MainActor
+    func testUnresolvedResolutionSurvivesRelaunch() async throws {
+        let store = InMemorySmartCartStateStore()
+        let ingredient = Ingredient(name: "Mystery ingredient", quantity: 1, unit: "item")
+        var model: AppModel? = AppModel(
+            stateStore: store,
+            retailerAdapters: [.walmart: Slice3GuideAdapter()],
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        XCTAssertTrue(model?.beginRecipe(phase2Recipe(ingredients: [ingredient])) == true)
+        await model?.startMatching()
+        XCTAssertEqual(model?.unresolvedIngredientResolutions.map(\.id), [ingredient.id])
+        model = nil
+
+        let restored = AppModel(
+            stateStore: store,
+            retailerAdapters: [.walmart: Slice3GuideAdapter()],
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        XCTAssertEqual(restored.unresolvedIngredientResolutions.map(\.id), [ingredient.id])
+        XCTAssertFalse(restored.continueToShoppingTrip())
+    }
+
+    @MainActor
+    func testForcedRetryFetchesOnlyPreviouslyUnresolvedDemand() async throws {
+        let recorder = Slice3MatchingRequestRecorder()
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            retailerAdapters: [.walmart: Slice3GuideAdapter(recorder: recorder)],
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        let exact = Ingredient(name: "Penne pasta", quantity: 16, unit: "oz")
+        let fallback = Ingredient(name: "Dragon fruit jam", quantity: 1, unit: "jar")
+        let unresolved = Ingredient(name: "Mystery ingredient", quantity: 1, unit: "item")
+        XCTAssertTrue(model.beginRecipe(phase2Recipe(ingredients: [exact, fallback, unresolved])))
+        await model.startMatching()
+        await recorder.reset()
+
+        await model.startMatching(force: true)
+
+        let recordedNames = await recorder.names()
+        XCTAssertEqual(recordedNames, ["Mystery ingredient"])
+        XCTAssertEqual(model.ingredientResolutions.map(\.id), [exact.id, fallback.id, unresolved.id])
+    }
+
+    @MainActor
+    func testMatchingCancellationPublishesNoPartialPlan() async throws {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            retailerAdapters: [.walmart: Slice3GuideAdapter(delay: .milliseconds(150))],
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        let ingredients = [
+            Ingredient(name: "Penne pasta", quantity: 16, unit: "oz"),
+            Ingredient(name: "Olive oil", quantity: 2, unit: "tbsp")
+        ]
+        XCTAssertTrue(model.beginRecipe(phase2Recipe(ingredients: ingredients)))
+
+        let task = Task { await model.startMatching() }
+        try await Task.sleep(for: .milliseconds(20))
+        task.cancel()
+        await task.value
+
+        XCTAssertTrue(model.shoppingItems.isEmpty)
+        XCTAssertTrue(model.ingredientResolutions.isEmpty)
+        XCTAssertFalse(model.isMatching)
+    }
+
+    @MainActor
+    func testStaleMatchingGenerationCannotOverwriteNewerRecipe() async throws {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            retailerAdapters: [.walmart: Slice3GuideAdapter(delay: .milliseconds(100))],
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        let stale = Ingredient(name: "Mystery ingredient", quantity: 1, unit: "item")
+        let current = Ingredient(name: "Penne pasta", quantity: 16, unit: "oz")
+        XCTAssertTrue(model.beginRecipe(phase2Recipe(ingredients: [stale])))
+        let staleTask = Task { await model.startMatching() }
+        try await Task.sleep(for: .milliseconds(20))
+
+        XCTAssertTrue(model.beginRecipe(phase2Recipe(ingredients: [current])))
+        await model.startMatching()
+        await staleTask.value
+
+        XCTAssertEqual(model.ingredientResolutions.map(\.id), [current.id])
+        XCTAssertEqual(model.shoppingItems.map(\.ingredient.id), [current.id])
+    }
+
     private func phase4Recipe(
         title: String,
         source: RecipeSource = .text
@@ -6732,6 +6911,83 @@ final class SmartCartTests: XCTestCase {
             ),
             confidence: confidence
         )
+    }
+}
+
+private actor Slice3MatchingRequestRecorder {
+    private var recordedNames: [String] = []
+
+    func record(_ name: String) {
+        recordedNames.append(name)
+    }
+
+    func reset() {
+        recordedNames = []
+    }
+
+    func names() -> [String] {
+        recordedNames
+    }
+}
+
+private struct Slice3GuideAdapter: RetailerGuideAdapter {
+    enum Failure: Error { case provider }
+
+    private let base = DemoWalmartCatalogService()
+    private let recorder: Slice3MatchingRequestRecorder?
+    private let delay: Duration?
+
+    init(
+        recorder: Slice3MatchingRequestRecorder? = nil,
+        delay: Duration? = nil
+    ) {
+        self.recorder = recorder
+        self.delay = delay
+    }
+
+    var retailer: ShoppingRetailer { .walmart }
+    var retailerID: String { base.retailerID }
+    var capabilities: RetailerCapabilities { base.capabilities }
+
+    func searchProducts(
+        for request: RetailerProductSearchRequest
+    ) async throws -> [RetailerProductRecord] {
+        await recorder?.record(request.ingredient.name)
+        if let delay { try await Task.sleep(for: delay) }
+        if request.ingredient.name == "Provider failure" { throw Failure.provider }
+        return try await base.searchProducts(for: request)
+    }
+
+    func resolveProduct(
+        retailerProductID: String,
+        storeID: String?
+    ) async throws -> RetailerProductRecord {
+        try await base.resolveProduct(retailerProductID: retailerProductID, storeID: storeID)
+    }
+
+    func refresh(product: RetailerProductRecord) async throws -> RetailerProductRecord {
+        try await base.refresh(product: product)
+    }
+
+    func createHandoff(manifest: ShoppingManifest) async throws -> RetailerHandoff {
+        try await base.createHandoff(manifest: manifest)
+    }
+
+    func searchFallback(
+        for ingredient: Ingredient,
+        storeID: String,
+        preferences: ShoppingPreferences
+    ) -> RetailerProductRecord {
+        base.searchFallback(for: ingredient, storeID: storeID, preferences: preferences)
+    }
+
+    func batchSearchFallback(
+        for ingredient: Ingredient,
+        storeID: String,
+        preferences: ShoppingPreferences
+    ) -> RetailerProductRecord? {
+        guard ingredient.name == "Dragon fruit jam" else { return nil }
+        return base.searchFallback(for: ingredient, storeID: storeID, preferences: preferences)
     }
 }
 

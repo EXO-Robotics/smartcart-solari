@@ -77,7 +77,7 @@ struct ProductMatchingView: View {
         }
         isPreparingProducts = false
 
-        if appModel.unresolvedMatchingExceptionItems.isEmpty {
+        if !appModel.hasUnresolvedMatchingWork {
             _ = appModel.continueToShoppingTrip()
         } else {
             activeSheet = .productExceptions
@@ -96,6 +96,7 @@ struct ProductExceptionReviewSheet: View {
     @Environment(AppModel.self) private var appModel
     @State private var activeSheet: ProductExceptionSheetDestination?
     @State private var shouldOrderByItemID: [UUID: Bool] = [:]
+    @State private var isRetryingMatching = false
     @AccessibilityFocusState private var focusedExceptionItemID: UUID?
 
     private var unresolvedItems: [ShoppingListItem] {
@@ -120,7 +121,44 @@ struct ProductExceptionReviewSheet: View {
                     .accessibilityIdentifier("product-exception-view-all-products")
                     .accessibilityHint("Opens the complete prepared product list without resolving these decisions")
 
+                    if !appModel.unresolvedIngredientResolutions.isEmpty {
+                        Button {
+                            guard !isRetryingMatching else { return }
+                            isRetryingMatching = true
+                            Task { @MainActor in
+                                await appModel.startMatching(force: true)
+                                isRetryingMatching = false
+                                if !appModel.hasUnresolvedMatchingWork {
+                                    continueIfResolved()
+                                }
+                            }
+                        } label: {
+                            Label(
+                                isRetryingMatching ? "Trying Again…" : "Try Matching Again",
+                                systemImage: "arrow.clockwise"
+                            )
+                            .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(SecondaryButtonStyle())
+                        .disabled(isRetryingMatching)
+                        .accessibilityIdentifier("product-exception-retry-matching")
+                    }
+
                     LazyVStack(spacing: 14) {
+                        ForEach(appModel.unresolvedIngredientResolutions) { resolution in
+                            UnresolvedIngredientDecisionRow(
+                                resolution: resolution,
+                                reason: appModel.matchingFailureDescription(for: resolution),
+                                onSkip: {
+                                    guard appModel.excludeUnresolvedIngredient(resolution.id) else { return }
+                                    if !appModel.hasUnresolvedMatchingWork {
+                                        continueIfResolved()
+                                    }
+                                }
+                            )
+                            .accessibilityFocused($focusedExceptionItemID, equals: resolution.id)
+                        }
+
                         ForEach(reviewItems) { item in
                             ProductExceptionCard(
                                 item: item,
@@ -166,10 +204,11 @@ struct ProductExceptionReviewSheet: View {
     }
 
     private var exceptionHeader: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let decisionCount = unresolvedItems.count + appModel.unresolvedIngredientResolutions.count
+        return VStack(alignment: .leading, spacing: 10) {
             Label("PRODUCT DECISIONS", systemImage: "exclamationmark.bubble.fill")
                 .smartEyebrow(SmartCartTheme.amber)
-            Text("Review \(unresolvedItems.count) product \(unresolvedItems.count == 1 ? "choice" : "choices")")
+            Text("Review \(decisionCount) product \(decisionCount == 1 ? "choice" : "choices")")
                 .font(.system(.title2, design: .rounded, weight: .bold))
                 .foregroundStyle(SmartCartTheme.navy)
             Text("Products default to Order. Turn off only the ingredients you do not want, then continue once.")
@@ -197,6 +236,11 @@ struct ProductExceptionReviewSheet: View {
             .foregroundStyle(SmartCartTheme.secondaryInk)
 
             Button {
+                guard appModel.unresolvedIngredientResolutions.isEmpty else { return }
+                guard !reviewItems.isEmpty else {
+                    continueIfResolved()
+                    return
+                }
                 let decisions = Dictionary(
                     uniqueKeysWithValues: reviewItems.map {
                         ($0.id, shouldOrderByItemID[$0.id] ?? true)
@@ -209,7 +253,7 @@ struct ProductExceptionReviewSheet: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(PrimaryButtonStyle())
-            .disabled(reviewItems.isEmpty)
+            .disabled(!appModel.unresolvedIngredientResolutions.isEmpty)
             .accessibilityIdentifier("product-exception-continue")
             .accessibilityHint("Applies every Order or Skip choice and opens the product list")
         }
@@ -229,7 +273,7 @@ struct ProductExceptionReviewSheet: View {
     }
 
     private func continueIfResolved() {
-        guard appModel.unresolvedMatchingExceptionItems.isEmpty else { return }
+        guard !appModel.hasUnresolvedMatchingWork else { return }
         if appModel.continueToShoppingTrip() {
             dismiss()
         } else {
@@ -269,6 +313,47 @@ struct ProductExceptionReviewSheet: View {
         guard appModel.homePath.last != .recipeReady else { return }
         appModel.selectedTab = .home
         appModel.homePath = [.recipeReady]
+    }
+}
+
+private struct UnresolvedIngredientDecisionRow: View {
+    let resolution: IngredientResolution
+    let reason: String
+    let onSkip: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "exclamationmark.magnifyingglass")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(SmartCartTheme.amber)
+                    .frame(width: 44, height: 44)
+                    .background(SmartCartTheme.amber.opacity(0.10))
+                    .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(resolution.ingredient.name)
+                        .font(.headline)
+                        .foregroundStyle(SmartCartTheme.navy)
+                    Text(reason)
+                        .font(.subheadline)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+
+            Button(role: .destructive, action: onSkip) {
+                Label("Skip this ingredient", systemImage: "minus.circle.fill")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(SecondaryButtonStyle())
+            .accessibilityIdentifier("unresolved-ingredient-skip-\(resolution.id.uuidString)")
+            .accessibilityHint("Excludes this ingredient from this shopping trip")
+        }
+        .smartCartCard()
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("unresolved-ingredient-\(resolution.id.uuidString)")
     }
 }
 

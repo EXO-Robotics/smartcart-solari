@@ -663,7 +663,7 @@ struct RecipeReadyView: View {
         await appModel.startMatching()
         guard !Task.isCancelled else { return }
 
-        if appModel.unresolvedMatchingExceptionItems.isEmpty {
+        if !appModel.hasUnresolvedMatchingWork {
             _ = appModel.continueToShoppingTrip()
         } else {
             activeSheet = .productExceptions

@@ -50,6 +50,9 @@ final class AppModel {
     var shoppingItems: [ShoppingListItem] {
         didSet { persistState() }
     }
+    private(set) var ingredientResolutions: [IngredientResolution] {
+        didSet { persistState() }
+    }
     var matchProgress = 0.0
     var matchStage = "Ready to match"
     var isMatching = false
@@ -192,9 +195,9 @@ final class AppModel {
     @ObservationIgnored
     private let persistenceCoordinator: SmartCartPersistenceCoordinator
     @ObservationIgnored
-    private var persistedIngredientResolutions: [IngredientResolution]
-    @ObservationIgnored
     private let retailerEngine: RetailerGuideEngine
+    @ObservationIgnored
+    private let retailerMatchingBatchService: RetailerMatchingBatchService
     @ObservationIgnored
     private let instacartHandoffService: any InstacartHandoffServicing
     @ObservationIgnored
@@ -205,6 +208,8 @@ final class AppModel {
     private var suppressPersistence = false
     @ObservationIgnored
     private var matchingGeneration: UInt = 0
+    @ObservationIgnored
+    private var retailerMatchingGeneration = RetailerMatchingGeneration()
 
     init(
         stateStore: any SmartCartStateStoring = JSONSmartCartStateStore(),
@@ -267,8 +272,9 @@ final class AppModel {
             store: stateStore,
             initialRevision: restoredState?.persistenceRevision ?? 0
         )
-        persistedIngredientResolutions = restoredState?.ingredientResolutions ?? []
+        ingredientResolutions = restoredState?.ingredientResolutions ?? []
         self.retailerEngine = RetailerGuideEngine(adapters: availableAdapters)
+        retailerMatchingBatchService = RetailerMatchingBatchService()
         self.instacartHandoffService = instacartHandoffService
         self.commerceDefaults = commerceDefaults
 
@@ -411,6 +417,7 @@ final class AppModel {
            restoredItems.allSatisfy({ $0.product.retailerID == initialRetailer.rawValue }) {
             shoppingItems = restoredItems
         } else if seedDemoShoppingState, initialRetailer == .walmart {
+            ingredientResolutions = []
             shoppingItems = Self.makeShoppingItems(
                 recipe: initialRecipe,
                 desiredServings: initialServings,
@@ -421,6 +428,7 @@ final class AppModel {
         } else {
             // Recipes may be available as samples, but a fresh install must
             // never imply the user already created a shopping trip.
+            ingredientResolutions = []
             shoppingItems = []
         }
 
@@ -702,6 +710,95 @@ final class AppModel {
         }
     }
 
+    var unresolvedIngredientResolutions: [IngredientResolution] {
+        guard activeShoppingSessionID == nil else { return [] }
+        return effectiveIngredientResolutions.filter {
+            if case .unresolved = $0.resolution { return true }
+            return false
+        }
+    }
+
+    var hasUnresolvedMatchingWork: Bool {
+        !unresolvedIngredientResolutions.isEmpty || !unresolvedMatchingExceptionItems.isEmpty
+    }
+
+    private var effectiveIngredientResolutions: [IngredientResolution] {
+        if !ingredientResolutions.isEmpty { return ingredientResolutions }
+        guard activeShoppingSessionID == nil else { return [] }
+        let expected = ingredientsToBuy
+        guard !expected.isEmpty,
+              shoppingItems.count == expected.count,
+              Set(shoppingItems.map { $0.ingredient.id }) == Set(expected.map(\.id))
+        else { return [] }
+        return shoppingItems.map { item in
+            if item.status == .skipped {
+                return IngredientResolution(
+                    ingredient: item.ingredient,
+                    resolution: .userExcluded,
+                    alternatives: item.alternatives,
+                    matchScore: item.matchScore,
+                    selectionReasons: item.selectionReasons
+                )
+            }
+            return resolution(
+                ingredient: item.ingredient,
+                product: item.product,
+                alternatives: item.alternatives,
+                matchScore: item.matchScore,
+                selectionReasons: item.selectionReasons
+            )
+        }
+    }
+
+    private var editableResolutionValidation: ShoppingResolutionValidation {
+        ShoppingResolutionService.validate(
+            includedIngredients: ingredientsToBuy,
+            resolutions: effectiveIngredientResolutions
+        )
+    }
+
+    private var editableResolutionActionsAreComplete: Bool {
+        let itemsByIngredientID = Dictionary(grouping: shoppingItems, by: { $0.ingredient.id })
+        return effectiveIngredientResolutions.allSatisfy { resolution in
+            let items = itemsByIngredientID[resolution.id] ?? []
+            switch resolution.resolution {
+            case .exactProduct(let product), .searchFallback(let product):
+                return items.count == 1 &&
+                    items[0].status != .skipped &&
+                    items[0].product.id == product.id
+            case .unresolved:
+                return items.isEmpty
+            case .userExcluded:
+                return items.isEmpty || (items.count == 1 && items[0].status == .skipped)
+            }
+        }
+    }
+
+    private func materializeCompatibleIngredientResolutionsIfNeeded() {
+        guard ingredientResolutions.isEmpty else { return }
+        let derived = effectiveIngredientResolutions
+        guard !derived.isEmpty else { return }
+        ingredientResolutions = derived
+    }
+
+    func matchingFailureDescription(for resolution: IngredientResolution) -> String {
+        guard case .unresolved(let reason) = resolution.resolution else { return "Resolved" }
+        return switch reason {
+        case .adapterUnavailable:
+            "This retailer is temporarily unavailable."
+        case .noCandidates:
+            "No suitable product was found for this ingredient."
+        case .requestCancelled:
+            "Matching stopped before this ingredient was resolved."
+        case .transientProviderFailure:
+            "The retailer catalog could not be reached."
+        case .invalidCandidateData:
+            "The returned product could not be verified safely."
+        case .fallbackUnavailable:
+            "SmartCart could not create a safe retailer search."
+        }
+    }
+
     func matchingExceptionReasons(for item: ShoppingListItem) -> [String] {
         var reasons: [String] = []
         if item.product.linkKind == .searchResults {
@@ -878,6 +975,7 @@ final class AppModel {
             savedRecipeIDs.insert(recipe.id)
         }
         recordRecipeOpened(recipe.id)
+        ingredientResolutions = []
         shoppingItems = []
         activeShoppingSessionID = nil
         matchProgress = 0
@@ -1038,6 +1136,7 @@ final class AppModel {
             let succeeded = performAtomicMealPrepTransition {
                 shoppingScope = draft.shoppingScope
                 activeShoppingSessionID = nil
+                ingredientResolutions = []
                 shoppingItems = []
                 guidedIndex = 0
             }
@@ -1319,6 +1418,7 @@ final class AppModel {
         var plan: MealPrepPlanSnapshot?
         var scope: ShoppingScope?
         var shoppingItems: [ShoppingListItem]
+        var ingredientResolutions: [IngredientResolution]
         var guidedIndex: Int
         var activeSessionID: UUID?
         var pantryInventory: [PantryInventoryItem]
@@ -1328,6 +1428,7 @@ final class AppModel {
         var activeRecipe: Recipe
         var recipes: [Recipe]
         var shoppingItems: [ShoppingListItem]
+        var ingredientResolutions: [IngredientResolution]
         var activeShoppingSessionID: UUID?
         var guidedIndex: Int
         var matchProgress: Double
@@ -1346,6 +1447,7 @@ final class AppModel {
             plan: mealPrepPlan,
             scope: shoppingScope,
             shoppingItems: shoppingItems,
+            ingredientResolutions: ingredientResolutions,
             guidedIndex: guidedIndex,
             activeSessionID: activeShoppingSessionID,
             pantryInventory: pantryInventory
@@ -1363,6 +1465,7 @@ final class AppModel {
             mealPrepPlan = backup.plan
             shoppingScope = backup.scope
             shoppingItems = backup.shoppingItems
+            ingredientResolutions = backup.ingredientResolutions
             guidedIndex = backup.guidedIndex
             activeShoppingSessionID = backup.activeSessionID
             pantryInventory = backup.pantryInventory
@@ -1431,10 +1534,14 @@ final class AppModel {
                 afterRemoving: id,
                 using: updatedRecipe
             )
+        let updatedIngredientResolutions = hadActiveSession
+            ? []
+            : ingredientResolutions.filter { $0.id != id }
         let backup = IngredientDeletionBackup(
             activeRecipe: activeRecipe,
             recipes: recipes,
             shoppingItems: shoppingItems,
+            ingredientResolutions: ingredientResolutions,
             activeShoppingSessionID: activeShoppingSessionID,
             guidedIndex: guidedIndex,
             matchProgress: matchProgress,
@@ -1446,11 +1553,12 @@ final class AppModel {
             recipe: updatedRecipe,
             recipes: updatedRecipes,
             shoppingItems: updatedShoppingItems,
+            ingredientResolutions: updatedIngredientResolutions,
             activeShoppingSessionID: hadActiveSession ? nil : activeShoppingSessionID,
             backup: backup
         ) else { return false }
 
-        matchingGeneration &+= 1
+        advanceMatchingGeneration()
         matchProgress = 0
         matchStage = "Ready to match"
         isMatching = false
@@ -1585,6 +1693,7 @@ final class AppModel {
         recipe: Recipe,
         recipes updatedRecipes: [Recipe],
         shoppingItems updatedShoppingItems: [ShoppingListItem],
+        ingredientResolutions updatedIngredientResolutions: [IngredientResolution],
         activeShoppingSessionID updatedSessionID: UUID?,
         backup: IngredientDeletionBackup
     ) -> Bool {
@@ -1594,6 +1703,7 @@ final class AppModel {
         activeRecipe = recipe
         recipes = updatedRecipes
         shoppingItems = updatedShoppingItems
+        ingredientResolutions = updatedIngredientResolutions
         activeShoppingSessionID = updatedSessionID
         guidedIndex = 0
         suppressPersistence = false
@@ -1607,6 +1717,7 @@ final class AppModel {
             activeRecipe = backup.activeRecipe
             recipes = backup.recipes
             shoppingItems = backup.shoppingItems
+            ingredientResolutions = backup.ingredientResolutions
             activeShoppingSessionID = backup.activeShoppingSessionID
             guidedIndex = backup.guidedIndex
             suppressPersistence = false
@@ -1795,14 +1906,18 @@ final class AppModel {
     }
 
     private func invalidateShoppingPlan(preservingMatches: Bool = true) {
-        matchingGeneration &+= 1
+        advanceMatchingGeneration()
         // Waiting pre-trip matches are a cache. Keep them long enough for the
         // next matching pass to reconcile unchanged inputs selectively. Once
         // a retailer session exists, its snapshot is historical trip state and
         // must never become that cache; detach and rebuild an editable plan.
         if !preservingMatches || activeShoppingSessionID != nil {
+            ingredientResolutions = []
             shoppingItems = []
             activeShoppingSessionID = nil
+        } else {
+            let eligibleIDs = Set(ingredientsToBuy.map(\.id))
+            ingredientResolutions = ingredientResolutions.filter { eligibleIDs.contains($0.id) }
         }
         matchProgress = 0
         matchStage = "Ready to match"
@@ -1879,14 +1994,22 @@ final class AppModel {
 
     func startMatching(force: Bool = false) async {
         prepareRetailerSafariWorkflow()
-        matchingGeneration &+= 1
-        let generation = matchingGeneration
-        let mayReusePreTripItems = activeShoppingSessionID == nil && !force
+        let generation = advanceMatchingGeneration()
+        let publicationGeneration = retailerMatchingGeneration
+        let retryOnlyUnresolved = force &&
+            activeShoppingSessionID == nil &&
+            ingredientResolutions.contains {
+                if case .unresolved = $0.resolution { return true }
+                return false
+            }
+        let mayReusePreTripItems = activeShoppingSessionID == nil && (!force || retryOnlyUnresolved)
         let reusableItems = mayReusePreTripItems ? shoppingItems : []
+        let reusableResolutions = mayReusePreTripItems ? effectiveIngredientResolutions : []
         if activeShoppingSessionID != nil {
             // Preserve the session-owned snapshot in `shoppingSessions`; the
             // newly matched list is an independent editable fork.
             shoppingItems = []
+            ingredientResolutions = []
             activeShoppingSessionID = nil
         }
         isMatching = true
@@ -1894,13 +2017,75 @@ final class AppModel {
         matchStage = "Matching products"
         matchProgress = 0.1
 
-        let matchedItems = await buildShoppingItems(reusing: reusableItems)
-        guard !Task.isCancelled, generation == matchingGeneration else { return }
-        shoppingItems = matchedItems
+        let matchedPlan: (items: [ShoppingListItem], resolutions: [IngredientResolution])
+        do {
+            matchedPlan = try await buildShoppingPlan(
+                reusing: reusableItems,
+                resolutions: reusableResolutions,
+                generation: publicationGeneration
+            )
+        } catch is CancellationError {
+            if generation == matchingGeneration {
+                isMatching = false
+                matchProgress = 0
+                matchStage = "Ready to match"
+            }
+            return
+        } catch {
+            if generation == matchingGeneration {
+                isMatching = false
+                matchProgress = 0
+                matchStage = "Products could not be prepared"
+                showToast("Products could not be prepared. Try again.")
+            }
+            return
+        }
+        guard !Task.isCancelled,
+              generation == matchingGeneration,
+              publicationGeneration == retailerMatchingGeneration
+        else { return }
+
+        let validation = ShoppingResolutionService.validate(
+            includedIngredients: ingredientsToBuy,
+            resolutions: matchedPlan.resolutions
+        )
+        guard validation.hasExactlyOneResolutionPerIngredient else {
+            isMatching = false
+            matchProgress = 0
+            matchStage = "Products could not be prepared"
+            showToast("Products could not be prepared safely. Try again.")
+            return
+        }
+
+        let originalItems = shoppingItems
+        let originalResolutions = ingredientResolutions
+        suppressPersistence = true
+        shoppingItems = matchedPlan.items
+        ingredientResolutions = matchedPlan.resolutions
+        suppressPersistence = false
+        do {
+            try persistenceCoordinator.saveCompatibility(stateSnapshot())
+            persistenceIssue = nil
+        } catch {
+            suppressPersistence = true
+            shoppingItems = originalItems
+            ingredientResolutions = originalResolutions
+            suppressPersistence = false
+            persistenceIssue = error.localizedDescription
+            isMatching = false
+            matchProgress = 0
+            matchStage = "Products could not be saved"
+            showToast("Products could not be saved. Try matching again.")
+            return
+        }
         withAnimation(.easeOut(duration: 0.35)) {
             matchProgress = 1
         }
-        matchStage = "\(matchedItemCount) exact products · \(searchFallbackCount) searches"
+        if unresolvedIngredientResolutions.isEmpty {
+            matchStage = "\(matchedItemCount) exact products · \(searchFallbackCount) searches"
+        } else {
+            matchStage = "\(unresolvedIngredientResolutions.count) ingredient\(unresolvedIngredientResolutions.count == 1 ? "" : "s") need attention"
+        }
         isMatching = false
         track(
             .matchingCompleted,
@@ -1908,9 +2093,51 @@ final class AppModel {
                 "items": String(shoppingItems.count),
                 "exact_links": String(matchedItemCount),
                 "fallbacks": String(searchFallbackCount),
+                "unresolved": String(unresolvedIngredientResolutions.count),
                 "retailer": selectedRetailer.rawValue
             ]
         )
+    }
+
+    @discardableResult
+    private func advanceMatchingGeneration() -> UInt {
+        matchingGeneration &+= 1
+        retailerMatchingGeneration = RetailerMatchingGeneration()
+        return matchingGeneration
+    }
+
+    @discardableResult
+    func excludeUnresolvedIngredient(_ ingredientID: UUID) -> Bool {
+        guard persistenceReady,
+              !isMatching,
+              activeShoppingSessionID == nil,
+              let index = ingredientResolutions.firstIndex(where: { $0.id == ingredientID }),
+              case .unresolved = ingredientResolutions[index].resolution
+        else { return false }
+
+        let originalResolutions = ingredientResolutions
+        let current = ingredientResolutions[index]
+        suppressPersistence = true
+        ingredientResolutions[index] = IngredientResolution(
+            ingredient: current.ingredient,
+            resolution: .userExcluded,
+            alternatives: current.alternatives,
+            matchScore: current.matchScore,
+            selectionReasons: current.selectionReasons
+        )
+        suppressPersistence = false
+        do {
+            try persistenceCoordinator.saveCompatibility(stateSnapshot())
+            persistenceIssue = nil
+            return true
+        } catch {
+            suppressPersistence = true
+            ingredientResolutions = originalResolutions
+            suppressPersistence = false
+            persistenceIssue = error.localizedDescription
+            showToast("That choice could not be saved")
+            return false
+        }
     }
 
     @discardableResult
@@ -1931,8 +2158,10 @@ final class AppModel {
               shoppingItems[index].status == .waiting,
               !matchingExceptionReasons(for: shoppingItems[index]).isEmpty else { return false }
         ensureMatchingFingerprints(at: index)
+        materializeCompatibleIngredientResolutionsIfNeeded()
         shoppingItems[index].reviewedMatchingFingerprint = shoppingItems[index].matchingInputFingerprint
         shoppingItems[index].status = .skipped
+        replaceIngredientResolution(itemID: itemID, with: .userExcluded)
         return true
     }
 
@@ -1948,11 +2177,14 @@ final class AppModel {
         }
 
         let originalItems = shoppingItems
+        let originalResolutions = ingredientResolutions
         suppressPersistence = true
+        materializeCompatibleIngredientResolutionsIfNeeded()
 
         for itemID in unresolvedIDs {
             guard let index = shoppingItems.firstIndex(where: { $0.id == itemID }) else {
                 shoppingItems = originalItems
+                ingredientResolutions = originalResolutions
                 suppressPersistence = false
                 return false
             }
@@ -1960,11 +2192,13 @@ final class AppModel {
             shoppingItems[index].reviewedMatchingFingerprint = shoppingItems[index].matchingInputFingerprint
             if shouldOrderByItemID[itemID] == false {
                 shoppingItems[index].status = .skipped
+                replaceIngredientResolution(itemID: itemID, with: .userExcluded)
             }
         }
 
         guard shoppingItems.contains(where: { $0.status == .waiting }) else {
             shoppingItems = originalItems
+            ingredientResolutions = originalResolutions
             suppressPersistence = false
             showToast("Keep at least one shopping item before continuing")
             return false
@@ -1978,6 +2212,7 @@ final class AppModel {
         } catch {
             suppressPersistence = true
             shoppingItems = originalItems
+            ingredientResolutions = originalResolutions
             suppressPersistence = false
             persistenceIssue = error.localizedDescription
             showToast("Product choices could not be saved")
@@ -1991,7 +2226,9 @@ final class AppModel {
             showToast("Match at least one shopping item before continuing")
             return false
         }
-        guard unresolvedMatchingExceptionItems.isEmpty else {
+        guard editableResolutionValidation.canStartShoppingTrip,
+              editableResolutionActionsAreComplete,
+              !hasUnresolvedMatchingWork else {
             showToast("Review or skip every matching exception before continuing")
             return false
         }
@@ -2032,6 +2269,7 @@ final class AppModel {
         }
 
         let originalItems = shoppingItems
+        let originalResolutions = ingredientResolutions
         let originalSessions = shoppingSessions
         let originalLists = savedLists
         let originalPreferences = preferredProductIDsByIngredient
@@ -2044,6 +2282,19 @@ final class AppModel {
         shoppingItems[itemIndex].alternatives.append(previous)
         shoppingItems[itemIndex].product = replacement
         shoppingItems[itemIndex].purchaseQuantity = replacementPackageCount
+        if activeShoppingSessionID == nil {
+            materializeCompatibleIngredientResolutionsIfNeeded()
+            let updated = resolution(
+                ingredient: shoppingItems[itemIndex].ingredient,
+                product: replacement,
+                alternatives: shoppingItems[itemIndex].alternatives,
+                matchScore: shoppingItems[itemIndex].matchScore,
+                selectionReasons: shoppingItems[itemIndex].selectionReasons
+            )
+            if let resolutionIndex = ingredientResolutions.firstIndex(where: { $0.id == itemID }) {
+                ingredientResolutions[resolutionIndex] = updated
+            }
+        }
         ensureMatchingFingerprints(at: itemIndex)
         shoppingItems[itemIndex].reviewedMatchingFingerprint = matchingExceptionReasons(
             for: shoppingItems[itemIndex]
@@ -2067,6 +2318,7 @@ final class AppModel {
             return true
         } catch {
             shoppingItems = originalItems
+            ingredientResolutions = originalResolutions
             shoppingSessions = originalSessions
             savedLists = originalLists
             preferredProductIDsByIngredient = originalPreferences
@@ -2765,6 +3017,7 @@ final class AppModel {
         }
         if let activeShoppingSessionID, relatedSessionIDs.contains(activeShoppingSessionID) {
             self.activeShoppingSessionID = nil
+            ingredientResolutions = []
             shoppingItems = []
             guidedIndex = 0
         }
@@ -3881,7 +4134,21 @@ final class AppModel {
         savedLists.insert(SavedShoppingList(manifest: manifest), at: 0)
     }
 
-    private func buildShoppingItems(reusing reusableItems: [ShoppingListItem]) async -> [ShoppingListItem] {
+    private struct PreparedRetailerMatch {
+        let ingredientIndex: Int
+        let ingredient: Ingredient
+        let requestedQuantity: Double
+        let contextFingerprint: String
+        let inputFingerprint: String
+        let preferredRetailerProductID: String?
+        let demand: RetailerMatchingDemand
+    }
+
+    private func buildShoppingPlan(
+        reusing reusableItems: [ShoppingListItem],
+        resolutions reusableResolutions: [IngredientResolution],
+        generation: RetailerMatchingGeneration
+    ) async throws -> (items: [ShoppingListItem], resolutions: [IngredientResolution]) {
         let mealPrepShopping = isMealPrepShopping
         let multiplier = mealPrepShopping ? 1 : Double(desiredServings) / Double(max(1, activeRecipe.servings))
         let method: FulfillmentMethod = fulfillmentMode == .pickup ? .pickup : .delivery
@@ -3894,9 +4161,15 @@ final class AppModel {
         for item in reusableItems where item.status == .waiting {
             reusableByIngredientID[item.ingredient.id] = reusableByIngredientID[item.ingredient.id] ?? item
         }
-        var results: [ShoppingListItem] = []
+        let reusableResolutionByIngredientID = Dictionary(
+            reusableResolutions.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        var itemsByIngredientIndex: [Int: ShoppingListItem] = [:]
+        var resolutionsByIngredientIndex: [Int: IngredientResolution] = [:]
+        var pendingMatches: [PreparedRetailerMatch] = []
 
-        for ingredient in ingredients {
+        for (ingredientIndex, ingredient) in ingredients.enumerated() {
             let requestedQuantity = mealPrepShopping
                 ? ingredient.quantity
                 : PantryMatchingService.quantityToBuy(
@@ -3916,8 +4189,23 @@ final class AppModel {
                 pantryDecision: ingredient.pantryDecision,
                 pantryState: ingredient.pantryState
             )
+
+            if let reusableResolution = reusableResolutionByIngredientID[ingredient.id],
+               case .userExcluded = reusableResolution.resolution {
+                resolutionsByIngredientIndex[ingredientIndex] = IngredientResolution(
+                    ingredient: ingredient,
+                    resolution: .userExcluded,
+                    alternatives: reusableResolution.alternatives,
+                    matchScore: reusableResolution.matchScore,
+                    selectionReasons: reusableResolution.selectionReasons
+                )
+                continue
+            }
+
             if var reused = reusableByIngredientID[ingredient.id],
-               reused.matchingContextFingerprint == contextFingerprint {
+               reused.matchingContextFingerprint == contextFingerprint,
+               let reusableResolution = reusableResolutionByIngredientID[ingredient.id],
+               reusableResolution.resolution.product != nil {
                 reused.ingredient = ingredient
                 reused.requestedQuantity = Ingredient.quantityText(
                     requestedQuantity,
@@ -3932,9 +4220,17 @@ final class AppModel {
                 reused.storeID = store.id
                 reused.matchingContextFingerprint = contextFingerprint
                 reused.matchingInputFingerprint = inputFingerprint
-                results.append(reused)
+                itemsByIngredientIndex[ingredientIndex] = reused
+                resolutionsByIngredientIndex[ingredientIndex] = resolution(
+                    ingredient: ingredient,
+                    product: reused.product,
+                    alternatives: reused.alternatives,
+                    matchScore: reused.matchScore,
+                    selectionReasons: reused.selectionReasons
+                )
                 continue
             }
+
             let request = RetailerProductSearchRequest(
                 ingredient: ingredient,
                 retailerID: retailer.rawValue,
@@ -3943,10 +4239,6 @@ final class AppModel {
                 storeID: store.retailerStoreID,
                 fulfillmentMethod: method
             )
-            var ranked = await retailerEngine.rankedProducts(
-                for: request,
-                preferences: matchingPreferences
-            )
             let retailerPreferenceKey = productPreferenceKey(
                 for: ingredient.name,
                 retailerID: retailer.rawValue
@@ -3954,38 +4246,136 @@ final class AppModel {
             let legacyWalmartPreference = retailer == .walmart
                 ? productPreferences[preferenceKey(for: ingredient.name)]
                 : nil
-            if let preferredID = productPreferences[retailerPreferenceKey] ?? legacyWalmartPreference,
-               let preferredIndex = ranked.firstIndex(where: { $0.product.retailerProductID == preferredID }) {
-                let preferred = ranked.remove(at: preferredIndex)
-                ranked.insert(preferred, at: 0)
-            }
-            guard let selected = ranked.first else { continue }
-
-            results.append(
-                ShoppingListItem(
-                    id: ingredient.id,
+            pendingMatches.append(
+                PreparedRetailerMatch(
+                    ingredientIndex: ingredientIndex,
                     ingredient: ingredient,
-                    requestedQuantity: Ingredient.quantityText(
-                        requestedQuantity,
-                        unit: ingredient.unit
-                    ),
-                    requestedAmount: requestedQuantity,
-                    purchaseQuantity: PackageMath.packageCount(
-                        product: selected.product,
-                        requestedQuantity: requestedQuantity,
-                        requestedUnit: ingredient.unit
-                    ),
-                    product: selected.product,
-                    alternatives: Array(ranked.dropFirst().map(\.product)),
-                    storeID: store.id,
-                    matchScore: selected.score,
-                    selectionReasons: selected.reasons,
-                    matchingContextFingerprint: contextFingerprint,
-                    matchingInputFingerprint: inputFingerprint
+                    requestedQuantity: requestedQuantity,
+                    contextFingerprint: contextFingerprint,
+                    inputFingerprint: inputFingerprint,
+                    preferredRetailerProductID:
+                        productPreferences[retailerPreferenceKey] ?? legacyWalmartPreference,
+                    demand: RetailerMatchingDemand(
+                        request: request,
+                        preferences: matchingPreferences
+                    )
                 )
             )
         }
-        return results
+
+        if !pendingMatches.isEmpty {
+            let batch = try await retailerMatchingBatchService.match(
+                pendingMatches.map(\.demand),
+                using: retailerEngine,
+                generation: generation
+            )
+            let acceptedItems = try batch.acceptedItems(for: retailerMatchingGeneration)
+            for batchItem in acceptedItems {
+                try Task.checkCancellation()
+                guard pendingMatches.indices.contains(batchItem.inputIndex) else { continue }
+                let pending = pendingMatches[batchItem.inputIndex]
+                let ingredientResolution = preferredResolution(
+                    batchItem.resolution,
+                    retailerProductID: pending.preferredRetailerProductID
+                )
+                resolutionsByIngredientIndex[pending.ingredientIndex] = ingredientResolution
+                guard let selectedProduct = ingredientResolution.resolution.product else { continue }
+
+                itemsByIngredientIndex[pending.ingredientIndex] = ShoppingListItem(
+                    id: pending.ingredient.id,
+                    ingredient: pending.ingredient,
+                    requestedQuantity: Ingredient.quantityText(
+                        pending.requestedQuantity,
+                        unit: pending.ingredient.unit
+                    ),
+                    requestedAmount: pending.requestedQuantity,
+                    purchaseQuantity: PackageMath.packageCount(
+                        product: selectedProduct,
+                        requestedQuantity: pending.requestedQuantity,
+                        requestedUnit: pending.ingredient.unit
+                    ),
+                    product: selectedProduct,
+                    alternatives: ingredientResolution.alternatives,
+                    storeID: store.id,
+                    matchScore: ingredientResolution.matchScore ?? 0,
+                    selectionReasons: ingredientResolution.selectionReasons,
+                    matchingContextFingerprint: pending.contextFingerprint,
+                    matchingInputFingerprint: pending.inputFingerprint
+                )
+            }
+        }
+
+        try Task.checkCancellation()
+        let orderedItems = ingredients.indices.compactMap { itemsByIngredientIndex[$0] }
+        let orderedResolutions = ingredients.indices.map { index in
+            resolutionsByIngredientIndex[index] ?? IngredientResolution(
+                ingredient: ingredients[index],
+                resolution: .unresolved(.invalidCandidateData)
+            )
+        }
+        return (orderedItems, orderedResolutions)
+    }
+
+    private func preferredResolution(
+        _ resolution: IngredientResolution,
+        retailerProductID: String?
+    ) -> IngredientResolution {
+        guard let retailerProductID,
+              let selectedProduct = resolution.resolution.product,
+              let preferredIndex = resolution.alternatives.firstIndex(where: {
+                  $0.retailerProductID == retailerProductID
+              })
+        else { return resolution }
+
+        var alternatives = resolution.alternatives
+        let preferred = alternatives.remove(at: preferredIndex)
+        alternatives.insert(selectedProduct, at: 0)
+        let preferredState: ShoppingResolution =
+            preferred.dataSource == .searchFallback || preferred.linkKind == .searchResults
+                ? .searchFallback(preferred)
+                : .exactProduct(preferred)
+        return IngredientResolution(
+            ingredient: resolution.ingredient,
+            resolution: preferredState,
+            alternatives: alternatives,
+            matchScore: resolution.matchScore,
+            selectionReasons: resolution.selectionReasons
+        )
+    }
+
+    private func replaceIngredientResolution(
+        itemID: UUID,
+        with state: ShoppingResolution
+    ) {
+        guard let index = ingredientResolutions.firstIndex(where: { $0.id == itemID }) else { return }
+        let current = ingredientResolutions[index]
+        ingredientResolutions[index] = IngredientResolution(
+            ingredient: current.ingredient,
+            resolution: state,
+            alternatives: current.alternatives,
+            matchScore: current.matchScore,
+            selectionReasons: current.selectionReasons
+        )
+    }
+
+    private func resolution(
+        ingredient: Ingredient,
+        product: RetailerProductRecord,
+        alternatives: [RetailerProductRecord],
+        matchScore: Double,
+        selectionReasons: [String]
+    ) -> IngredientResolution {
+        let state: ShoppingResolution =
+            product.dataSource == .searchFallback || product.linkKind == .searchResults
+                ? .searchFallback(product)
+                : .exactProduct(product)
+        return IngredientResolution(
+            ingredient: ingredient,
+            resolution: state,
+            alternatives: alternatives,
+            matchScore: matchScore,
+            selectionReasons: selectionReasons
+        )
     }
 
     private func ensureMatchingFingerprints(at index: Int) {
@@ -4204,7 +4594,7 @@ final class AppModel {
             pickupDay: pickupDay,
             pickupTime: pickupTime,
             shoppingItems: shoppingItems,
-            ingredientResolutions: persistedIngredientResolutions,
+            ingredientResolutions: ingredientResolutions,
             guidedIndex: guidedIndex,
             savedLists: savedLists,
             preferredDeliveryPartnerName: preferredDeliveryPartnerName,
