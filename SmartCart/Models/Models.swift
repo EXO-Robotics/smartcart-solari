@@ -883,6 +883,9 @@ struct ShoppingListItem: Identifiable, Hashable, Codable {
     var matchingInputFingerprint: String?
     /// The exact matching input the user explicitly reviewed, when needed.
     var reviewedMatchingFingerprint: String?
+    /// Optional frozen purchase-group metadata. Missing legacy fields decode
+    /// as nil, so historical Shopping Trips are not regrouped by this slice.
+    var purchaseGroup: ProductPurchaseGroup?
 
     init(
         id: UUID = UUID(),
@@ -898,7 +901,8 @@ struct ShoppingListItem: Identifiable, Hashable, Codable {
         selectionReasons: [String] = [],
         matchingContextFingerprint: String? = nil,
         matchingInputFingerprint: String? = nil,
-        reviewedMatchingFingerprint: String? = nil
+        reviewedMatchingFingerprint: String? = nil,
+        purchaseGroup: ProductPurchaseGroup? = nil
     ) {
         self.id = id
         self.ingredient = ingredient
@@ -914,6 +918,7 @@ struct ShoppingListItem: Identifiable, Hashable, Codable {
         self.matchingContextFingerprint = matchingContextFingerprint
         self.matchingInputFingerprint = matchingInputFingerprint
         self.reviewedMatchingFingerprint = reviewedMatchingFingerprint
+        self.purchaseGroup = purchaseGroup
     }
 
     var lineTotal: Double {
