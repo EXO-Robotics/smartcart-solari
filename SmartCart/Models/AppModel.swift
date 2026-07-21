@@ -190,7 +190,9 @@ final class AppModel {
     let deliveryPartners: [DeliveryPartner]
 
     @ObservationIgnored
-    private let stateStore: any SmartCartStateStoring
+    private let persistenceCoordinator: SmartCartPersistenceCoordinator
+    @ObservationIgnored
+    private var persistedIngredientResolutions: [IngredientResolution]
     @ObservationIgnored
     private let retailerEngine: RetailerGuideEngine
     @ObservationIgnored
@@ -261,7 +263,11 @@ final class AppModel {
             ?? latestManifestRetailer
             ?? .walmart
 
-        self.stateStore = stateStore
+        persistenceCoordinator = SmartCartPersistenceCoordinator(
+            store: stateStore,
+            initialRevision: restoredState?.persistenceRevision ?? 0
+        )
+        persistedIngredientResolutions = restoredState?.ingredientResolutions ?? []
         self.retailerEngine = RetailerGuideEngine(adapters: availableAdapters)
         self.instacartHandoffService = instacartHandoffService
         self.commerceDefaults = commerceDefaults
@@ -1347,7 +1353,7 @@ final class AppModel {
         suppressPersistence = true
         do {
             try mutation()
-            try stateStore.save(stateSnapshot())
+            try persistenceCoordinator.saveCompatibility(stateSnapshot())
             persistenceIssue = nil
             suppressPersistence = false
             return true
@@ -1593,7 +1599,7 @@ final class AppModel {
         suppressPersistence = false
 
         do {
-            try stateStore.save(stateSnapshot())
+            try persistenceCoordinator.saveCompatibility(stateSnapshot())
             persistenceIssue = nil
             return true
         } catch {
@@ -1966,7 +1972,7 @@ final class AppModel {
 
         suppressPersistence = false
         do {
-            try stateStore.save(stateSnapshot())
+            try persistenceCoordinator.saveCompatibility(stateSnapshot())
             persistenceIssue = nil
             return true
         } catch {
@@ -2054,7 +2060,7 @@ final class AppModel {
             persistCurrentManifest(progress: manifestProgress)
         }
         do {
-            try stateStore.save(stateSnapshot())
+            try persistenceCoordinator.saveCompatibility(stateSnapshot())
             persistenceIssue = nil
             suppressPersistence = false
             showToast("Product replacement selected")
@@ -2175,7 +2181,7 @@ final class AppModel {
                     "remaining": String(retailerSessionRemainingCount)
                 ]
             )
-            try stateStore.save(stateSnapshot())
+            try persistenceCoordinator.saveCompatibility(stateSnapshot())
             persistenceIssue = nil
             suppressPersistence = false
             return true
@@ -2217,7 +2223,7 @@ final class AppModel {
             ]
         )
         do {
-            try stateStore.save(stateSnapshot())
+            try persistenceCoordinator.saveCompatibility(stateSnapshot())
             persistenceIssue = nil
             suppressPersistence = false
             showToast("Shopping trip saved")
@@ -2293,7 +2299,7 @@ final class AppModel {
         shoppingItems = session.items
         guidedIndex = shoppingItems.firstIndex(where: { !$0.status.isCompleted }) ?? 0
         do {
-            try stateStore.save(stateSnapshot())
+            try persistenceCoordinator.saveCompatibility(stateSnapshot())
             persistenceIssue = nil
             suppressPersistence = false
             selectedTab = .home
@@ -2484,7 +2490,7 @@ final class AppModel {
         }
 
         do {
-            try stateStore.save(stateSnapshot())
+            try persistenceCoordinator.saveCompatibility(stateSnapshot())
             persistenceIssue = nil
             suppressPersistence = false
             if completedNow {
@@ -2565,7 +2571,7 @@ final class AppModel {
         )
 
         do {
-            try stateStore.save(stateSnapshot())
+            try persistenceCoordinator.saveCompatibility(stateSnapshot())
             suppressPersistence = false
             persistenceIssue = nil
             showToast("New editable trip created")
@@ -2702,7 +2708,9 @@ final class AppModel {
         }
 
         do {
-            try stateStore.save(stateSnapshot(shoppingSessions: updatedSessions))
+            try persistenceCoordinator.saveCompatibility(
+                stateSnapshot(shoppingSessions: updatedSessions)
+            )
             suppressPersistence = true
             shoppingSessions = updatedSessions
             suppressPersistence = false
@@ -2762,7 +2770,7 @@ final class AppModel {
         }
 
         do {
-            try stateStore.save(stateSnapshot())
+            try persistenceCoordinator.saveCompatibility(stateSnapshot())
             suppressPersistence = false
             persistenceIssue = nil
             showToast("Shopping trip deleted")
@@ -2814,7 +2822,9 @@ final class AppModel {
                 to: session
             )
             deduplicatedSessions[sessionIndex].reconciliationDraft = nil
-            try stateStore.save(stateSnapshot(shoppingSessions: deduplicatedSessions))
+            try persistenceCoordinator.saveCompatibility(
+                stateSnapshot(shoppingSessions: deduplicatedSessions)
+            )
             suppressPersistence = true
             shoppingSessions = deduplicatedSessions
             suppressPersistence = false
@@ -2891,7 +2901,7 @@ final class AppModel {
 
         // Persist the complete transaction before changing observable state.
         // A retry therefore cannot add the same purchase twice.
-        try stateStore.save(
+        try persistenceCoordinator.saveCompatibility(
             stateSnapshot(
                 pantryInventory: updatedPantry,
                 preferredProductIDs: updatedPreferences,
@@ -2984,7 +2994,9 @@ final class AppModel {
         if suppressPersistence {
             shoppingSessions = updatedSessions
         } else {
-            try stateStore.save(stateSnapshot(shoppingSessions: updatedSessions))
+            try persistenceCoordinator.saveCompatibility(
+                stateSnapshot(shoppingSessions: updatedSessions)
+            )
             suppressPersistence = true
             shoppingSessions = updatedSessions
             suppressPersistence = false
@@ -4140,7 +4152,7 @@ final class AppModel {
     private func persistState() {
         guard persistenceReady, !suppressPersistence else { return }
         do {
-            try stateStore.save(stateSnapshot())
+            try persistenceCoordinator.saveCompatibility(stateSnapshot())
             persistenceIssue = nil
         } catch {
             persistenceIssue = error.localizedDescription
@@ -4161,7 +4173,7 @@ final class AppModel {
         suppressPersistence = false
 
         do {
-            try stateStore.save(stateSnapshot())
+            try persistenceCoordinator.saveCompatibility(stateSnapshot())
             persistenceIssue = nil
             return true
         } catch {
@@ -4192,6 +4204,7 @@ final class AppModel {
             pickupDay: pickupDay,
             pickupTime: pickupTime,
             shoppingItems: shoppingItems,
+            ingredientResolutions: persistedIngredientResolutions,
             guidedIndex: guidedIndex,
             savedLists: savedLists,
             preferredDeliveryPartnerName: preferredDeliveryPartnerName,

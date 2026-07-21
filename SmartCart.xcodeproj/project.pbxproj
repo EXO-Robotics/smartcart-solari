@@ -45,6 +45,7 @@
 		A10000000000000000000028 /* RetailerMatchingBatchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000029 /* RetailerMatchingBatchService.swift */; };
 		A10000000000000000000022 /* ExactProductIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000023 /* ExactProductIdentity.swift */; };
 		A10000000000000000000026 /* ProductPurchaseGroupingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000027 /* ProductPurchaseGroupingService.swift */; };
+		A10000000000000000000027 /* SmartCartPersistenceCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000028 /* SmartCartPersistenceCoordinator.swift */; };
 		A20000000000000000000001 /* SmartCartTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000001 /* SmartCartTests.swift */; };
 		A20000000000000000000002 /* MealPrepAggregationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000003 /* MealPrepAggregationTests.swift */; };
 		A20000000000000000000003 /* ReleaseBlockerMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000004 /* ReleaseBlockerMigrationTests.swift */; };
@@ -56,6 +57,7 @@
 		A2000000000000000000000D /* RetailerMatchingBatchServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000000000000000000000E /* RetailerMatchingBatchServiceTests.swift */; };
 		A20000000000000000000006 /* ExactProductIdentityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000007 /* ExactProductIdentityTests.swift */; };
 		A2000000000000000000000A /* ProductPurchaseGroupingServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000000000000000000000B /* ProductPurchaseGroupingServiceTests.swift */; };
+		A2000000000000000000000C /* SmartCartPersistenceCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000000000000000000000D /* SmartCartPersistenceCoordinatorTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -109,6 +111,7 @@
 		B10000000000000000000029 /* RetailerMatchingBatchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RetailerMatchingBatchService.swift; sourceTree = "<group>"; };
 		B10000000000000000000023 /* ExactProductIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExactProductIdentity.swift; sourceTree = "<group>"; };
 		B10000000000000000000027 /* ProductPurchaseGroupingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductPurchaseGroupingService.swift; sourceTree = "<group>"; };
+		B10000000000000000000028 /* SmartCartPersistenceCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartCartPersistenceCoordinator.swift; sourceTree = "<group>"; };
 		B20000000000000000000001 /* SmartCartTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartCartTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000002 /* SmartCartTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SmartCartTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B20000000000000000000003 /* MealPrepAggregationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealPrepAggregationTests.swift; sourceTree = "<group>"; };
@@ -121,6 +124,7 @@
 		B2000000000000000000000E /* RetailerMatchingBatchServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RetailerMatchingBatchServiceTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000007 /* ExactProductIdentityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExactProductIdentityTests.swift; sourceTree = "<group>"; };
 		B2000000000000000000000B /* ProductPurchaseGroupingServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductPurchaseGroupingServiceTests.swift; sourceTree = "<group>"; };
+		B2000000000000000000000D /* SmartCartPersistenceCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartCartPersistenceCoordinatorTests.swift; sourceTree = "<group>"; };
 		B30000000000000000000001 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
 		B30000000000000000000002 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		B30000000000000000000003 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
@@ -270,6 +274,7 @@
 				B10000000000000000000029 /* RetailerMatchingBatchService.swift */,
 				B10000000000000000000023 /* ExactProductIdentity.swift */,
 				B10000000000000000000027 /* ProductPurchaseGroupingService.swift */,
+				B10000000000000000000028 /* SmartCartPersistenceCoordinator.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -313,6 +318,7 @@
 				B2000000000000000000000E /* RetailerMatchingBatchServiceTests.swift */,
 				B20000000000000000000007 /* ExactProductIdentityTests.swift */,
 				B2000000000000000000000B /* ProductPurchaseGroupingServiceTests.swift */,
+				B2000000000000000000000D /* SmartCartPersistenceCoordinatorTests.swift */,
 			);
 			path = SmartCartTests;
 			sourceTree = "<group>";
@@ -458,6 +464,7 @@
 				A10000000000000000000028 /* RetailerMatchingBatchService.swift in Sources */,
 				A10000000000000000000022 /* ExactProductIdentity.swift in Sources */,
 				A10000000000000000000026 /* ProductPurchaseGroupingService.swift in Sources */,
+				A10000000000000000000027 /* SmartCartPersistenceCoordinator.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -476,6 +483,7 @@
 				A2000000000000000000000D /* RetailerMatchingBatchServiceTests.swift in Sources */,
 				A20000000000000000000006 /* ExactProductIdentityTests.swift in Sources */,
 				A2000000000000000000000A /* ProductPurchaseGroupingServiceTests.swift in Sources */,
+				A2000000000000000000000C /* SmartCartPersistenceCoordinatorTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

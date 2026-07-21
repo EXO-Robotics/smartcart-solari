@@ -1,9 +1,12 @@
 import Foundation
 
 struct SmartCartPersistedState: Codable, Hashable {
-    static let currentSchemaVersion = 6
+    static let currentSchemaVersion = 8
 
     var schemaVersion: Int = currentSchemaVersion
+    /// Durable compare-and-swap generation. Missing schema-8 metadata decodes
+    /// as generation zero and the first coordinator write advances to one.
+    var persistenceRevision: UInt64 = 0
     var recipes: [Recipe]
     var activeRecipe: Recipe
     var desiredServings: Int
@@ -16,6 +19,9 @@ struct SmartCartPersistedState: Codable, Hashable {
     var pickupDay: String
     var pickupTime: String
     var shoppingItems: [ShoppingListItem]
+    /// Schema-7 compatibility pass-through only. Runtime exhaustive matching
+    /// remains deferred; this slice does not publish or consume these results.
+    var ingredientResolutions: [IngredientResolution] = []
     var guidedIndex: Int
     var savedLists: [SavedShoppingList]
     var preferredDeliveryPartnerName: String?
@@ -31,6 +37,111 @@ struct SmartCartPersistedState: Codable, Hashable {
     /// Library membership is independent from retained recipe records. Optional
     /// decoding keeps schema-6 payloads written before this field compatible.
     var savedRecipeIDs: Set<UUID>? = nil
+}
+
+extension SmartCartPersistedState {
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case persistenceRevision
+        case recipes
+        case activeRecipe
+        case desiredServings
+        case preferences
+        case featureFlags
+        case storeStrategy
+        case fulfillmentMode
+        case selectedStoreIDs
+        case zipCode
+        case pickupDay
+        case pickupTime
+        case shoppingItems
+        case ingredientResolutions
+        case guidedIndex
+        case savedLists
+        case preferredDeliveryPartnerName
+        case pantryInventory
+        case preferredProductIDsByIngredient
+        case analyticsEvents
+        case walmartWishlistReference
+        case shoppingSessions
+        case activeShoppingSessionID
+        case shoppingScope
+        case mealPrepDraft
+        case mealPrepPlan
+        case savedRecipeIDs
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try values.decode(Int.self, forKey: .schemaVersion)
+        persistenceRevision = try values.decodeIfPresent(
+            UInt64.self,
+            forKey: .persistenceRevision
+        ) ?? 0
+        recipes = try values.decode([Recipe].self, forKey: .recipes)
+        activeRecipe = try values.decode(Recipe.self, forKey: .activeRecipe)
+        desiredServings = try values.decode(Int.self, forKey: .desiredServings)
+        preferences = try values.decode(ShoppingPreferences.self, forKey: .preferences)
+        featureFlags = try values.decode(AppFeatureFlags.self, forKey: .featureFlags)
+        storeStrategy = try values.decode(StoreStrategy.self, forKey: .storeStrategy)
+        fulfillmentMode = try values.decode(FulfillmentMode.self, forKey: .fulfillmentMode)
+        selectedStoreIDs = try values.decode(Set<UUID>.self, forKey: .selectedStoreIDs)
+        zipCode = try values.decode(String.self, forKey: .zipCode)
+        pickupDay = try values.decode(String.self, forKey: .pickupDay)
+        pickupTime = try values.decode(String.self, forKey: .pickupTime)
+        shoppingItems = try values.decode([ShoppingListItem].self, forKey: .shoppingItems)
+        ingredientResolutions = try values.decodeIfPresent(
+            [IngredientResolution].self,
+            forKey: .ingredientResolutions
+        ) ?? []
+        guidedIndex = try values.decode(Int.self, forKey: .guidedIndex)
+        savedLists = try values.decode([SavedShoppingList].self, forKey: .savedLists)
+        preferredDeliveryPartnerName = try values.decodeIfPresent(
+            String.self,
+            forKey: .preferredDeliveryPartnerName
+        )
+        pantryInventory = try values.decode([PantryInventoryItem].self, forKey: .pantryInventory)
+        preferredProductIDsByIngredient = try values.decode(
+            [String: String].self,
+            forKey: .preferredProductIDsByIngredient
+        )
+        analyticsEvents = try values.decode([AnalyticsEvent].self, forKey: .analyticsEvents)
+        walmartWishlistReference = try values.decodeIfPresent(
+            WalmartWishlistReference.self,
+            forKey: .walmartWishlistReference
+        )
+        shoppingSessions = try values.decodeIfPresent(
+            [ShoppingSession].self,
+            forKey: .shoppingSessions
+        ) ?? []
+        activeShoppingSessionID = try values.decodeIfPresent(
+            UUID.self,
+            forKey: .activeShoppingSessionID
+        )
+        shoppingScope = try values.decodeIfPresent(ShoppingScope.self, forKey: .shoppingScope)
+        mealPrepDraft = try values.decodeIfPresent(MealPrepDraft.self, forKey: .mealPrepDraft)
+        mealPrepPlan = try values.decodeIfPresent(MealPrepPlanSnapshot.self, forKey: .mealPrepPlan)
+        savedRecipeIDs = try values.decodeIfPresent(Set<UUID>.self, forKey: .savedRecipeIDs)
+    }
+}
+
+/// Schema 6 and 7 are decoded through the current field surface, then migrated
+/// by changing only schema/revision metadata. This keeps every historical row,
+/// order, identifier, status, and pantry decision untouched.
+struct LegacySmartCartPersistedStateV6: Decodable {
+    let state: SmartCartPersistedState
+
+    init(from decoder: Decoder) throws {
+        state = try SmartCartPersistedState(from: decoder)
+    }
+}
+
+struct LegacySmartCartPersistedStateV7: Decodable {
+    let state: SmartCartPersistedState
+
+    init(from decoder: Decoder) throws {
+        state = try SmartCartPersistedState(from: decoder)
+    }
 }
 
 struct LegacySmartCartPersistedStateV5: Codable, Hashable {
@@ -164,10 +275,35 @@ protocol SmartCartStateStoring {
 
     func load() throws -> SmartCartPersistedState?
     func save(_ state: SmartCartPersistedState) throws
+    func save(
+        _ state: SmartCartPersistedState,
+        expectedRevision: UInt64
+    ) throws
 }
 
 extension SmartCartStateStoring {
     var lastLoadWarning: SmartCartStateStoreWarning? { nil }
+
+    func save(
+        _ state: SmartCartPersistedState,
+        expectedRevision: UInt64
+    ) throws {
+        let currentState = try load()
+        let currentRevision = currentState?.persistenceRevision ?? 0
+        if state.persistenceRevision == currentRevision, currentState == state {
+            return
+        }
+        guard expectedRevision == currentRevision,
+              currentRevision < UInt64.max,
+              state.persistenceRevision == currentRevision + 1
+        else {
+            throw SmartCartStateStoreError.staleRevision(
+                attempted: state.persistenceRevision,
+                current: currentRevision
+            )
+        }
+        try save(state)
+    }
 }
 
 enum SmartCartStateStoreWarning: LocalizedError, Equatable {
@@ -190,12 +326,33 @@ enum SmartCartStateStoreWarning: LocalizedError, Equatable {
 
 enum SmartCartStateStoreError: LocalizedError, Equatable {
     case unsupportedSchema(Int)
+    case staleRevision(attempted: UInt64, current: UInt64)
+    case sourceChangedDuringRecovery
 
     var errorDescription: String? {
         switch self {
         case .unsupportedSchema(let version):
             "SmartCart state schema \(version) is newer than this app supports."
+        case .staleRevision(let attempted, let current):
+            "SmartCart rejected stale persistence revision \(attempted); revision \(current) is already durable."
+        case .sourceChangedDuringRecovery:
+            "SmartCart local data changed while recovery was being prepared. Nothing was moved or overwritten."
         }
+    }
+}
+
+private enum SmartCartStateFileLockRegistry {
+    private static let registryLock = NSLock()
+    private static var locks: [String: NSRecursiveLock] = [:]
+
+    static func lock(for fileURL: URL) -> NSRecursiveLock {
+        registryLock.lock()
+        defer { registryLock.unlock() }
+        let key = fileURL.standardizedFileURL.path
+        if let existing = locks[key] { return existing }
+        let created = NSRecursiveLock()
+        locks[key] = created
+        return created
     }
 }
 
@@ -208,6 +365,7 @@ final class JSONSmartCartStateStore: SmartCartStateStoring {
 
     private let atomicWriter: AtomicWriter
     private let dataReader: DataReader
+    private let stateFileLock: NSRecursiveLock
 
     init(
         fileURL: URL,
@@ -219,6 +377,7 @@ final class JSONSmartCartStateStore: SmartCartStateStoring {
         self.fileURL = fileURL
         self.dataReader = dataReader
         self.atomicWriter = atomicWriter
+        stateFileLock = SmartCartStateFileLockRegistry.lock(for: fileURL)
     }
 
     convenience init() {
@@ -234,6 +393,12 @@ final class JSONSmartCartStateStore: SmartCartStateStoring {
     }
 
     func load() throws -> SmartCartPersistedState? {
+        stateFileLock.lock()
+        defer { stateFileLock.unlock() }
+        return try loadLocked()
+    }
+
+    private func loadLocked() throws -> SmartCartPersistedState? {
         lastLoadWarning = nil
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
             return nil
@@ -248,24 +413,38 @@ final class JSONSmartCartStateStore: SmartCartStateStoring {
             switch version {
             case SmartCartPersistedState.currentSchemaVersion:
                 return try decoder().decode(SmartCartPersistedState.self, from: data)
+            case 7:
+                let legacy = try decoder().decode(LegacySmartCartPersistedStateV7.self, from: data)
+                return try finishMigration(
+                    migrate(legacy),
+                    originalData: data,
+                    sourceSchemaVersion: version
+                )
+            case 6:
+                let legacy = try decoder().decode(LegacySmartCartPersistedStateV6.self, from: data)
+                return try finishMigration(
+                    migrate(legacy),
+                    originalData: data,
+                    sourceSchemaVersion: version
+                )
             case 5:
                 let legacy = try decoder().decode(LegacySmartCartPersistedStateV5.self, from: data)
-                return finishMigration(migrate(legacy), originalData: data, sourceSchemaVersion: version)
+                return try finishMigration(migrate(legacy), originalData: data, sourceSchemaVersion: version)
             case 4:
                 let legacy = try decoder().decode(LegacySmartCartPersistedStateV4.self, from: data)
-                return finishMigration(migrate(legacy), originalData: data, sourceSchemaVersion: version)
+                return try finishMigration(migrate(legacy), originalData: data, sourceSchemaVersion: version)
             case 3:
                 let legacy = try decoder().decode(LegacySmartCartPersistedStateV3.self, from: data)
-                return finishMigration(migrate(legacy), originalData: data, sourceSchemaVersion: version)
+                return try finishMigration(migrate(legacy), originalData: data, sourceSchemaVersion: version)
             case 2:
                 let legacy = try decoder().decode(LegacySmartCartPersistedStateV2.self, from: data)
-                return finishMigration(migrate(legacy), originalData: data, sourceSchemaVersion: version)
+                return try finishMigration(migrate(legacy), originalData: data, sourceSchemaVersion: version)
             case 1:
                 let legacy = try decoder().decode(LegacySmartCartPersistedStateV1.self, from: data)
-                return finishMigration(migrate(legacy), originalData: data, sourceSchemaVersion: version)
+                return try finishMigration(migrate(legacy), originalData: data, sourceSchemaVersion: version)
             case 0:
                 let legacy = try decoder().decode(LegacySmartCartPersistedStateV0.self, from: data)
-                return finishMigration(migrate(legacy), originalData: data, sourceSchemaVersion: version)
+                return try finishMigration(migrate(legacy), originalData: data, sourceSchemaVersion: version)
             default:
                 throw SmartCartStateStoreError.unsupportedSchema(version)
             }
@@ -274,9 +453,30 @@ final class JSONSmartCartStateStore: SmartCartStateStoring {
             // an older build can never quarantine or overwrite valid data.
             throw error
         } catch {
-            try? quarantineUnreadableState()
+            try quarantineUnreadableState(ifCurrentDataMatches: data)
             return nil
         }
+    }
+
+    private func migrate(
+        _ legacy: LegacySmartCartPersistedStateV6
+    ) -> SmartCartPersistedState {
+        migratedPassThroughState(legacy.state)
+    }
+
+    private func migrate(
+        _ legacy: LegacySmartCartPersistedStateV7
+    ) -> SmartCartPersistedState {
+        migratedPassThroughState(legacy.state)
+    }
+
+    private func migratedPassThroughState(
+        _ legacy: SmartCartPersistedState
+    ) -> SmartCartPersistedState {
+        var migrated = legacy
+        migrated.schemaVersion = SmartCartPersistedState.currentSchemaVersion
+        migrated.persistenceRevision = 0
+        return migrated
     }
 
     private func migrate(
@@ -574,6 +774,12 @@ final class JSONSmartCartStateStore: SmartCartStateStoring {
     }
 
     func save(_ state: SmartCartPersistedState) throws {
+        stateFileLock.lock()
+        defer { stateFileLock.unlock() }
+        try saveLocked(state)
+    }
+
+    private func saveLocked(_ state: SmartCartPersistedState) throws {
         try FileManager.default.createDirectory(
             at: fileURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
@@ -583,14 +789,80 @@ final class JSONSmartCartStateStore: SmartCartStateStoring {
         lastLoadWarning = nil
     }
 
+    func save(
+        _ state: SmartCartPersistedState,
+        expectedRevision: UInt64
+    ) throws {
+        stateFileLock.lock()
+        defer { stateFileLock.unlock() }
+
+        try FileManager.default.createDirectory(
+            at: fileURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let proposedData = try encoder().encode(state)
+        let currentData: Data?
+        if FileManager.default.fileExists(atPath: fileURL.path) {
+            currentData = try dataReader(fileURL)
+        } else {
+            currentData = nil
+        }
+
+        let currentRevision: UInt64
+        if let currentData {
+            let probe = try decoder().decode(StateVersionProbe.self, from: currentData)
+            let version = probe.schemaVersion ?? 0
+            if version > SmartCartPersistedState.currentSchemaVersion {
+                throw SmartCartStateStoreError.unsupportedSchema(version)
+            }
+            currentRevision = version == SmartCartPersistedState.currentSchemaVersion
+                ? try decoder().decode(SmartCartPersistedState.self, from: currentData).persistenceRevision
+                : 0
+
+            if state.persistenceRevision == currentRevision,
+               proposedData == currentData {
+                lastLoadWarning = nil
+                return
+            }
+        } else {
+            currentRevision = 0
+        }
+
+        guard expectedRevision == currentRevision,
+              currentRevision < UInt64.max,
+              state.persistenceRevision == currentRevision + 1
+        else {
+            throw SmartCartStateStoreError.staleRevision(
+                attempted: state.persistenceRevision,
+                current: currentRevision
+            )
+        }
+
+        try atomicWriter(proposedData, fileURL)
+        lastLoadWarning = nil
+    }
+
     private func finishMigration(
-        _ migrated: SmartCartPersistedState,
+        _ revisionZeroMigratedState: SmartCartPersistedState,
         originalData: Data,
         sourceSchemaVersion: Int
-    ) -> SmartCartPersistedState {
+    ) throws -> SmartCartPersistedState {
+        var durableCandidate = revisionZeroMigratedState
+        durableCandidate.schemaVersion = SmartCartPersistedState.currentSchemaVersion
+        durableCandidate.persistenceRevision = 1
         do {
-            try save(migrated)
+            try save(durableCandidate, expectedRevision: 0)
+            return durableCandidate
+        } catch let storeError as SmartCartStateStoreError {
+            if case .staleRevision = storeError,
+               let winner = try currentSchemaStateFromDisk() {
+                return winner
+            }
+            throw storeError
         } catch {
+            if let winner = try? currentSchemaStateFromDisk() {
+                return winner
+            }
             let preservedStateURL = preserveLegacyState(
                 originalData,
                 sourceSchemaVersion: sourceSchemaVersion
@@ -600,8 +872,18 @@ final class JSONSmartCartStateStore: SmartCartStateStoring {
                 targetSchemaVersion: SmartCartPersistedState.currentSchemaVersion,
                 preservedStateURL: preservedStateURL
             )
+            return revisionZeroMigratedState
         }
-        return migrated
+    }
+
+    private func currentSchemaStateFromDisk() throws -> SmartCartPersistedState? {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return nil }
+        let data = try Data(contentsOf: fileURL)
+        let probe = try decoder().decode(StateVersionProbe.self, from: data)
+        guard probe.schemaVersion == SmartCartPersistedState.currentSchemaVersion else {
+            return nil
+        }
+        return try decoder().decode(SmartCartPersistedState.self, from: data)
     }
 
     private func legacyManifest(
@@ -731,23 +1013,41 @@ final class JSONSmartCartStateStore: SmartCartStateStoring {
         _ originalData: Data,
         sourceSchemaVersion: Int
     ) -> URL? {
-        if let currentData = try? Data(contentsOf: fileURL), currentData == originalData {
-            return fileURL
+        if FileManager.default.fileExists(atPath: fileURL.path) {
+            if let currentData = try? Data(contentsOf: fileURL), currentData == originalData {
+                return fileURL
+            }
+            // Another writer or an injected failure left different durable
+            // bytes. Never overwrite them while preserving the legacy source.
+            return writeMigrationRecovery(
+                originalData,
+                sourceSchemaVersion: sourceSchemaVersion
+            )
         }
 
         do {
             try originalData.write(to: fileURL, options: [.atomic])
             return fileURL
         } catch {
-            let recoveryURL = fileURL
-                .deletingPathExtension()
-                .appendingPathExtension("migration-recovery-v\(sourceSchemaVersion).json")
-            do {
-                try originalData.write(to: recoveryURL, options: [.atomic])
-                return recoveryURL
-            } catch {
-                return nil
-            }
+            return writeMigrationRecovery(
+                originalData,
+                sourceSchemaVersion: sourceSchemaVersion
+            )
+        }
+    }
+
+    private func writeMigrationRecovery(
+        _ originalData: Data,
+        sourceSchemaVersion: Int
+    ) -> URL? {
+        let recoveryURL = fileURL
+            .deletingPathExtension()
+            .appendingPathExtension("migration-recovery-v\(sourceSchemaVersion).json")
+        do {
+            try originalData.write(to: recoveryURL, options: [.atomic])
+            return recoveryURL
+        } catch {
+            return nil
         }
     }
 
@@ -865,15 +1165,18 @@ final class JSONSmartCartStateStore: SmartCartStateStoring {
         )
     }
 
-    private func quarantineUnreadableState() throws {
+    private func quarantineUnreadableState(
+        ifCurrentDataMatches originalData: Data
+    ) throws {
         guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
-        let stamp = Int(Date().timeIntervalSince1970)
+        let currentData = try Data(contentsOf: fileURL)
+        guard currentData == originalData else {
+            throw SmartCartStateStoreError.sourceChangedDuringRecovery
+        }
+        let stamp = "\(Int(Date().timeIntervalSince1970))-\(UUID().uuidString)"
         let backupURL = fileURL
             .deletingPathExtension()
             .appendingPathExtension("corrupt-\(stamp).json")
-        if FileManager.default.fileExists(atPath: backupURL.path) {
-            try FileManager.default.removeItem(at: backupURL)
-        }
         try FileManager.default.moveItem(at: fileURL, to: backupURL)
     }
 
@@ -893,6 +1196,7 @@ final class JSONSmartCartStateStore: SmartCartStateStoring {
 
 private struct StateVersionProbe: Decodable {
     var schemaVersion: Int?
+    var persistenceRevision: UInt64?
 }
 
 final class InMemorySmartCartStateStore: SmartCartStateStoring {

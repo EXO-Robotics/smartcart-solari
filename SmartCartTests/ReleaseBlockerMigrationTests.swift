@@ -30,7 +30,7 @@ final class ReleaseBlockerMigrationTests: XCTestCase {
             store.lastLoadWarning,
             .migrationRewriteFailed(
                 sourceSchemaVersion: 5,
-                targetSchemaVersion: 6,
+                targetSchemaVersion: SmartCartPersistedState.currentSchemaVersion,
                 preservedStateURL: fixture.fileURL
             )
         )
@@ -427,6 +427,209 @@ final class ReleaseBlockerMigrationTests: XCTestCase {
             )
             try assertDurableFields(in: relaunched, match: expectation)
         }
+    }
+
+    func testSchemaV6FixtureMigratesWithoutRegroupingOrChangingHistory() throws {
+        let fixture = try makeV6Fixture()
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let legacy = try decoder.decode(
+            LegacySmartCartPersistedStateV6.self,
+            from: fixture.originalData
+        ).state
+
+        let migrated = try XCTUnwrap(
+            JSONSmartCartStateStore(fileURL: fixture.fileURL).load()
+        )
+
+        XCTAssertEqual(migrated.schemaVersion, 8)
+        XCTAssertEqual(migrated.persistenceRevision, 1)
+        XCTAssertEqual(migrated.shoppingItems, legacy.shoppingItems)
+        XCTAssertEqual(migrated.guidedIndex, legacy.guidedIndex)
+        XCTAssertEqual(migrated.savedLists, legacy.savedLists)
+        XCTAssertEqual(migrated.shoppingSessions, legacy.shoppingSessions)
+        XCTAssertEqual(migrated.pantryInventory, legacy.pantryInventory)
+        XCTAssertEqual(
+            migrated.preferredProductIDsByIngredient,
+            legacy.preferredProductIDsByIngredient
+        )
+        XCTAssertEqual(migrated.shoppingItems.count, 2)
+        XCTAssertTrue(migrated.shoppingItems.allSatisfy { $0.purchaseGroup == nil })
+        XCTAssertEqual(
+            migrated.shoppingItems.map(\.product.retailerProductID),
+            ["v6-shared-cream-cheese", "v6-shared-cream-cheese"]
+        )
+        XCTAssertEqual(migrated.shoppingSessions.count, 3)
+    }
+
+    func testSchemaV7PassesResolutionDataThroughWithoutRuntimeIntegration() throws {
+        let fixture = try makeV6Fixture()
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        var schemaSeven = try decoder.decode(
+            LegacySmartCartPersistedStateV6.self,
+            from: fixture.originalData
+        ).state
+        schemaSeven.schemaVersion = 7
+        let ingredient = try XCTUnwrap(schemaSeven.activeRecipe.ingredients.first)
+        schemaSeven.ingredientResolutions = [
+            IngredientResolution(ingredient: ingredient, resolution: .userExcluded)
+        ]
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(schemaSeven).write(to: fixture.fileURL, options: [.atomic])
+
+        let migrated = try XCTUnwrap(
+            JSONSmartCartStateStore(fileURL: fixture.fileURL).load()
+        )
+
+        XCTAssertEqual(migrated.schemaVersion, 8)
+        XCTAssertEqual(migrated.persistenceRevision, 1)
+        XCTAssertEqual(migrated.ingredientResolutions, schemaSeven.ingredientResolutions)
+        XCTAssertEqual(migrated.shoppingItems, schemaSeven.shoppingItems)
+        XCTAssertTrue(migrated.shoppingItems.allSatisfy { $0.purchaseGroup == nil })
+    }
+
+    func testSchemaV8MissingRevisionDefaultsToZeroWithoutRewrite() throws {
+        let fixture = try makeV6Fixture()
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        var current = try decoder.decode(
+            LegacySmartCartPersistedStateV6.self,
+            from: fixture.originalData
+        ).state
+        current.schemaVersion = 8
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let encoded = try encoder.encode(current)
+        var root = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        root.removeValue(forKey: "persistenceRevision")
+        let missingRevision = try JSONSerialization.data(
+            withJSONObject: root,
+            options: [.sortedKeys]
+        )
+        try missingRevision.write(to: fixture.fileURL, options: [.atomic])
+
+        let loaded = try XCTUnwrap(
+            JSONSmartCartStateStore(fileURL: fixture.fileURL).load()
+        )
+
+        XCTAssertEqual(loaded.persistenceRevision, 0)
+        XCTAssertEqual(try Data(contentsOf: fixture.fileURL), missingRevision)
+    }
+
+    func testMalformedNewOptionalFieldsAreLocalizedToNil() throws {
+        let fixture = try makeV6Fixture()
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        var current = try decoder.decode(
+            LegacySmartCartPersistedStateV6.self,
+            from: fixture.originalData
+        ).state
+        current.schemaVersion = 8
+        current.persistenceRevision = 1
+        var ingredient = try XCTUnwrap(current.activeRecipe.ingredients.first)
+        ingredient.sourceEvidence = IngredientSourceEvidence(
+            rawText: ingredient.rawText,
+            pageIndex: 0,
+            boundingBox: nil,
+            extractionStrategy: .visionOCR,
+            ocrConfidence: 0.9,
+            layoutConfidence: 0.9,
+            parserConfidence: 0.9,
+            normalizationConfidence: 0.9,
+            alternateQuantityCandidates: []
+        )
+        current.activeRecipe.ingredients = [ingredient]
+            + current.activeRecipe.ingredients.dropFirst()
+        current.recipes = current.recipes.map {
+            $0.id == current.activeRecipe.id ? current.activeRecipe : $0
+        }
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        var root = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoder.encode(current)) as? [String: Any]
+        )
+        var activeRecipe = try XCTUnwrap(root["activeRecipe"] as? [String: Any])
+        var ingredients = try XCTUnwrap(activeRecipe["ingredients"] as? [[String: Any]])
+        var firstIngredient = try XCTUnwrap(ingredients.first)
+        var evidence = try XCTUnwrap(firstIngredient["sourceEvidence"] as? [String: Any])
+        evidence["sourceCropReference"] = ["sha256": 123, "byteCount": "bad"]
+        firstIngredient["sourceEvidence"] = evidence
+        ingredients = [firstIngredient] + ingredients.dropFirst()
+        activeRecipe["ingredients"] = ingredients
+        root["activeRecipe"] = activeRecipe
+        var shoppingItems = try XCTUnwrap(root["shoppingItems"] as? [[String: Any]])
+        var firstShoppingItem = try XCTUnwrap(shoppingItems.first)
+        firstShoppingItem["purchaseGroup"] = "malformed"
+        shoppingItems = [firstShoppingItem] + shoppingItems.dropFirst()
+        root["shoppingItems"] = shoppingItems
+        let malformedOptionalData = try JSONSerialization.data(withJSONObject: root)
+        try malformedOptionalData.write(to: fixture.fileURL, options: [.atomic])
+
+        let loaded = try XCTUnwrap(
+            JSONSmartCartStateStore(fileURL: fixture.fileURL).load()
+        )
+
+        XCTAssertEqual(loaded.schemaVersion, 8)
+        XCTAssertNil(loaded.activeRecipe.ingredients.first?.sourceEvidence?.sourceCropReference)
+        XCTAssertNil(loaded.shoppingItems.first?.purchaseGroup)
+        XCTAssertEqual(loaded.shoppingItems.count, current.shoppingItems.count)
+        XCTAssertEqual(loaded.shoppingSessions, current.shoppingSessions)
+    }
+
+    func testV6MigrationRewriteFailureReturnsRevisionZeroAndRelaunchRetries() throws {
+        let fixture = try makeV6Fixture()
+        let store = JSONSmartCartStateStore(
+            fileURL: fixture.fileURL,
+            atomicWriter: { _, destination in
+                try FileManager.default.removeItem(at: destination)
+                throw InjectedRewriteFailure.requested
+            }
+        )
+
+        let inMemory = try XCTUnwrap(store.load())
+
+        XCTAssertEqual(inMemory.schemaVersion, 8)
+        XCTAssertEqual(inMemory.persistenceRevision, 0)
+        XCTAssertEqual(try Data(contentsOf: fixture.fileURL), fixture.originalData)
+        XCTAssertEqual(
+            store.lastLoadWarning,
+            .migrationRewriteFailed(
+                sourceSchemaVersion: 6,
+                targetSchemaVersion: 8,
+                preservedStateURL: fixture.fileURL
+            )
+        )
+
+        let relaunched = try XCTUnwrap(
+            JSONSmartCartStateStore(fileURL: fixture.fileURL).load()
+        )
+        XCTAssertEqual(relaunched.schemaVersion, 8)
+        XCTAssertEqual(relaunched.persistenceRevision, 1)
+        XCTAssertEqual(relaunched.shoppingItems, inMemory.shoppingItems)
+        XCTAssertTrue(relaunched.shoppingItems.allSatisfy { $0.purchaseGroup == nil })
+    }
+
+    private func makeV6Fixture() throws -> (fileURL: URL, originalData: Data) {
+        let sourceURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/LegacyState/legacy-v6.json")
+        let originalData = try Data(contentsOf: sourceURL)
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SmartCart-Legacy-v6-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+        let fileURL = directory.appendingPathComponent("state.json")
+        try originalData.write(to: fileURL, options: [.atomic])
+        return (fileURL, originalData)
     }
 
     @MainActor

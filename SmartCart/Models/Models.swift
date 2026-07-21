@@ -361,6 +361,19 @@ enum IngredientExtractionStrategy: String, Hashable, Codable {
     case manual
 }
 
+/// Optional durable locator for an OCR source crop. Slice 2 keeps existing
+/// inline JPEG data unchanged; external blob storage is intentionally deferred.
+struct IngredientSourceCropReference: Hashable, Codable {
+    var sha256: String
+    var byteCount: Int
+
+    var isStructurallyValid: Bool {
+        byteCount >= 0 && sha256.count == 64 && sha256.utf8.allSatisfy {
+            (48...57).contains($0) || (97...102).contains($0)
+        }
+    }
+}
+
 struct IngredientSourceEvidence: Hashable, Codable {
     var rawText: String
     var pageIndex: Int?
@@ -372,6 +385,7 @@ struct IngredientSourceEvidence: Hashable, Codable {
     var normalizationConfidence: Double
     var alternateQuantityCandidates: [Double]
     var alternateSourceTexts: [String]? = nil
+    var sourceCropReference: IngredientSourceCropReference? = nil
     var sourceCropJPEGData: Data? = nil
     var ocrColumnIndex: Int? = nil
     var sourceObservationIDs: [String]? = nil
@@ -380,6 +394,82 @@ struct IngredientSourceEvidence: Hashable, Codable {
     var originalLine: String? = nil
     var removedSuffix: String? = nil
     var reviewReasons: [String]? = nil
+}
+
+extension IngredientSourceEvidence {
+    private enum CodingKeys: String, CodingKey {
+        case rawText
+        case pageIndex
+        case boundingBox
+        case extractionStrategy
+        case ocrConfidence
+        case layoutConfidence
+        case parserConfidence
+        case normalizationConfidence
+        case alternateQuantityCandidates
+        case alternateSourceTexts
+        case sourceCropReference
+        case sourceCropJPEGData
+        case ocrColumnIndex
+        case sourceObservationIDs
+        case continuationAttached
+        case reconstructionConfidence
+        case originalLine
+        case removedSuffix
+        case reviewReasons
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        rawText = try values.decode(String.self, forKey: .rawText)
+        pageIndex = try values.decodeIfPresent(Int.self, forKey: .pageIndex)
+        boundingBox = try values.decodeIfPresent(NormalizedSourceRect.self, forKey: .boundingBox)
+        extractionStrategy = try values.decode(IngredientExtractionStrategy.self, forKey: .extractionStrategy)
+        ocrConfidence = try values.decodeIfPresent(Double.self, forKey: .ocrConfidence)
+        layoutConfidence = try values.decodeIfPresent(Double.self, forKey: .layoutConfidence)
+        parserConfidence = try values.decode(Double.self, forKey: .parserConfidence)
+        normalizationConfidence = try values.decode(Double.self, forKey: .normalizationConfidence)
+        alternateQuantityCandidates = try values.decode([Double].self, forKey: .alternateQuantityCandidates)
+        alternateSourceTexts = try values.decodeIfPresent([String].self, forKey: .alternateSourceTexts)
+        sourceCropReference = try? values.decodeIfPresent(
+            IngredientSourceCropReference.self,
+            forKey: .sourceCropReference
+        )
+        if sourceCropReference?.isStructurallyValid == false {
+            sourceCropReference = nil
+        }
+        sourceCropJPEGData = try values.decodeIfPresent(Data.self, forKey: .sourceCropJPEGData)
+        ocrColumnIndex = try values.decodeIfPresent(Int.self, forKey: .ocrColumnIndex)
+        sourceObservationIDs = try values.decodeIfPresent([String].self, forKey: .sourceObservationIDs)
+        continuationAttached = try values.decodeIfPresent(Bool.self, forKey: .continuationAttached)
+        reconstructionConfidence = try values.decodeIfPresent(Double.self, forKey: .reconstructionConfidence)
+        originalLine = try values.decodeIfPresent(String.self, forKey: .originalLine)
+        removedSuffix = try values.decodeIfPresent(String.self, forKey: .removedSuffix)
+        reviewReasons = try values.decodeIfPresent([String].self, forKey: .reviewReasons)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(rawText, forKey: .rawText)
+        try values.encodeIfPresent(pageIndex, forKey: .pageIndex)
+        try values.encodeIfPresent(boundingBox, forKey: .boundingBox)
+        try values.encode(extractionStrategy, forKey: .extractionStrategy)
+        try values.encodeIfPresent(ocrConfidence, forKey: .ocrConfidence)
+        try values.encodeIfPresent(layoutConfidence, forKey: .layoutConfidence)
+        try values.encode(parserConfidence, forKey: .parserConfidence)
+        try values.encode(normalizationConfidence, forKey: .normalizationConfidence)
+        try values.encode(alternateQuantityCandidates, forKey: .alternateQuantityCandidates)
+        try values.encodeIfPresent(alternateSourceTexts, forKey: .alternateSourceTexts)
+        try values.encodeIfPresent(sourceCropReference, forKey: .sourceCropReference)
+        try values.encodeIfPresent(sourceCropJPEGData, forKey: .sourceCropJPEGData)
+        try values.encodeIfPresent(ocrColumnIndex, forKey: .ocrColumnIndex)
+        try values.encodeIfPresent(sourceObservationIDs, forKey: .sourceObservationIDs)
+        try values.encodeIfPresent(continuationAttached, forKey: .continuationAttached)
+        try values.encodeIfPresent(reconstructionConfidence, forKey: .reconstructionConfidence)
+        try values.encodeIfPresent(originalLine, forKey: .originalLine)
+        try values.encodeIfPresent(removedSuffix, forKey: .removedSuffix)
+        try values.encodeIfPresent(reviewReasons, forKey: .reviewReasons)
+    }
 }
 
 enum PantryCoverage: String, Hashable, Codable {
@@ -923,6 +1013,57 @@ struct ShoppingListItem: Identifiable, Hashable, Codable {
 
     var lineTotal: Double {
         product.price * Double(purchaseQuantity)
+    }
+}
+
+extension ShoppingListItem {
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case ingredient
+        case requestedQuantity
+        case requestedAmount
+        case purchaseQuantity
+        case product
+        case alternatives
+        case storeID
+        case status
+        case matchScore
+        case selectionReasons
+        case matchingContextFingerprint
+        case matchingInputFingerprint
+        case reviewedMatchingFingerprint
+        case purchaseGroup
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(UUID.self, forKey: .id)
+        ingredient = try values.decode(Ingredient.self, forKey: .ingredient)
+        requestedQuantity = try values.decode(String.self, forKey: .requestedQuantity)
+        requestedAmount = try values.decodeIfPresent(Double.self, forKey: .requestedAmount)
+        purchaseQuantity = try values.decode(Int.self, forKey: .purchaseQuantity)
+        product = try values.decode(RetailerProductRecord.self, forKey: .product)
+        alternatives = try values.decode([RetailerProductRecord].self, forKey: .alternatives)
+        storeID = try values.decode(UUID.self, forKey: .storeID)
+        status = try values.decode(GuidedItemStatus.self, forKey: .status)
+        matchScore = try values.decode(Double.self, forKey: .matchScore)
+        selectionReasons = try values.decode([String].self, forKey: .selectionReasons)
+        matchingContextFingerprint = try values.decodeIfPresent(
+            String.self,
+            forKey: .matchingContextFingerprint
+        )
+        matchingInputFingerprint = try values.decodeIfPresent(
+            String.self,
+            forKey: .matchingInputFingerprint
+        )
+        reviewedMatchingFingerprint = try values.decodeIfPresent(
+            String.self,
+            forKey: .reviewedMatchingFingerprint
+        )
+        purchaseGroup = try? values.decodeIfPresent(
+            ProductPurchaseGroup.self,
+            forKey: .purchaseGroup
+        )
     }
 }
 

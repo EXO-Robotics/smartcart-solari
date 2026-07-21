@@ -465,7 +465,7 @@ final class MealPrepAggregationTests: XCTestCase {
         try encoder.encode(legacy).write(to: file, options: .atomic)
 
         let migrated = try XCTUnwrap(JSONSmartCartStateStore(fileURL: file).load())
-        XCTAssertEqual(migrated.schemaVersion, 6)
+        XCTAssertEqual(migrated.schemaVersion, SmartCartPersistedState.currentSchemaVersion)
         XCTAssertEqual(migrated.shoppingScope, ShoppingScope.singleRecipe(state.activeRecipe.id))
         XCTAssertEqual(migrated.shoppingItems, state.shoppingItems)
     }
