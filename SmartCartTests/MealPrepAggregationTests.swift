@@ -31,6 +31,38 @@ final class MealPrepAggregationTests: XCTestCase {
         XCTAssertTrue(result.lines.allSatisfy { $0.mergeReviewReasons.contains(.incompatibleUnit) })
     }
 
+    func testMassMergesAcrossPoundsAndGramsThroughCanonicalQuantity() throws {
+        let selected = [selection(
+            recipe("Two-system dough", servings: 1, [
+                ingredient("Flour", 1, "lb"),
+                ingredient("Flour", 453.59237, "g")
+            ]),
+            target: 1
+        )]
+
+        let result = try aggregate(selected)
+
+        XCTAssertEqual(result.lines.count, 1)
+        XCTAssertEqual(result.lines[0].quantity, 2, accuracy: 0.000_001)
+        XCTAssertEqual(result.lines[0].unit.symbol, "lb")
+    }
+
+    func testVolumeMergesAcrossCupsAndMillilitersThroughCanonicalQuantity() throws {
+        let selected = [selection(
+            recipe("Two-system sauce", servings: 1, [
+                ingredient("Milk", 1, "cup"),
+                ingredient("Milk", 236.5882365, "ml")
+            ]),
+            target: 1
+        )]
+
+        let result = try aggregate(selected)
+
+        XCTAssertEqual(result.lines.count, 1)
+        XCTAssertEqual(result.lines[0].quantity, 2, accuracy: 0.000_001)
+        XCTAssertEqual(result.lines[0].unit.symbol, "cup")
+    }
+
     func testOnionAndButterSubtypesRemainSeparate() throws {
         let ingredients = [
             ingredient("Red onions", 1, "count"), ingredient("Yellow onion", 1, "count"),
@@ -282,7 +314,7 @@ final class MealPrepAggregationTests: XCTestCase {
         XCTAssertTrue(unsafe.lines[0].pantryDeductions.isEmpty)
     }
 
-    func testPurchasedProductNameCanCoverItsGenericRecipeIngredient() throws {
+    func testPurchasedProductMarketingNameRequiresReviewForGenericRecipeIngredient() throws {
         let selected = [selection(
             recipe("Dinner", servings: 1, [ingredient("Chicken breasts", 1, "lb")]),
             target: 1
@@ -305,11 +337,64 @@ final class MealPrepAggregationTests: XCTestCase {
 
         XCTAssertNil(result.lines[0].buyFullOverride)
         XCTAssertEqual(result.lines[0].quantityToBuy, 1, accuracy: 0.000_001)
-        XCTAssertEqual(result.lines[0].pantryDeductions.first?.pantryItemID, inventory.id)
+        XCTAssertTrue(result.lines[0].pantryDeductions.isEmpty)
         var usePantryLines = result.lines
         usePantryLines[0].buyFullOverride = false
         MealPrepAggregationService.recomputePantry([inventory], for: &usePantryLines)
-        XCTAssertEqual(usePantryLines[0].quantityToBuy, 0, accuracy: 0.000_001)
+        XCTAssertEqual(usePantryLines[0].quantityToBuy, 1, accuracy: 0.000_001)
+    }
+
+    func testDangerousPantryIdentityPairsNeverProduceMeasuredCoverage() {
+        let pairs: [(String, String)] = [
+            ("butter", "peanut butter"),
+            ("milk", "coconut milk"),
+            ("cream", "sour cream"),
+            ("flour", "bread flour"),
+            ("flour", "almond flour"),
+            ("sugar", "brown sugar"),
+            ("rice", "cauliflower rice"),
+            ("salted butter", "unsalted butter")
+        ]
+
+        for (ingredientName, pantryName) in pairs {
+            let suggestion = PantryMatchingService.bestSuggestion(
+                for: Ingredient(name: ingredientName, quantity: 1, unit: "cup"),
+                inventory: [
+                    PantryInventoryItem(
+                        name: pantryName,
+                        remainingAmount: 10,
+                        remainingUnit: "cup"
+                    )
+                ]
+            )
+
+            XCTAssertNil(suggestion, "\(pantryName) must be suppressed for \(ingredientName)")
+        }
+    }
+
+    func testUnknownPantryIdentityCanOnlyProduceReviewOnlyCoverage() throws {
+        let ingredient = Ingredient(name: "Organic chicken breast", quantity: 1, unit: "lb")
+        let pantry = PantryInventoryItem(
+            name: "Chicken breast",
+            remainingAmount: 2,
+            remainingUnit: "lb"
+        )
+
+        let suggestion = try XCTUnwrap(
+            PantryMatchingService.bestSuggestion(for: ingredient, inventory: [pantry])
+        )
+
+        XCTAssertEqual(suggestion.coverage, .possible)
+        var reviewedIngredient = ingredient
+        reviewedIngredient.pantrySuggestion = suggestion
+        reviewedIngredient.pantryDecision = .useAvailable
+        XCTAssertEqual(
+            PantryMatchingService.quantityToBuy(
+                for: reviewedIngredient,
+                requiredQuantity: ingredient.quantity
+            ),
+            ingredient.quantity
+        )
     }
 
     @MainActor

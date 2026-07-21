@@ -3348,75 +3348,89 @@ final class AppModel {
     ) -> UUID {
         let product = item.product
         let replacementName = substitution?.replacementName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let name = replacementName?.isEmpty == false
-            ? replacementName!
-            : (product.linkKind == .exactProduct ? product.name : item.ingredient.name)
-        let brand = substitution?.replacementBrand ?? (product.linkKind == .exactProduct ? product.brand : "")
-        let retailerProductID = substitution == nil
-            ? (product.linkKind == .exactProduct ? product.retailerProductID : nil)
-            : substitution?.replacementRetailerProductID
-        let scopedRetailerProductID = retailerProductID.map {
-            "\(product.retailerID):\($0)"
+        let name: String
+        if let replacementName, !replacementName.isEmpty {
+            name = replacementName
+        } else {
+            name = product.linkKind == .exactProduct ? product.name : item.ingredient.name
         }
-        let gtin14 = normalizedGTIN14(
-            substitution == nil ? product.gtin : substitution?.replacementGTIN14
+        let brand = substitution?.replacementBrand ?? (product.linkKind == .exactProduct ? product.brand : "")
+        let evidence = item.purchaseGroup?.exactProductIdentityEvidence
+            ?? ExactProductIdentity.all(for: product)
+        let scopedRetailerProductIDs: Set<String>
+        let exactGTINs: Set<String>
+        if let substitution {
+            // A user-entered external reference has no retailer provenance in
+            // this flow. A checksum-valid replacement GTIN is the only strong
+            // substitution identity available here.
+            scopedRetailerProductIDs = []
+            exactGTINs = Set([normalizedGTIN14(substitution.replacementGTIN14)].compactMap { $0 })
+        } else {
+            scopedRetailerProductIDs = Set(evidence.compactMap { identity in
+                guard identity.kind == .retailerProductID else { return nil }
+                return scopedRetailerProductIdentity(
+                    retailerID: identity.retailerID,
+                    productID: identity.normalizedValue
+                )
+            })
+            exactGTINs = Set(evidence.compactMap { identity in
+                guard identity.kind == .gtin else { return nil }
+                return normalizedGTIN14(identity.normalizedValue)
+            })
+        }
+        let identityIsConflicted = scopedRetailerProductIDs.count > 1 || exactGTINs.count > 1
+        let identityIsURLOnly = substitution == nil &&
+            !evidence.isEmpty &&
+            scopedRetailerProductIDs.isEmpty &&
+            exactGTINs.isEmpty
+        let substitutionHasNoTrustedIdentity = substitution != nil &&
+            scopedRetailerProductIDs.isEmpty &&
+            exactGTINs.isEmpty
+        let requiresIdentityReview = identityIsConflicted || identityIsURLOnly || substitutionHasNoTrustedIdentity
+        let exactPurchaseIdentityClaims = requiresIdentityReview ? [] : (
+            scopedRetailerProductIDs.map(PantryIdentityClaim.exactPurchaseRetailerProductID) +
+                exactGTINs.map(PantryIdentityClaim.exactPurchaseGTIN)
         )
-        let packageQuantity = substitution == nil
-            ? (product.variableWeight ? nil : product.packageQuantity)
-            : substitution?.packageQuantity
-        let packageUnit = substitution == nil
-            ? (product.variableWeight ? nil : product.packageUnit)
-            : substitution?.packageUnit
+        let packageFacts = confirmedPackageFacts(for: item, substitution: substitution)
+        let packageQuantity = packageFacts.quantity
+        let packageUnit = packageFacts.unit
         let hasUnknownPackageMass = packageQuantity == nil || packageUnit?.isEmpty != false
         let amount = max(
-            0.01,
+            0,
             substitution == nil
-                ? Double(max(1, item.purchaseQuantity))
+                ? Double(item.purchaseQuantity)
                 : (substitution?.replacementAmount ?? 0)
         )
 
-        let matchIndex = inventory.firstIndex { existing in
-            if let gtin14 {
-                let identities = Set((existing.barcodeGTINs ?? []) + [existing.gtin14].compactMap { $0 })
-                if identities.contains(gtin14) {
-                    return packagesAreCompatible(
-                        existingSize: existing.packageSize,
-                        existingUnit: existing.packageUnit,
-                        incomingSize: packageQuantity,
-                        incomingUnit: packageUnit
-                    )
-                }
+        let matchIndex = requiresIdentityReview ? nil : inventory.firstIndex { existing in
+            let existingRetailerProductIDs = existing.claimedScopedRetailerProductIDs
+            let existingGTINs = existing.claimedGTIN14s
+            let retailerConflict = !scopedRetailerProductIDs.isEmpty &&
+                !existingRetailerProductIDs.isEmpty &&
+                scopedRetailerProductIDs.isDisjoint(with: existingRetailerProductIDs)
+            let gtinConflict = !exactGTINs.isEmpty &&
+                !existingGTINs.isEmpty &&
+                exactGTINs.isDisjoint(with: existingGTINs)
+            guard !retailerConflict, !gtinConflict else { return false }
+
+            let incomingHasStrongIdentity = !scopedRetailerProductIDs.isEmpty || !exactGTINs.isEmpty
+            let existingHasStrongIdentity = !existingRetailerProductIDs.isEmpty || !existingGTINs.isEmpty
+            if incomingHasStrongIdentity || existingHasStrongIdentity {
+                guard !scopedRetailerProductIDs.isDisjoint(with: existingRetailerProductIDs) ||
+                    !exactGTINs.isDisjoint(with: existingGTINs) else { return false }
+            } else {
+                let existingBrand = preferenceKey(for: existing.brand)
+                let incomingBrand = preferenceKey(for: brand)
+                guard !existingBrand.isEmpty,
+                      existingBrand == incomingBrand,
+                      preferenceKey(for: existing.name) == preferenceKey(for: name) else { return false }
             }
-            if let scopedRetailerProductID {
-                if existing.preferredRetailerProductID == scopedRetailerProductID {
-                    return packagesAreCompatible(
-                        existingSize: existing.packageSize,
-                        existingUnit: existing.packageUnit,
-                        incomingSize: packageQuantity,
-                        incomingUnit: packageUnit
-                    )
-                }
-                if product.retailerID == ShoppingRetailer.walmart.rawValue,
-                   existing.preferredRetailerProductID == retailerProductID {
-                    return packagesAreCompatible(
-                        existingSize: existing.packageSize,
-                        existingUnit: existing.packageUnit,
-                        incomingSize: packageQuantity,
-                        incomingUnit: packageUnit
-                    )
-                }
-            }
-            let existingBrand = preferenceKey(for: existing.brand)
-            let incomingBrand = preferenceKey(for: brand)
-            return !existingBrand.isEmpty
-                && existingBrand == incomingBrand
-                && preferenceKey(for: existing.name) == preferenceKey(for: name)
-                && packagesAreCompatible(
-                    existingSize: existing.packageSize,
-                    existingUnit: existing.packageUnit,
-                    incomingSize: packageQuantity,
-                    incomingUnit: packageUnit
-                )
+            return packagesAreCompatible(
+                existingSize: existing.packageSize,
+                existingUnit: existing.packageUnit,
+                incomingSize: packageQuantity,
+                incomingUnit: packageUnit
+            )
         }
 
         if let matchIndex {
@@ -3426,17 +3440,19 @@ final class AppModel {
                 packageUnit: packageUnit
             )
             inventory[matchIndex].updatedAt = .now
-            inventory[matchIndex].preferredRetailerProductID =
-                inventory[matchIndex].preferredRetailerProductID ?? scopedRetailerProductID
+            if let exactRetailerProductID = scopedRetailerProductIDs.sorted().first {
+                inventory[matchIndex].preferredRetailerProductID = exactRetailerProductID
+            }
+            inventory[matchIndex].addIdentityClaims(exactPurchaseIdentityClaims)
             inventory[matchIndex].packageSize = inventory[matchIndex].packageSize ?? packageQuantity
             inventory[matchIndex].packageUnit = inventory[matchIndex].packageUnit ?? packageUnit
             inventory[matchIndex].hasUnknownPackageMass =
                 inventory[matchIndex].hasUnknownPackageMass == true || hasUnknownPackageMass
-            if let gtin14 {
+            if let gtin14 = exactGTINs.sorted().first {
                 inventory[matchIndex].gtin14 = inventory[matchIndex].gtin14 ?? gtin14
-                var identities = inventory[matchIndex].barcodeGTINs ?? []
-                if !identities.contains(gtin14) { identities.append(gtin14) }
-                inventory[matchIndex].barcodeGTINs = identities.sorted()
+                inventory[matchIndex].barcodeGTINs = Array(
+                    Set(inventory[matchIndex].barcodeGTINs ?? []).union(exactGTINs)
+                ).sorted()
             }
             return inventory[matchIndex].id
         }
@@ -3446,14 +3462,17 @@ final class AppModel {
             brand: brand,
             quantity: amount,
             unit: "package",
-            preferredRetailerProductID: scopedRetailerProductID,
+            preferredRetailerProductID: requiresIdentityReview
+                ? nil
+                : scopedRetailerProductIDs.sorted().first,
+            identityClaims: exactPurchaseIdentityClaims,
             source: .recipe,
             packageCount: amount,
             packageSize: packageQuantity,
             packageUnit: packageUnit,
-            requiresUserNaming: false,
-            gtin14: gtin14,
-            barcodeGTINs: gtin14.map { [$0] },
+            requiresUserNaming: name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            gtin14: requiresIdentityReview ? nil : exactGTINs.sorted().first,
+            barcodeGTINs: requiresIdentityReview || exactGTINs.isEmpty ? nil : exactGTINs.sorted(),
             hasUnknownPackageMass: hasUnknownPackageMass
         )
         inventory.insert(pantryItem, at: 0)
@@ -3676,9 +3695,23 @@ final class AppModel {
 
     private func normalizedGTIN14(_ value: String?) -> String? {
         guard let value else { return nil }
-        let digits = value.filter(\.isNumber)
-        guard (8...14).contains(digits.count) else { return nil }
-        return String(repeating: "0", count: 14 - digits.count) + digits
+        guard case .success(let barcode) = BarcodeNormalizer.normalize(value) else { return nil }
+        return barcode.canonicalGTIN14
+    }
+
+    private func scopedRetailerProductIdentity(
+        retailerID: String,
+        productID: String
+    ) -> String? {
+        let retailerID = retailerID
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .precomposedStringWithCanonicalMapping
+            .lowercased()
+        let productID = productID
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .precomposedStringWithCanonicalMapping
+        guard !retailerID.isEmpty, !productID.isEmpty else { return nil }
+        return "\(retailerID):\(productID)"
     }
 
     private func packagesAreCompatible(
@@ -3691,13 +3724,75 @@ final class AppModel {
            existingUnit == nil, incomingUnit == nil {
             return true
         }
-        guard let existingSize,
-              let incomingSize,
-              let existingUnit,
-              let incomingUnit,
-              preferenceKey(for: existingUnit) == preferenceKey(for: incomingUnit)
-        else { return false }
-        return abs(existingSize - incomingSize) < 0.001
+        guard let existing = exactCanonicalPackageContents(
+            quantity: existingSize,
+            unit: existingUnit
+        ), let incoming = exactCanonicalPackageContents(
+            quantity: incomingSize,
+            unit: incomingUnit
+        ), existing.dimension == incoming.dimension else { return false }
+        return existing == incoming
+    }
+
+    private func confirmedPackageFacts(
+        for item: ShoppingListItem,
+        substitution: ShoppingSubstitutionFeedback?
+    ) -> (quantity: Double?, unit: String?) {
+        if let substitution {
+            guard exactCanonicalPackageContents(
+                quantity: substitution.packageQuantity,
+                unit: substitution.packageUnit
+            ) != nil else { return (nil, nil) }
+            return (
+                substitution.packageQuantity,
+                substitution.packageUnit?.trimmingCharacters(in: .whitespacesAndNewlines)
+            )
+        }
+
+        guard !item.product.variableWeight else { return (nil, nil) }
+        if let plan = item.purchaseGroup?.packagePlan {
+            guard plan.certainty == .exact,
+                  let packageSize = plan.packageSize,
+                  packageSize.certainty == .exact else { return (nil, nil) }
+            if exactCanonicalPackageContents(
+                quantity: item.product.packageQuantity,
+                unit: item.product.packageUnit
+            ) == packageSize {
+                return (
+                    item.product.packageQuantity,
+                    item.product.packageUnit?.trimmingCharacters(in: .whitespacesAndNewlines)
+                )
+            }
+            return (
+                NSDecimalNumber(decimal: packageSize.value).doubleValue,
+                packageSize.canonicalUnit?.rawValue
+            )
+        }
+
+        guard exactCanonicalPackageContents(
+            quantity: item.product.packageQuantity,
+            unit: item.product.packageUnit
+        ) != nil else { return (nil, nil) }
+        return (
+            item.product.packageQuantity,
+            item.product.packageUnit?.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+    }
+
+    private func exactCanonicalPackageContents(
+        quantity: Double?,
+        unit: String?
+    ) -> CanonicalQuantity? {
+        guard let quantity,
+              quantity.isFinite,
+              quantity > 0,
+              case .exact(let canonical) = QuantityEngine.canonicalize(
+                  value: Decimal(quantity),
+                  unit: unit
+              ),
+              canonical.certainty == .exact,
+              canonical.dimension != .package else { return nil }
+        return canonical
     }
 
     private func nextWaitingRetailerItem(after index: Int) -> Int? {
@@ -3885,6 +3980,9 @@ final class AppModel {
                     name: record?.name ?? "Unknown Product",
                     brand: record?.brand ?? "",
                     preferredRetailerProductID: record?.retailerProductID,
+                    identityClaims: normalizedBarcode.map {
+                        [.observedBarcode($0)]
+                    } ?? [],
                     source: .barcode,
                     requiresUserNaming: record == nil,
                     rawBarcode: upc,
@@ -3899,7 +3997,7 @@ final class AppModel {
         }
         track(.barcodeScanned, properties: ["matched": record == nil ? "false" : "true"])
         track(.pantryItemAdded, properties: ["source": PantryItemSource.barcode.rawValue])
-        showToast(record == nil ? "UPC saved for later matching" : "\(record!.name) added to pantry")
+        showToast(record.map { "\($0.name) added to pantry" } ?? "UPC saved for later matching")
     }
 
     func addPantryItem(
@@ -3920,10 +4018,12 @@ final class AppModel {
             case .replace:
                 let existingQuantity = updatedInventory[index].packageCount
                 let knownBarcodes = updatedInventory[index].barcodeGTINs ?? []
+                let existingIdentityClaims = updatedInventory[index].identityClaims
                 updatedInventory[index] = pantryItem(from: submission, quantity: existingQuantity)
                 updatedInventory[index].barcodeGTINs = Array(
                     Set(knownBarcodes + [submission.barcode.canonicalGTIN14])
                 ).sorted()
+                updatedInventory[index].addIdentityClaims(existingIdentityClaims)
             case .cancel:
                 return
             }
@@ -3946,6 +4046,7 @@ final class AppModel {
             brand: submission.brand,
             quantity: quantity,
             preferredRetailerProductID: submission.externalProductID,
+            identityClaims: [.observedBarcode(submission.barcode)],
             source: .barcode,
             requiresUserNaming: submission.requiresUserNaming,
             rawBarcode: submission.scan.rawBarcode,
@@ -4021,10 +4122,30 @@ final class AppModel {
         named name: String,
         submission: PantryBarcodeSubmission?
     ) -> PantryInventoryItem? {
-        if let submission, let barcodeMatch = pantryItem(matching: submission.barcode) {
-            return barcodeMatch
+        if let submission {
+            if let barcodeMatch = pantryItem(matching: submission.barcode) {
+                return barcodeMatch
+            }
+            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
+            return pantryInventory.first { item in
+                item.name.compare(
+                    trimmed,
+                    options: [.caseInsensitive, .diacriticInsensitive]
+                ) == .orderedSame && canAdoptUnseenBarcodeByName(item)
+            }
         }
         return pantryItem(named: name)
+    }
+
+    private func canAdoptUnseenBarcodeByName(_ item: PantryInventoryItem) -> Bool {
+        let legacyBarcodes = [item.upc, item.rawBarcode].compactMap(normalizedGTIN14)
+        let preferredProductID = item.preferredRetailerProductID?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return item.claimedGTIN14s.isEmpty &&
+            item.claimedScopedRetailerProductIDs.isEmpty &&
+            legacyBarcodes.isEmpty &&
+            preferredProductID?.isEmpty != false
     }
 
     /// Adds scanned or manual stock: merges into an existing item when the
@@ -4059,6 +4180,9 @@ final class AppModel {
                     brand: submission?.brand ?? "",
                     quantity: amount,
                     preferredRetailerProductID: submission?.externalProductID,
+                    identityClaims: submission.map {
+                        [.observedBarcode($0.barcode)]
+                    } ?? [],
                     source: submission == nil ? .manual : .barcode,
                     requiresUserNaming: false,
                     rawBarcode: submission?.scan.rawBarcode,

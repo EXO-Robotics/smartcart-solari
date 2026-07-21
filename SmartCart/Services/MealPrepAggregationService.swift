@@ -50,12 +50,12 @@ enum MealPrepAggregationService {
                         source: source
                     )
 
-                    if let index = pending.firstIndex(where: { canAutomaticallyMerge($0, candidate) }) {
-                        let converted = convert(
+                    if let index = pending.firstIndex(where: { canAutomaticallyMerge($0, candidate) }),
+                       let converted = convert(
                             candidate.quantity,
                             from: candidate.unit,
                             to: pending[index].unit
-                        )!
+                       ) {
                         pending[index].quantity += converted
                         pending[index].sources.append(source)
                         pending[index].state = .automaticallyMerged
@@ -256,11 +256,11 @@ private extension MealPrepAggregationService {
 
                 let applied = min(needed, convertedAvailable)
                 guard applied > 0 else { continue }
-                let consumedInPantryUnit = convert(
+                guard let consumedInPantryUnit = convert(
                     applied,
                     from: lines[lineIndex].unit,
                     to: unit(for: item.remainingUnit)
-                )!
+                ) else { continue }
                 candidateRemaining[item.id] = max(0, available - consumedInPantryUnit)
                 needed -= applied
                 lines[lineIndex].pantryDeductions.append(
@@ -404,55 +404,33 @@ private extension MealPrepAggregationService {
 
     static func unit(for raw: String) -> MealPrepUnit {
         let key = normalized(raw)
-        let aliases: [String: MealPrepUnit] = [
-            "": MealPrepUnit(symbol: "count", family: .count),
-            "count": MealPrepUnit(symbol: "count", family: .count),
-            "counts": MealPrepUnit(symbol: "count", family: .count),
-            "item": MealPrepUnit(symbol: "count", family: .count),
-            "items": MealPrepUnit(symbol: "count", family: .count),
-            "each": MealPrepUnit(symbol: "count", family: .count),
-            "ea": MealPrepUnit(symbol: "count", family: .count),
-            "piece": MealPrepUnit(symbol: "count", family: .count),
-            "pieces": MealPrepUnit(symbol: "count", family: .count),
-            "tsp": MealPrepUnit(symbol: "tsp", family: .usVolume),
-            "teaspoon": MealPrepUnit(symbol: "tsp", family: .usVolume),
-            "teaspoons": MealPrepUnit(symbol: "tsp", family: .usVolume),
-            "tbsp": MealPrepUnit(symbol: "tbsp", family: .usVolume, baseMultiplier: 3),
-            "tablespoon": MealPrepUnit(symbol: "tbsp", family: .usVolume, baseMultiplier: 3),
-            "tablespoons": MealPrepUnit(symbol: "tbsp", family: .usVolume, baseMultiplier: 3),
-            "tbs": MealPrepUnit(symbol: "tbsp", family: .usVolume, baseMultiplier: 3),
-            "cup": MealPrepUnit(symbol: "cup", family: .usVolume, baseMultiplier: 48),
-            "cups": MealPrepUnit(symbol: "cup", family: .usVolume, baseMultiplier: 48),
-            "c": MealPrepUnit(symbol: "cup", family: .usVolume, baseMultiplier: 48),
-            "fl oz": MealPrepUnit(symbol: "fl oz", family: .usVolume, baseMultiplier: 6),
-            "fluid ounce": MealPrepUnit(symbol: "fl oz", family: .usVolume, baseMultiplier: 6),
-            "fluid ounces": MealPrepUnit(symbol: "fl oz", family: .usVolume, baseMultiplier: 6),
-            "oz": MealPrepUnit(symbol: "oz", family: .imperialMass),
-            "ounce": MealPrepUnit(symbol: "oz", family: .imperialMass),
-            "ounces": MealPrepUnit(symbol: "oz", family: .imperialMass),
-            "lb": MealPrepUnit(symbol: "lb", family: .imperialMass, baseMultiplier: 16),
-            "lbs": MealPrepUnit(symbol: "lb", family: .imperialMass, baseMultiplier: 16),
-            "pound": MealPrepUnit(symbol: "lb", family: .imperialMass, baseMultiplier: 16),
-            "pounds": MealPrepUnit(symbol: "lb", family: .imperialMass, baseMultiplier: 16),
-            "g": MealPrepUnit(symbol: "g", family: .metricMass),
-            "gram": MealPrepUnit(symbol: "g", family: .metricMass),
-            "grams": MealPrepUnit(symbol: "g", family: .metricMass),
-            "kg": MealPrepUnit(symbol: "kg", family: .metricMass, baseMultiplier: 1_000),
-            "kilogram": MealPrepUnit(symbol: "kg", family: .metricMass, baseMultiplier: 1_000),
-            "kilograms": MealPrepUnit(symbol: "kg", family: .metricMass, baseMultiplier: 1_000),
-            "ml": MealPrepUnit(symbol: "ml", family: .metricVolume),
-            "milliliter": MealPrepUnit(symbol: "ml", family: .metricVolume),
-            "milliliters": MealPrepUnit(symbol: "ml", family: .metricVolume),
-            "l": MealPrepUnit(symbol: "l", family: .metricVolume, baseMultiplier: 1_000),
-            "liter": MealPrepUnit(symbol: "l", family: .metricVolume, baseMultiplier: 1_000),
-            "liters": MealPrepUnit(symbol: "l", family: .metricVolume, baseMultiplier: 1_000)
-        ]
-        return aliases[key] ?? MealPrepUnit(symbol: key, family: .exactOnly)
+        let quantityUnit = RecipeQuantityUnitNormalizer.quantityEngineUnit(for: raw)
+        guard let symbol = QuantityEngine.normalizedUnit(for: quantityUnit) else {
+            return MealPrepUnit(symbol: key, family: .exactOnly)
+        }
+        return switch symbol {
+        case "count": MealPrepUnit(symbol: symbol, family: .count)
+        case "tsp": MealPrepUnit(symbol: symbol, family: .usVolume)
+        case "tbsp": MealPrepUnit(symbol: symbol, family: .usVolume, baseMultiplier: 3)
+        case "fl oz": MealPrepUnit(symbol: symbol, family: .usVolume, baseMultiplier: 6)
+        case "cup": MealPrepUnit(symbol: symbol, family: .usVolume, baseMultiplier: 48)
+        case "oz": MealPrepUnit(symbol: symbol, family: .imperialMass)
+        case "lb": MealPrepUnit(symbol: symbol, family: .imperialMass, baseMultiplier: 16)
+        case "g": MealPrepUnit(symbol: symbol, family: .metricMass)
+        case "kg": MealPrepUnit(symbol: symbol, family: .metricMass, baseMultiplier: 1_000)
+        case "ml": MealPrepUnit(symbol: symbol, family: .metricVolume)
+        case "l": MealPrepUnit(symbol: symbol, family: .metricVolume, baseMultiplier: 1_000)
+        default: MealPrepUnit(symbol: symbol, family: .exactOnly)
+        }
     }
 
     static func convert(_ quantity: Double, from source: MealPrepUnit, to destination: MealPrepUnit) -> Double? {
-        guard source.family == destination.family else { return nil }
-        if source.family == .exactOnly, source.symbol != destination.symbol { return nil }
-        return quantity * source.baseMultiplier / destination.baseMultiplier
+        guard case .exact(let converted) = QuantityEngine.convertedValue(
+            doubleValue: quantity,
+            from: source.symbol,
+            to: destination.symbol
+        ) else { return nil }
+        let value = NSDecimalNumber(decimal: converted.value).doubleValue
+        return value.isFinite ? value : nil
     }
 }

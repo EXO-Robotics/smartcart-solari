@@ -91,8 +91,9 @@ enum BarcodeNormalizer {
         }
 
         let expected = checkDigit(forBody: digits.dropLast())
-        guard let actual = digits.last, actual == expected else {
-            return .failure(.invalidCheckDigit(expected: expected, actual: digits.last!))
+        guard let actual = digits.last else { return .failure(.empty) }
+        guard actual == expected else {
+            return .failure(.invalidCheckDigit(expected: expected, actual: actual))
         }
 
         return .success(
@@ -108,7 +109,8 @@ enum BarcodeNormalizer {
     static func checkDigit(forBody body: Substring) -> Character {
         var sum = 0
         for (offset, character) in body.reversed().enumerated() {
-            let digit = Int(character.asciiValue! - Character("0").asciiValue!)
+            guard let asciiValue = character.asciiValue else { continue }
+            let digit = Int(asciiValue - 48)
             sum += digit * (offset.isMultiple(of: 2) ? 3 : 1)
         }
         return Character(String((10 - (sum % 10)) % 10))
@@ -200,11 +202,7 @@ struct PantryBarcodeUserEditedCache: BarcodeUserEditedCache, Sendable {
             guard !name.isEmpty, name.caseInsensitiveCompare("Unknown Product") != .orderedSame else {
                 continue
             }
-            var identities = Set((item.barcodeGTINs ?? []) + [item.gtin14].compactMap { $0 })
-            if let legacyUPC = item.upc,
-               case .success(let normalized) = BarcodeNormalizer.normalize(legacyUPC) {
-                identities.insert(normalized.canonicalGTIN14)
-            }
+            let identities = item.claimedGTIN14s
             for identity in identities where products[identity] == nil {
                 products[identity] = BarcodeProduct(
                     identifier: "pantry:\(item.id.uuidString)",

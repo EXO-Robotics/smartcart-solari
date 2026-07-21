@@ -689,6 +689,55 @@ enum PantryItemSource: String, Codable, Hashable {
     }
 }
 
+/// One independently evidenced exact-identity value. Legacy display mirrors
+/// such as `upc`, `gtin14`, and `preferredRetailerProductID` are intentionally
+/// not promoted into trusted identity during decoding.
+struct PantryIdentityClaim: Hashable, Codable, Sendable {
+    enum Kind: String, Codable, Hashable, Sendable {
+        case gtin14
+        case scopedRetailerProductID
+    }
+
+    enum Evidence: String, Codable, Hashable, Sendable {
+        case barcodeScan
+        case exactPurchase
+    }
+
+    let kind: Kind
+    let normalizedValue: String
+    let evidence: Evidence
+    let normalizationVersion: Int
+
+    static func observedBarcode(_ barcode: NormalizedBarcode) -> PantryIdentityClaim {
+        PantryIdentityClaim(
+            kind: .gtin14,
+            normalizedValue: barcode.canonicalGTIN14,
+            evidence: .barcodeScan,
+            normalizationVersion: ExactProductIdentity.currentNormalizationVersion
+        )
+    }
+
+    static func exactPurchaseGTIN(_ canonicalGTIN14: String) -> PantryIdentityClaim {
+        PantryIdentityClaim(
+            kind: .gtin14,
+            normalizedValue: canonicalGTIN14,
+            evidence: .exactPurchase,
+            normalizationVersion: ExactProductIdentity.currentNormalizationVersion
+        )
+    }
+
+    static func exactPurchaseRetailerProductID(
+        _ scopedRetailerProductID: String
+    ) -> PantryIdentityClaim {
+        PantryIdentityClaim(
+            kind: .scopedRetailerProductID,
+            normalizedValue: scopedRetailerProductID,
+            evidence: .exactPurchase,
+            normalizationVersion: ExactProductIdentity.currentNormalizationVersion
+        )
+    }
+}
+
 struct PantryInventoryItem: Identifiable, Hashable, Codable {
     let id: UUID
     var upc: String?
@@ -699,6 +748,9 @@ struct PantryInventoryItem: Identifiable, Hashable, Codable {
     var quantity: Double
     var unit: String
     var preferredRetailerProductID: String?
+    /// Persisted value-level proof used for exact matching. The neighboring
+    /// UPC, GTIN, and retailer fields remain compatibility/display mirrors.
+    private(set) var identityClaims: [PantryIdentityClaim]
     var source: PantryItemSource
     var updatedAt: Date
     var packageCount: Double
@@ -726,6 +778,7 @@ struct PantryInventoryItem: Identifiable, Hashable, Codable {
         quantity: Double = 1,
         unit: String = "item",
         preferredRetailerProductID: String? = nil,
+        identityClaims: [PantryIdentityClaim] = [],
         source: PantryItemSource = .manual,
         updatedAt: Date = .now,
         packageCount: Double? = nil,
@@ -747,6 +800,7 @@ struct PantryInventoryItem: Identifiable, Hashable, Codable {
         self.quantity = quantity
         self.unit = unit
         self.preferredRetailerProductID = preferredRetailerProductID
+        self.identityClaims = Self.canonicalizedIdentityClaims(identityClaims)
         self.source = source
         self.updatedAt = updatedAt
         let resolvedPackageCount = max(0, packageCount ?? quantity)
@@ -774,6 +828,7 @@ struct PantryInventoryItem: Identifiable, Hashable, Codable {
 
     private enum CodingKeys: String, CodingKey {
         case id, upc, name, brand, quantity, unit, preferredRetailerProductID
+        case identityClaims
         case source, updatedAt, packageCount, packageSize, packageUnit
         case remainingAmount, remainingUnit, requiresUserNaming, rawBarcode
         case barcodeSymbology, gtin14, barcodeGTINs, hasUnknownPackageMass
@@ -788,6 +843,9 @@ struct PantryInventoryItem: Identifiable, Hashable, Codable {
         quantity = try values.decode(Double.self, forKey: .quantity)
         unit = try values.decode(String.self, forKey: .unit)
         preferredRetailerProductID = try values.decodeIfPresent(String.self, forKey: .preferredRetailerProductID)
+        identityClaims = Self.canonicalizedIdentityClaims(
+            try values.decodeIfPresent([PantryIdentityClaim].self, forKey: .identityClaims) ?? []
+        )
         source = try values.decode(PantryItemSource.self, forKey: .source)
         updatedAt = try values.decode(Date.self, forKey: .updatedAt)
         packageSize = try values.decodeIfPresent(Double.self, forKey: .packageSize)
@@ -864,9 +922,7 @@ struct PantryInventoryItem: Identifiable, Hashable, Codable {
     }
 
     func matches(barcode: NormalizedBarcode) -> Bool {
-        gtin14 == barcode.canonicalGTIN14 ||
-            upc == barcode.digits ||
-            (barcodeGTINs?.contains(barcode.canonicalGTIN14) ?? false)
+        claimedGTIN14s.contains(barcode.canonicalGTIN14)
     }
 
     mutating func register(
@@ -887,6 +943,76 @@ struct PantryInventoryItem: Identifiable, Hashable, Codable {
             identities.append(barcode.canonicalGTIN14)
         }
         barcodeGTINs = identities.sorted()
+        addIdentityClaims([.observedBarcode(barcode)])
+    }
+
+    var claimedGTIN14s: Set<String> {
+        Set(identityClaims.compactMap { claim in
+            guard let claim = Self.validatedIdentityClaim(claim),
+                  claim.kind == .gtin14 else { return nil }
+            return claim.normalizedValue
+        })
+    }
+
+    var claimedScopedRetailerProductIDs: Set<String> {
+        Set(identityClaims.compactMap { claim in
+            guard let claim = Self.validatedIdentityClaim(claim),
+                  claim.kind == .scopedRetailerProductID else { return nil }
+            return claim.normalizedValue
+        })
+    }
+
+    mutating func addIdentityClaims(_ claims: [PantryIdentityClaim]) {
+        identityClaims = Self.canonicalizedIdentityClaims(identityClaims + claims)
+    }
+
+    private static func canonicalizedIdentityClaims(
+        _ claims: [PantryIdentityClaim]
+    ) -> [PantryIdentityClaim] {
+        Array(Set(claims.compactMap(validatedIdentityClaim))).sorted { first, second in
+            if first.kind.rawValue != second.kind.rawValue {
+                return first.kind.rawValue < second.kind.rawValue
+            }
+            if first.normalizedValue != second.normalizedValue {
+                return first.normalizedValue < second.normalizedValue
+            }
+            if first.evidence.rawValue != second.evidence.rawValue {
+                return first.evidence.rawValue < second.evidence.rawValue
+            }
+            return first.normalizationVersion < second.normalizationVersion
+        }
+    }
+
+    private static func validatedIdentityClaim(
+        _ claim: PantryIdentityClaim
+    ) -> PantryIdentityClaim? {
+        guard claim.normalizationVersion == ExactProductIdentity.currentNormalizationVersion else {
+            return nil
+        }
+
+        switch claim.kind {
+        case .gtin14:
+            guard case .success(let barcode) = BarcodeNormalizer.normalize(claim.normalizedValue),
+                  barcode.canonicalGTIN14 == claim.normalizedValue else { return nil }
+        case .scopedRetailerProductID:
+            let value = claim.normalizedValue
+            guard value == value.trimmingCharacters(in: .whitespacesAndNewlines),
+                  let separator = value.firstIndex(of: ":") else { return nil }
+            let retailerID = String(value[..<separator])
+            let productID = String(value[value.index(after: separator)...])
+            let normalizedRetailerID = retailerID
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .precomposedStringWithCanonicalMapping
+                .lowercased()
+            let normalizedProductID = productID
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .precomposedStringWithCanonicalMapping
+            guard !normalizedRetailerID.isEmpty,
+                  !normalizedProductID.isEmpty,
+                  retailerID == normalizedRetailerID,
+                  productID == normalizedProductID else { return nil }
+        }
+        return claim
     }
 }
 

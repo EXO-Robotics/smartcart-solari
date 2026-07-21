@@ -2205,6 +2205,7 @@ final class SmartCartTests: XCTestCase {
         XCTAssertEqual(decoded.remainingAmount, 10, accuracy: 0.001)
         XCTAssertEqual(decoded.remainingUnit, "lb")
         XCTAssertEqual(decoded.quantity, decoded.packageCount)
+        XCTAssertTrue(decoded.identityClaims.isEmpty)
     }
 
     func testPantryMatchingUsesRemainingAmountInsteadOfFullPackageCapacity() throws {
@@ -2245,6 +2246,7 @@ final class SmartCartTests: XCTestCase {
                 name: "Pasta",
                 quantity: 2,
                 unit: "box",
+                identityClaims: [.observedBarcode(barcode)],
                 source: .barcode,
                 gtin14: barcode.canonicalGTIN14
             )
@@ -2266,7 +2268,7 @@ final class SmartCartTests: XCTestCase {
     }
 
     @MainActor
-    func testEveryScannedBarcodePersistsAndRestacksAfterRelaunch() throws {
+    func testScannedBarcodeClaimsPersistAndConflictingBarcodesStaySeparate() throws {
         let store = JSONSmartCartStateStore(
             fileURL: temporaryDirectory().appendingPathComponent("barcode-state.json")
         )
@@ -2307,13 +2309,15 @@ final class SmartCartTests: XCTestCase {
         )
 
         let restored = AppModel(stateStore: store)
-        XCTAssertEqual(restored.pantryInventory.count, 1)
-        XCTAssertEqual(restored.pantryInventory[0].quantity, 3, accuracy: 0.001)
+        XCTAssertEqual(restored.pantryInventory.count, 2)
         XCTAssertEqual(
-            Set(restored.pantryInventory[0].barcodeGTINs ?? []),
-            Set([firstBarcode.canonicalGTIN14, alternateBarcode.canonicalGTIN14])
+            restored.pantryItem(matching: firstBarcode)?.claimedGTIN14s,
+            Set([firstBarcode.canonicalGTIN14])
         )
-        XCTAssertEqual(restored.pantryItem(matching: alternateBarcode)?.id, restored.pantryInventory[0].id)
+        XCTAssertEqual(
+            restored.pantryItem(matching: alternateBarcode)?.claimedGTIN14s,
+            Set([alternateBarcode.canonicalGTIN14])
+        )
 
         restored.addPantryStock(
             name: "A different catalog name",
@@ -2322,9 +2326,9 @@ final class SmartCartTests: XCTestCase {
         )
 
         let relaunchedAgain = AppModel(stateStore: store)
-        XCTAssertEqual(relaunchedAgain.pantryInventory.count, 1)
-        XCTAssertEqual(relaunchedAgain.pantryInventory[0].quantity, 7, accuracy: 0.001)
-        XCTAssertEqual(relaunchedAgain.pantryInventory[0].name, "Pantry staple")
+        XCTAssertEqual(relaunchedAgain.pantryInventory.count, 2)
+        let alternateItem = try XCTUnwrap(relaunchedAgain.pantryItem(matching: alternateBarcode))
+        XCTAssertEqual(alternateItem.packageCount, 6, accuracy: 0.001)
     }
 
     @MainActor
@@ -3631,6 +3635,18 @@ final class SmartCartTests: XCTestCase {
         let model = AppModel(stateStore: store, seedDemoShoppingState: true)
         let item = try XCTUnwrap(model.shoppingItems.first { !$0.product.variableWeight })
         XCTAssertFalse(item.product.variableWeight)
+        let exactClaims = ExactProductIdentity.all(for: item.product).compactMap { identity in
+            switch identity.kind {
+            case .retailerProductID:
+                return PantryIdentityClaim.exactPurchaseRetailerProductID(
+                    "\(identity.retailerID):\(identity.normalizedValue)"
+                )
+            case .gtin:
+                return PantryIdentityClaim.exactPurchaseGTIN(identity.normalizedValue)
+            case .exactURL:
+                return nil
+            }
+        }
         model.pantryInventory = [
             PantryInventoryItem(
                 name: item.product.name,
@@ -3638,6 +3654,7 @@ final class SmartCartTests: XCTestCase {
                 quantity: 2,
                 unit: "item",
                 preferredRetailerProductID: item.product.retailerProductID,
+                identityClaims: exactClaims,
                 packageSize: item.product.packageQuantity,
                 packageUnit: item.product.packageUnit
             )
@@ -3947,10 +3964,8 @@ final class SmartCartTests: XCTestCase {
             XCTAssertEqual(model.pantryInventory.first?.remainingAmount, 3 * packageSize)
             XCTAssertEqual(model.pantryInventory.first?.remainingUnit, replacement.packageUnit)
         }
-        XCTAssertEqual(
-            model.pantryInventory.first?.preferredRetailerProductID,
-            "\(replacement.retailerID):\(replacement.retailerProductID)"
-        )
+        XCTAssertNil(model.pantryInventory.first?.preferredRetailerProductID)
+        XCTAssertFalse(model.pantryInventory.first?.requiresUserNaming == true)
         XCTAssertTrue(model.preferredProductIDsByIngredient.values.contains(replacement.retailerProductID))
         XCTAssertEqual(
             model.shoppingSession(id: sessionID)?.reconciliation?.substitutions.first?.replacementName,
@@ -4150,6 +4165,71 @@ final class SmartCartTests: XCTestCase {
 
         XCTAssertEqual(model.pantryInventory.count, 3)
         XCTAssertTrue(originalIDs.isSubset(of: Set(model.pantryInventory.map(\.id))))
+    }
+
+    @MainActor
+    func testConflictingRetailerProductIdentityPreventsGTINOnlyPantryMerge() throws {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            seedDemoShoppingState: true
+        )
+        var item = try model.shoppingItems.firstUnwrapped()
+        item.product.gtin = "078742002163"
+        item.purchaseGroup = nil
+        model.shoppingItems = [item]
+        let gtin = try XCTUnwrap(
+            ExactProductIdentity.all(for: item.product).first { $0.kind == .gtin }?.normalizedValue
+        )
+        let existing = PantryInventoryItem(
+            name: item.product.name,
+            brand: item.product.brand,
+            quantity: 1,
+            unit: "package",
+            identityClaims: [
+                .exactPurchaseRetailerProductID("\(item.product.retailerID):conflicting-product"),
+                .exactPurchaseGTIN(gtin)
+            ],
+            source: .recipe,
+            packageSize: item.product.packageQuantity,
+            packageUnit: item.product.packageUnit
+        )
+        model.pantryInventory = [existing]
+        let sessionID = try model.ensureCurrentShoppingSession().firstUnwrapped()
+
+        try model.commitShoppingReconciliation(
+            sessionID: sessionID,
+            outcome: .boughtFew,
+            purchasedItemIDs: [item.id],
+            substitutions: []
+        )
+
+        XCTAssertEqual(model.pantryInventory.count, 2)
+        XCTAssertEqual(
+            model.pantryInventory.first(where: { $0.id == existing.id })?.packageCount,
+            1
+        )
+    }
+
+    @MainActor
+    func testVariableWeightPurchaseDoesNotBecomeConfirmedPackageMass() throws {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            seedDemoShoppingState: true
+        )
+        let item = try model.shoppingItems.first(where: { $0.product.variableWeight }).firstUnwrapped()
+        let sessionID = try model.ensureCurrentShoppingSession().firstUnwrapped()
+
+        try model.commitShoppingReconciliation(
+            sessionID: sessionID,
+            outcome: .boughtFew,
+            purchasedItemIDs: [item.id],
+            substitutions: []
+        )
+
+        let pantryItem = try model.pantryInventory.firstUnwrapped()
+        XCTAssertNil(pantryItem.packageSize)
+        XCTAssertNil(pantryItem.packageUnit)
+        XCTAssertTrue(pantryItem.hasUnknownPackageMass == true)
     }
 
     @MainActor

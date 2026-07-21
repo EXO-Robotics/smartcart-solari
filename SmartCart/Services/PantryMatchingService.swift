@@ -1,8 +1,44 @@
 import Foundation
 
+enum RecipeQuantityUnitNormalizer {
+    static func quantityEngineUnit(
+        for raw: String,
+        blankMeansCount: Bool = true
+    ) -> String {
+        let normalized = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if normalized.isEmpty {
+            return blankMeansCount ? "count" : normalized
+        }
+        switch normalized.lowercased() {
+        case "clove", "cloves", "egg", "eggs":
+            return "count"
+        default:
+            return normalized
+        }
+    }
+}
+
 enum PantryMatchingService {
-    static func convertedQuantity(_ quantity: Double, from source: String, to destination: String) -> Double? {
-        convert(quantity, from: source, to: destination)
+    static func convertedQuantity(
+        _ quantity: Double,
+        from source: String,
+        to destination: String,
+        sourceBlankMeansIngredientCount: Bool = false,
+        destinationBlankMeansIngredientCount: Bool = false
+    ) -> Double? {
+        guard case .exact(let converted) = QuantityEngine.convertedValue(
+            doubleValue: quantity,
+            from: RecipeQuantityUnitNormalizer.quantityEngineUnit(
+                for: source,
+                blankMeansCount: sourceBlankMeansIngredientCount
+            ),
+            to: RecipeQuantityUnitNormalizer.quantityEngineUnit(
+                for: destination,
+                blankMeansCount: destinationBlankMeansIngredientCount
+            )
+        ) else { return nil }
+        let value = NSDecimalNumber(decimal: converted.value).doubleValue
+        return value.isFinite ? value : nil
     }
 
     static func bestSuggestion(
@@ -15,18 +51,34 @@ enum PantryMatchingService {
 
         let candidates = inventory.compactMap { item -> PantrySuggestion? in
             guard item.requiresUserNaming != true else { return nil }
-            let itemTokens = tokens(for: item.name + " " + item.brand)
-            let score = matchScore(ingredientTokens, itemTokens)
+            let relationship = IngredientIdentityService.relationship(
+                between: ingredient.name,
+                and: item.name,
+                lhsPreparation: ingredient.preparation
+            )
+            guard relationship != .incompatible else { return nil }
+
+            let itemTokens = tokens(for: item.name)
+            let tokenScore = matchScore(ingredientTokens, itemTokens)
+            let score = relationship == .exact ? 1 : tokenScore
             guard score >= 0.62 else { return nil }
 
             let requested = max(0, requiredQuantity ?? ingredient.quantity)
             let stockQuantity = max(0, item.remainingAmount)
             let stockUnit = item.remainingUnit
-            let converted = convert(stockQuantity, from: stockUnit, to: ingredient.unit)
+            let converted = convertedQuantity(
+                stockQuantity,
+                from: stockUnit,
+                to: ingredient.unit,
+                destinationBlankMeansIngredientCount: true
+            )
             let coverage: PantryCoverage
             let available: Double
 
-            if item.hasUnknownPackageMass == true {
+            if relationship != .exact {
+                available = converted ?? stockQuantity
+                coverage = .possible
+            } else if item.hasUnknownPackageMass == true {
                 // Package count is useful display information, but it is not
                 // an exact mass. Keep it review-only even if a future caller
                 // happens to request a superficially compatible unit.
@@ -108,7 +160,7 @@ enum PantryMatchingService {
         guard !lhs.isEmpty, !rhs.isEmpty else { return 0 }
         let intersection = lhs.intersection(rhs)
         guard !intersection.isEmpty else { return 0 }
-        if lhs == rhs || lhs.isSubset(of: rhs) || rhs.isSubset(of: lhs) { return 1 }
+        if lhs == rhs { return 1 }
         return Double(intersection.count) / Double(lhs.union(rhs).count)
     }
 
@@ -120,44 +172,4 @@ enum PantryMatchingService {
         }
     }
 
-    private static func convert(_ quantity: Double, from source: String, to destination: String) -> Double? {
-        let sourceKey = canonicalUnit(source)
-        let destinationKey = canonicalUnit(destination)
-        if sourceKey == destinationKey { return quantity }
-        guard let sourceMeasure = unitDefinition(sourceKey),
-              let destinationMeasure = unitDefinition(destinationKey),
-              sourceMeasure.dimension == destinationMeasure.dimension else { return nil }
-        return quantity * sourceMeasure.baseMultiplier / destinationMeasure.baseMultiplier
-    }
-
-    private static func canonicalUnit(_ raw: String) -> String {
-        let key = raw.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        let aliases: [String: String] = [
-            "tablespoon": "tbsp", "tablespoons": "tbsp", "tbs": "tbsp",
-            "teaspoon": "tsp", "teaspoons": "tsp",
-            "cups": "cup", "c": "cup", "fluid ounce": "fl oz", "fluid ounces": "fl oz",
-            "ounces": "oz", "ounce": "oz", "pounds": "lb", "pound": "lb", "lbs": "lb",
-            "grams": "g", "gram": "g", "kilograms": "kg", "kilogram": "kg",
-            "milliliters": "ml", "milliliter": "ml", "liters": "l", "liter": "l",
-            "items": "item", "count": "item", "each": "item"
-        ]
-        return aliases[key] ?? key
-    }
-
-    private static func unitDefinition(_ unit: String) -> (dimension: String, baseMultiplier: Double)? {
-        switch unit {
-        case "tsp": ("volume", 4.92892)
-        case "tbsp": ("volume", 14.7868)
-        case "fl oz": ("volume", 29.5735)
-        case "cup": ("volume", 236.588)
-        case "ml": ("volume", 1)
-        case "l": ("volume", 1000)
-        case "g": ("mass", 1)
-        case "kg": ("mass", 1000)
-        case "oz": ("mass", 28.3495)
-        case "lb": ("mass", 453.592)
-        case "item", "", "clove", "cloves", "egg", "eggs": ("count", 1)
-        default: nil
-        }
-    }
 }
