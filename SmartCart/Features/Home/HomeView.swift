@@ -301,9 +301,11 @@ struct HomeView: View {
                         .top,
                         collapsedShoppingTripsDrawerHeight - woodWrapDepth - joinOverlap
                     )
-                HomeGlassSurface(radius: 0, darkness: 0.28, showsBorder: false)
+                SmartCartDrawerGlassSurface(
+                    shape: HomePullUpShape(),
+                    darkness: 0.28
+                )
                     .frame(height: collapsedShoppingTripsDrawerHeight)
-                    .clipShape(HomePullUpShape())
             }
         }
         .clipShape(HomePullUpShape())
@@ -318,7 +320,6 @@ struct HomeView: View {
                         )
                 }
         }
-        .shadow(color: .black.opacity(0.34), radius: 22, y: -8)
         .padding(.horizontal, 8)
         .accessibilityElement(children: .contain)
     }

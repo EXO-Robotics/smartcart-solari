@@ -1038,11 +1038,10 @@ struct PantryDashboardView: View {
     }
 
     private func scannerDrawer(height: CGFloat, collapsedOffset: CGFloat) -> some View {
-        VStack(spacing: 0) {
-            scannerDrawerHandle(collapsedOffset: collapsedOffset)
+        let joinOverlap: CGFloat = scannerExpanded ? 2 : 0
 
-            Divider()
-                .overlay(SmartCartTheme.border)
+        return VStack(spacing: 0) {
+            scannerDrawerHandle(collapsedOffset: collapsedOffset)
 
             if scannerExpanded {
                 BarcodeScannerSheet(
@@ -1057,14 +1056,27 @@ struct PantryDashboardView: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: height, alignment: .top)
-        .background(SmartCartTheme.scannerSurface)
+        .background {
+            ZStack(alignment: .top) {
+                SmartCartTheme.scannerSurface
+                    .padding(.top, collapsedDrawerHeight - joinOverlap)
+                SmartCartDrawerGlassSurface(
+                    shape: PantryPullUpShape(),
+                    darkness: 0.28
+                )
+                    .frame(height: collapsedDrawerHeight)
+            }
+        }
         .clipShape(PantryPullUpShape())
         .overlay(alignment: .top) {
             PantryPullUpShape()
                 .stroke(SmartCartTheme.borderStrong.opacity(0.72), lineWidth: 1)
                 .frame(height: collapsedDrawerHeight)
+                .mask(alignment: .top) {
+                    Rectangle()
+                        .frame(height: collapsedDrawerHeight - joinOverlap)
+                }
         }
-        .shadow(color: .black.opacity(0.28), radius: 22, y: -8)
         .padding(.horizontal, 8)
         .accessibilityElement(children: .contain)
     }

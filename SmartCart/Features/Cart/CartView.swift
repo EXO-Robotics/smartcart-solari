@@ -1311,9 +1311,11 @@ struct RecipesView: View {
                         .top,
                         collapsedDrawerHeight - woodWrapDepth - joinOverlap
                     )
-                SmartCartSmokedGlassSurface(radius: 0, darkness: 0.28, showsBorder: false)
+                SmartCartDrawerGlassSurface(
+                    shape: RecipesPullUpShape(),
+                    darkness: 0.28
+                )
                     .frame(height: collapsedDrawerHeight)
-                    .clipShape(RecipesPullUpShape())
             }
         }
         .clipShape(RecipesPullUpShape())
@@ -1326,7 +1328,6 @@ struct RecipesView: View {
                         .frame(height: collapsedDrawerHeight - joinOverlap)
                 }
         }
-        .shadow(color: .black.opacity(0.28), radius: 22, y: -8)
         .padding(.horizontal, 8)
         .accessibilityElement(children: .contain)
     }

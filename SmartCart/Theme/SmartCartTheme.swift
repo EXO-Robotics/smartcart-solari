@@ -239,6 +239,39 @@ struct SmartCartSmokedGlassSurface: View {
     }
 }
 
+/// Draws the drawer material directly into its pull-tab shape. Keeping the
+/// material's render bounds identical to the visible shape avoids the faint
+/// rectangular backdrop band that post-clipping can expose in either appearance.
+struct SmartCartDrawerGlassSurface<SurfaceShape: Shape>: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    let shape: SurfaceShape
+    let darkness: Double
+
+    var body: some View {
+        shape
+            .fill(.ultraThinMaterial)
+            .overlay {
+                shape.fill(
+                    colorScheme == .light
+                        ? Color.white.opacity(min(0.82, 0.62 + darkness * 0.25))
+                        : Color.black.opacity(darkness)
+                )
+            }
+            .overlay {
+                shape.fill(
+                    LinearGradient(
+                        colors: colorScheme == .light
+                            ? [Color.white.opacity(0.44), Color.clear, Color.black.opacity(0.04)]
+                            : [Color.white.opacity(0.10), Color.clear, Color.black.opacity(0.10)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+            }
+    }
+}
+
 /// Shared full-screen food photography for primary app surfaces. The adaptive
 /// veil preserves semantic label contrast in both supported appearance modes.
 struct SmartCartFoodBackground: View {
