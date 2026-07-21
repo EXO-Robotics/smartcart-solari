@@ -50,7 +50,7 @@ final class ReleaseBlockerPackageMathTests: XCTestCase {
         )
     }
 
-    func testCountRequestAgainstMassPackageIsUnresolvedAndUsesSafeFallback() {
+    func testCountRequestAgainstMassPackageIsUnresolvedWithoutInventingOnePackage() {
         let product = makeProduct(packageQuantity: 16, packageUnit: "oz")
 
         XCTAssertEqual(
@@ -59,7 +59,7 @@ final class ReleaseBlockerPackageMathTests: XCTestCase {
                 requestedQuantity: 2,
                 requestedUnit: "count"
             ),
-            1
+            0
         )
         XCTAssertFalse(
             PackageMath.isPackageSufficient(
@@ -127,7 +127,7 @@ final class ReleaseBlockerPackageMathTests: XCTestCase {
                 requestedQuantity: 2,
                 requestedUnit: "cloves"
             ),
-            1
+            0
         )
         XCTAssertFalse(
             PackageMath.isPackageSufficient(

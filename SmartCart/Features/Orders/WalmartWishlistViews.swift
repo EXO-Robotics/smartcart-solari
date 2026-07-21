@@ -308,6 +308,12 @@ struct RetailerSafariHandoffView: View {
                 Text("\(item.product.package) · quantity \(item.purchaseQuantity)")
                     .font(.subheadline)
                     .foregroundStyle(SmartCartTheme.secondaryInk)
+                if let group = item.purchaseGroup,
+                   group.contributions.count > 1 {
+                    Text("For \(group.contributions.count) recipe ingredients")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(SmartCartTheme.green)
+                }
             }
 
             if item.status != .waiting {

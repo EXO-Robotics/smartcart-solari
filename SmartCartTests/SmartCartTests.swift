@@ -4931,7 +4931,8 @@ final class SmartCartTests: XCTestCase {
             $0.product.isExactProductLink && $0.product.confidence == .high
         })
         XCTAssertTrue(model.unresolvedMatchingExceptionItems.isEmpty)
-        XCTAssertTrue(model.continueToShoppingTrip())
+        let continued = model.continueToShoppingTrip()
+        XCTAssertTrue(continued, model.toastMessage ?? "No continuation failure message")
         XCTAssertEqual(model.homePath.last, .shoppingTrip)
     }
 
@@ -4975,8 +4976,26 @@ final class SmartCartTests: XCTestCase {
                 .first(where: { $0.id == itemID })
                 .firstUnwrapped()
             XCTAssertEqual(reviewed.reviewedMatchingFingerprint, reviewed.matchingInputFingerprint)
+            if reviewed.purchaseQuantity == 0 {
+                model.updatePurchaseQuantity(for: reviewed.id, delta: 1)
+                XCTAssertEqual(
+                    model.shoppingItems.first(where: { $0.id == reviewed.id })?.purchaseQuantity,
+                    1
+                )
+            }
         }
-        XCTAssertTrue(model.continueToShoppingTrip())
+        XCTAssertEqual(model.shoppingItems.map(\.purchaseQuantity), [1, 1])
+        XCTAssertFalse(model.hasUnresolvedMatchingWork)
+        XCTAssertEqual(model.ingredientResolutions.count, 2)
+        XCTAssertEqual(
+            Set(model.shoppingItems.flatMap {
+                $0.purchaseGroup?.contributions.map(\.sourceIngredientID) ?? [$0.ingredient.id]
+            }),
+            Set(model.ingredientResolutions.map(\.id))
+        )
+        XCTAssertTrue(model.editableResolutionActionsAreComplete)
+        let continued = model.continueToShoppingTrip()
+        XCTAssertTrue(continued, model.toastMessage ?? "No continuation failure message")
         XCTAssertEqual(model.homePath.last, .shoppingTrip)
     }
 
@@ -6674,6 +6693,129 @@ final class SmartCartTests: XCTestCase {
 
         XCTAssertEqual(model.ingredientResolutions.map(\.id), [current.id])
         XCTAssertEqual(model.shoppingItems.map(\.ingredient.id), [current.id])
+    }
+
+    @MainActor
+    func testExactMatchingConsolidatesSameSKUWithEveryDemandTraceable() async throws {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            retailerAdapters: [.walmart: Slice3GuideAdapter()],
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        let first = Ingredient(name: "Penne pasta", quantity: 16, unit: "oz")
+        let second = Ingredient(name: "Penne pasta", quantity: 16, unit: "oz")
+        XCTAssertTrue(model.beginRecipe(phase2Recipe(ingredients: [first, second])))
+
+        await model.startMatching()
+
+        let row = try model.shoppingItems.firstUnwrapped()
+        XCTAssertEqual(model.shoppingItems.count, 1)
+        XCTAssertEqual(row.purchaseGroup?.contributions.map(\.sourceIngredientID), [first.id, second.id])
+        XCTAssertEqual(row.purchaseQuantity, 2)
+        XCTAssertEqual(row.purchaseGroup?.packagePlan?.requiredQuantity?.dimension, .mass)
+    }
+
+    @MainActor
+    func testMatchingKeepsEquivalentSearchFallbacksAsSeparateActions() async throws {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            retailerAdapters: [.walmart: Slice3GuideAdapter()],
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        let first = Ingredient(name: "Dragon fruit jam", quantity: 1, unit: "jar")
+        let second = Ingredient(name: "Dragon fruit jam", quantity: 1, unit: "jar")
+        XCTAssertTrue(model.beginRecipe(phase2Recipe(ingredients: [first, second])))
+
+        await model.startMatching()
+
+        XCTAssertEqual(model.shoppingItems.count, 2)
+        XCTAssertEqual(model.shoppingItems.map { $0.purchaseGroup?.contributions.count }, [1, 1])
+        XCTAssertTrue(model.shoppingItems.allSatisfy { $0.purchaseGroup?.exactProductIdentity == nil })
+    }
+
+    @MainActor
+    func testReplacementBeforeTripStartRegroupsWhenItCreatesExactProductCollision() async throws {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            retailerAdapters: [.walmart: Slice3GuideAdapter()],
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        let pasta = Ingredient(name: "Penne pasta", quantity: 16, unit: "oz")
+        let garlic = Ingredient(name: "Garlic", quantity: 8, unit: "oz")
+        XCTAssertTrue(model.beginRecipe(phase2Recipe(ingredients: [pasta, garlic])))
+        await model.startMatching()
+        XCTAssertEqual(model.shoppingItems.count, 2)
+
+        let collisionProduct = try model.shoppingItems.first(where: {
+            $0.ingredient.id == pasta.id
+        }).firstUnwrapped().product
+        let replacedID = garlic.id
+        let replacedIndex = try XCTUnwrap(
+            model.shoppingItems.firstIndex(where: { $0.ingredient.id == replacedID })
+        )
+        model.shoppingItems[replacedIndex].alternatives = [collisionProduct]
+
+        XCTAssertTrue(
+            model.selectAlternative(itemID: replacedID, candidateID: collisionProduct.id)
+        )
+        XCTAssertEqual(model.shoppingItems.count, 1)
+        XCTAssertEqual(
+            Set(try model.shoppingItems.firstUnwrapped().purchaseGroup?.contributions.map(\.sourceIngredientID) ?? []),
+            Set([pasta.id, garlic.id])
+        )
+    }
+
+    @MainActor
+    func testStartedGroupedTripDoesNotRegroupOrChangeQuantity() async throws {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            retailerAdapters: [.walmart: Slice3GuideAdapter()],
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        let first = Ingredient(name: "Penne pasta", quantity: 16, unit: "oz")
+        let second = Ingredient(name: "Penne pasta", quantity: 16, unit: "oz")
+        XCTAssertTrue(model.beginRecipe(phase2Recipe(ingredients: [first, second])))
+        await model.startMatching()
+        model.completeRetailerSetup()
+        XCTAssertTrue(model.startOrResumeRetailerShoppingSession())
+        let frozen = model.shoppingItems
+        let row = try frozen.firstUnwrapped()
+
+        model.updatePurchaseQuantity(for: row.id, delta: 1)
+        XCTAssertFalse(model.selectAlternative(itemID: row.id, candidateID: UUID()))
+
+        XCTAssertEqual(model.shoppingItems, frozen)
+        XCTAssertEqual(model.shoppingSession(id: try XCTUnwrap(model.activeShoppingSessionID))?.items, frozen)
+    }
+
+    @MainActor
+    func testOnePurchaseGroupCreatesOneReconciliationAcquisition() async throws {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            retailerAdapters: [.walmart: Slice3GuideAdapter()],
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        let first = Ingredient(name: "Penne pasta", quantity: 16, unit: "oz")
+        let second = Ingredient(name: "Penne pasta", quantity: 16, unit: "oz")
+        XCTAssertTrue(model.beginRecipe(phase2Recipe(ingredients: [first, second])))
+        await model.startMatching()
+        model.completeRetailerSetup()
+        XCTAssertTrue(model.startOrResumeRetailerShoppingSession())
+        let sessionID = try XCTUnwrap(model.activeShoppingSessionID)
+        let row = try model.shoppingItems.firstUnwrapped()
+        XCTAssertTrue(model.recordRetailerOutcome(.addedToCart, for: row.id, sessionID: sessionID))
+
+        try model.commitShoppingReconciliation(
+            sessionID: sessionID,
+            outcome: .boughtEverything,
+            purchasedItemIDs: [row.id],
+            substitutions: []
+        )
+
+        let acquisitions = model.shoppingSession(id: sessionID)?.reconciliation?.acquisitions
+        XCTAssertEqual(acquisitions?.count, 1)
+        XCTAssertEqual(acquisitions?.first?.shoppingItemID, row.id)
+        XCTAssertEqual(acquisitions?.first?.amount, Double(row.purchaseQuantity))
     }
 
     private func phase4Recipe(

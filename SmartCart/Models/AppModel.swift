@@ -757,19 +757,23 @@ final class AppModel {
         )
     }
 
-    private var editableResolutionActionsAreComplete: Bool {
-        let itemsByIngredientID = Dictionary(grouping: shoppingItems, by: { $0.ingredient.id })
+    var editableResolutionActionsAreComplete: Bool {
+        let representedIngredientIDs = shoppingItems.flatMap { item in
+            item.purchaseGroup?.contributions.map(\.sourceIngredientID) ?? [item.ingredient.id]
+        }
+        let representationCounts = Dictionary(
+            representedIngredientIDs.map { ($0, 1) },
+            uniquingKeysWith: +
+        )
         return effectiveIngredientResolutions.allSatisfy { resolution in
-            let items = itemsByIngredientID[resolution.id] ?? []
+            let count = representationCounts[resolution.id] ?? 0
             switch resolution.resolution {
-            case .exactProduct(let product), .searchFallback(let product):
-                return items.count == 1 &&
-                    items[0].status != .skipped &&
-                    items[0].product.id == product.id
+            case .exactProduct, .searchFallback:
+                return count == 1
             case .unresolved:
-                return items.isEmpty
+                return count == 0
             case .userExcluded:
-                return items.isEmpty || (items.count == 1 && items[0].status == .skipped)
+                return count == 0
             }
         }
     }
@@ -2236,6 +2240,10 @@ final class AppModel {
             showToast("Keep at least one shopping item before continuing")
             return false
         }
+        guard shoppingItems.allSatisfy({ $0.purchaseQuantity > 0 }) else {
+            showToast("Confirm a package quantity before continuing")
+            return false
+        }
         selectedTab = .home
         if homePath.last != .shoppingTrip {
             homePath.append(.shoppingTrip)
@@ -2244,18 +2252,42 @@ final class AppModel {
     }
 
     func updatePurchaseQuantity(for itemID: UUID, delta: Int) {
-        guard !activeShoppingSessionIsImmutable else {
-            showToast("Completed trips are read-only. Edit as a new trip instead.")
+        guard activeShoppingSessionID == nil else {
+            showToast("Started trips keep their original quantities. Edit as a new trip instead.")
             return
         }
         guard let index = shoppingItems.firstIndex(where: { $0.id == itemID }) else { return }
-        shoppingItems[index].purchaseQuantity = max(1, shoppingItems[index].purchaseQuantity + delta)
+        let updated = max(1, shoppingItems[index].purchaseQuantity + delta)
+        shoppingItems[index].purchaseQuantity = updated
+        if var group = shoppingItems[index].purchaseGroup,
+           var plan = group.packagePlan {
+            plan.packageCount = updated
+            if let packageSize = plan.packageSize,
+               let acquired = CanonicalQuantity(
+                   value: packageSize.value * Decimal(updated),
+                   dimension: packageSize.dimension,
+                   certainty: plan.certainty
+               ) {
+                plan.acquiredQuantity = acquired
+                if let required = plan.requiredQuantity,
+                   acquired.dimension == required.dimension,
+                   acquired.value >= required.value {
+                    plan.overage = CanonicalQuantity(
+                        value: acquired.value - required.value,
+                        dimension: acquired.dimension,
+                        certainty: plan.certainty
+                    )
+                }
+            }
+            group.packagePlan = plan
+            shoppingItems[index].purchaseGroup = group
+        }
     }
 
     @discardableResult
     func selectAlternative(itemID: UUID, candidateID: UUID) -> Bool {
         guard persistenceReady,
-            !activeShoppingSessionIsImmutable,
+            activeShoppingSessionID == nil,
             let itemIndex = shoppingItems.firstIndex(where: { $0.id == itemID }),
             let candidateIndex = shoppingItems[itemIndex].alternatives.firstIndex(where: { $0.id == candidateID })
         else { return false }
@@ -2306,6 +2338,10 @@ final class AppModel {
             for: shoppingItems[itemIndex].ingredient.name,
             retailerID: replacement.retailerID
         )] = replacement.retailerProductID
+        shoppingItems = groupedShoppingItems(
+            resolutions: ingredientResolutions,
+            sourceItems: shoppingItems
+        )
         track(.productReplaced, properties: ["link_kind": replacement.linkKind.rawValue])
         if let manifestProgress {
             persistCurrentManifest(progress: manifestProgress)
@@ -2625,7 +2661,8 @@ final class AppModel {
                 storeID: store.id,
                 status: line.status,
                 matchScore: 0,
-                selectionReasons: ["Restored from saved list"]
+                selectionReasons: ["Restored from saved list"],
+                purchaseGroup: line.purchaseGroup
             )
         }
         guidedIndex = shoppingItems.firstIndex(where: { !$0.status.isCompleted }) ?? 0
@@ -3113,7 +3150,9 @@ final class AppModel {
                 into: &updatedPantry
             )
             touchedPantryIDs.insert(pantryID)
-            let sources = session.mealPrepSnapshot?.lines.first {
+            let sources = item.purchaseGroup?.contributions.flatMap {
+                $0.sourceContributions ?? []
+            } ?? session.mealPrepSnapshot?.lines.first {
                 $0.shoppingItemID == item.ingredient.id ||
                     $0.sources.first?.ingredient.id == item.ingredient.id
             }?.sources ?? []
@@ -3121,7 +3160,7 @@ final class AppModel {
                 PantryAcquisition(
                     shoppingItemID: item.id,
                     pantryItemID: pantryID,
-                    amount: substitution?.replacementAmount ?? Double(max(1, item.purchaseQuantity)),
+                    amount: substitution?.replacementAmount ?? Double(item.purchaseQuantity),
                     sourceContributions: sources
                 )
             )
@@ -3432,7 +3471,17 @@ final class AppModel {
         let itemState = items
             .sorted { $0.id.uuidString < $1.id.uuidString }
             .map { item in
-                [
+                let groupState = item.purchaseGroup?.contributions.map { contribution in
+                    [
+                        contribution.sourceRecipeID?.uuidString ?? "",
+                        contribution.sourceIngredientID.uuidString,
+                        contribution.originalDisplayQuantity,
+                        contribution.canonicalRequiredQuantity.map {
+                            "\($0.dimension.rawValue):\($0.value):\($0.certainty.rawValue)"
+                        } ?? "unknown"
+                    ].joined(separator: ":")
+                }.joined(separator: ",") ?? "legacy-singleton"
+                return [
                     item.id.uuidString,
                     item.requestedQuantity,
                     String(item.purchaseQuantity),
@@ -3440,7 +3489,8 @@ final class AppModel {
                     item.product.retailerProductID,
                     item.product.gtin ?? "",
                     item.product.packageQuantity.map { String($0.bitPattern) } ?? "",
-                    item.product.packageUnit ?? ""
+                    item.product.packageUnit ?? "",
+                    groupState
                 ].joined(separator: "|")
             }
             .joined(separator: "\n")
@@ -4118,7 +4168,10 @@ final class AppModel {
                     purchaseQuantity: $0.purchaseQuantity,
                     product: $0.product,
                     status: $0.status,
-                    sourceContributions: currentMealPrepSources(for: $0.ingredient.id)
+                    sourceContributions: $0.purchaseGroup?.contributions.flatMap {
+                        $0.sourceContributions ?? []
+                    } ?? currentMealPrepSources(for: $0.ingredient.id),
+                    purchaseGroup: $0.purchaseGroup
                 )
             },
             createdAt: existing?.createdAt ?? .now,
@@ -4313,7 +4366,135 @@ final class AppModel {
                 resolution: .unresolved(.invalidCandidateData)
             )
         }
-        return (orderedItems, orderedResolutions)
+        return (
+            groupedShoppingItems(
+                resolutions: orderedResolutions,
+                sourceItems: orderedItems
+            ),
+            orderedResolutions
+        )
+    }
+
+    private func groupedShoppingItems(
+        resolutions: [IngredientResolution],
+        sourceItems: [ShoppingListItem]
+    ) -> [ShoppingListItem] {
+        let candidates = resolutions.compactMap { resolution -> ProductPurchaseCandidate? in
+            guard resolution.resolution.product != nil,
+                  let item = sourceShoppingItem(
+                      for: resolution,
+                      in: sourceItems
+                  )
+            else { return nil }
+            let priorContribution = sourceItems
+                .compactMap(\.purchaseGroup)
+                .flatMap(\.contributions)
+                .first { $0.sourceIngredientID == resolution.id }
+            let provenance = priorContribution?.sourceContributions ??
+                currentMealPrepSources(for: resolution.id)
+            return ProductPurchaseCandidate(
+                lineID: resolution.id,
+                sourceRecipeID: provenance.first?.recipeID ?? activeRecipe.id,
+                ingredientResolution: resolution,
+                originalDisplayQuantity: item.requestedQuantity,
+                canonicalRequiredQuantity: priorContribution?.canonicalRequiredQuantity ?? canonicalQuantity(
+                    value: item.requestedAmount ?? resolution.ingredient.quantity,
+                    unit: resolution.ingredient.unit
+                ),
+                pantryDeduction: priorContribution?.pantryDeduction ?? pantryDeduction(for: resolution.ingredient),
+                sourceContributions: provenance
+            )
+        }
+
+        return ProductPurchaseGroupingService.group(candidates).compactMap { group in
+            guard let anchorContribution = group.contributions.first else { return nil }
+            guard var item = sourceShoppingItem(
+                for: anchorContribution.sourceIngredientID,
+                in: sourceItems,
+                resolutions: resolutions
+            ) else { return nil }
+            item.product = group.representativeProduct
+            item.purchaseQuantity = group.packagePlan?.packageCount ?? 0
+            item.purchaseGroup = group
+            return item
+        }
+    }
+
+    private func sourceShoppingItem(
+        for resolution: IngredientResolution,
+        in items: [ShoppingListItem]
+    ) -> ShoppingListItem? {
+        sourceShoppingItem(
+            for: resolution.id,
+            in: items,
+            resolutions: [resolution]
+        )
+    }
+
+    private func sourceShoppingItem(
+        for ingredientID: UUID,
+        in items: [ShoppingListItem],
+        resolutions: [IngredientResolution]
+    ) -> ShoppingListItem? {
+        if let exact = items.first(where: { $0.ingredient.id == ingredientID }) {
+            return exact
+        }
+        guard let grouped = items.first(where: {
+            $0.purchaseGroup?.contributions.contains {
+                $0.sourceIngredientID == ingredientID
+            } == true
+        }), let contribution = grouped.purchaseGroup?.contributions.first(where: {
+            $0.sourceIngredientID == ingredientID
+        }), let resolution = resolutions.first(where: { $0.id == ingredientID })
+        else { return nil }
+        return ShoppingListItem(
+            id: ingredientID,
+            ingredient: resolution.ingredient,
+            requestedQuantity: contribution.originalDisplayQuantity,
+            requestedAmount: resolution.ingredient.quantity,
+            purchaseQuantity: grouped.purchaseQuantity,
+            product: resolution.resolution.product ?? grouped.product,
+            alternatives: resolution.alternatives,
+            storeID: grouped.storeID,
+            status: grouped.status,
+            matchScore: resolution.matchScore ?? grouped.matchScore,
+            selectionReasons: resolution.selectionReasons,
+            matchingContextFingerprint: grouped.matchingContextFingerprint,
+            matchingInputFingerprint: grouped.matchingInputFingerprint,
+            reviewedMatchingFingerprint: grouped.reviewedMatchingFingerprint
+        )
+    }
+
+    private func canonicalQuantity(value: Double, unit: String) -> CanonicalQuantity? {
+        guard value.isFinite, value >= 0,
+              case .exact(let quantity) = QuantityEngine.canonicalize(
+                  value: Decimal(value),
+                  unit: unit,
+                  certainty: .exact
+              )
+        else { return nil }
+        return quantity
+    }
+
+    private func pantryDeduction(for ingredient: Ingredient) -> CanonicalQuantity? {
+        let required: Double
+        let requested: Double
+        if let line = currentShoppingMealPrepSnapshot?.lines.first(where: {
+            $0.shoppingItemID == ingredient.id ||
+                $0.sources.contains { $0.ingredient.id == ingredient.id }
+        }) {
+            required = line.quantity
+            requested = line.quantityToBuy
+        } else {
+            required = scaledQuantity(for: ingredient)
+            requested = PantryMatchingService.quantityToBuy(
+                for: ingredient,
+                requiredQuantity: required
+            )
+        }
+        let deducted = max(0, required - requested)
+        guard deducted > 0 else { return nil }
+        return canonicalQuantity(value: deducted, unit: ingredient.unit)
     }
 
     private func preferredResolution(

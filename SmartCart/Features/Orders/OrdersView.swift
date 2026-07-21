@@ -496,7 +496,7 @@ private struct AllPreparedProductsSheet: View {
                     ForEach(appModel.shoppingItems) { item in
                         ShoppingProductRow(
                             item: item,
-                            isReadOnly: appModel.activeShoppingSessionIsImmutable
+                            isReadOnly: appModel.activeShoppingSessionID != nil
                         )
                     }
                 }
@@ -549,7 +549,7 @@ struct ShoppingListReviewView: View {
                     ForEach(appModel.shoppingItems) { item in
                         ShoppingProductRow(
                             item: item,
-                            isReadOnly: appModel.activeShoppingSessionIsImmutable
+                            isReadOnly: appModel.activeShoppingSessionID != nil
                         )
                     }
                 }
@@ -818,6 +818,11 @@ private struct ShoppingProductRow: View {
                     Text("Recipe needs \(item.requestedQuantity)")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(SmartCartTheme.secondaryInk)
+                    if let groupedSummary {
+                        Text(groupedSummary)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(SmartCartTheme.green)
+                    }
                     if item.product.variableWeight {
                         Text("Final weight may vary")
                             .font(.caption2)
@@ -853,17 +858,17 @@ private struct ShoppingProductRow: View {
                     Text(isReadOnly ? "FROZEN QTY" : "PLANNED QTY")
                         .smartEyebrow(SmartCartTheme.mutedInk)
                     if isReadOnly {
-                        Text("\(item.purchaseQuantity)")
+                        Text(quantityLabel)
                             .font(.caption.bold())
                             .frame(minWidth: 12)
                             .accessibilityLabel("Frozen quantity")
-                            .accessibilityValue("\(item.purchaseQuantity) packages")
+                            .accessibilityValue(quantityLabel)
                     } else {
                         HStack(spacing: 8) {
                             quantityButton("minus", delta: -1)
-                            Text("\(item.purchaseQuantity)")
+                            Text(quantityLabel)
                                 .font(.caption.bold())
-                                .frame(minWidth: 12)
+                                .frame(minWidth: 12, maxWidth: 64)
                             quantityButton("plus", delta: 1)
                         }
                     }
@@ -888,6 +893,28 @@ private struct ShoppingProductRow: View {
             ? candidate.price.formatted(.currency(code: "USD"))
             : "price unavailable"
         return "\(candidate.brand) \(candidate.name) · \(price)"
+    }
+
+    private var quantityLabel: String {
+        item.purchaseQuantity > 0 ? String(item.purchaseQuantity) : "Confirm"
+    }
+
+    private var groupedSummary: String? {
+        guard let group = item.purchaseGroup,
+              group.contributions.count > 1 else { return nil }
+        let titles = group.contributions
+            .flatMap { $0.sourceContributions ?? [] }
+            .map(\.recipeTitle)
+            .reduce(into: [String]()) { result, title in
+                if !result.contains(title) { result.append(title) }
+            }
+        let sourceText = titles.isEmpty
+            ? appModel.currentShoppingTitle
+            : titles.joined(separator: " + ")
+        let packageText = item.purchaseQuantity > 0
+            ? "\(item.purchaseQuantity) package\(item.purchaseQuantity == 1 ? "" : "s")"
+            : "Confirm packages"
+        return "\(packageText) · \(sourceText)"
     }
 
     private func quantityButton(_ symbol: String, delta: Int) -> some View {

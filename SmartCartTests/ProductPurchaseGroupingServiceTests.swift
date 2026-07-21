@@ -42,6 +42,30 @@ final class ProductPurchaseGroupingServiceTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(groups.first?.exactProductIdentity).kind, .gtin)
     }
 
+    func testSharedCanonicalGTINGroupsEvenWhenRetailerProductIDsDiffer() {
+        let first = makeProduct(
+            productID: "sku-a",
+            gtin: "036000291452",
+            pathID: "1"
+        )
+        let second = makeProduct(
+            productID: "sku-b",
+            gtin: "00036000291452",
+            pathID: "2"
+        )
+
+        let groups = ProductPurchaseGroupingService.group([
+            candidate(line: 1, ingredient: 11, product: first),
+            candidate(line: 2, ingredient: 12, product: second)
+        ])
+
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertEqual(groups.first?.contributions.count, 2)
+        XCTAssertTrue(groups.first?.exactProductIdentityEvidence?.contains {
+            $0.kind == .gtin && $0.normalizedValue == "00036000291452"
+        } == true)
+    }
+
     func testThreeRecipesPreserveOrderedProvenance() {
         let product = makeProduct(productID: "shared-sku")
         let groups = ProductPurchaseGroupingService.group([
@@ -74,7 +98,7 @@ final class ProductPurchaseGroupingServiceTests: XCTestCase {
     }
 
     func testCompatibleMassQuantitiesSumAndPreservePantryDeductions() throws {
-        let product = makeProduct(productID: "mass")
+        let product = makeProduct(productID: "mass", packageQuantity: 100, packageUnit: "g")
         let fifty = try quantity(50, .mass)
         let hundred = try quantity(100, .mass)
         let pantry = try quantity(10, .mass)
@@ -87,11 +111,13 @@ final class ProductPurchaseGroupingServiceTests: XCTestCase {
         XCTAssertEqual(groups.first?.packagePlan?.requiredQuantity?.value, 150)
         XCTAssertEqual(groups.first?.packagePlan?.requiredQuantity?.dimension, .mass)
         XCTAssertEqual(groups.first?.contributions.first?.pantryDeduction, pantry)
-        XCTAssertNil(groups.first?.packagePlan?.packageCount)
+        XCTAssertEqual(groups.first?.packagePlan?.packageCount, 2)
+        XCTAssertEqual(groups.first?.packagePlan?.acquiredQuantity?.value, 200)
+        XCTAssertEqual(groups.first?.packagePlan?.overage?.value, 50)
     }
 
     func testCompatibleVolumeQuantitiesSum() throws {
-        let product = makeProduct(productID: "volume")
+        let product = makeProduct(productID: "volume", packageQuantity: 500, packageUnit: "ml")
         let groups = ProductPurchaseGroupingService.group([
             candidate(line: 1, ingredient: 11, product: product, canonical: try quantity(250, .volume)),
             candidate(line: 2, ingredient: 12, product: product, canonical: try quantity(500, .volume))
@@ -99,6 +125,8 @@ final class ProductPurchaseGroupingServiceTests: XCTestCase {
 
         XCTAssertEqual(groups.first?.packagePlan?.requiredQuantity?.value, 750)
         XCTAssertEqual(groups.first?.packagePlan?.requiredQuantity?.dimension, .volume)
+        XCTAssertEqual(groups.first?.packagePlan?.packageCount, 2)
+        XCTAssertEqual(groups.first?.packagePlan?.overage?.value, 250)
     }
 
     func testMassAndVolumeRemainInProvenanceWithoutBeingSummed() throws {
@@ -128,6 +156,58 @@ final class ProductPurchaseGroupingServiceTests: XCTestCase {
         XCTAssertEqual(groups.first?.contributions.first?.originalDisplayQuantity, "to taste")
         XCTAssertNil(groups.first?.contributions.first?.canonicalRequiredQuantity)
         XCTAssertNil(groups.first?.packagePlan?.requiredQuantity)
+    }
+
+    func testMissingPackageMetadataNeverDefaultsToOne() throws {
+        let groups = ProductPurchaseGroupingService.group([
+            candidate(
+                line: 1,
+                ingredient: 11,
+                product: makeProduct(productID: "missing"),
+                canonical: try quantity(100, .mass)
+            )
+        ])
+
+        XCTAssertNil(groups.first?.packagePlan?.packageSize)
+        XCTAssertNil(groups.first?.packagePlan?.packageCount)
+        XCTAssertNil(groups.first?.packagePlan?.acquiredQuantity)
+    }
+
+    func testVariableWeightProductRequiresExplicitPackageQuantity() throws {
+        var product = makeProduct(
+            productID: "variable",
+            packageQuantity: 1,
+            packageUnit: "lb"
+        )
+        product.variableWeight = true
+
+        let groups = ProductPurchaseGroupingService.group([
+            candidate(
+                line: 1,
+                ingredient: 11,
+                product: product,
+                canonical: try quantity(453.59237, .mass)
+            )
+        ])
+
+        XCTAssertNil(groups.first?.packagePlan?.packageCount)
+        XCTAssertEqual(groups.first?.packagePlan?.certainty, .unknown)
+    }
+
+    func testSameExactURLGroupsEvenWhenProductIDsAreUnavailable() {
+        let first = makeProduct(productID: "", pathID: "777")
+        let second = makeProduct(productID: "", pathID: "777")
+
+        let groups = ProductPurchaseGroupingService.group([
+            candidate(line: 1, ingredient: 11, product: first),
+            candidate(line: 2, ingredient: 12, product: second)
+        ])
+
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertEqual(groups.first?.contributions.count, 2)
+        XCTAssertTrue(groups.first?.exactProductIdentityEvidence?.contains {
+            $0.kind == .exactURL
+        } == true)
     }
 
     func testPackageOnlyQuantityRemainsPreservedWithoutPackageCount() throws {
@@ -254,13 +334,18 @@ final class ProductPurchaseGroupingServiceTests: XCTestCase {
     private func makeProduct(
         productID: String,
         gtin: String? = nil,
-        pathID: String = "123456789",
+        pathID: String = "",
         retailerID: String = "walmart",
         dataSource: ProductDataSource = .retailerAPI,
         linkKind: RetailerLinkKind = .exactProduct,
-        url: String? = nil
+        url: String? = nil,
+        packageQuantity: Double? = nil,
+        packageUnit: String? = nil
     ) -> RetailerProductRecord {
-        let urlString = url ?? "https://www.\(retailerID).com/ip/product/\(pathID)"
+        let resolvedPathID = pathID.isEmpty ? productID : pathID
+        let urlString = url ?? (resolvedPathID.isEmpty
+            ? "https://www.\(retailerID).com/search?q=unknown"
+            : "https://www.\(retailerID).com/ip/product/\(resolvedPathID)")
         return RetailerProductRecord(
             retailerID: retailerID,
             storeID: "store-1",
@@ -270,6 +355,8 @@ final class ProductPurchaseGroupingServiceTests: XCTestCase {
             brand: "Test Brand",
             exactURL: URL(string: urlString) ?? URL(fileURLWithPath: "/invalid-test-url"),
             packageDescription: "1 package",
+            packageQuantity: packageQuantity,
+            packageUnit: packageUnit,
             unitPriceText: "Price unavailable",
             priceType: .unavailable,
             availability: .inStock,

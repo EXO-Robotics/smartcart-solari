@@ -60,6 +60,45 @@ struct ExactProductIdentity: Codable, Hashable, Sendable {
         )
     }
 
+    /// Every exact identifier the retailer record can prove. Grouping may use
+    /// any shared identifier, while the singular initializer above remains the
+    /// stable preferred identity used by older persisted values.
+    static func all(for product: RetailerProductRecord) -> [ExactProductIdentity] {
+        guard product.linkKind == .exactProduct,
+              product.dataSource != .searchFallback,
+              let retailerID = normalizedRetailerID(product.retailerID)
+        else { return [] }
+
+        var identities: [ExactProductIdentity] = []
+        if let productID = normalizedRetailerProductID(
+            product.retailerProductID,
+            retailerID: retailerID
+        ), let identity = ExactProductIdentity(
+            retailerID: retailerID,
+            kind: .retailerProductID,
+            normalizedValue: productID
+        ) {
+            identities.append(identity)
+        }
+        if let gtin = normalizedGTIN(product.gtin),
+           let identity = ExactProductIdentity(
+               retailerID: retailerID,
+               kind: .gtin,
+               normalizedValue: gtin
+           ) {
+            identities.append(identity)
+        }
+        if let url = normalizedExactURL(product.exactURL, retailerID: retailerID),
+           let identity = ExactProductIdentity(
+               retailerID: retailerID,
+               kind: .exactURL,
+               normalizedValue: url
+           ) {
+            identities.append(identity)
+        }
+        return identities
+    }
+
     init?(
         retailerID: String,
         kind: Kind,

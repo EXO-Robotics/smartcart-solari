@@ -776,6 +776,7 @@ struct ManifestLineItem: Codable, Identifiable, Hashable {
     var product: RetailerProductRecord
     var status: GuidedItemStatus
     var sourceContributions: [CombinedIngredientSource]?
+    var purchaseGroup: ProductPurchaseGroup?
 
     init(
         id: UUID = UUID(),
@@ -786,7 +787,8 @@ struct ManifestLineItem: Codable, Identifiable, Hashable {
         purchaseQuantity: Int,
         product: RetailerProductRecord,
         status: GuidedItemStatus,
-        sourceContributions: [CombinedIngredientSource] = []
+        sourceContributions: [CombinedIngredientSource] = [],
+        purchaseGroup: ProductPurchaseGroup? = nil
     ) {
         self.id = id
         self.ingredientID = ingredientID
@@ -797,6 +799,7 @@ struct ManifestLineItem: Codable, Identifiable, Hashable {
         self.product = product
         self.status = status
         self.sourceContributions = sourceContributions
+        self.purchaseGroup = purchaseGroup
     }
 }
 

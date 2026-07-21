@@ -10,6 +10,7 @@ struct ProductPurchaseCandidate: Hashable, Codable {
     let originalDisplayQuantity: String
     let canonicalRequiredQuantity: CanonicalQuantity?
     let pantryDeduction: CanonicalQuantity?
+    let sourceContributions: [CombinedIngredientSource]
 
     init(
         lineID: UUID,
@@ -17,7 +18,8 @@ struct ProductPurchaseCandidate: Hashable, Codable {
         ingredientResolution: IngredientResolution,
         originalDisplayQuantity: String,
         canonicalRequiredQuantity: CanonicalQuantity? = nil,
-        pantryDeduction: CanonicalQuantity? = nil
+        pantryDeduction: CanonicalQuantity? = nil,
+        sourceContributions: [CombinedIngredientSource] = []
     ) {
         self.lineID = lineID
         self.sourceRecipeID = sourceRecipeID
@@ -25,6 +27,7 @@ struct ProductPurchaseCandidate: Hashable, Codable {
         self.originalDisplayQuantity = originalDisplayQuantity
         self.canonicalRequiredQuantity = canonicalRequiredQuantity
         self.pantryDeduction = pantryDeduction
+        self.sourceContributions = sourceContributions
     }
 }
 
@@ -37,6 +40,7 @@ struct ProductPurchaseContribution: Hashable, Codable {
     let canonicalRequiredQuantity: CanonicalQuantity?
     let pantryDeduction: CanonicalQuantity?
     let selectedProductIdentity: ExactProductIdentity?
+    var sourceContributions: [CombinedIngredientSource]?
 }
 
 /// Package-plan storage shape only. Slice 1C deliberately performs no package
@@ -90,60 +94,75 @@ struct ProductPurchaseGroup: Identifiable, Hashable, Codable {
     let exactProductIdentity: ExactProductIdentity?
     let representativeProduct: RetailerProductRecord
     let contributions: [ProductPurchaseContribution]
-    let packagePlan: ProductPackagePlan?
+    var packagePlan: ProductPackagePlan?
+    /// All exact identifiers observed across the group. Optional so the
+    /// Slice-1C storage shape remains decodable without migration synthesis.
+    var exactProductIdentityEvidence: [ExactProductIdentity]? = nil
 
     var memberLineIDs: [UUID] { contributions.map(\.lineID) }
 }
 
 enum ProductPurchaseGroupingService {
-    /// Groups only equal preferred exact identities. Search fallbacks and exact
-    /// products without a durable identity remain isolated. Unresolved and
-    /// explicitly excluded demands do not become purchase groups.
+    private struct Member {
+        let candidate: ProductPurchaseCandidate
+        let product: RetailerProductRecord
+        let identity: ExactProductIdentity?
+        let identities: Set<ExactProductIdentity>
+    }
+
+    /// Groups exact products that share a retailer product ID, canonical GTIN,
+    /// or canonical exact-product URL. Search fallbacks and exact products
+    /// without durable identity remain isolated. Unresolved and explicitly
+    /// excluded demands do not become purchase groups.
     static func group(
         _ candidates: [ProductPurchaseCandidate]
     ) -> [ProductPurchaseGroup] {
-        enum GroupKey: Hashable {
-            case exact(ExactProductIdentity)
-            case isolated(Int)
-        }
+        var groupedMembers: [[Member]] = []
 
-        struct Member {
-            let candidate: ProductPurchaseCandidate
+        for candidate in candidates {
             let product: RetailerProductRecord
             let identity: ExactProductIdentity?
-        }
-
-        var orderedKeys: [GroupKey] = []
-        var membersByKey: [GroupKey: [Member]] = [:]
-
-        for (offset, candidate) in candidates.enumerated() {
-            let product: RetailerProductRecord
-            let identity: ExactProductIdentity?
-            let key: GroupKey
+            let identities: Set<ExactProductIdentity>
 
             switch candidate.ingredientResolution.resolution {
             case .exactProduct(let exactProduct):
                 product = exactProduct
                 identity = exactProduct.exactProductIdentity
-                key = identity.map(GroupKey.exact) ?? .isolated(offset)
+                identities = Set(ExactProductIdentity.all(for: exactProduct))
             case .searchFallback(let fallback):
                 product = fallback
                 identity = nil
-                key = .isolated(offset)
+                identities = []
             case .unresolved, .userExcluded:
                 continue
             }
 
-            if membersByKey[key] == nil {
-                orderedKeys.append(key)
-            }
-            membersByKey[key, default: []].append(
-                Member(candidate: candidate, product: product, identity: identity)
+            let member = Member(
+                candidate: candidate,
+                product: product,
+                identity: identity,
+                identities: identities
             )
+            guard !identities.isEmpty else {
+                groupedMembers.append([member])
+                continue
+            }
+
+            let matchingIndices = groupedMembers.indices.filter { groupIndex in
+                groupedMembers[groupIndex].contains { !$0.identities.isDisjoint(with: identities) }
+            }
+            guard let firstMatchingIndex = matchingIndices.first else {
+                groupedMembers.append([member])
+                continue
+            }
+            groupedMembers[firstMatchingIndex].append(member)
+            for mergeIndex in matchingIndices.dropFirst().reversed() {
+                groupedMembers[firstMatchingIndex].append(contentsOf: groupedMembers.remove(at: mergeIndex))
+            }
         }
 
-        return orderedKeys.compactMap { key in
-            guard let members = membersByKey[key], let first = members.first else {
+        return groupedMembers.compactMap { members in
+            guard let first = members.first else {
                 return nil
             }
             let contributions = members.map { member in
@@ -154,24 +173,104 @@ enum ProductPurchaseGroupingService {
                     originalDisplayQuantity: member.candidate.originalDisplayQuantity,
                     canonicalRequiredQuantity: member.candidate.canonicalRequiredQuantity,
                     pantryDeduction: member.candidate.pantryDeduction,
-                    selectedProductIdentity: member.identity
+                    selectedProductIdentity: member.identity,
+                    sourceContributions: member.candidate.sourceContributions
                 )
             }
             let requiredQuantity = combinedRequiredQuantity(
                 contributions.map(\.canonicalRequiredQuantity)
             )
-            let packagePlan = ProductPackagePlan(
-                requiredQuantity: requiredQuantity,
-                certainty: requiredQuantity?.certainty ?? .unknown
+            let packagePlan = packagePlan(
+                members: members,
+                requiredQuantity: requiredQuantity
             )
+            let evidence = Array(Set(members.flatMap(\.identities))).sorted {
+                if $0.kind != $1.kind { return $0.kind.rawValue < $1.kind.rawValue }
+                return $0.normalizedValue < $1.normalizedValue
+            }
             return ProductPurchaseGroup(
                 id: first.candidate.lineID,
                 exactProductIdentity: first.identity,
                 representativeProduct: first.product,
                 contributions: contributions,
-                packagePlan: packagePlan
+                packagePlan: packagePlan,
+                exactProductIdentityEvidence: evidence.isEmpty ? nil : evidence
             )
         }
+    }
+
+    private static func packagePlan(
+        members: [Member],
+        requiredQuantity: CanonicalQuantity?
+    ) -> ProductPackagePlan {
+        guard let requiredQuantity else {
+            return ProductPackagePlan(certainty: .unknown)
+        }
+        guard requiredQuantity.certainty == .exact,
+              !members.isEmpty,
+              members.allSatisfy({ !$0.product.variableWeight }),
+              let firstSize = canonicalPackageSize(for: members[0].product),
+              firstSize.certainty == .exact,
+              firstSize.dimension == requiredQuantity.dimension,
+              members.dropFirst().allSatisfy({ canonicalPackageSize(for: $0.product) == firstSize }),
+              firstSize.value > 0
+        else {
+            return ProductPackagePlan(
+                requiredQuantity: requiredQuantity,
+                certainty: .unknown
+            )
+        }
+
+        let rawCount = NSDecimalNumber(decimal: requiredQuantity.value / firstSize.value).doubleValue
+        guard rawCount.isFinite,
+              rawCount >= 0,
+              rawCount <= Double(Int.max)
+        else {
+            return ProductPackagePlan(
+                packageSize: firstSize,
+                requiredQuantity: requiredQuantity,
+                certainty: .unknown
+            )
+        }
+        let count = max(1, Int(ceil(rawCount)))
+        guard let acquired = CanonicalQuantity(
+            value: firstSize.value * Decimal(count),
+            dimension: firstSize.dimension,
+            certainty: .exact
+        ), let overage = CanonicalQuantity(
+            value: acquired.value - requiredQuantity.value,
+            dimension: acquired.dimension,
+            certainty: .exact
+        ) else {
+            return ProductPackagePlan(
+                packageSize: firstSize,
+                requiredQuantity: requiredQuantity,
+                certainty: .unknown
+            )
+        }
+        return ProductPackagePlan(
+            packageSize: firstSize,
+            requiredQuantity: requiredQuantity,
+            packageCount: count,
+            acquiredQuantity: acquired,
+            overage: overage,
+            certainty: .exact
+        )
+    }
+
+    private static func canonicalPackageSize(
+        for product: RetailerProductRecord
+    ) -> CanonicalQuantity? {
+        guard let quantity = product.packageQuantity,
+              quantity.isFinite,
+              quantity > 0
+        else { return nil }
+        guard case .exact(let canonical) = QuantityEngine.canonicalize(
+            value: Decimal(quantity),
+            unit: product.packageUnit,
+            certainty: .exact
+        ) else { return nil }
+        return canonical
     }
 
     private static func combinedRequiredQuantity(

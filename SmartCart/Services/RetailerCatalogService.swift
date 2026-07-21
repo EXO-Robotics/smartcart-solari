@@ -838,7 +838,7 @@ enum PackageMath {
             product: product,
             requestedQuantity: requestedQuantity,
             requestedUnit: requestedUnit
-        ) ?? 1
+        ) ?? 0
     }
 
     static func resolvedPackageCount(
@@ -853,15 +853,16 @@ enum PackageMath {
             packageQuantity > 0,
             requestedQuantity.isFinite,
             requestedQuantity >= 0,
-            let converted = convertedQuantity(
-                requestedQuantity,
-                from: requestedUnit,
-                to: product.packageUnit ?? ""
-            )
+            let requested = exactCanonicalQuantity(requestedQuantity, unit: requestedUnit),
+            let package = exactCanonicalQuantity(packageQuantity, unit: product.packageUnit),
+            requested.dimension == package.dimension,
+            package.value > 0
         else {
             return nil
         }
-        return max(1, Int(ceil(converted / packageQuantity)))
+        let rawCount = NSDecimalNumber(decimal: requested.value / package.value).doubleValue
+        guard rawCount.isFinite, rawCount <= Double(Int.max) else { return nil }
+        return max(1, Int(ceil(rawCount)))
     }
 
     static func isPackageSufficient(
@@ -876,15 +877,38 @@ enum PackageMath {
             packageQuantity > 0,
             requestedQuantity.isFinite,
             requestedQuantity >= 0,
-            let converted = convertedQuantity(
-                requestedQuantity,
-                from: requestedUnit,
-                to: product.packageUnit ?? ""
-            )
+            let requested = exactCanonicalQuantity(requestedQuantity, unit: requestedUnit),
+            let package = exactCanonicalQuantity(packageQuantity, unit: product.packageUnit),
+            requested.dimension == package.dimension
         else {
             return false
         }
-        return packageQuantity >= converted
+        return package.value >= requested.value
+    }
+
+    private static func exactCanonicalQuantity(
+        _ value: Double,
+        unit: String?
+    ) -> CanonicalQuantity? {
+        guard value.isFinite, value >= 0 else { return nil }
+        let normalized = (unit ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        if ["", "clove", "cloves", "lemon", "lemons", "bunch", "bunches"].contains(normalized) {
+            return CanonicalQuantity(
+                value: Decimal(value),
+                dimension: .count,
+                certainty: .exact
+            )
+        }
+        guard
+              case .exact(let quantity) = QuantityEngine.canonicalize(
+                  value: Decimal(value),
+                  unit: unit,
+                  certainty: .exact
+              )
+        else { return nil }
+        return quantity
     }
 
     private enum QuantityDomain: Equatable {
