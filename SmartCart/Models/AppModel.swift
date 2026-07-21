@@ -210,6 +210,8 @@ final class AppModel {
     @ObservationIgnored
     private let commerceDefaults: UserDefaults
     @ObservationIgnored
+    private let operationObserver: any LocalOperationObserving
+    @ObservationIgnored
     private var persistenceReady = false
     @ObservationIgnored
     private var suppressPersistence = false
@@ -233,6 +235,7 @@ final class AppModel {
         retailerAdapters: [ShoppingRetailer: any RetailerGuideAdapter]? = nil,
         instacartHandoffService: any InstacartHandoffServicing = InstacartHandoffClient(),
         commerceDefaults: UserDefaults = .standard,
+        operationObserver: any LocalOperationObserving = AsyncLocalOperationObserver.shared,
         seedDemoShoppingState: Bool = false
     ) {
         var availableAdapters: [ShoppingRetailer: any RetailerGuideAdapter] = [
@@ -294,6 +297,7 @@ final class AppModel {
         retailerMatchingBatchService = RetailerMatchingBatchService()
         self.instacartHandoffService = instacartHandoffService
         self.commerceDefaults = commerceDefaults
+        self.operationObserver = operationObserver
 
         selectedRetailer = initialRetailer
         retailerSetupCompletedIDs = Set(
@@ -1024,11 +1028,26 @@ final class AppModel {
 
     @discardableResult
     func beginRecipe(_ recipe: Recipe) -> Bool {
+        let operationToken = operationObserver.start(
+            .recipeImport,
+            importMethod: localOperationImportMethod(for: recipe.source),
+            retailer: nil
+        )
         guard persistenceReady else {
+            operationObserver.finish(
+                operationToken,
+                event: .failedUnrecoverably,
+                failureCategory: .persistenceUnavailable
+            )
             showToast("Couldn’t save this change.")
             return false
         }
         guard !recipe.ingredients.isEmpty else {
+            operationObserver.finish(
+                operationToken,
+                event: .requiredDecision,
+                failureCategory: .invalidInput
+            )
             showToast("Add at least one ingredient before continuing")
             return false
         }
@@ -1065,6 +1084,11 @@ final class AppModel {
             // visible. Retrying the same import is idempotent because recipe
             // identity is stable and the coordinator retains the failed graph.
             persistenceIssue = "Couldn’t save this change."
+            operationObserver.finish(
+                operationToken,
+                event: .failedUnrecoverably,
+                failureCategory: .persistenceWriteFailed
+            )
             showToast("Couldn’t save this change.")
             return false
         }
@@ -1079,6 +1103,11 @@ final class AppModel {
                 "source": recipe.source.rawValue,
                 "ingredient_count": String(recipe.ingredients.count)
             ]
+        )
+        operationObserver.finish(
+            operationToken,
+            event: .handledAutomatically,
+            failureCategory: nil
         )
         return true
     }
@@ -2105,6 +2134,14 @@ final class AppModel {
     @discardableResult
     func startMatching(force: Bool = false) async -> Bool {
         prepareRetailerSafariWorkflow()
+        let operationToken = operationObserver.start(
+            .productMatching,
+            importMethod: nil,
+            retailer: localOperationRetailer
+        )
+        if force {
+            operationObserver.recordRetry(operationToken, failureCategory: .noResult)
+        }
         let generation = advanceMatchingGeneration()
         let publicationGeneration = retailerMatchingGeneration
         let retryOnlyUnresolved = force &&
@@ -2136,6 +2173,11 @@ final class AppModel {
                 generation: publicationGeneration
             )
         } catch is CancellationError {
+            operationObserver.finish(
+                operationToken,
+                event: .abandoned,
+                failureCategory: .cancelledByUser
+            )
             if generation == matchingGeneration {
                 isMatching = false
                 matchProgress = 0
@@ -2143,6 +2185,11 @@ final class AppModel {
             }
             return false
         } catch {
+            operationObserver.finish(
+                operationToken,
+                event: .failedUnrecoverably,
+                failureCategory: .serviceUnavailable
+            )
             if generation == matchingGeneration {
                 isMatching = false
                 matchProgress = 0
@@ -2154,13 +2201,25 @@ final class AppModel {
         guard !Task.isCancelled,
               generation == matchingGeneration,
               publicationGeneration == retailerMatchingGeneration
-        else { return false }
+        else {
+            operationObserver.finish(
+                operationToken,
+                event: .abandoned,
+                failureCategory: Task.isCancelled ? .cancelledByUser : .superseded
+            )
+            return false
+        }
 
         let validation = ShoppingResolutionService.validate(
             includedIngredients: ingredientsToBuy,
             resolutions: matchedPlan.resolutions
         )
         guard validation.hasExactlyOneResolutionPerIngredient else {
+            operationObserver.finish(
+                operationToken,
+                event: .failedUnrecoverably,
+                failureCategory: .invariantViolation
+            )
             isMatching = false
             matchProgress = 0
             matchStage = "Products could not be prepared"
@@ -2186,6 +2245,11 @@ final class AppModel {
             isMatching = false
             matchProgress = 0
             matchStage = "Products could not be saved"
+            operationObserver.finish(
+                operationToken,
+                event: .failedUnrecoverably,
+                failureCategory: .persistenceWriteFailed
+            )
             showToast("Products could not be saved. Try matching again.")
             return false
         }
@@ -2207,6 +2271,11 @@ final class AppModel {
                 "unresolved": String(unresolvedIngredientResolutions.count),
                 "retailer": selectedRetailer.rawValue
             ]
+        )
+        operationObserver.finish(
+            operationToken,
+            event: hasUnresolvedMatchingWork ? .requiredDecision : .handledAutomatically,
+            failureCategory: hasUnresolvedMatchingWork ? .ambiguousResult : nil
         )
         return true
     }
@@ -5177,7 +5246,17 @@ final class AppModel {
     @discardableResult
     func undoPendingDomainAction() async -> Bool {
         guard let pendingDomainUndo else { return false }
+        let operationToken = operationObserver.start(
+            .statePersistence,
+            importMethod: nil,
+            retailer: nil
+        )
         guard persistenceCoordinator.latestDurableRevision == pendingDomainUndo.committedRevision else {
+            operationObserver.finish(
+                operationToken,
+                event: .abandoned,
+                failureCategory: .superseded
+            )
             clearPendingDomainUndo()
             showToast("Undo is no longer available")
             return false
@@ -5189,6 +5268,11 @@ final class AppModel {
             recentRecipeRecords = pendingDomainUndo.priorRecentRecipeRecords
             persistenceIssue = nil
             clearPendingDomainUndo()
+            operationObserver.finish(
+                operationToken,
+                event: .recovered,
+                failureCategory: nil
+            )
             return true
         } catch {
             persistenceIssue = error.localizedDescription
@@ -5196,6 +5280,11 @@ final class AppModel {
                 id: pendingDomainUndo.id,
                 message: "Couldn’t restore this change.",
                 actionTitle: "Retry"
+            )
+            operationObserver.finish(
+                operationToken,
+                event: .requiredDecision,
+                failureCategory: .persistenceWriteFailed
             )
             showToast("Couldn’t save this change.")
             return false
@@ -5258,6 +5347,29 @@ final class AppModel {
         mealPrepPlan = state.mealPrepPlan
         savedRecipeIDs = state.savedRecipeIDs ?? Set(state.recipes.map(\.id))
         suppressPersistence = false
+    }
+
+    func recoverStaleOperationObservations() {
+        operationObserver.recoverStaleInFlightOperations()
+    }
+
+    private var localOperationRetailer: LocalOperationRetailer {
+        switch selectedRetailer {
+        case .walmart: .walmart
+        case .target: .target
+        case .kroger: .kroger
+        }
+    }
+
+    private func localOperationImportMethod(
+        for source: RecipeSource
+    ) -> LocalOperationImportMethod {
+        switch source {
+        case .photo: .photoLibrary
+        case .link, .pinterest: .recipeLink
+        case .text: .pastedText
+        case .sample: .sample
+        }
     }
 
     private func persistLibraryMutation(

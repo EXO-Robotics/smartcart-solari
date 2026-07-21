@@ -59,6 +59,8 @@
 		A2000000000000000000000A /* ProductPurchaseGroupingServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000000000000000000000B /* ProductPurchaseGroupingServiceTests.swift */; };
 		A2000000000000000000000C /* SmartCartPersistenceCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000000000000000000000D /* SmartCartPersistenceCoordinatorTests.swift */; };
 		A8B000000000000000000001 /* RecipeLinkCapabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8B000000000000000000001 /* RecipeLinkCapabilityTests.swift */; };
+		A9B000000000000000000001 /* LocalOperationRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9B000000000000000000001 /* LocalOperationRecorder.swift */; };
+		A9B000000000000000000002 /* LocalOperationRecorderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9B000000000000000000002 /* LocalOperationRecorderTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -128,6 +130,8 @@
 		B2000000000000000000000B /* ProductPurchaseGroupingServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductPurchaseGroupingServiceTests.swift; sourceTree = "<group>"; };
 		B2000000000000000000000D /* SmartCartPersistenceCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartCartPersistenceCoordinatorTests.swift; sourceTree = "<group>"; };
 		B8B000000000000000000001 /* RecipeLinkCapabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeLinkCapabilityTests.swift; sourceTree = "<group>"; };
+		B9B000000000000000000001 /* LocalOperationRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalOperationRecorder.swift; sourceTree = "<group>"; };
+		B9B000000000000000000002 /* LocalOperationRecorderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalOperationRecorderTests.swift; sourceTree = "<group>"; };
 		B30000000000000000000001 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
 		B30000000000000000000002 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		B30000000000000000000003 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
@@ -279,6 +283,7 @@
 				B10000000000000000000023 /* ExactProductIdentity.swift */,
 				B10000000000000000000027 /* ProductPurchaseGroupingService.swift */,
 				B10000000000000000000028 /* SmartCartPersistenceCoordinator.swift */,
+				B9B000000000000000000001 /* LocalOperationRecorder.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -324,6 +329,7 @@
 				B2000000000000000000000B /* ProductPurchaseGroupingServiceTests.swift */,
 				B2000000000000000000000D /* SmartCartPersistenceCoordinatorTests.swift */,
 				B8B000000000000000000001 /* RecipeLinkCapabilityTests.swift */,
+				B9B000000000000000000002 /* LocalOperationRecorderTests.swift */,
 			);
 			path = SmartCartTests;
 			sourceTree = "<group>";
@@ -470,6 +476,7 @@
 				A10000000000000000000022 /* ExactProductIdentity.swift in Sources */,
 				A10000000000000000000026 /* ProductPurchaseGroupingService.swift in Sources */,
 				A10000000000000000000027 /* SmartCartPersistenceCoordinator.swift in Sources */,
+				A9B000000000000000000001 /* LocalOperationRecorder.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -490,6 +497,7 @@
 				A2000000000000000000000A /* ProductPurchaseGroupingServiceTests.swift in Sources */,
 				A2000000000000000000000C /* SmartCartPersistenceCoordinatorTests.swift in Sources */,
 				A8B000000000000000000001 /* RecipeLinkCapabilityTests.swift in Sources */,
+				A9B000000000000000000002 /* LocalOperationRecorderTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

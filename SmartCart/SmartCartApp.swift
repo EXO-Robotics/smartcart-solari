@@ -30,7 +30,7 @@ struct SmartCartApp: App {
                             lease.end()
                         }
                     case .active:
-                        break
+                        appModel.recoverStaleOperationObservations()
                     @unknown default:
                         appModel.requestLifecyclePersistenceFlush()
                     }
