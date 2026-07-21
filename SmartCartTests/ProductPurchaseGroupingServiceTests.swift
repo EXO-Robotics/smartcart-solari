@@ -116,6 +116,38 @@ final class ProductPurchaseGroupingServiceTests: XCTestCase {
         XCTAssertEqual(groups.first?.packagePlan?.overage?.value, 50)
     }
 
+    func testSameEightOunceProductRecalculatesPackagePlanWhenRequirementChanges() throws {
+        let product = makeProduct(productID: "eight-ounce", packageQuantity: 8, packageUnit: "oz")
+        let onePackage = ProductPurchaseGroupingService.group([
+            candidate(
+                line: 1,
+                ingredient: 11,
+                product: product,
+                canonical: try XCTUnwrap(
+                    QuantityEngine.canonicalize(value: 8, unit: "oz").quantity
+                )
+            )
+        ])
+        let twoPackages = ProductPurchaseGroupingService.group([
+            candidate(
+                line: 1,
+                ingredient: 11,
+                product: product,
+                canonical: try XCTUnwrap(
+                    QuantityEngine.canonicalize(value: 16, unit: "oz").quantity
+                )
+            )
+        ])
+
+        XCTAssertEqual(onePackage.first?.packagePlan?.packageCount, 1)
+        XCTAssertEqual(twoPackages.first?.packagePlan?.packageCount, 2)
+        XCTAssertEqual(twoPackages.first?.packagePlan?.acquiredQuantity?.dimension, .mass)
+        XCTAssertEqual(twoPackages.first?.packagePlan?.overage?.value, 0)
+        XCTAssertEqual(onePackage.first?.exactProductIdentity, twoPackages.first?.exactProductIdentity)
+        XCTAssertEqual(onePackage.first?.contributions.map(\.sourceIngredientID), [uuid(11)])
+        XCTAssertEqual(twoPackages.first?.contributions.map(\.sourceIngredientID), [uuid(11)])
+    }
+
     func testCompatibleVolumeQuantitiesSum() throws {
         let product = makeProduct(productID: "volume", packageQuantity: 500, packageUnit: "ml")
         let groups = ProductPurchaseGroupingService.group([

@@ -758,9 +758,11 @@ final class AppModel {
     }
 
     var editableResolutionActionsAreComplete: Bool {
-        let representedIngredientIDs = shoppingItems.flatMap { item in
-            item.purchaseGroup?.contributions.map(\.sourceIngredientID) ?? [item.ingredient.id]
-        }
+        let representedIngredientIDs = shoppingItems
+            .filter { $0.status != .skipped }
+            .flatMap { item in
+                item.purchaseGroup?.contributions.map(\.sourceIngredientID) ?? [item.ingredient.id]
+            }
         let representationCounts = Dictionary(
             representedIngredientIDs.map { ($0, 1) },
             uniquingKeysWith: +
@@ -2035,7 +2037,8 @@ final class AppModel {
         retainOnlyStore(primaryStore.id, for: selectedRetailer)
     }
 
-    func startMatching(force: Bool = false) async {
+    @discardableResult
+    func startMatching(force: Bool = false) async -> Bool {
         prepareRetailerSafariWorkflow()
         let generation = advanceMatchingGeneration()
         let publicationGeneration = retailerMatchingGeneration
@@ -2073,7 +2076,7 @@ final class AppModel {
                 matchProgress = 0
                 matchStage = "Ready to match"
             }
-            return
+            return false
         } catch {
             if generation == matchingGeneration {
                 isMatching = false
@@ -2081,12 +2084,12 @@ final class AppModel {
                 matchStage = "Products could not be prepared"
                 showToast("Products could not be prepared. Try again.")
             }
-            return
+            return false
         }
         guard !Task.isCancelled,
               generation == matchingGeneration,
               publicationGeneration == retailerMatchingGeneration
-        else { return }
+        else { return false }
 
         let validation = ShoppingResolutionService.validate(
             includedIngredients: ingredientsToBuy,
@@ -2097,7 +2100,7 @@ final class AppModel {
             matchProgress = 0
             matchStage = "Products could not be prepared"
             showToast("Products could not be prepared safely. Try again.")
-            return
+            return false
         }
 
         let originalItems = shoppingItems
@@ -2119,7 +2122,7 @@ final class AppModel {
             matchProgress = 0
             matchStage = "Products could not be saved"
             showToast("Products could not be saved. Try matching again.")
-            return
+            return false
         }
         withAnimation(.easeOut(duration: 0.35)) {
             matchProgress = 1
@@ -2140,6 +2143,7 @@ final class AppModel {
                 "retailer": selectedRetailer.rawValue
             ]
         )
+        return true
     }
 
     @discardableResult
@@ -2279,7 +2283,9 @@ final class AppModel {
             showToast("Keep at least one shopping item before continuing")
             return false
         }
-        guard shoppingItems.allSatisfy({ $0.purchaseQuantity > 0 }) else {
+        guard shoppingItems
+            .filter({ $0.status != .skipped })
+            .allSatisfy({ $0.purchaseQuantity > 0 }) else {
             showToast("Confirm a package quantity before continuing")
             return false
         }
@@ -2324,12 +2330,25 @@ final class AppModel {
     }
 
     @discardableResult
-    func selectAlternative(itemID: UUID, candidateID: UUID) -> Bool {
+    func selectAlternative(
+        itemID: UUID,
+        candidateID: UUID,
+        sessionID expectedSessionID: UUID? = nil
+    ) -> Bool {
         guard persistenceReady,
-            activeShoppingSessionID == nil,
             let itemIndex = shoppingItems.firstIndex(where: { $0.id == itemID }),
             let candidateIndex = shoppingItems[itemIndex].alternatives.firstIndex(where: { $0.id == candidateID })
         else { return false }
+        if let expectedSessionID {
+            guard activeShoppingSessionID == expectedSessionID,
+                  shoppingSessions.contains(where: { $0.id == expectedSessionID && $0.isReusable })
+            else { return false }
+        }
+        if let activeShoppingSessionID {
+            guard shoppingSessions.contains(where: { $0.id == activeShoppingSessionID && $0.isReusable }),
+                  shoppingItems[itemIndex].status == .waiting
+            else { return false }
+        }
         let candidate = shoppingItems[itemIndex].alternatives[candidateIndex]
         guard let replacementPackageCount = resolvedReplacementPackageCount(
             for: shoppingItems[itemIndex],
@@ -2346,6 +2365,9 @@ final class AppModel {
         let originalPreferences = preferredProductIDsByIngredient
         let originalEvents = analyticsEvents
         let manifestProgress = currentSavedManifest?.handoffProgress
+        let originalGuidedIndex = guidedIndex
+        let selectedIngredientIDs = representedIngredientIDs(in: shoppingItems[itemIndex])
+        let currentIngredientIDs = currentGuidedItem.map { representedIngredientIDs(in: $0) } ?? []
         suppressPersistence = true
 
         let previous = shoppingItems[itemIndex].product
@@ -2355,32 +2377,73 @@ final class AppModel {
         shoppingItems[itemIndex].purchaseQuantity = replacementPackageCount
         if activeShoppingSessionID == nil {
             materializeCompatibleIngredientResolutionsIfNeeded()
-            let updated = resolution(
-                ingredient: shoppingItems[itemIndex].ingredient,
+        }
+        for resolutionIndex in ingredientResolutions.indices where
+            selectedIngredientIDs.contains(ingredientResolutions[resolutionIndex].id) {
+            let current = ingredientResolutions[resolutionIndex]
+            ingredientResolutions[resolutionIndex] = resolution(
+                ingredient: current.ingredient,
                 product: replacement,
                 alternatives: shoppingItems[itemIndex].alternatives,
-                matchScore: shoppingItems[itemIndex].matchScore,
-                selectionReasons: shoppingItems[itemIndex].selectionReasons
+                matchScore: current.matchScore ?? shoppingItems[itemIndex].matchScore,
+                selectionReasons: current.selectionReasons
             )
-            if let resolutionIndex = ingredientResolutions.firstIndex(where: { $0.id == itemID }) {
-                ingredientResolutions[resolutionIndex] = updated
-            }
         }
         ensureMatchingFingerprints(at: itemIndex)
         shoppingItems[itemIndex].reviewedMatchingFingerprint = matchingExceptionReasons(
             for: shoppingItems[itemIndex]
         ).isEmpty ? shoppingItems[itemIndex].matchingInputFingerprint : nil
-        if let activeShoppingSessionID {
-            synchronizeCurrentShoppingSessionItems(sessionID: activeShoppingSessionID)
-        }
         preferredProductIDsByIngredient[productPreferenceKey(
             for: shoppingItems[itemIndex].ingredient.name,
             retailerID: replacement.retailerID
         )] = replacement.retailerProductID
-        shoppingItems = groupedShoppingItems(
-            resolutions: ingredientResolutions,
-            sourceItems: shoppingItems
-        )
+        let exactReplacementIdentities = Set(ExactProductIdentity.all(for: replacement))
+        let createsCollision = replacement.isExactProductLink &&
+            !exactReplacementIdentities.isEmpty &&
+            shoppingItems.indices.contains { index in
+            index != itemIndex &&
+                shoppingItems[index].status == .waiting &&
+                shoppingItems[index].product.isExactProductLink &&
+                !Set(ExactProductIdentity.all(for: shoppingItems[index].product))
+                    .isDisjoint(with: exactReplacementIdentities)
+            }
+        let representedIDs = Set(shoppingItems.flatMap { representedIngredientIDs(in: $0) })
+        let hasCompleteResolutionCoverage = representedIDs.isSubset(of: Set(ingredientResolutions.map(\.id)))
+        if hasCompleteResolutionCoverage {
+            if createsCollision {
+                shoppingItems = regroupWaitingShoppingItemsPreservingOutcomes(
+                    resolutions: ingredientResolutions,
+                    sourceItems: shoppingItems
+                )
+            } else {
+                let selectedResolutions = ingredientResolutions.filter {
+                    selectedIngredientIDs.contains($0.id)
+                }
+                let replacementRows = groupedShoppingItems(
+                    resolutions: selectedResolutions,
+                    sourceItems: shoppingItems
+                )
+                if replacementRows.count == 1, var replacementRow = replacementRows.first {
+                    replacementRow.status = shoppingItems[itemIndex].status
+                    shoppingItems[itemIndex] = replacementRow
+                } else {
+                    shoppingItems = regroupWaitingShoppingItemsPreservingOutcomes(
+                        resolutions: ingredientResolutions,
+                        sourceItems: shoppingItems
+                    )
+                }
+            }
+        }
+        if let relocatedIndex = shoppingItems.firstIndex(where: {
+            !representedIngredientIDs(in: $0).isDisjoint(with: currentIngredientIDs)
+        }) {
+            guidedIndex = relocatedIndex
+        } else {
+            guidedIndex = min(originalGuidedIndex, max(0, shoppingItems.count - 1))
+        }
+        if let activeShoppingSessionID {
+            synchronizeCurrentShoppingSessionItems(sessionID: activeShoppingSessionID)
+        }
         track(.productReplaced, properties: ["link_kind": replacement.linkKind.rawValue])
         if let manifestProgress {
             persistCurrentManifest(progress: manifestProgress)
@@ -2398,11 +2461,44 @@ final class AppModel {
             savedLists = originalLists
             preferredProductIDsByIngredient = originalPreferences
             analyticsEvents = originalEvents
+            guidedIndex = originalGuidedIndex
             suppressPersistence = false
             persistenceIssue = error.localizedDescription
             showToast("Product replacement could not be saved")
             return false
         }
+    }
+
+    private func representedIngredientIDs(in item: ShoppingListItem) -> Set<UUID> {
+        Set(item.purchaseGroup?.contributions.map(\.sourceIngredientID) ?? [item.ingredient.id])
+    }
+
+    private func regroupWaitingShoppingItemsPreservingOutcomes(
+        resolutions: [IngredientResolution],
+        sourceItems: [ShoppingListItem]
+    ) -> [ShoppingListItem] {
+        let waitingIDs = Set(sourceItems.filter { $0.status == .waiting }.flatMap {
+            representedIngredientIDs(in: $0)
+        })
+        let regroupedWaiting = groupedShoppingItems(
+            resolutions: resolutions.filter { waitingIDs.contains($0.id) },
+            sourceItems: sourceItems.filter { $0.status == .waiting }
+        )
+        var emittedGroupIDs: Set<UUID> = []
+        var result: [ShoppingListItem] = []
+        for item in sourceItems {
+            guard item.status == .waiting else {
+                result.append(item)
+                continue
+            }
+            let memberIDs = representedIngredientIDs(in: item)
+            guard var regrouped = regroupedWaiting.first(where: {
+                !representedIngredientIDs(in: $0).isDisjoint(with: memberIDs)
+            }), emittedGroupIDs.insert(regrouped.id).inserted else { continue }
+            regrouped.status = .waiting
+            result.append(regrouped)
+        }
+        return result
     }
 
     private func requestedQuantityForShoppingItem(_ item: ShoppingListItem) -> Double {
@@ -4579,7 +4675,7 @@ final class AppModel {
                 sourceRecipeID: provenance.first?.recipeID ?? activeRecipe.id,
                 ingredientResolution: resolution,
                 originalDisplayQuantity: item.requestedQuantity,
-                canonicalRequiredQuantity: priorContribution?.canonicalRequiredQuantity ?? canonicalQuantity(
+                canonicalRequiredQuantity: canonicalQuantity(
                     value: item.requestedAmount ?? resolution.ingredient.quantity,
                     unit: resolution.ingredient.unit
                 ),
@@ -4710,15 +4806,19 @@ final class AppModel {
         itemID: UUID,
         with state: ShoppingResolution
     ) {
-        guard let index = ingredientResolutions.firstIndex(where: { $0.id == itemID }) else { return }
-        let current = ingredientResolutions[index]
-        ingredientResolutions[index] = IngredientResolution(
-            ingredient: current.ingredient,
-            resolution: state,
-            alternatives: current.alternatives,
-            matchScore: current.matchScore,
-            selectionReasons: current.selectionReasons
-        )
+        let representedIDs = shoppingItems
+            .first(where: { $0.id == itemID })
+            .map { representedIngredientIDs(in: $0) } ?? Set([itemID])
+        for index in ingredientResolutions.indices where representedIDs.contains(ingredientResolutions[index].id) {
+            let current = ingredientResolutions[index]
+            ingredientResolutions[index] = IngredientResolution(
+                ingredient: current.ingredient,
+                resolution: state,
+                alternatives: current.alternatives,
+                matchScore: current.matchScore,
+                selectionReasons: current.selectionReasons
+            )
+        }
     }
 
     private func resolution(

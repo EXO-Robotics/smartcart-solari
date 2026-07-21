@@ -660,8 +660,8 @@ struct RecipeReadyView: View {
         defer { isPreparingProducts = false }
 
         guard appModel.beginShoppingFromRecipeReady() else { return }
-        await appModel.startMatching()
-        guard !Task.isCancelled else { return }
+        let published = await appModel.startMatching()
+        guard published, !Task.isCancelled else { return }
 
         if !appModel.hasUnresolvedMatchingWork {
             _ = appModel.continueToShoppingTrip()

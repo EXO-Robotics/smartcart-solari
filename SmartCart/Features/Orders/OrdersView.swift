@@ -70,8 +70,8 @@ struct ProductMatchingView: View {
     private func prepareProducts() async {
         guard !isPreparingProducts else { return }
         isPreparingProducts = true
-        await appModel.startMatching()
-        guard !Task.isCancelled else {
+        let published = await appModel.startMatching()
+        guard published, !Task.isCancelled else {
             isPreparingProducts = false
             return
         }
@@ -126,9 +126,9 @@ struct ProductExceptionReviewSheet: View {
                             guard !isRetryingMatching else { return }
                             isRetryingMatching = true
                             Task { @MainActor in
-                                await appModel.startMatching(force: true)
+                                let published = await appModel.startMatching(force: true)
                                 isRetryingMatching = false
-                                if !appModel.hasUnresolvedMatchingWork {
+                                if published, !appModel.hasUnresolvedMatchingWork {
                                     continueIfResolved()
                                 }
                             }

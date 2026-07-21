@@ -664,8 +664,11 @@ struct RetailerSafariHandoffView: View {
     }
 
     private func replaceCurrentProduct(candidateID: UUID, itemID: UUID, sessionID: UUID) {
-        guard appModel.selectAlternative(itemID: itemID, candidateID: candidateID),
-              let updatedItem = appModel.shoppingItems.first(where: { $0.id == itemID }) else { return }
+        guard appModel.selectAlternative(
+            itemID: itemID,
+            candidateID: candidateID,
+            sessionID: sessionID
+        ), let updatedItem = appModel.currentGuidedItem else { return }
         openProduct(
             updatedItem,
             sessionID: sessionID,
