@@ -4385,11 +4385,22 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(tripSource.contains("Label(\"Check Target\", systemImage: \"magnifyingglass\")"))
         XCTAssertTrue(tripSource.contains("checkedTargetURL = targetSearchURL"))
         XCTAssertTrue(tripSource.contains("url: displayedURL"))
-        XCTAssertTrue(tripSource.contains(".frame(minWidth: 72, minHeight: 48)"))
         XCTAssertTrue(tripSource.contains("retailer-trip-check-target"))
         XCTAssertFalse(tripSource.contains("Button(\"Check Target\", systemImage: \"magnifyingglass\")"))
         XCTAssertTrue(tripSource.contains("VStack(spacing: 6) {\n                        pauseButton\n                        moreMenu"))
         XCTAssertTrue(tripSource.contains("VStack(spacing: 6) {\n                        nextButton\n                        checkTargetButton"))
+        XCTAssertFalse(tripSource.contains("retailerOwnershipLabel"))
+        XCTAssertFalse(tripSource.contains("Shopping stays with"))
+        XCTAssertFalse(tripSource.contains(".frame(minWidth: 72, minHeight: 48)"))
+
+        let moreStart = try XCTUnwrap(tripSource.range(of: "    private var moreMenu")?.lowerBound)
+        let displayedURLStart = try XCTUnwrap(
+            tripSource.range(of: "    private var displayedURL", range: moreStart..<tripSource.endIndex)?.lowerBound
+        )
+        let moreMenuSource = tripSource[moreStart..<displayedURLStart]
+        XCTAssertTrue(moreMenuSource.contains(".font(.caption.bold())"))
+        XCTAssertTrue(moreMenuSource.contains(".frame(minHeight: 38)"))
+        XCTAssertTrue(moreMenuSource.contains(".frame(minHeight: 44)"))
     }
 
     func testHomeUsesActionFirstLayoutAndRecipeImportersAutoPresentMediaTools() throws {

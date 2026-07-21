@@ -65,7 +65,6 @@ struct RetailerSafariHandoffView: View {
                     itemID: itemID,
                     url: url,
                     targetSearchURL: targetSearchURL(for: itemID),
-                    configuration: appModel.retailerConfiguration,
                     position: appModel.guidedIndex + 1,
                     total: appModel.shoppingItems.count,
                     productIdentity: productIdentity(for: itemID),
@@ -772,7 +771,6 @@ private struct RetailerTripSafariSheet: View {
     let itemID: UUID
     let url: URL
     let targetSearchURL: URL
-    let configuration: RetailerGuideConfiguration
     let position: Int
     let total: Int
     let productIdentity: String
@@ -839,8 +837,6 @@ private struct RetailerTripSafariSheet: View {
                         .frame(maxWidth: .infinity)
                     checkTargetButton
                         .frame(maxWidth: .infinity)
-                    retailerOwnershipLabel
-                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             } else {
                 HStack(alignment: .top, spacing: 8) {
@@ -857,8 +853,6 @@ private struct RetailerTripSafariSheet: View {
                         checkTargetButton
                     }
                 }
-                retailerOwnershipLabel
-                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .foregroundStyle(SmartCartTheme.green)
@@ -941,13 +935,6 @@ private struct RetailerTripSafariSheet: View {
         .disabled(!loadState.canRecordVisited)
     }
 
-    private var retailerOwnershipLabel: some View {
-        Label(retailerOwnershipText, systemImage: "lock.shield.fill")
-            .font(.caption2)
-            .foregroundStyle(SmartCartTheme.secondaryInk)
-            .fixedSize(horizontal: false, vertical: true)
-    }
-
     private var checkTargetButton: some View {
         Button {
             checkedTargetURL = targetSearchURL
@@ -1000,32 +987,25 @@ private struct RetailerTripSafariSheet: View {
             .accessibilityIdentifier("retailer-trip-help")
         } label: {
             Label("More", systemImage: "ellipsis.circle")
-                .font(.subheadline.bold())
-                .padding(.horizontal, 12)
-                .frame(minWidth: 72, minHeight: 48)
+                .font(.caption.bold())
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .padding(.horizontal, 10)
+                .frame(minHeight: 38)
                 .background(SmartCartTheme.herbLight)
-                .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
                         .stroke(SmartCartTheme.borderStrong, lineWidth: 1)
                 }
         }
+        .frame(minHeight: 44)
         .accessibilityIdentifier("retailer-trip-more")
         .accessibilityLabel("More actions")
     }
 
     private var displayedURL: URL {
         checkedTargetURL ?? url
-    }
-
-    private var retailerOwnershipText: String {
-        guard checkedTargetURL != nil else {
-            return "Shopping stays with \(configuration.displayName)"
-        }
-        if configuration.retailer == .target {
-            return "Fresh Target search · shopping trip unchanged"
-        }
-        return "Checking Target · trip stays with \(configuration.displayName)"
     }
 
     private var loadFailureView: some View {
