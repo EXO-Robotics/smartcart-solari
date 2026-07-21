@@ -4370,7 +4370,7 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(tripSource.contains(".background(SmartCartTheme.herbLight)"))
     }
 
-    func testRetailerTripMoreMenuIncludesTargetSearchAndLargerTrigger() throws {
+    func testRetailerTripPlacesMoreBelowPauseAndTargetBelowNext() throws {
         let repositoryRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -4381,11 +4381,15 @@ final class SmartCartTests: XCTestCase {
             encoding: .utf8
         )
 
-        XCTAssertTrue(tripSource.contains("Button(\"Check Target\", systemImage: \"magnifyingglass\")"))
+        XCTAssertTrue(tripSource.contains("private var checkTargetButton: some View"))
+        XCTAssertTrue(tripSource.contains("Label(\"Check Target\", systemImage: \"magnifyingglass\")"))
         XCTAssertTrue(tripSource.contains("checkedTargetURL = targetSearchURL"))
         XCTAssertTrue(tripSource.contains("url: displayedURL"))
         XCTAssertTrue(tripSource.contains(".frame(minWidth: 72, minHeight: 48)"))
         XCTAssertTrue(tripSource.contains("retailer-trip-check-target"))
+        XCTAssertFalse(tripSource.contains("Button(\"Check Target\", systemImage: \"magnifyingglass\")"))
+        XCTAssertTrue(tripSource.contains("VStack(spacing: 6) {\n                        pauseButton\n                        moreMenu"))
+        XCTAssertTrue(tripSource.contains("VStack(spacing: 6) {\n                        nextButton\n                        checkTargetButton"))
     }
 
     func testHomeUsesActionFirstLayoutAndRecipeImportersAutoPresentMediaTools() throws {

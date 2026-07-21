@@ -827,36 +827,38 @@ private struct RetailerTripSafariSheet: View {
     }
 
     private var tripBar: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 6) {
             if dynamicTypeSize.isAccessibilitySize {
-                VStack(spacing: 4) {
+                VStack(spacing: 6) {
                     tripPositionLabel
                     pauseButton
                         .frame(maxWidth: .infinity)
+                    moreMenu
+                        .frame(maxWidth: .infinity)
                     nextButton
                         .frame(maxWidth: .infinity)
+                    checkTargetButton
+                        .frame(maxWidth: .infinity)
+                    retailerOwnershipLabel
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             } else {
-                HStack(spacing: 8) {
-                    pauseButton
+                HStack(alignment: .top, spacing: 8) {
+                    VStack(spacing: 6) {
+                        pauseButton
+                        moreMenu
+                    }
                     Spacer(minLength: 4)
                     tripPositionLabel
+                        .padding(.top, 12)
                     Spacer(minLength: 4)
-                    nextButton
+                    VStack(spacing: 6) {
+                        nextButton
+                        checkTargetButton
+                    }
                 }
-            }
-
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: 2) {
-                    retailerOwnershipLabel
-                    moreMenu
-                }
-            } else {
-                HStack {
-                    retailerOwnershipLabel
-                    Spacer(minLength: 8)
-                    moreMenu
-                }
+                retailerOwnershipLabel
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .foregroundStyle(SmartCartTheme.green)
@@ -946,6 +948,28 @@ private struct RetailerTripSafariSheet: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 
+    private var checkTargetButton: some View {
+        Button {
+            checkedTargetURL = targetSearchURL
+            loadState = .loading
+            loadAttempt += 1
+        } label: {
+            Label("Check Target", systemImage: "magnifyingglass")
+                .font(.caption.bold())
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .foregroundStyle(SmartCartTheme.onAccent)
+                .padding(.horizontal, 10)
+                .frame(minHeight: 38)
+                .background(SmartCartTheme.green)
+                .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+        }
+        .buttonStyle(PressableButtonStyle())
+        .frame(minHeight: 44)
+        .accessibilityIdentifier("retailer-trip-check-target")
+        .accessibilityHint("Opens a fresh Target search for this ingredient without changing the shopping trip")
+    }
+
     private var moreMenu: some View {
         Menu {
             Button("Report product unavailable", systemImage: "exclamationmark.triangle.fill", action: onUnavailable)
@@ -965,13 +989,6 @@ private struct RetailerTripSafariSheet: View {
 
             Button("Skip item in SmartCart", systemImage: "forward.fill", action: onSkip)
                 .accessibilityIdentifier("retailer-trip-skip")
-            Button("Check Target", systemImage: "magnifyingglass") {
-                checkedTargetURL = targetSearchURL
-                loadState = .loading
-                loadAttempt += 1
-            }
-            .accessibilityIdentifier("retailer-trip-check-target")
-            .accessibilityHint("Opens a fresh Target search for this ingredient without changing the shopping trip")
             Button("Reload retailer page", systemImage: "arrow.clockwise") {
                 loadState = .loading
                 loadAttempt += 1
