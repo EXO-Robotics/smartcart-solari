@@ -289,9 +289,17 @@ struct HomeView: View {
         .frame(maxWidth: .infinity)
         .frame(height: height, alignment: .top)
         .background {
-            WoodGrainBackground()
+            ZStack(alignment: .top) {
+                WoodGrainBackground()
+                HomeGlassSurface(radius: 30, darkness: 0.28)
+                    .frame(height: collapsedShoppingTripsDrawerHeight)
+            }
         }
         .clipShape(HomePullUpShape())
+        .overlay {
+            HomePullUpShape()
+                .stroke(SmartCartTheme.borderStrong.opacity(0.72), lineWidth: 1)
+        }
         .shadow(color: .black.opacity(0.34), radius: 22, y: -8)
         .padding(.horizontal, 8)
         .accessibilityElement(children: .contain)
@@ -462,48 +470,7 @@ struct HomeView: View {
     }
 }
 
-private struct HomeGlassSurface: View {
-    @Environment(\.colorScheme) private var colorScheme
-
-    let radius: CGFloat
-    let darkness: Double
-
-    var body: some View {
-        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
-
-        shape
-            .fill(.ultraThinMaterial)
-            .overlay {
-                shape.fill(
-                    colorScheme == .light
-                        ? Color.white.opacity(min(0.82, 0.62 + darkness * 0.25))
-                        : Color.black.opacity(darkness)
-                )
-            }
-            .overlay {
-                shape.fill(
-                    LinearGradient(
-                        colors: colorScheme == .light
-                            ? [Color.white.opacity(0.44), Color.clear, Color.black.opacity(0.04)]
-                            : [Color.white.opacity(0.10), Color.clear, Color.black.opacity(0.10)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-            }
-            .overlay {
-                shape.stroke(
-                    colorScheme == .light ? Color.black.opacity(0.12) : Color.white.opacity(0.22),
-                    lineWidth: 1
-                )
-            }
-            .shadow(
-                color: .black.opacity(colorScheme == .light ? 0.14 : 0.28),
-                radius: 20,
-                y: 10
-            )
-    }
-}
+private typealias HomeGlassSurface = SmartCartSmokedGlassSurface
 
 /// Raised center handle keeps the conditional Continue Shopping drawer
 /// discoverable above the tab bar without adding another navigation control.

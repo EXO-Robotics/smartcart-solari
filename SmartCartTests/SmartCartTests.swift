@@ -4414,6 +4414,12 @@ final class SmartCartTests: XCTestCase {
             ),
             encoding: .utf8
         )
+        let themeSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "SmartCart/Theme/SmartCartTheme.swift"
+            ),
+            encoding: .utf8
+        )
 
         let bodyStart = try XCTUnwrap(homeSource.range(of: "    var body: some View")?.lowerBound)
         let headerStart = try XCTUnwrap(
@@ -4427,7 +4433,7 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(homeSource.contains("SmartCartFoodBackground()"))
         XCTAssertTrue(homeSource.contains("@Environment(\\.colorScheme) private var colorScheme"))
         XCTAssertTrue(homeSource.contains("colorScheme == .light ? SmartCartTheme.ink : .white"))
-        XCTAssertTrue(homeSource.contains("Color.white.opacity(min(0.82, 0.62 + darkness * 0.25))"))
+        XCTAssertTrue(themeSource.contains("Color.white.opacity(min(0.82, 0.62 + darkness * 0.25))"))
         XCTAssertTrue(homeSource.contains(".allowsHitTesting(false)"))
         XCTAssertTrue(homeSource.contains(".accessibilityHidden(true)"))
         XCTAssertTrue(homeSource.contains("ScrollView {"))
@@ -4446,7 +4452,7 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(homeSource.contains(".frame(maxWidth: .infinity, minHeight: 96, alignment: .leading)"))
         XCTAssertTrue(homeSource.contains(".padding(.bottom, 24)"))
         XCTAssertTrue(homeSource.contains("HomeGlassSurface(radius: 30, darkness: 0.16)"))
-        XCTAssertTrue(homeSource.contains("Color.white.opacity(0.10)"))
+        XCTAssertTrue(themeSource.contains("Color.white.opacity(0.10)"))
         XCTAssertTrue(homeSource.contains("accessibilityIdentifier(\"home-import-camera\")"))
         XCTAssertTrue(homeSource.contains("accessibilityIdentifier(\"home-import-photos\")"))
         XCTAssertTrue(homeSource.contains("accessibilityIdentifier(\"home-paste-recipe\")"))
@@ -4480,7 +4486,10 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(homeSource.contains("if hasPausedTrips {"))
         XCTAssertTrue(homeSource.contains("continueShoppingTripsDrawer("))
         XCTAssertTrue(homeSource.contains("HomePullUpShape"))
-        XCTAssertTrue(homeSource.contains(".background {\n            WoodGrainBackground()"))
+        XCTAssertTrue(homeSource.contains("ZStack(alignment: .top)"))
+        XCTAssertTrue(homeSource.contains("WoodGrainBackground()"))
+        XCTAssertTrue(homeSource.contains("HomeGlassSurface(radius: 30, darkness: 0.28)"))
+        XCTAssertTrue(homeSource.contains(".frame(height: collapsedShoppingTripsDrawerHeight)"))
         XCTAssertFalse(homeSource.contains("HomePullUpGlassSurface"))
         XCTAssertTrue(homeSource.contains("accessibilityIdentifier(\"home-continue-shopping-drawer\")"))
         XCTAssertTrue(homeSource.contains("Label(\"Continue Shopping\", systemImage: \"cart.badge.clock\")"))
@@ -4741,10 +4750,13 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(recipesSource.contains("Label(\"Recent Recipes\", systemImage: \"clock.fill\")"))
         XCTAssertTrue(recipesSource.contains("accessibilityIdentifier(\"recipes-recent-drawer\")"))
         XCTAssertTrue(recipesSource.contains("recentDragGesture"))
-        XCTAssertTrue(recipesSource.contains(".background {\n            WoodGrainBackground()"))
+        XCTAssertTrue(recipesSource.contains("WoodGrainBackground()"))
+        XCTAssertTrue(recipesSource.contains("SmartCartSmokedGlassSurface(radius: 30, darkness: 0.28)"))
+        XCTAssertTrue(recipesSource.contains(".frame(height: collapsedDrawerHeight)"))
         XCTAssertTrue(rootSource.contains("SmartCartFoodBackground()"))
         XCTAssertFalse(rootSource.contains("WoodGrainBackground()"))
         XCTAssertTrue(themeSource.contains("struct SmartCartFoodBackground: View"))
+        XCTAssertTrue(themeSource.contains("struct SmartCartSmokedGlassSurface: View"))
         XCTAssertTrue(themeSource.contains("Image(\"SmartCartHomeBackground\")"))
         XCTAssertTrue(themeSource.contains("func smartCartBackground() -> some View"))
         XCTAssertTrue(themeSource.contains("SmartCartFoodBackground()"))

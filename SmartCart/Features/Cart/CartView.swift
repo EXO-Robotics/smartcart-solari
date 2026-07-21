@@ -1300,7 +1300,11 @@ struct RecipesView: View {
         .frame(maxWidth: .infinity)
         .frame(height: height, alignment: .top)
         .background {
-            WoodGrainBackground()
+            ZStack(alignment: .top) {
+                WoodGrainBackground()
+                SmartCartSmokedGlassSurface(radius: 30, darkness: 0.28)
+                    .frame(height: collapsedDrawerHeight)
+            }
         }
         .clipShape(RecipesPullUpShape())
         .overlay {

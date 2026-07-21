@@ -143,6 +143,51 @@ struct WoodGrainBackground: View {
     }
 }
 
+/// Shared smoked-glass surface used by the Home action card and the exposed
+/// tips of wood-backed pull-up drawers.
+struct SmartCartSmokedGlassSurface: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    let radius: CGFloat
+    let darkness: Double
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+
+        shape
+            .fill(.ultraThinMaterial)
+            .overlay {
+                shape.fill(
+                    colorScheme == .light
+                        ? Color.white.opacity(min(0.82, 0.62 + darkness * 0.25))
+                        : Color.black.opacity(darkness)
+                )
+            }
+            .overlay {
+                shape.fill(
+                    LinearGradient(
+                        colors: colorScheme == .light
+                            ? [Color.white.opacity(0.44), Color.clear, Color.black.opacity(0.04)]
+                            : [Color.white.opacity(0.10), Color.clear, Color.black.opacity(0.10)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+            }
+            .overlay {
+                shape.stroke(
+                    colorScheme == .light ? Color.black.opacity(0.12) : Color.white.opacity(0.22),
+                    lineWidth: 1
+                )
+            }
+            .shadow(
+                color: .black.opacity(colorScheme == .light ? 0.14 : 0.28),
+                radius: 20,
+                y: 10
+            )
+    }
+}
+
 /// Shared full-screen food photography for primary app surfaces. The adaptive
 /// veil preserves semantic label contrast in both supported appearance modes.
 struct SmartCartFoodBackground: View {
