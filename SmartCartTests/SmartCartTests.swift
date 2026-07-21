@@ -3134,6 +3134,7 @@ final class SmartCartTests: XCTestCase {
             purchasedItemIDs: [purchasedID],
             substitutions: []
         )
+        model.persistNow()
 
         let restored = AppModel(stateStore: store)
         XCTAssertEqual(restored.shoppingSession(id: sessionID)?.reconciliationDraft?.outcome, .boughtFew)
@@ -3627,6 +3628,7 @@ final class SmartCartTests: XCTestCase {
         model.saveCurrentList()
         XCTAssertEqual(model.savedLists.first?.manifest.handoffProgress, .completed)
         let openedURL = model.openSavedWalmartWishlist()
+        model.persistNow()
 
         let restored = AppModel(stateStore: store, commerceDefaults: defaults)
 
@@ -4371,6 +4373,7 @@ final class SmartCartTests: XCTestCase {
         fresh.preferences.dietaryRestrictions = [.glutenFree]
         fresh.startRetailerGuide(.target)
         fresh.completeRetailerSetup()
+        fresh.persistNow()
 
         let restored = AppModel(stateStore: store, commerceDefaults: defaults)
         XCTAssertEqual(restored.selectedRetailer, .target)

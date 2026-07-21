@@ -92,17 +92,68 @@ final class SmartCartPersistenceCoordinatorTests: XCTestCase {
     }
 
     @MainActor
-    func testAppModelSeedsFirstSuccessorFromLoadedRevision() throws {
+    func testAppModelSeedsFirstSuccessorFromLoadedRevision() async throws {
         var loaded = makeState(marker: 3)
         loaded.persistenceRevision = 7
         let store = InMemorySmartCartStateStore(state: loaded)
         let model = AppModel(stateStore: store)
 
         model.zipCode = "12345"
+        await model.flushPendingPersistence()
 
         let durable = try XCTUnwrap(store.state)
         XCTAssertEqual(durable.persistenceRevision, 8)
         XCTAssertEqual(durable.zipCode, "12345")
+    }
+
+    @MainActor
+    func testRecipeImportCommitsBeforePublishingRecipeReadyRoute() throws {
+        let store = RecordingRevisionStore()
+        let model = AppModel(stateStore: store)
+        let recipe = makeImportRecipe(title: "Durable import")
+
+        XCTAssertTrue(model.beginRecipe(recipe))
+
+        XCTAssertEqual(store.state?.activeRecipe.id, recipe.id)
+        XCTAssertTrue(store.state?.recipes.contains(where: { $0.id == recipe.id }) == true)
+        XCTAssertEqual(model.homePath, [.recipeReady])
+        XCTAssertNil(model.persistenceIssue)
+    }
+
+    @MainActor
+    func testFailedRecipeImportPreservesWorkBlocksRouteAndRetriesLatestGraph() async throws {
+        let store = RecordingRevisionStore(failuresRemaining: 1)
+        let model = AppModel(stateStore: store)
+        let recipe = makeImportRecipe(title: "Retryable import")
+
+        XCTAssertFalse(model.beginRecipe(recipe))
+        XCTAssertEqual(model.activeRecipe.id, recipe.id)
+        XCTAssertTrue(model.recipes.contains(where: { $0.id == recipe.id }))
+        XCTAssertTrue(model.homePath.isEmpty)
+        XCTAssertEqual(model.persistenceIssue, "Couldn’t save this change.")
+        XCTAssertNil(store.state)
+
+        let retried = await model.retryPersistence()
+        XCTAssertTrue(retried)
+        XCTAssertEqual(store.state?.activeRecipe.id, recipe.id)
+        XCTAssertEqual(store.savedRevisions, [1])
+        XCTAssertNil(model.persistenceIssue)
+    }
+
+    @MainActor
+    func testTimerAutosaveFailureRemainsEligibleForLifecycleRetry() async throws {
+        let store = RecordingRevisionStore(failuresRemaining: 1)
+        let model = AppModel(stateStore: store)
+
+        model.zipCode = "90210"
+        await model.flushPendingPersistence()
+        XCTAssertEqual(model.persistenceIssue, "Couldn’t save this change.")
+        XCTAssertNil(store.state)
+
+        let retried = await model.retryPersistence()
+        XCTAssertTrue(retried)
+        XCTAssertEqual(store.state?.zipCode, "90210")
+        XCTAssertEqual(store.savedRevisions, [1])
     }
 
     func testExplicitFailureRetainsLatestSnapshotForRetry() async throws {
@@ -293,6 +344,26 @@ final class SmartCartPersistenceCoordinatorTests: XCTestCase {
             pantryInventory: [],
             preferredProductIDsByIngredient: [:],
             analyticsEvents: []
+        )
+    }
+
+    private func makeImportRecipe(title: String) -> Recipe {
+        Recipe(
+            title: title,
+            source: .text,
+            sourceDetail: "Persistence test",
+            heroSymbol: "fork.knife",
+            servings: 2,
+            prepMinutes: 5,
+            cookMinutes: 10,
+            ingredients: [
+                Ingredient(
+                    name: "Flour",
+                    quantity: 1,
+                    unit: "cup",
+                    category: .pantry
+                )
+            ]
         )
     }
 

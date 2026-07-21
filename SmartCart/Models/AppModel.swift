@@ -1000,11 +1000,16 @@ final class AppModel {
 
     @discardableResult
     func beginRecipe(_ recipe: Recipe) -> Bool {
+        guard persistenceReady else {
+            showToast("Couldn’t save this change.")
+            return false
+        }
         guard !recipe.ingredients.isEmpty else {
             showToast("Add at least one ingredient before continuing")
             return false
         }
         var recipe = recipe
+        suppressPersistence = true
         desiredServings = recipe.servings
         applyPantrySuggestions(to: &recipe)
         activeRecipe = recipe
@@ -1019,7 +1024,6 @@ final class AppModel {
         if isNewRecipeRecord && recipe.source != .sample {
             savedRecipeIDs.insert(recipe.id)
         }
-        recordRecipeOpened(recipe.id)
         ingredientResolutions = []
         shoppingItems = []
         activeShoppingSessionID = nil
@@ -1027,6 +1031,21 @@ final class AppModel {
         matchStage = "Ready to match"
         isMatching = false
         guidedIndex = 0
+        suppressPersistence = false
+
+        do {
+            try persistenceCoordinator.saveCompatibility(stateSnapshot())
+            persistenceIssue = nil
+        } catch {
+            // Keep the imported recipe in memory and leave the source surface
+            // visible. Retrying the same import is idempotent because recipe
+            // identity is stable and the coordinator retains the failed graph.
+            persistenceIssue = "Couldn’t save this change."
+            showToast("Couldn’t save this change.")
+            return false
+        }
+
+        recordRecipeOpened(recipe.id)
         selectedTab = .home
         presentedSheet = nil
         homePath = [.recipeReady]
@@ -2547,7 +2566,6 @@ final class AppModel {
 
     func saveCurrentList() {
         persistCurrentManifest(progress: currentSavedManifest?.handoffProgress ?? .notStarted)
-        showToast("Shopping list saved")
     }
 
     func beginGuidedShopping() {
@@ -2649,7 +2667,6 @@ final class AppModel {
             try persistenceCoordinator.saveCompatibility(stateSnapshot())
             persistenceIssue = nil
             suppressPersistence = false
-            showToast("Shopping trip saved")
             return true
         } catch {
             savedLists = originalLists
@@ -3158,7 +3175,6 @@ final class AppModel {
             shoppingSessions = updatedSessions
             suppressPersistence = false
             persistenceIssue = nil
-            showToast("Pantry update reminder archived")
             return true
         } catch {
             persistenceIssue = error.localizedDescription
@@ -4078,7 +4094,47 @@ final class AppModel {
     }
 
     func persistNow() {
-        persistState()
+        guard persistenceReady, !suppressPersistence else { return }
+        do {
+            try persistenceCoordinator.saveCompatibility(stateSnapshot())
+            persistenceIssue = nil
+        } catch {
+            persistenceIssue = "Couldn’t save this change."
+        }
+    }
+
+    /// Flushes routine debounced state without blocking the MainActor. A
+    /// failed eligible snapshot remains retained by the coordinator for Retry.
+    func flushPendingPersistence() async {
+        do {
+            _ = try await persistenceCoordinator.flush()
+            persistenceIssue = nil
+        } catch {
+            persistenceIssue = "Couldn’t save this change."
+        }
+    }
+
+    /// Retries only the newest failed durable snapshot. Repeated Retry taps are
+    /// idempotent after a successful commit.
+    @discardableResult
+    func retryPersistence() async -> Bool {
+        do {
+            _ = try await persistenceCoordinator.retryLatest()
+            persistenceIssue = nil
+            return true
+        } catch {
+            persistenceIssue = "Couldn’t save this change."
+            return false
+        }
+    }
+
+    func requestLifecyclePersistenceFlush(
+        completion: (@MainActor (Bool) -> Void)? = nil
+    ) {
+        Task { @MainActor in
+            await flushPendingPersistence()
+            completion?(persistenceIssue == nil)
+        }
     }
 
     func setInternalTesterModeEnabled(_ enabled: Bool) {
@@ -5005,10 +5061,9 @@ final class AppModel {
     private func persistState() {
         guard persistenceReady, !suppressPersistence else { return }
         do {
-            try persistenceCoordinator.saveCompatibility(stateSnapshot())
-            persistenceIssue = nil
+            _ = try persistenceCoordinator.requestAutosave(stateSnapshot())
         } catch {
-            persistenceIssue = error.localizedDescription
+            persistenceIssue = "Couldn’t save this change."
         }
     }
 
