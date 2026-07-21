@@ -7,7 +7,7 @@ struct HomeView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var pendingDiscardSession: ShoppingSession?
     @State private var shoppingTripsExpanded = false
-    @GestureState private var shoppingTripsDrag: CGFloat = 0
+    @State private var shoppingTripsDrag: CGFloat = 0
 
     private let collapsedShoppingTripsDrawerHeight: CGFloat = 92
     private let workspaceTransition: Namespace.ID?
@@ -45,11 +45,15 @@ struct HomeView: View {
                         height: drawerHeight,
                         collapsedOffset: collapsedOffset
                     )
+                    .mask(alignment: .top) {
+                        Rectangle()
+                            .frame(
+                                height: drawerHeight - shoppingTripsDrawerOffset(
+                                    collapsedOffset: collapsedOffset
+                                )
+                            )
+                    }
                     .offset(y: shoppingTripsDrawerOffset(collapsedOffset: collapsedOffset))
-                    .animation(
-                        reduceMotion ? nil : SmartCartMotion.signature,
-                        value: shoppingTripsExpanded
-                    )
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
@@ -59,6 +63,7 @@ struct HomeView: View {
         .onChange(of: pausedShoppingSessions.map(\.id)) { _, sessionIDs in
             if sessionIDs.isEmpty {
                 shoppingTripsExpanded = false
+                shoppingTripsDrag = 0
                 pendingDiscardSession = nil
             }
         }
@@ -263,11 +268,11 @@ struct HomeView: View {
         height: CGFloat,
         collapsedOffset: CGFloat
     ) -> some View {
-        VStack(spacing: 0) {
-            continueShoppingTripsHandle(collapsedOffset: collapsedOffset)
+        let woodWrapDepth: CGFloat = shoppingTripsExpanded ? 26 : 0
+        let joinOverlap: CGFloat = shoppingTripsExpanded ? 2 : 0
 
-            Divider()
-                .overlay(SmartCartTheme.border)
+        return VStack(spacing: 0) {
+            continueShoppingTripsHandle(collapsedOffset: collapsedOffset)
 
             if shoppingTripsExpanded {
                 ScrollView(.vertical, showsIndicators: false) {
@@ -291,14 +296,27 @@ struct HomeView: View {
         .background {
             ZStack(alignment: .top) {
                 WoodGrainBackground()
-                HomeGlassSurface(radius: 30, darkness: 0.28)
+                    .clipShape(SmartCartDrawerWoodWrapShape(depth: woodWrapDepth))
+                    .padding(
+                        .top,
+                        collapsedShoppingTripsDrawerHeight - woodWrapDepth - joinOverlap
+                    )
+                HomeGlassSurface(radius: 0, darkness: 0.28, showsBorder: false)
                     .frame(height: collapsedShoppingTripsDrawerHeight)
+                    .clipShape(HomePullUpShape())
             }
         }
         .clipShape(HomePullUpShape())
-        .overlay {
+        .overlay(alignment: .top) {
             HomePullUpShape()
                 .stroke(SmartCartTheme.borderStrong.opacity(0.72), lineWidth: 1)
+                .frame(height: collapsedShoppingTripsDrawerHeight)
+                .mask(alignment: .top) {
+                    Rectangle()
+                        .frame(
+                            height: collapsedShoppingTripsDrawerHeight - joinOverlap
+                        )
+                }
         }
         .shadow(color: .black.opacity(0.34), radius: 22, y: -8)
         .padding(.horizontal, 8)
@@ -330,7 +348,7 @@ struct HomeView: View {
         .frame(height: collapsedShoppingTripsDrawerHeight)
         .contentShape(Rectangle())
         .onTapGesture {
-            shoppingTripsExpanded.toggle()
+            settleShoppingTripsDrawer(expanded: !shoppingTripsExpanded)
         }
         .gesture(shoppingTripsDragGesture(collapsedOffset: collapsedOffset))
         .accessibilityLabel("Continue Shopping drawer")
@@ -437,22 +455,29 @@ struct HomeView: View {
     }
 
     private func shoppingTripsDragGesture(collapsedOffset: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 6)
-            .updating($shoppingTripsDrag) { value, state, _ in
-                state = value.translation.height
+        DragGesture(minimumDistance: 6, coordinateSpace: .global)
+            .onChanged { value in
+                var transaction = Transaction()
+                transaction.animation = nil
+                withTransaction(transaction) {
+                    shoppingTripsDrag = value.translation.height
+                }
             }
             .onEnded { value in
                 let projected = value.predictedEndTranslation.height
                 let decisiveDistance = min(96, collapsedOffset * 0.22)
-
-                if shoppingTripsExpanded {
-                    if projected > decisiveDistance {
-                        shoppingTripsExpanded = false
-                    }
-                } else if projected < -decisiveDistance {
-                    shoppingTripsExpanded = true
-                }
+                let shouldExpand = shoppingTripsExpanded
+                    ? projected <= decisiveDistance
+                    : projected < -decisiveDistance
+                settleShoppingTripsDrawer(expanded: shouldExpand)
             }
+    }
+
+    private func settleShoppingTripsDrawer(expanded: Bool) {
+        withAnimation(reduceMotion ? nil : SmartCartMotion.signature) {
+            shoppingTripsExpanded = expanded
+            shoppingTripsDrag = 0
+        }
     }
 
     private func pasteRecipeFromClipboard() {

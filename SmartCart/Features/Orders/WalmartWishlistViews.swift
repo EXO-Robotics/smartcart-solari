@@ -947,6 +947,7 @@ private struct RetailerTripSafariSheet: View {
                 .minimumScaleFactor(0.8)
                 .foregroundStyle(SmartCartTheme.onAccent)
                 .padding(.horizontal, 10)
+                .frame(width: compactSecondaryActionWidth)
                 .frame(minHeight: 38)
                 .background(SmartCartTheme.green)
                 .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
@@ -991,6 +992,7 @@ private struct RetailerTripSafariSheet: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
                 .padding(.horizontal, 10)
+                .frame(width: compactSecondaryActionWidth)
                 .frame(minHeight: 38)
                 .background(SmartCartTheme.herbLight)
                 .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
@@ -1002,6 +1004,10 @@ private struct RetailerTripSafariSheet: View {
         .frame(minHeight: 44)
         .accessibilityIdentifier("retailer-trip-more")
         .accessibilityLabel("More actions")
+    }
+
+    private var compactSecondaryActionWidth: CGFloat? {
+        dynamicTypeSize.isAccessibilitySize ? nil : 128
     }
 
     private var displayedURL: URL {

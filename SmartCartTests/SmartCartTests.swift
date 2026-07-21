@@ -4399,8 +4399,10 @@ final class SmartCartTests: XCTestCase {
         )
         let moreMenuSource = tripSource[moreStart..<displayedURLStart]
         XCTAssertTrue(moreMenuSource.contains(".font(.caption.bold())"))
+        XCTAssertTrue(moreMenuSource.contains(".frame(width: compactSecondaryActionWidth)"))
         XCTAssertTrue(moreMenuSource.contains(".frame(minHeight: 38)"))
         XCTAssertTrue(moreMenuSource.contains(".frame(minHeight: 44)"))
+        XCTAssertTrue(tripSource.contains("dynamicTypeSize.isAccessibilitySize ? nil : 128"))
     }
 
     func testHomeUsesActionFirstLayoutAndRecipeImportersAutoPresentMediaTools() throws {
@@ -4499,7 +4501,14 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(homeSource.contains("HomePullUpShape"))
         XCTAssertTrue(homeSource.contains("ZStack(alignment: .top)"))
         XCTAssertTrue(homeSource.contains("WoodGrainBackground()"))
-        XCTAssertTrue(homeSource.contains("HomeGlassSurface(radius: 30, darkness: 0.28)"))
+        XCTAssertTrue(homeSource.contains("HomeGlassSurface(radius: 0, darkness: 0.28, showsBorder: false)"))
+        XCTAssertTrue(homeSource.contains(".clipShape(HomePullUpShape())"))
+        XCTAssertTrue(homeSource.contains("let woodWrapDepth: CGFloat = shoppingTripsExpanded ? 26 : 0"))
+        XCTAssertTrue(homeSource.contains("let joinOverlap: CGFloat = shoppingTripsExpanded ? 2 : 0"))
+        XCTAssertTrue(homeSource.contains(".clipShape(SmartCartDrawerWoodWrapShape(depth: woodWrapDepth))"))
+        XCTAssertTrue(homeSource.contains("collapsedShoppingTripsDrawerHeight - woodWrapDepth - joinOverlap"))
+        XCTAssertTrue(homeSource.contains("collapsedShoppingTripsDrawerHeight - joinOverlap"))
+        XCTAssertFalse(homeSource.contains("continueShoppingTripsHandle(collapsedOffset: collapsedOffset)\n\n            Divider()"))
         XCTAssertTrue(homeSource.contains(".frame(height: collapsedShoppingTripsDrawerHeight)"))
         XCTAssertFalse(homeSource.contains("HomePullUpGlassSurface"))
         XCTAssertTrue(homeSource.contains("accessibilityIdentifier(\"home-continue-shopping-drawer\")"))
@@ -4762,12 +4771,20 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(recipesSource.contains("accessibilityIdentifier(\"recipes-recent-drawer\")"))
         XCTAssertTrue(recipesSource.contains("recentDragGesture"))
         XCTAssertTrue(recipesSource.contains("WoodGrainBackground()"))
-        XCTAssertTrue(recipesSource.contains("SmartCartSmokedGlassSurface(radius: 30, darkness: 0.28)"))
+        XCTAssertTrue(recipesSource.contains("SmartCartSmokedGlassSurface(radius: 0, darkness: 0.28, showsBorder: false)"))
+        XCTAssertTrue(recipesSource.contains(".clipShape(RecipesPullUpShape())"))
+        XCTAssertTrue(recipesSource.contains("let woodWrapDepth: CGFloat = recentDrawerExpanded ? 26 : 0"))
+        XCTAssertTrue(recipesSource.contains("let joinOverlap: CGFloat = recentDrawerExpanded ? 2 : 0"))
+        XCTAssertTrue(recipesSource.contains(".clipShape(SmartCartDrawerWoodWrapShape(depth: woodWrapDepth))"))
+        XCTAssertTrue(recipesSource.contains("collapsedDrawerHeight - woodWrapDepth - joinOverlap"))
+        XCTAssertTrue(recipesSource.contains(".frame(height: collapsedDrawerHeight - joinOverlap)"))
+        XCTAssertFalse(recipesSource.contains("recentDrawerHandle(collapsedOffset: collapsedOffset)\n\n            Divider()"))
         XCTAssertTrue(recipesSource.contains(".frame(height: collapsedDrawerHeight)"))
         XCTAssertTrue(rootSource.contains("SmartCartFoodBackground()"))
         XCTAssertFalse(rootSource.contains("WoodGrainBackground()"))
         XCTAssertTrue(themeSource.contains("struct SmartCartFoodBackground: View"))
         XCTAssertTrue(themeSource.contains("struct SmartCartSmokedGlassSurface: View"))
+        XCTAssertTrue(themeSource.contains("struct SmartCartDrawerWoodWrapShape: Shape"))
         XCTAssertTrue(themeSource.contains("Image(\"SmartCartHomeBackground\")"))
         XCTAssertTrue(themeSource.contains("func smartCartBackground() -> some View"))
         XCTAssertTrue(themeSource.contains("SmartCartFoodBackground()"))
@@ -4775,6 +4792,55 @@ final class SmartCartTests: XCTestCase {
         XCTAssertFalse(recipesSource.contains("Text(\"Recently opened\")"))
         XCTAssertFalse(recipesSource.contains("private var mealPrepLaunchCard"))
         XCTAssertFalse(recipesSource.contains("private var currentListCard"))
+    }
+
+    func testPullUpDrawersUseOneExplicitSettleAnimation() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let homeSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "SmartCart/Features/Home/HomeView.swift"
+            ),
+            encoding: .utf8
+        )
+        let recipesSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "SmartCart/Features/Cart/CartView.swift"
+            ),
+            encoding: .utf8
+        )
+        let pantrySource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "SmartCart/Features/Cart/PickupSchedulerSheet.swift"
+            ),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(homeSource.contains("@State private var shoppingTripsDrag: CGFloat = 0"))
+        XCTAssertTrue(homeSource.contains("settleShoppingTripsDrawer(expanded:"))
+        XCTAssertTrue(homeSource.contains("height: drawerHeight - shoppingTripsDrawerOffset("))
+        XCTAssertTrue(homeSource.contains(".frame(height: collapsedShoppingTripsDrawerHeight)"))
+        XCTAssertFalse(homeSource.contains("@GestureState private var shoppingTripsDrag"))
+
+        XCTAssertTrue(recipesSource.contains("@State private var recentDrawerDrag: CGFloat = 0"))
+        XCTAssertTrue(recipesSource.contains("settleRecentDrawer(expanded:"))
+        XCTAssertTrue(recipesSource.contains("height: drawerHeight - recentDrawerOffset("))
+        XCTAssertTrue(recipesSource.contains(".overlay(alignment: .top)"))
+        XCTAssertFalse(recipesSource.contains("@GestureState private var recentDrawerDrag"))
+        XCTAssertFalse(recipesSource.contains(".simultaneousGesture(recentDragGesture"))
+
+        XCTAssertTrue(pantrySource.contains("@State private var scannerDrag: CGFloat = 0"))
+        XCTAssertTrue(pantrySource.contains("settleScannerDrawer(expanded:"))
+        XCTAssertTrue(pantrySource.contains("height: drawerHeight - scannerDrawerOffset("))
+        XCTAssertTrue(pantrySource.contains(".overlay(alignment: .top)"))
+        XCTAssertFalse(pantrySource.contains("@GestureState private var scannerDrag"))
+
+        for source in [homeSource, recipesSource, pantrySource] {
+            XCTAssertTrue(source.contains("DragGesture(minimumDistance: 6, coordinateSpace: .global)"))
+            XCTAssertTrue(source.contains("transaction.animation = nil"))
+            XCTAssertTrue(source.contains("withAnimation(reduceMotion ? nil"))
+        }
     }
 
     func testPremiumMotionUsesNativeWorkspaceTransitionsAndReduceMotionFallbacks() throws {

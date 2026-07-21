@@ -143,6 +143,48 @@ struct WoodGrainBackground: View {
     }
 }
 
+/// Concave top edge for an expanded wood-backed drawer. The outer edges rise
+/// behind the pull tab while the center begins below it, creating a U-shaped
+/// wrap without exposing wood when `depth` is zero in the collapsed state.
+struct SmartCartDrawerWoodWrapShape: Shape {
+    var depth: CGFloat
+
+    var animatableData: CGFloat {
+        get { depth }
+        set { depth = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let clampedDepth = min(max(depth, 0), min(rect.width / 2, rect.height))
+
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addCurve(
+            to: CGPoint(x: rect.minX + clampedDepth, y: rect.minY + clampedDepth),
+            control1: CGPoint(x: rect.minX + clampedDepth * 0.55, y: rect.minY),
+            control2: CGPoint(
+                x: rect.minX + clampedDepth,
+                y: rect.minY + clampedDepth * 0.45
+            )
+        )
+        path.addLine(
+            to: CGPoint(x: rect.maxX - clampedDepth, y: rect.minY + clampedDepth)
+        )
+        path.addCurve(
+            to: CGPoint(x: rect.maxX, y: rect.minY),
+            control1: CGPoint(
+                x: rect.maxX - clampedDepth,
+                y: rect.minY + clampedDepth * 0.45
+            ),
+            control2: CGPoint(x: rect.maxX - clampedDepth * 0.55, y: rect.minY)
+        )
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
+
 /// Shared smoked-glass surface used by the Home action card and the exposed
 /// tips of wood-backed pull-up drawers.
 struct SmartCartSmokedGlassSurface: View {
@@ -150,6 +192,13 @@ struct SmartCartSmokedGlassSurface: View {
 
     let radius: CGFloat
     let darkness: Double
+    let showsBorder: Bool
+
+    init(radius: CGFloat, darkness: Double, showsBorder: Bool = true) {
+        self.radius = radius
+        self.darkness = darkness
+        self.showsBorder = showsBorder
+    }
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
@@ -175,10 +224,12 @@ struct SmartCartSmokedGlassSurface: View {
                 )
             }
             .overlay {
-                shape.stroke(
-                    colorScheme == .light ? Color.black.opacity(0.12) : Color.white.opacity(0.22),
-                    lineWidth: 1
-                )
+                if showsBorder {
+                    shape.stroke(
+                        colorScheme == .light ? Color.black.opacity(0.12) : Color.white.opacity(0.22),
+                        lineWidth: 1
+                    )
+                }
             }
             .shadow(
                 color: .black.opacity(colorScheme == .light ? 0.14 : 0.28),

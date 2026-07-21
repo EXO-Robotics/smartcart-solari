@@ -1118,7 +1118,7 @@ struct RecipesView: View {
         return environment["SMARTCART_RECIPES_DRAWER"] == "recent" ||
             environment["SMARTCART_RECIPES_PAGE"] == "recent"
     }()
-    @GestureState private var recentDrawerDrag: CGFloat = 0
+    @State private var recentDrawerDrag: CGFloat = 0
 
     private let collapsedDrawerHeight: CGFloat = 92
 
@@ -1131,11 +1131,15 @@ struct RecipesView: View {
                 recipeLibrary
 
                 recentRecipesDrawer(height: drawerHeight, collapsedOffset: collapsedOffset)
+                    .mask(alignment: .top) {
+                        Rectangle()
+                            .frame(
+                                height: drawerHeight - recentDrawerOffset(
+                                    collapsedOffset: collapsedOffset
+                                )
+                            )
+                    }
                     .offset(y: recentDrawerOffset(collapsedOffset: collapsedOffset))
-                    .animation(
-                        reduceMotion ? nil : SmartCartMotion.signature,
-                        value: recentDrawerExpanded
-                    )
             }
         }
         .smartCartBackground()
@@ -1283,11 +1287,11 @@ struct RecipesView: View {
     }
 
     private func recentRecipesDrawer(height: CGFloat, collapsedOffset: CGFloat) -> some View {
-        VStack(spacing: 0) {
-            recentDrawerHandle(collapsedOffset: collapsedOffset)
+        let woodWrapDepth: CGFloat = recentDrawerExpanded ? 26 : 0
+        let joinOverlap: CGFloat = recentDrawerExpanded ? 2 : 0
 
-            Divider()
-                .overlay(SmartCartTheme.border)
+        return VStack(spacing: 0) {
+            recentDrawerHandle(collapsedOffset: collapsedOffset)
 
             if recentDrawerExpanded {
                 recentRecipeContents
@@ -1302,14 +1306,25 @@ struct RecipesView: View {
         .background {
             ZStack(alignment: .top) {
                 WoodGrainBackground()
-                SmartCartSmokedGlassSurface(radius: 30, darkness: 0.28)
+                    .clipShape(SmartCartDrawerWoodWrapShape(depth: woodWrapDepth))
+                    .padding(
+                        .top,
+                        collapsedDrawerHeight - woodWrapDepth - joinOverlap
+                    )
+                SmartCartSmokedGlassSurface(radius: 0, darkness: 0.28, showsBorder: false)
                     .frame(height: collapsedDrawerHeight)
+                    .clipShape(RecipesPullUpShape())
             }
         }
         .clipShape(RecipesPullUpShape())
-        .overlay {
+        .overlay(alignment: .top) {
             RecipesPullUpShape()
                 .stroke(SmartCartTheme.borderStrong.opacity(0.72), lineWidth: 1)
+                .frame(height: collapsedDrawerHeight)
+                .mask(alignment: .top) {
+                    Rectangle()
+                        .frame(height: collapsedDrawerHeight - joinOverlap)
+                }
         }
         .shadow(color: .black.opacity(0.28), radius: 22, y: -8)
         .padding(.horizontal, 8)
@@ -1317,35 +1332,34 @@ struct RecipesView: View {
     }
 
     private func recentDrawerHandle(collapsedOffset: CGFloat) -> some View {
-        Button {
-            recentDrawerExpanded.toggle()
-        } label: {
-            VStack(spacing: 4) {
-                Image(systemName: recentDrawerExpanded ? "chevron.compact.down" : "chevron.compact.up")
-                    .font(.system(size: 24, weight: .bold))
-                    .foregroundStyle(SmartCartTheme.green)
-                    .frame(height: 35)
+        VStack(spacing: 4) {
+            Image(systemName: recentDrawerExpanded ? "chevron.compact.down" : "chevron.compact.up")
+                .font(.system(size: 24, weight: .bold))
+                .foregroundStyle(SmartCartTheme.green)
+                .frame(height: 35)
 
-                HStack(spacing: 9) {
-                    Label("Recent Recipes", systemImage: "clock.fill")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(SmartCartTheme.ink)
+            HStack(spacing: 9) {
+                Label("Recent Recipes", systemImage: "clock.fill")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(SmartCartTheme.ink)
 
-                    Spacer()
+                Spacer()
 
-                    Text(recentDrawerExpanded ? "Swipe down to hide" : "Swipe up")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(SmartCartTheme.secondaryInk)
-                }
-                .padding(.horizontal, 18)
-                .padding(.bottom, 10)
+                Text(recentDrawerExpanded ? "Swipe down to hide" : "Swipe up")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: collapsedDrawerHeight)
-            .contentShape(Rectangle())
+            .padding(.horizontal, 18)
+            .padding(.bottom, 10)
         }
-        .buttonStyle(PressableButtonStyle())
-        .simultaneousGesture(recentDragGesture(collapsedOffset: collapsedOffset))
+        .frame(maxWidth: .infinity)
+        .frame(height: collapsedDrawerHeight)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            settleRecentDrawer(expanded: !recentDrawerExpanded)
+        }
+        .gesture(recentDragGesture(collapsedOffset: collapsedOffset))
+        .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("recipes-recent-drawer")
         .accessibilityLabel("Recent Recipes drawer")
         .accessibilityValue(recentDrawerExpanded ? "Expanded" : "Collapsed")
@@ -1488,22 +1502,29 @@ struct RecipesView: View {
     }
 
     private func recentDragGesture(collapsedOffset: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 6)
-            .updating($recentDrawerDrag) { value, state, _ in
-                state = value.translation.height
+        DragGesture(minimumDistance: 6, coordinateSpace: .global)
+            .onChanged { value in
+                var transaction = Transaction()
+                transaction.animation = nil
+                withTransaction(transaction) {
+                    recentDrawerDrag = value.translation.height
+                }
             }
             .onEnded { value in
                 let projected = value.predictedEndTranslation.height
                 let decisiveDistance = min(96, collapsedOffset * 0.22)
-
-                if recentDrawerExpanded {
-                    if projected > decisiveDistance {
-                        recentDrawerExpanded = false
-                    }
-                } else if projected < -decisiveDistance {
-                    recentDrawerExpanded = true
-                }
+                let shouldExpand = recentDrawerExpanded
+                    ? projected <= decisiveDistance
+                    : projected < -decisiveDistance
+                settleRecentDrawer(expanded: shouldExpand)
             }
+    }
+
+    private func settleRecentDrawer(expanded: Bool) {
+        withAnimation(reduceMotion ? nil : SmartCartMotion.signature) {
+            recentDrawerExpanded = expanded
+            recentDrawerDrag = 0
+        }
     }
 }
 
@@ -1532,8 +1553,16 @@ private struct RecipesPullUpShape: Shape {
             to: CGPoint(x: rect.maxX, y: top + cornerRadius),
             control: CGPoint(x: rect.maxX, y: top)
         )
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - cornerRadius))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX - cornerRadius, y: rect.maxY),
+            control: CGPoint(x: rect.maxX, y: rect.maxY)
+        )
+        path.addLine(to: CGPoint(x: cornerRadius, y: rect.maxY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX, y: rect.maxY - cornerRadius),
+            control: CGPoint(x: rect.minX, y: rect.maxY)
+        )
         path.addLine(to: CGPoint(x: rect.minX, y: top + cornerRadius))
         path.addQuadCurve(
             to: CGPoint(x: cornerRadius, y: top),

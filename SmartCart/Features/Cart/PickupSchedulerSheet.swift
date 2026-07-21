@@ -975,12 +975,13 @@ private struct MoreRetailersCard: View {
 
 struct PantryDashboardView: View {
     @Environment(AppModel.self) private var appModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var pantrySheet: PantrySheetDestination?
     @State private var manualPantryName = ""
     @State private var searchText = ""
     @State private var scannerExpanded =
         ProcessInfo.processInfo.environment["SMARTCART_PANTRY_DRAWER"] == "scanner"
-    @GestureState private var scannerDrag: CGFloat = 0
+    @State private var scannerDrag: CGFloat = 0
 
     private let collapsedDrawerHeight: CGFloat = 92
 
@@ -998,11 +999,15 @@ struct PantryDashboardView: View {
                 }
 
                 scannerDrawer(height: drawerHeight, collapsedOffset: collapsedOffset)
+                    .mask(alignment: .top) {
+                        Rectangle()
+                            .frame(
+                                height: drawerHeight - scannerDrawerOffset(
+                                    collapsedOffset: collapsedOffset
+                                )
+                            )
+                    }
                     .offset(y: scannerDrawerOffset(collapsedOffset: collapsedOffset))
-                    .animation(
-                        .spring(response: 0.42, dampingFraction: 0.86),
-                        value: scannerExpanded
-                    )
             }
         }
         .smartCartBackground()
@@ -1054,9 +1059,10 @@ struct PantryDashboardView: View {
         .frame(height: height, alignment: .top)
         .background(SmartCartTheme.scannerSurface)
         .clipShape(PantryPullUpShape())
-        .overlay {
+        .overlay(alignment: .top) {
             PantryPullUpShape()
                 .stroke(SmartCartTheme.borderStrong.opacity(0.72), lineWidth: 1)
+                .frame(height: collapsedDrawerHeight)
         }
         .shadow(color: .black.opacity(0.28), radius: 22, y: -8)
         .padding(.horizontal, 8)
@@ -1087,7 +1093,7 @@ struct PantryDashboardView: View {
         .frame(height: collapsedDrawerHeight)
         .contentShape(Rectangle())
         .onTapGesture {
-            scannerExpanded.toggle()
+            settleScannerDrawer(expanded: !scannerExpanded)
         }
         .gesture(scannerDragGesture(collapsedOffset: collapsedOffset))
         .accessibilityLabel("Barcode scanner drawer")
@@ -1183,22 +1189,30 @@ struct PantryDashboardView: View {
     }
 
     private func scannerDragGesture(collapsedOffset: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 6)
-            .updating($scannerDrag) { value, state, _ in
-                state = value.translation.height
+        DragGesture(minimumDistance: 6, coordinateSpace: .global)
+            .onChanged { value in
+                var transaction = Transaction()
+                transaction.animation = nil
+                withTransaction(transaction) {
+                    scannerDrag = value.translation.height
+                }
             }
             .onEnded { value in
                 let projected = value.predictedEndTranslation.height
                 let decisiveDistance = min(96, collapsedOffset * 0.22)
-
-                if scannerExpanded {
-                    if projected > decisiveDistance {
-                        scannerExpanded = false
-                    }
-                } else if projected < -decisiveDistance {
-                    scannerExpanded = true
-                }
+                let shouldExpand = scannerExpanded
+                    ? projected <= decisiveDistance
+                    : projected < -decisiveDistance
+                settleScannerDrawer(expanded: shouldExpand)
             }
+    }
+
+    private func settleScannerDrawer(expanded: Bool) {
+        let animation = Animation.spring(response: 0.42, dampingFraction: 0.86)
+        withAnimation(reduceMotion ? nil : animation) {
+            scannerExpanded = expanded
+            scannerDrag = 0
+        }
     }
 
     private var filteredInventory: [PantryInventoryItem] {
@@ -1239,8 +1253,16 @@ private struct PantryPullUpShape: Shape {
             to: CGPoint(x: rect.maxX, y: top + cornerRadius),
             control: CGPoint(x: rect.maxX, y: top)
         )
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - cornerRadius))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX - cornerRadius, y: rect.maxY),
+            control: CGPoint(x: rect.maxX, y: rect.maxY)
+        )
+        path.addLine(to: CGPoint(x: cornerRadius, y: rect.maxY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX, y: rect.maxY - cornerRadius),
+            control: CGPoint(x: rect.minX, y: rect.maxY)
+        )
         path.addLine(to: CGPoint(x: rect.minX, y: top + cornerRadius))
         path.addQuadCurve(
             to: CGPoint(x: cornerRadius, y: top),
