@@ -1729,38 +1729,53 @@ final class SmartCartTests: XCTestCase {
         XCTAssertEqual(release.baseURL.absoluteString, "https://bundle.smartcart.app")
     }
 
-    func testBarcodeBuildConfigurationProcessesTheBundleKeyAndLocalATSException() throws {
+    func testBarcodeBuildConfigurationSeparatesDebugLocalNetworkingFromRelease() throws {
         let repositoryRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-        let infoData = try Data(
+        let debugInfoData = try Data(
             contentsOf: repositoryRoot.appendingPathComponent("SmartCart/Info.plist")
         )
-        let info = try XCTUnwrap(
-            PropertyListSerialization.propertyList(from: infoData, format: nil)
+        let debugInfo = try XCTUnwrap(
+            PropertyListSerialization.propertyList(from: debugInfoData, format: nil)
                 as? [String: Any]
         )
         XCTAssertEqual(
-            info[BarcodeBackendConfiguration.bundleKey] as? String,
+            debugInfo[BarcodeBackendConfiguration.bundleKey] as? String,
             "$(SMARTCART_BARCODE_BACKEND_URL)"
         )
-        let ats = try XCTUnwrap(info["NSAppTransportSecurity"] as? [String: Any])
-        XCTAssertEqual(ats["NSAllowsLocalNetworking"] as? Bool, true)
-
-        let project = try String(
-            contentsOf: repositoryRoot.appendingPathComponent(
-                "SmartCart.xcodeproj/project.pbxproj"
-            ),
-            encoding: .utf8
+        let debugATS = try XCTUnwrap(
+            debugInfo["NSAppTransportSecurity"] as? [String: Any]
         )
-        XCTAssertEqual(project.components(separatedBy: "GENERATE_INFOPLIST_FILE = NO;").count - 1, 2)
-        XCTAssertEqual(project.components(separatedBy: "INFOPLIST_FILE = SmartCart/Info.plist;").count - 1, 2)
+        XCTAssertEqual(debugATS["NSAllowsLocalNetworking"] as? Bool, true)
+        XCTAssertNotNil(debugInfo["NSLocalNetworkUsageDescription"] as? String)
+
+        let releaseInfoData = try Data(
+            contentsOf: repositoryRoot.appendingPathComponent("SmartCart/Info-Release.plist")
+        )
+        let releaseInfo = try XCTUnwrap(
+            PropertyListSerialization.propertyList(from: releaseInfoData, format: nil)
+                as? [String: Any]
+        )
+        XCTAssertEqual(
+            releaseInfo[BarcodeBackendConfiguration.bundleKey] as? String,
+            "$(SMARTCART_BARCODE_BACKEND_URL)"
+        )
+        XCTAssertNil(releaseInfo["NSAppTransportSecurity"])
+        XCTAssertNil(releaseInfo["NSLocalNetworkUsageDescription"])
 
         let debug = try String(
             contentsOf: repositoryRoot.appendingPathComponent("Config/Debug.xcconfig"),
             encoding: .utf8
         )
         XCTAssertTrue(debug.contains("SMARTCART_BARCODE_BACKEND_URL = http:/$()/localhost:8787"))
+
+        let release = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("Config/Release.xcconfig"),
+            encoding: .utf8
+        )
+        XCTAssertTrue(release.contains("SMARTCART_BARCODE_BACKEND_URL ="))
+        XCTAssertFalse(release.contains("localhost"))
     }
 
     func testBarcodeBackendConfigurationRejectsUnsafeReleaseEndpoints() {

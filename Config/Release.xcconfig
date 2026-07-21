@@ -4,3 +4,6 @@
 // An empty value produces a truthful configurationMissing outcome.
 SMARTCART_BARCODE_BACKEND_URL =
 
+// Recipe-link import remains hidden until this points at a verified public
+// HTTPS service exposing /v1/recipe-pages/extract and its session routes.
+SMARTCART_RECIPE_BACKEND_URL =

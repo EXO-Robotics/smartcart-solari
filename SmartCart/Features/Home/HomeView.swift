@@ -172,7 +172,11 @@ struct HomeView: View {
             }
             .buttonStyle(PressableButtonStyle())
             .accessibilityIdentifier("home-paste-recipe")
-            .accessibilityHint("Pastes recipe text or a copied recipe link")
+            .accessibilityHint(
+                RecipeLinkCapability.current.isAvailable
+                    ? "Pastes recipe text or a copied recipe link"
+                    : "Pastes recipe text"
+            )
 
             Divider()
                 .overlay(homeBorder)
@@ -534,7 +538,12 @@ struct HomeView: View {
         let trimmedText = normalizedText?.isEmpty == false ? normalizedText : nil
 
         if let validatedURL = trimmedText.flatMap(RecipeLinkInput.validHTTPSURL(from:)) {
-            appModel.openImporter(.recipeLink, initialText: validatedURL.absoluteString)
+            let capability = RecipeLinkCapability.current
+            if capability.isAvailable {
+                appModel.openImporter(.recipeLink, initialText: validatedURL.absoluteString)
+            } else {
+                appModel.showToast(capability.fallbackMessage)
+            }
         } else {
             appModel.openImporter(.recipeText, initialText: trimmedText)
         }

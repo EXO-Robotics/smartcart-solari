@@ -2,4 +2,4 @@
 
 // `$()` safely separates the URL slashes from xcconfig's `//` comment syntax.
 SMARTCART_BARCODE_BACKEND_URL = http:/$()/localhost:8787
-
+SMARTCART_RECIPE_BACKEND_URL = http:/$()/localhost:8787

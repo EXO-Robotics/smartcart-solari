@@ -146,11 +146,12 @@ protocol InstacartHandoffServicing: Sendable {
 
 actor InstacartHandoffClient: InstacartHandoffServicing {
     private let session: URLSession
-    private let baseURL: URL
+    private let baseURL: URL?
     private var cachedResponses: [Data: InstacartHandoffResponse] = [:]
 
     init(session: URLSession = .shared) {
         self.session = session
+        #if DEBUG
         let environment = ProcessInfo.processInfo.environment
         if let configured = environment["SMARTCART_COMMERCE_BACKEND_URL"] ?? environment["SMARTCART_RECIPE_BACKEND_URL"],
            let url = URL(string: configured) {
@@ -158,6 +159,9 @@ actor InstacartHandoffClient: InstacartHandoffServicing {
         } else {
             baseURL = URL(string: "http://localhost:8787")!
         }
+        #else
+        baseURL = nil
+        #endif
     }
 
     func createHandoff(
@@ -166,6 +170,9 @@ actor InstacartHandoffClient: InstacartHandoffServicing {
         preferredRetailer: InstacartRetailerPreference,
         fulfillment: CommerceFulfillmentPreference
     ) async throws -> InstacartHandoffResponse {
+        guard baseURL != nil else {
+            throw InstacartHandoffError.backendUnavailable
+        }
         let cacheKey = try JSONEncoder.smartCart.encode(
             CacheIdentity(
                 draft: draft,
@@ -230,7 +237,8 @@ actor InstacartHandoffClient: InstacartHandoffServicing {
         body: Body,
         bearerToken: String?
     ) async throws -> Response {
-        guard let url = URL(string: path, relativeTo: baseURL) else {
+        guard let baseURL,
+              let url = URL(string: path, relativeTo: baseURL) else {
             throw InstacartHandoffError.backendUnavailable
         }
         var request = URLRequest(url: url)

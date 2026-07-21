@@ -58,6 +58,7 @@
 		A20000000000000000000006 /* ExactProductIdentityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000007 /* ExactProductIdentityTests.swift */; };
 		A2000000000000000000000A /* ProductPurchaseGroupingServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000000000000000000000B /* ProductPurchaseGroupingServiceTests.swift */; };
 		A2000000000000000000000C /* SmartCartPersistenceCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000000000000000000000D /* SmartCartPersistenceCoordinatorTests.swift */; };
+		A8B000000000000000000001 /* RecipeLinkCapabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8B000000000000000000001 /* RecipeLinkCapabilityTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -102,6 +103,7 @@
 		B1000000000000000000001D /* MealPrepViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealPrepViews.swift; sourceTree = "<group>"; };
 		B1000000000000000000001E /* ContextualIngredientFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContextualIngredientFilter.swift; sourceTree = "<group>"; };
 		B1000000000000000000001F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B8B000000000000000000002 /* Info-Release.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-Release.plist"; sourceTree = "<group>"; };
 		B10000000000000000000020 /* OCRFocusRegion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRFocusRegion.swift; sourceTree = "<group>"; };
 		B10000000000000000000021 /* OCRFocusRegionSuggester.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRFocusRegionSuggester.swift; sourceTree = "<group>"; };
 		B10000000000000000000022 /* IngredientFocusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IngredientFocusView.swift; sourceTree = "<group>"; };
@@ -125,6 +127,7 @@
 		B20000000000000000000007 /* ExactProductIdentityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExactProductIdentityTests.swift; sourceTree = "<group>"; };
 		B2000000000000000000000B /* ProductPurchaseGroupingServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductPurchaseGroupingServiceTests.swift; sourceTree = "<group>"; };
 		B2000000000000000000000D /* SmartCartPersistenceCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartCartPersistenceCoordinatorTests.swift; sourceTree = "<group>"; };
+		B8B000000000000000000001 /* RecipeLinkCapabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeLinkCapabilityTests.swift; sourceTree = "<group>"; };
 		B30000000000000000000001 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
 		B30000000000000000000002 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		B30000000000000000000003 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
@@ -172,6 +175,7 @@
 			isa = PBXGroup;
 			children = (
 				B1000000000000000000001F /* Info.plist */,
+				B8B000000000000000000002 /* Info-Release.plist */,
 				B10000000000000000000001 /* SmartCartApp.swift */,
 				B10000000000000000000006 /* RootView.swift */,
 				B10000000000000000000013 /* PrivacyInfo.xcprivacy */,
@@ -319,6 +323,7 @@
 				B20000000000000000000007 /* ExactProductIdentityTests.swift */,
 				B2000000000000000000000B /* ProductPurchaseGroupingServiceTests.swift */,
 				B2000000000000000000000D /* SmartCartPersistenceCoordinatorTests.swift */,
+				B8B000000000000000000001 /* RecipeLinkCapabilityTests.swift */,
 			);
 			path = SmartCartTests;
 			sourceTree = "<group>";
@@ -484,6 +489,7 @@
 				A20000000000000000000006 /* ExactProductIdentityTests.swift in Sources */,
 				A2000000000000000000000A /* ProductPurchaseGroupingServiceTests.swift in Sources */,
 				A2000000000000000000000C /* SmartCartPersistenceCoordinatorTests.swift in Sources */,
+				A8B000000000000000000001 /* RecipeLinkCapabilityTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -608,11 +614,10 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = SmartCart/Info.plist;
+				INFOPLIST_FILE = "SmartCart/Info-Release.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = SmartCart;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.food-and-drink";
 				INFOPLIST_KEY_NSCameraUsageDescription = "SmartCart uses the camera to scan recipe cards, cookbook pages, and pantry barcodes.";
-				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking = YES;
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "SmartCart imports recipe screenshots and photos from your library.";
 				INFOPLIST_KEY_SmartCartBarcodeBackendURL = "$(SMARTCART_BARCODE_BACKEND_URL)";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;

@@ -24,15 +24,8 @@
 	<string>public.app-category.food-and-drink</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSAllowsLocalNetworking</key>
-		<true/>
-	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>SmartCart uses the camera to scan recipe cards, cookbook pages, and pantry barcodes.</string>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>SmartCart connects to local recipe and barcode services during development.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>SmartCart imports recipe screenshots and photos from your library.</string>
 	<key>SmartCartBarcodeBackendURL</key>

@@ -1,12 +1,211 @@
 import Foundation
+import Network
+
+enum RecipePageBackendBuildMode: Hashable, Sendable {
+    case debug
+    case release
+
+    static var current: Self {
+        #if DEBUG
+        .debug
+        #else
+        .release
+        #endif
+    }
+}
+
+enum RecipePageBackendConfigurationSource: Hashable, Sendable {
+    case injected
+    case debugEnvironment
+    case bundle
+}
+
+enum RecipePageBackendConfigurationError: Error, Hashable, Sendable {
+    case missing
+    case invalidURL
+    case insecureReleaseURL
+    case disallowedReleaseHost
+}
+
+struct RecipePageBackendConfiguration: Hashable, Sendable {
+    static let bundleKey = "SmartCartRecipeBackendURL"
+
+    let baseURL: URL
+    let source: RecipePageBackendConfigurationSource
+
+    static func resolve(
+        explicitURL: URL? = nil,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        bundleInfo: [String: Any] = Bundle.main.infoDictionary ?? [:],
+        buildMode: RecipePageBackendBuildMode = .current
+    ) -> Result<Self, RecipePageBackendConfigurationError> {
+        if let explicitURL {
+            return validated(explicitURL, source: .injected, buildMode: buildMode)
+        }
+        if buildMode == .debug,
+           let value = environment["SMARTCART_RECIPE_BACKEND_URL"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !value.isEmpty {
+            guard let url = URL(string: value) else { return .failure(.invalidURL) }
+            return validated(url, source: .debugEnvironment, buildMode: buildMode)
+        }
+        if let rawValue = bundleInfo[bundleKey] as? String {
+            let value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !value.isEmpty, !value.contains("$("), let url = URL(string: value) {
+                return validated(url, source: .bundle, buildMode: buildMode)
+            }
+            if !value.isEmpty, !value.contains("$(") { return .failure(.invalidURL) }
+        }
+        return .failure(.missing)
+    }
+
+    private static func validated(
+        _ url: URL,
+        source: RecipePageBackendConfigurationSource,
+        buildMode: RecipePageBackendBuildMode
+    ) -> Result<Self, RecipePageBackendConfigurationError> {
+        guard let scheme = url.scheme?.lowercased(),
+              let host = url.host?.lowercased(),
+              !host.isEmpty,
+              url.user == nil,
+              url.password == nil,
+              url.query == nil,
+              url.fragment == nil,
+              scheme == "http" || scheme == "https" else {
+            return .failure(.invalidURL)
+        }
+        if buildMode == .release {
+            guard scheme == "https" else { return .failure(.insecureReleaseURL) }
+            guard !isDisallowedReleaseHost(host) else {
+                return .failure(.disallowedReleaseHost)
+            }
+        }
+        return .success(Self(baseURL: url, source: source))
+    }
+
+    private static func isDisallowedReleaseHost(_ rawHost: String) -> Bool {
+        var host = rawHost
+        while host.hasSuffix(".") { host.removeLast() }
+        guard !host.isEmpty else { return true }
+        if host == "localhost" || host.hasSuffix(".localhost") || host.hasSuffix(".local") {
+            return true
+        }
+        if ["example", "example.com", "example.net", "example.org", "test", "invalid"]
+            .contains(host) ||
+            [".example", ".example.com", ".example.net", ".example.org", ".test", ".invalid"]
+            .contains(where: host.hasSuffix) {
+            return true
+        }
+        if host == "0.0.0.0" || host == "::" || host == "::1" || host == "[::1]" || host == "*" {
+            return true
+        }
+
+        let unwrappedHost = host.trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+        if let address = IPv4Address(unwrappedHost) {
+            return isDisallowedIPv4(Array(address.rawValue))
+        }
+        if let address = IPv6Address(unwrappedHost) {
+            let bytes = Array(address.rawValue)
+            guard bytes.count == 16 else { return true }
+            if bytes.allSatisfy({ $0 == 0 }) ||
+                (bytes.dropLast().allSatisfy({ $0 == 0 }) && bytes.last == 1) {
+                return true
+            }
+            if bytes.prefix(10).allSatisfy({ $0 == 0 }), bytes[10] == 0xff, bytes[11] == 0xff {
+                return isDisallowedIPv4(Array(bytes.suffix(4)))
+            }
+            if bytes[0] & 0xfe == 0xfc ||
+                (bytes[0] == 0xfe && bytes[1] & 0xc0 == 0x80) ||
+                (bytes[0] == 0xfe && bytes[1] & 0xc0 == 0xc0) ||
+                bytes[0] == 0xff || Array(bytes.prefix(4)) == [0x20, 0x01, 0x0d, 0xb8] {
+                return true
+            }
+            return false
+        }
+        return !isValidPublicDNSHost(host)
+    }
+
+    private static func isValidPublicDNSHost(_ host: String) -> Bool {
+        guard host.utf8.count <= 253 else { return false }
+        let labels = host.split(separator: ".", omittingEmptySubsequences: false)
+        guard labels.count >= 2 else { return false }
+        return labels.allSatisfy { label in
+            let bytes = Array(label.utf8)
+            guard (1...63).contains(bytes.count),
+                  let first = bytes.first,
+                  let last = bytes.last,
+                  isASCIIAlphaNumeric(first),
+                  isASCIIAlphaNumeric(last) else { return false }
+            return bytes.allSatisfy { isASCIIAlphaNumeric($0) || $0 == 45 }
+        }
+    }
+
+    private static func isASCIIAlphaNumeric(_ byte: UInt8) -> Bool {
+        (48...57).contains(byte) || (65...90).contains(byte) || (97...122).contains(byte)
+    }
+
+    private static func isDisallowedIPv4(_ octets: [UInt8]) -> Bool {
+        guard octets.count == 4 else { return true }
+        let first = octets[0]
+        let second = octets[1]
+        let third = octets[2]
+        switch (first, second) {
+        case (0, _), (10, _), (127, _), (169, 254), (192, 168),
+             (172, 16...31), (100, 64...127), (198, 18...19):
+            return true
+        default:
+            break
+        }
+        return first >= 224 ||
+            (first == 192 && second == 0 && (third == 0 || third == 2)) ||
+            (first == 198 && second == 51 && third == 100) ||
+            (first == 203 && second == 0 && third == 113)
+    }
+}
+
+enum RecipeLinkCapability: Hashable, Sendable {
+    case available
+    case unavailable(RecipePageBackendConfigurationError)
+
+    static var current: Self { resolve() }
+
+    static func resolve(
+        explicitURL: URL? = nil,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        bundleInfo: [String: Any] = Bundle.main.infoDictionary ?? [:],
+        buildMode: RecipePageBackendBuildMode = .current
+    ) -> Self {
+        switch RecipePageBackendConfiguration.resolve(
+            explicitURL: explicitURL,
+            environment: environment,
+            bundleInfo: bundleInfo,
+            buildMode: buildMode
+        ) {
+        case .success: .available
+        case .failure(let error): .unavailable(error)
+        }
+    }
+
+    var isAvailable: Bool {
+        if case .available = self { return true }
+        return false
+    }
+
+    var fallbackMessage: String {
+        "Recipe links aren’t available in this build. Import photos or paste the ingredient list instead."
+    }
+}
 
 enum RecipeLinkImporter {
-    static func importRecipe(from url: URL, source: RecipeSource) async throws -> Recipe {
+    static func importRecipe(
+        from url: URL,
+        source: RecipeSource,
+        client: RecipePageBackendClient = RecipePageBackendClient()
+    ) async throws -> Recipe {
         guard url.scheme?.lowercased() == "https" else {
             throw RecipePageClientError.invalidURL
         }
 
-        let client = RecipePageBackendClient()
         let response = try await client.extract(url: url)
         let sectionedText = response.recipe.ingredientSections.flatMap { section -> [String] in
             guard let name = section.name, !name.isEmpty else { return section.ingredients }
@@ -31,23 +230,37 @@ enum RecipeLinkImporter {
     }
 }
 
-private struct RecipePageBackendClient {
+struct RecipePageBackendClient {
     private let session: URLSession
-    private let baseURL: URL
+    private let configuration: Result<RecipePageBackendConfiguration, RecipePageBackendConfigurationError>
 
-    init(session: URLSession = .shared) {
+    init(
+        session: URLSession = .shared,
+        baseURL: URL? = nil,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        bundleInfo: [String: Any] = Bundle.main.infoDictionary ?? [:],
+        buildMode: RecipePageBackendBuildMode = .current
+    ) {
         self.session = session
-        if let configured = ProcessInfo.processInfo.environment["SMARTCART_RECIPE_BACKEND_URL"],
-           let url = URL(string: configured) {
-            baseURL = url
-        } else {
-            baseURL = URL(string: "http://localhost:8787")!
-        }
+        configuration = RecipePageBackendConfiguration.resolve(
+            explicitURL: baseURL,
+            environment: environment,
+            bundleInfo: bundleInfo,
+            buildMode: buildMode
+        )
     }
 
     func extract(url: URL) async throws -> RecipePageResponse {
+        let baseURL: URL
+        switch configuration {
+        case .success(let configuration):
+            baseURL = configuration.baseURL
+        case .failure(let error):
+            throw RecipePageClientError.configuration(error)
+        }
         do {
             let account: AccountEnvelope = try await post(
+                baseURL: baseURL,
                 path: "/v1/demo/accounts",
                 body: [
                     "displayName": "SmartCart Local Recipe Import",
@@ -56,11 +269,13 @@ private struct RecipePageBackendClient {
                 bearerToken: nil
             )
             let sessionEnvelope: SessionEnvelope = try await post(
+                baseURL: baseURL,
                 path: "/v1/demo/sessions",
                 body: ["accountId": account.account.id],
                 bearerToken: nil
             )
             return try await post(
+                baseURL: baseURL,
                 path: "/v1/recipe-pages/extract",
                 body: ["url": url.absoluteString],
                 bearerToken: sessionEnvelope.session.token
@@ -76,12 +291,13 @@ private struct RecipePageBackendClient {
     }
 
     private func post<Response: Decodable>(
+        baseURL: URL,
         path: String,
         body: [String: String],
         bearerToken: String?
     ) async throws -> Response {
-        guard let url = URL(string: path, relativeTo: baseURL) else {
-            throw RecipePageClientError.backendUnavailable
+        let url = path.split(separator: "/").reduce(baseURL) {
+            $0.appendingPathComponent(String($1))
         }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -122,7 +338,7 @@ private struct SessionEnvelope: Decodable {
     var session: Session
 }
 
-private struct RecipePageResponse: Decodable {
+struct RecipePageResponse: Decodable {
     struct Page: Decodable {
         var originalURL: URL
         var finalURL: URL
@@ -159,6 +375,7 @@ private struct ErrorEnvelope: Decodable {
 
 private enum RecipePageClientError: LocalizedError {
     case invalidURL
+    case configuration(RecipePageBackendConfigurationError)
     case backendUnavailable
     case timeout
     case unreadableResponse
@@ -168,8 +385,10 @@ private enum RecipePageClientError: LocalizedError {
         switch self {
         case .invalidURL:
             "Recipe links must begin with https://."
+        case .configuration:
+            RecipeLinkCapability.unavailable(.missing).fallbackMessage
         case .backendUnavailable:
-            "The local SmartCart recipe extractor is not running. Start backend/ and try again, or paste the ingredients."
+            "The recipe page service could not be reached. Try again, import photos, or paste the ingredient list."
         case .timeout:
             "The recipe page took too long to answer. Try again or paste the ingredients."
         case .unreadableResponse:

@@ -994,6 +994,13 @@ final class AppModel {
     }
 
     func openImporter(_ method: ImportMethod, initialText: String? = nil) {
+        if method == .recipeLink || method == .pinterest {
+            let capability = RecipeLinkCapability.current
+            guard capability.isAvailable else {
+                showToast(capability.fallbackMessage)
+                return
+            }
+        }
         track(.importStarted, properties: ["method": method.rawValue])
         presentedSheet = .importer(method, initialText)
     }
@@ -6307,6 +6314,7 @@ enum RecipeParser {
     }
 }
 
+#if DEBUG
 enum LegacyRecipeLinkImporter {
     static func importRecipe(from url: URL, source: RecipeSource) async throws -> Recipe {
         let (data, response) = try await URLSession.shared.data(from: url)
@@ -6428,6 +6436,7 @@ enum LegacyRecipeLinkImporter {
         return nil
     }
 }
+#endif
 
 enum RecipeImportError: LocalizedError {
     case unavailable

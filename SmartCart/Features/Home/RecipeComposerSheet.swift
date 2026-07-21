@@ -11,6 +11,7 @@ struct RecipeComposerSheet: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let initialMethod: ImportMethod
+    private let recipeLinkCapability: RecipeLinkCapability
 
     @State private var selectedMethod: ImportMethod
     @State private var title = "Lemon Herb Chicken Pasta"
@@ -55,13 +56,23 @@ struct RecipeComposerSheet: View {
         case link
     }
 
-    init(initialMethod: ImportMethod, initialText: String? = nil) {
-        let visibleInitialMethod = initialMethod == .pinterest ? .recipeLink : initialMethod
+    init(
+        initialMethod: ImportMethod,
+        initialText: String? = nil,
+        recipeLinkCapability: RecipeLinkCapability = .current
+    ) {
+        let requestedMethod = initialMethod == .pinterest ? .recipeLink : initialMethod
+        let requestedUnavailableLink = requestedMethod == .recipeLink && !recipeLinkCapability.isAvailable
+        let visibleInitialMethod: ImportMethod = requestedUnavailableLink ? .recipeText : requestedMethod
         let trimmedInitialText = initialText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         self.initialMethod = visibleInitialMethod
+        self.recipeLinkCapability = recipeLinkCapability
         _selectedMethod = State(initialValue: visibleInitialMethod)
         _linkText = State(
-            initialValue: visibleInitialMethod == .recipeLink ? trimmedInitialText : ""
+            initialValue: requestedMethod == .recipeLink ? trimmedInitialText : ""
+        )
+        _errorMessage = State(
+            initialValue: requestedUnavailableLink ? recipeLinkCapability.fallbackMessage : nil
         )
         if visibleInitialMethod == .sample {
             _title = State(initialValue: "Lemon Herb Chicken Pasta")
@@ -183,7 +194,7 @@ struct RecipeComposerSheet: View {
                 && selectedImageSetID == recognizedImageSetID
                 && !recipe.ingredients.isEmpty
         case .recipeLink, .pinterest:
-            validURL != nil
+            recipeLinkCapability.isAvailable && validURL != nil
         case .recipeText:
             !recipe.ingredients.isEmpty
         case .sample:
@@ -323,7 +334,10 @@ struct RecipeComposerSheet: View {
     }
 
     private var visibleImportMethods: [ImportMethod] {
-        [.camera, .photoLibrary, .recipeLink, .recipeText, .sample]
+        var methods: [ImportMethod] = [.camera, .photoLibrary]
+        if recipeLinkCapability.isAvailable { methods.append(.recipeLink) }
+        methods.append(contentsOf: [.recipeText, .sample])
+        return methods
     }
 
     @ViewBuilder
@@ -1011,6 +1025,11 @@ struct RecipeComposerSheet: View {
             }
 
         case .recipeLink, .pinterest:
+            guard recipeLinkCapability.isAvailable else {
+                selectedMethod = .recipeText
+                errorMessage = recipeLinkCapability.fallbackMessage
+                return
+            }
             guard let validURL else {
                 errorMessage = RecipeImportError.invalidURL.localizedDescription
                 return
