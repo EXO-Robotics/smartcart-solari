@@ -81,6 +81,7 @@
 		A70000000000000000000012 /* WeeklyMealSnapshotFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = B70000000000000000000013 /* WeeklyMealSnapshotFactory.swift */; };
 		A70000000000000000000013 /* WeeklyMealIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B70000000000000000000014 /* WeeklyMealIntegrationTests.swift */; };
 		A70000000000000000000014 /* WeeklyMealAccessibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B70000000000000000000015 /* WeeklyMealAccessibilityTests.swift */; };
+		A70000000000000000000015 /* RemoteWeeklyMealRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = B70000000000000000000017 /* RemoteWeeklyMealRepository.swift */; };
 		AS1000000000000000000001 /* SmartCartShareInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = BS1000000000000000000001 /* SmartCartShareInbox.swift */; };
 		AS1000000000000000000002 /* SmartCartShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BS1000000000000000000002 /* SmartCartShareViewController.swift */; };
 		AS1000000000000000000003 /* SmartCartShareInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = BS1000000000000000000001 /* SmartCartShareInbox.swift */; };
@@ -212,6 +213,7 @@
 		B70000000000000000000013 /* WeeklyMealSnapshotFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/WeeklyMealSnapshotFactory.swift; sourceTree = "<group>"; };
 		B70000000000000000000014 /* WeeklyMealIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeeklyMealIntegrationTests.swift; sourceTree = "<group>"; };
 		B70000000000000000000015 /* WeeklyMealAccessibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeeklyMealAccessibilityTests.swift; sourceTree = "<group>"; };
+		B70000000000000000000017 /* RemoteWeeklyMealRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/RemoteWeeklyMealRepository.swift; sourceTree = "<group>"; };
 		B70000000000000000000016 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -398,6 +400,7 @@
 			children = (
 				B70000000000000000000001 /* WeeklyMealModels.swift */,
 				B70000000000000000000002 /* BundledWeeklyMealRepository.swift */,
+				B70000000000000000000017 /* RemoteWeeklyMealRepository.swift */,
 				B70000000000000000000003 /* WeeklyMealCostEstimator.swift */,
 				B7000000000000000000000C /* WeeklyMealDisplayModelFactory.swift */,
 				B70000000000000000000013 /* WeeklyMealSnapshotFactory.swift */,
@@ -664,6 +667,7 @@
 				A9B000000000000000000001 /* LocalOperationRecorder.swift in Sources */,
 				A70000000000000000000001 /* WeeklyMealModels.swift in Sources */,
 				A70000000000000000000002 /* BundledWeeklyMealRepository.swift in Sources */,
+				A70000000000000000000015 /* RemoteWeeklyMealRepository.swift in Sources */,
 				A70000000000000000000003 /* WeeklyMealCostEstimator.swift in Sources */,
 				A7000000000000000000000B /* WeeklyMealDisplayModelFactory.swift in Sources */,
 				A7000000000000000000000C /* WeeklyMealCard.swift in Sources */,

@@ -8,6 +8,9 @@
   },
   "routes": [
     {
+      "handle": "filesystem"
+    },
+    {
       "src": "/health",
       "methods": ["GET", "HEAD"],
       "dest": "/api/index.js?route=health"

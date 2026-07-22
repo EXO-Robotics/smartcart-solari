@@ -21,25 +21,23 @@ final class ReleaseBlockerPackageMathTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(renderedSize.height, 44)
     }
 
-    func testRequiredReversalAndScannerControlsRetainHitTargetModifier() throws {
+    func testCurrentRemovalAndScannerControlsRetainHitTargetModifier() throws {
         let mealPrepSource = try sourceText("SmartCart/Features/MealPrep/MealPrepViews.swift")
         let recipeReadySource = try sourceText("SmartCart/Features/Cart/CartView.swift")
         let scannerSource = try sourceText("SmartCart/Features/Pantry/BarcodeScannerView.swift")
 
-        XCTAssertTrue(mealPrepSource.contains("pantryChoice(\"Use Pantry\""))
-        XCTAssertTrue(mealPrepSource.contains("pantryChoice(\"Buy Full\""))
         XCTAssertTrue(
             try sourceSection(
                 recipeReadySource,
-                from: "private func mealPrepReviewControls",
-                through: "private func performMealPrepReviewAction"
+                from: "private func mealPrepRemoveButton",
+                through: "private func mealPrepServingControls"
             ).contains(".smartCartMinimumHitTarget()")
         )
         XCTAssertTrue(
             try sourceSection(
                 mealPrepSource,
-                from: "private func pantryChoice",
-                through: "private var sourceRecipes"
+                from: "private func removeButton",
+                through: "private var continueButton"
             ).contains(".smartCartMinimumHitTarget()")
         )
         XCTAssertTrue(

@@ -9,6 +9,7 @@
   },
   "scripts": {
     "start": "node src/server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "validate:weekly-meals": "node scripts/validate-weekly-meals.mjs"
   }
 }

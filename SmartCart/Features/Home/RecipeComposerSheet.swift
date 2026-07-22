@@ -16,7 +16,13 @@ struct RecipeComposerInitialInput: Equatable {
         initialText: String?,
         recipeLinkCapability: RecipeLinkCapability
     ) {
-        let requestedMethod = initialMethod == .pinterest ? .recipeLink : initialMethod
+        let requestedMethod: ImportMethod
+        switch initialMethod {
+        case .pinterest:
+            requestedMethod = .recipeLink
+        default:
+            requestedMethod = initialMethod
+        }
         let requestedUnavailableLink = requestedMethod == .recipeLink
             && !recipeLinkCapability.isAvailable
         visibleMethod = requestedUnavailableLink ? .recipeText : requestedMethod
@@ -40,19 +46,9 @@ struct RecipeComposerSheet: View {
     private let recipeLinkCapability: RecipeLinkCapability
 
     @State private var selectedMethod: ImportMethod
-    @State private var title = "Lemon Herb Chicken Pasta"
-    @State private var recipeText = """
-    1 lb chicken breasts
-    8 oz penne pasta
-    2 tbsp olive oil
-    1 lemon, zested and juiced
-    2 cloves garlic, minced
-    1/2 cup heavy cream
-    1/2 cup parmesan cheese
-    1 bunch fresh parsley
-    """
+    @State private var title = "Imported Recipe"
+    @State private var recipeText = ""
     @State private var linkText = ""
-    @State private var selectedSampleIndex = 0
     @State private var photoItems: [PhotosPickerItem] = []
     @State private var selectedImages: [UIImage] = []
     @State private var showCamera = false
@@ -100,12 +96,8 @@ struct RecipeComposerSheet: View {
         _selectedMethod = State(initialValue: input.visibleMethod)
         _linkText = State(initialValue: input.linkText)
         _errorMessage = State(initialValue: input.fallbackMessage)
-        if input.visibleMethod == .sample {
-            _title = State(initialValue: "Lemon Herb Chicken Pasta")
-        } else {
-            _title = State(initialValue: "Imported Recipe")
-            _recipeText = State(initialValue: input.recipeText)
-        }
+        _title = State(initialValue: "Imported Recipe")
+        _recipeText = State(initialValue: input.recipeText)
     }
 
     private var draftRecipe: Recipe {
@@ -164,7 +156,6 @@ struct RecipeComposerSheet: View {
         case .photoLibrary: "Imported from Photos"
         case .recipeLink, .pinterest: linkText
         case .recipeText: "Pasted into SmartCart"
-        case .sample: "SmartCart sample recipe"
         }
     }
 
@@ -221,8 +212,6 @@ struct RecipeComposerSheet: View {
             recipeLinkCapability.isAvailable && validURL != nil
         case .recipeText:
             !recipe.ingredients.isEmpty
-        case .sample:
-            appModel.sampleRecipes.indices.contains(selectedSampleIndex)
         }
     }
 
@@ -249,7 +238,7 @@ struct RecipeComposerSheet: View {
                     methodPicker
                     selectedMethodContent
 
-                    if selectedMethod != .sample && selectedMethod != .recipeLink && selectedMethod != .pinterest {
+                    if selectedMethod != .recipeLink && selectedMethod != .pinterest {
                         editableRecipeFields(for: draft)
                         if !draft.ingredients.isEmpty {
                             detectedIngredients(in: draft)
@@ -404,7 +393,7 @@ struct RecipeComposerSheet: View {
     private var visibleImportMethods: [ImportMethod] {
         var methods: [ImportMethod] = [.camera, .photoLibrary]
         if recipeLinkCapability.isAvailable { methods.append(.recipeLink) }
-        methods.append(contentsOf: [.recipeText, .sample])
+        methods.append(.recipeText)
         return methods
     }
 
@@ -522,47 +511,6 @@ struct RecipeComposerSheet: View {
                 }
             }
 
-        case .sample:
-            samplePicker
-        }
-    }
-
-    private var samplePicker: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "Choose a sample", subtitle: "Perfect for testing every step")
-
-            ForEach(Array(appModel.sampleRecipes.enumerated()), id: \.element.id) { index, recipe in
-                Button {
-                    selectedSampleIndex = index
-                } label: {
-                    HStack(spacing: 13) {
-                        Image(systemName: recipe.heroSymbol)
-                            .font(.title3.bold())
-                            .foregroundStyle(index == selectedSampleIndex ? SmartCartTheme.onAccent : SmartCartTheme.green)
-                            .frame(width: 48, height: 48)
-                            .background(index == selectedSampleIndex ? AnyShapeStyle(SmartCartTheme.green) : AnyShapeStyle(SmartCartTheme.herbLight))
-                            .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
-                            .shadow(color: index == selectedSampleIndex ? SmartCartTheme.mintGlow : .clear, radius: 10)
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(recipe.title)
-                                .font(.headline)
-                                .foregroundStyle(SmartCartTheme.navy)
-                            Text("\(recipe.ingredients.count) ingredients · \(recipe.servings) servings · \(recipe.totalMinutes)m")
-                                .font(.caption)
-                                .foregroundStyle(SmartCartTheme.secondaryInk)
-                        }
-
-                        Spacer()
-
-                        Image(systemName: index == selectedSampleIndex ? "checkmark.circle.fill" : "circle")
-                            .font(.title3)
-                            .foregroundStyle(index == selectedSampleIndex ? SmartCartTheme.green : SmartCartTheme.border)
-                    }
-                    .smartCartCard(padding: 13)
-                }
-                .buttonStyle(PressableButtonStyle())
-            }
         }
     }
 
@@ -888,7 +836,6 @@ struct RecipeComposerSheet: View {
         if isProcessing { return processingMessage }
         return switch selectedMethod {
         case .recipeLink, .pinterest: "Import recipe"
-        case .sample: "Use this sample"
         default: "Review ingredients"
         }
     }
@@ -899,7 +846,6 @@ struct RecipeComposerSheet: View {
         case .recipeLink, .pinterest:
             validURL.map(RecipeLinkInput.source(for:)) ?? .link
         case .recipeText: .text
-        case .sample: .sample
         }
     }
 
@@ -1135,14 +1081,6 @@ struct RecipeComposerSheet: View {
         errorMessage = nil
 
         switch selectedMethod {
-        case .sample:
-            guard appModel.sampleRecipes.indices.contains(selectedSampleIndex) else { return }
-            if !submitRecipe(appModel.sampleRecipes[selectedSampleIndex]) {
-                errorMessage = sharedImportFailureMessage(
-                    fallback: "That sample has no ingredients. Choose another recipe."
-                )
-            }
-
         case .recipeLink, .pinterest:
             guard recipeLinkCapability.isAvailable else {
                 selectedMethod = .recipeText

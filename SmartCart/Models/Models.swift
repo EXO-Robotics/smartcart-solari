@@ -62,7 +62,6 @@ enum ImportMethod: String, CaseIterable, Identifiable, Hashable, Codable {
     case recipeLink
     case pinterest
     case recipeText
-    case sample
 
     var id: String { rawValue }
 
@@ -73,7 +72,6 @@ enum ImportMethod: String, CaseIterable, Identifiable, Hashable, Codable {
         case .recipeLink: "Paste a link"
         case .pinterest: "Pinterest"
         case .recipeText: "Paste recipe"
-        case .sample: "Try a sample"
         }
     }
 
@@ -84,7 +82,6 @@ enum ImportMethod: String, CaseIterable, Identifiable, Hashable, Codable {
         case .recipeLink: "Link"
         case .pinterest: "Pinterest"
         case .recipeText: "Text"
-        case .sample: "Sample"
         }
     }
 
@@ -95,7 +92,6 @@ enum ImportMethod: String, CaseIterable, Identifiable, Hashable, Codable {
         case .recipeLink: "Import recipe page data"
         case .pinterest: "Use a recipe pin link"
         case .recipeText: "Paste an ingredient list"
-        case .sample: "Explore the complete flow"
         }
     }
 
@@ -106,7 +102,6 @@ enum ImportMethod: String, CaseIterable, Identifiable, Hashable, Codable {
         case .recipeLink: "link"
         case .pinterest: "p.circle.fill"
         case .recipeText: "doc.text.fill"
-        case .sample: "takeoutbag.and.cup.and.straw.fill"
         }
     }
 
@@ -117,7 +112,6 @@ enum ImportMethod: String, CaseIterable, Identifiable, Hashable, Codable {
         case .recipeLink: SmartCartTheme.navy
         case .pinterest: Color(red: 0.83, green: 0.08, blue: 0.17)
         case .recipeText: SmartCartTheme.green
-        case .sample: SmartCartTheme.amber
         }
     }
 }

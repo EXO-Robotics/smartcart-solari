@@ -3,6 +3,7 @@
 // Verified public HTTPS barcode-only service. This endpoint exposes only
 // /health and /v1/barcodes/{gtin}; recipe import remains independently gated.
 SMARTCART_BARCODE_BACKEND_URL = https:/$()/smartcart-barcode-api-omega.vercel.app
+SMARTCART_WEEKLY_MEALS_BASE_URL = https:/$()/smartcart-barcode-api-omega.vercel.app
 
 // Recipe-link import remains hidden until this points at a verified public
 // HTTPS service exposing /v1/recipe-pages/extract and its session routes.

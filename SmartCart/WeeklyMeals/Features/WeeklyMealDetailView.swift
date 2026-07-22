@@ -2,25 +2,22 @@ import SwiftUI
 
 struct WeeklyMealDetailView: View {
     @Environment(AppModel.self) private var appModel
+    @Environment(WeeklyMealsStore.self) private var weeklyMealsStore
     @State private var servings: Int
+    @State private var didInitializeServings = false
     @State private var includedOptionalIngredientIDs: Set<String> = []
     @State private var isSaved = false
     @State private var isInMealPrep = false
 
     let recipeID: CuratedRecipeID
-    private let collectionID: String?
-    private let meal: ResolvedWeeklyMeal?
 
     init(recipeID: CuratedRecipeID) {
         self.recipeID = recipeID
-        let collection = try? BundledWeeklyMealRepository().activeCollection(
-            on: Date(),
-            calendar: Calendar.autoupdatingCurrent
-        )
-        collectionID = collection?.id
-        meal = collection?.meals.first { $0.recipe.id == recipeID }
-        _servings = State(initialValue: meal?.recipe.defaultServings ?? 1)
+        _servings = State(initialValue: 1)
     }
+
+    private var collectionID: String? { weeklyMealsStore.collection?.id }
+    private var meal: ResolvedWeeklyMeal? { weeklyMealsStore.meal(id: recipeID) }
 
     var body: some View {
         Group {
@@ -61,7 +58,13 @@ struct WeeklyMealDetailView: View {
         .navigationTitle("Weekly Meal")
         .navigationBarTitleDisplayMode(.inline)
         .domainUndoOverlay()
-        .onAppear(perform: refreshActionState)
+        .onAppear {
+            if !didInitializeServings, let meal {
+                servings = meal.recipe.defaultServings
+                didInitializeServings = true
+            }
+            refreshActionState()
+        }
     }
 
     private func hero(_ meal: ResolvedWeeklyMeal) -> some View {

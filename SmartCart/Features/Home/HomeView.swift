@@ -3,6 +3,7 @@ import UIKit
 
 struct HomeView: View {
     @Environment(AppModel.self) private var appModel
+    @Environment(WeeklyMealsStore.self) private var weeklyMealsStore
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -75,6 +76,9 @@ struct HomeView: View {
                     weeklyMealRackInteraction.frame = frame
                 }
                 .simultaneousGesture(homeWeeklyMealRackGesture, including: .gesture)
+                .refreshable {
+                    await weeklyMealsStore.refreshIfNeeded(force: true)
+                }
 
                 if hasTripActions {
                     continueShoppingTripsDrawer(
@@ -138,10 +142,8 @@ struct HomeView: View {
     }
 
     private func shopWeeklyMeal(_ recipeID: CuratedRecipeID) {
-        guard let collection = try? BundledWeeklyMealRepository().activeCollection(
-            on: Date(),
-            calendar: Calendar.autoupdatingCurrent
-        ), let meal = collection.meals.first(where: { $0.recipe.id == recipeID }) else {
+        guard let collection = weeklyMealsStore.collection,
+              let meal = weeklyMealsStore.meal(id: recipeID) else {
             appModel.showToast("This meal could not be prepared")
             return
         }
@@ -317,12 +319,6 @@ struct HomeView: View {
             }
             .accessibilityIdentifier("home-import-manual")
 
-            Button {
-                appModel.openImporter(.sample)
-            } label: {
-                Label("Try a Sample", systemImage: "takeoutbag.and.cup.and.straw.fill")
-            }
-            .accessibilityIdentifier("home-import-sample")
         } label: {
             Image(systemName: "ellipsis")
                 .font(.title3.bold())
@@ -333,7 +329,7 @@ struct HomeView: View {
         }
         .accessibilityIdentifier("home-import-more")
         .accessibilityLabel("More options")
-        .accessibilityHint("Shows manual entry and sample recipe options")
+        .accessibilityHint("Shows manual recipe entry")
     }
 
     private var tripActionPresentations: [HomeTripActionPresentation] {

@@ -106,6 +106,8 @@ struct MealPrepSelectionView: View {
                             servingControls(recipe: recipe, selection: selection)
                         }
                         .frame(maxWidth: .infinity, alignment: .trailing)
+                        removeButton(recipe: recipe, selection: selection)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
                     }
                 } else {
                     HStack {
@@ -114,6 +116,7 @@ struct MealPrepSelectionView: View {
                             .foregroundStyle(SmartCartTheme.secondaryInk)
                         Spacer()
                         servingControls(recipe: recipe, selection: selection)
+                        removeButton(recipe: recipe, selection: selection)
                     }
                 }
             }
@@ -197,6 +200,22 @@ struct MealPrepSelectionView: View {
         }
         .buttonStyle(PressableButtonStyle())
         .accessibilityLabel(delta > 0 ? "Increase servings for \(recipeTitle)" : "Decrease servings for \(recipeTitle)")
+    }
+
+    private func removeButton(recipe: Recipe, selection: MealPrepSelection) -> some View {
+        Button(role: .destructive) {
+            appModel.removeRecipeFromMealPrep(selectionID: selection.id)
+        } label: {
+            Label("Remove", systemImage: "trash")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(SmartCartTheme.coral)
+                .frame(minHeight: 44)
+        }
+        .buttonStyle(.plain)
+        .smartCartMinimumHitTarget()
+        .accessibilityLabel("Remove \(recipe.title) from Meal Prep")
+        .accessibilityHint("You can undo this removal")
+        .accessibilityIdentifier("meal-prep-remove-\(selection.id.uuidString)")
     }
 
     private var continueButton: some View {

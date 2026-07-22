@@ -39,6 +39,8 @@
 	<string>$(SMARTCART_BARCODE_BACKEND_URL)</string>
 	<key>SmartCartRecipeBackendURL</key>
 	<string>$(SMARTCART_RECIPE_BACKEND_URL)</string>
+	<key>SmartCartWeeklyMealsBaseURL</key>
+	<string>$(SMARTCART_WEEKLY_MEALS_BASE_URL)</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchScreen</key>

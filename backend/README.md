@@ -33,11 +33,12 @@ npm test
 
 Tests use only `node:test`, saved HTML, injected fetch doubles, and an ephemeral loopback HTTP port. No live website, provider, database, or package download is required.
 
-## Beta barcode deployment surface
+## Beta public deployment surface
 
 The Vercel project rooted at this `backend` directory deliberately deploys only one small
-function. `vercel.json` exposes `GET`/`HEAD /health` and `GET /v1/barcodes/{gtin}` and returns
-404 for every other route and method. The function reuses `BarcodeCatalogService`; it does not
+function plus reviewed static Weekly Meals JSON. `vercel.json` exposes `GET`/`HEAD /health`,
+`GET /v1/barcodes/{gtin}`, and files under `/weekly-meals`; it returns 404 for every other route
+and method. The function reuses `BarcodeCatalogService`; it does not
 import or deploy the mock account, session, OAuth, manifest, analytics, recipe-page, affiliate,
 or Instacart application routes.
 
@@ -45,6 +46,12 @@ This is a beta product-identity lookup, not a deployment of the complete local/d
 Its positive and negative caches and provider limiter are process-local and may be cold after a
 new function instance starts. Do not configure a Vercel project for this directory as if the
 other local/demo routes were production services.
+
+Weekly Meals uses `public/weekly-meals/manifest.json` as a mutable pointer and immutable,
+self-contained files under `public/weekly-meals/collections`. Validate every editorial change
+with `npm run validate:weekly-meals`; GitHub Actions runs the same command before reviewed content
+reaches the production branch. The iOS client validates and caches content independently and
+falls back to its bundled collection when this static surface is unavailable or invalid.
 
 ## API overview
 

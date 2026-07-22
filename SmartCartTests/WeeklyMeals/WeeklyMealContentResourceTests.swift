@@ -87,6 +87,27 @@ final class WeeklyMealContentResourceTests: XCTestCase {
         )
     }
 
+    func testPublishedStaticWeekOneMatchesBundledEditorialRecords() throws {
+        let bundledRecipes = try JSONDecoder().decode(
+            WeeklyMealRecipesResource.self,
+            from: SourceResourceLoader().data(resource: "recipes-v1.json")
+        ).recipes
+        let bundledCollection = try JSONDecoder().decode(
+            WeeklyMealCollection.self,
+            from: SourceResourceLoader().data(resource: "week-01.json")
+        )
+        let remoteData = try Data(contentsOf: repositoryRoot
+            .appendingPathComponent("backend/public/weekly-meals/collections/week-001-v1.json"))
+        let remote = try RemoteWeeklyMealsValidator.decoder().decode(
+            RemoteWeeklyMealCollectionDocument.self,
+            from: remoteData
+        )
+
+        XCTAssertEqual(remote.revision, 1)
+        XCTAssertEqual(remote.collection, bundledCollection)
+        XCTAssertEqual(remote.recipes, bundledRecipes)
+    }
+
     private static let expectedRecipeIDs: Set<String> = [
         "weekly.protein-overnight-oats",
         "weekly.make-ahead-breakfast-burritos",
@@ -97,6 +118,13 @@ final class WeeklyMealContentResourceTests: XCTestCase {
         "weekly.protein-berry-smoothie",
         "weekly.creamy-buffalo-chicken-dip"
     ]
+
+    private var repositoryRoot: URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+    }
 }
 
 private struct SourceResourceLoader: WeeklyMealsResourceLoading {

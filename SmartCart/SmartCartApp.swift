@@ -6,12 +6,14 @@ struct SmartCartApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @State private var appModel = AppModel()
     @State private var appearanceController = SmartCartAppearanceController()
+    @State private var weeklyMealsStore = WeeklyMealsStore()
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environment(appModel)
                 .environment(appearanceController)
+                .environment(weeklyMealsStore)
                 .preferredColorScheme(appearanceController.appearance.colorScheme)
                 .onAppear {
                     if let raw = ProcessInfo.processInfo.environment["SMARTCART_START_TAB"],
@@ -20,6 +22,7 @@ struct SmartCartApp: App {
                     }
                     if scenePhase == .active {
                         appModel.applicationDidBecomeActive()
+                        Task { await weeklyMealsStore.refreshIfNeeded() }
                     }
                 }
                 .onChange(of: scenePhase) { _, phase in
@@ -36,6 +39,7 @@ struct SmartCartApp: App {
                         }
                     case .active:
                         appModel.applicationDidBecomeActive()
+                        Task { await weeklyMealsStore.refreshIfNeeded() }
                     @unknown default:
                         appModel.requestLifecyclePersistenceFlush()
                     }

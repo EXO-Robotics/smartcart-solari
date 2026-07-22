@@ -1,0 +1,42 @@
+name: Validate Weekly Meals content
+
+on:
+  pull_request:
+    paths:
+      - "backend/public/weekly-meals/**"
+      - "backend/scripts/validate-weekly-meals.mjs"
+      - "backend/package.json"
+      - ".github/workflows/weekly-meals-content.yml"
+  push:
+    branches: [main]
+    paths:
+      - "backend/public/weekly-meals/**"
+      - "backend/scripts/validate-weekly-meals.mjs"
+      - "backend/package.json"
+      - ".github/workflows/weekly-meals-content.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Preserve immutable collection URLs
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          changed_existing="$(git diff --name-status "origin/${BASE_REF}...HEAD" -- backend/public/weekly-meals/collections | awk '$1 != "A"')"
+          if [ -n "$changed_existing" ]; then
+            echo "Published collection files are immutable; add a new revision file instead."
+            echo "$changed_existing"
+            exit 1
+          fi
+      - run: npm --prefix backend run validate:weekly-meals

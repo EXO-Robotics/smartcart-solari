@@ -57,7 +57,7 @@ These fields are backward-compatible additions within schema v6, not a schema-v7
 - present with unknown IDs: intersect with retained recipe IDs and discard the unknown values; and
 - present with valid IDs: expose only those retained recipes in Saved Recipes and Meal Prep selection.
 
-The same inference applies after v0-v5 decoding because those legacy migrations produce no membership field. A fresh install still begins with empty membership even though the dedicated sample catalog is available. The first import of a new non-sample recipe saves it by default; samples are never auto-saved, and reopening a retained unsaved recipe does not silently resave it.
+The same inference applies after v0-v5 decoding because those legacy migrations produce no membership field. A fresh install begins with no tester recipe records and empty Saved Recipes membership; curated discovery is supplied independently by bundled Weekly Meals. The first import of a new non-sample recipe saves it by default, and reopening a retained unsaved recipe does not silently resave it.
 
 The legacy decoders remain isolated by schema version. Loading a valid v0-v5 file first applies the existing v6 domain migration and then advances to the current schema through the revision-safe rewrite boundary. If that rewrite fails after a successful decode, SmartCart continues from the migrated in-memory state, preserves the original legacy bytes at the state path or a migration-recovery path, and surfaces a recoverable persistence warning. Rewrite failure alone must never quarantine valid legacy data or replace it with defaults.
 

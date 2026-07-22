@@ -448,7 +448,11 @@ struct RecipeReadyView: View {
             SectionHeader(title: "Recipes and servings", subtitle: "Each recipe keeps its own scale")
             ForEach(appModel.currentShoppingMealPrepSnapshot?.selections ?? []) { selection in
                 VStack(alignment: .leading, spacing: 10) {
-                    mealPrepRecipeIdentity(selection)
+                    HStack(alignment: .top, spacing: 12) {
+                        mealPrepRecipeIdentity(selection)
+                        Spacer(minLength: 8)
+                        mealPrepRemoveButton(selection)
+                    }
                     mealPrepServingControls(selection)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -467,6 +471,24 @@ struct RecipeReadyView: View {
                 .font(.caption)
                 .foregroundStyle(SmartCartTheme.secondaryInk)
         }
+    }
+
+    private func mealPrepRemoveButton(_ selection: MealPrepSelection) -> some View {
+        Button(role: .destructive) {
+            appModel.removeRecipeFromMealPrep(selectionID: selection.id)
+        } label: {
+            Image(systemName: "trash")
+                .font(.caption.bold())
+                .foregroundStyle(SmartCartTheme.coral)
+                .frame(width: 44, height: 44)
+                .background(SmartCartTheme.coral.opacity(0.10))
+                .clipShape(Circle())
+        }
+        .buttonStyle(PressableButtonStyle())
+        .smartCartMinimumHitTarget()
+        .accessibilityLabel("Remove \(selection.recipeSnapshot.title) from Meal Prep")
+        .accessibilityHint("Recalculates combined ingredients. You can undo this removal")
+        .accessibilityIdentifier("recipe-ready-remove-meal-prep-\(selection.id.uuidString)")
     }
 
     private func mealPrepServingControls(_ selection: MealPrepSelection) -> some View {

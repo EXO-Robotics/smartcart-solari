@@ -126,8 +126,8 @@ shopping-flow matrix below:
 4. Verify the primary Recipes library shows only Saved Recipes membership, with
    title/ingredient search and the pull-up **Recent Recipes** drawer. The drawer
    may show a retained unsaved recipe after an intentional **Shop Again** open.
-   **Try a Sample** must use its dedicated sample catalog and must not populate
-   the saved library.
+   A fresh install must contain no tester recipes. The bundled eight-recipe
+   **Weekly Meals** collection remains the only preloaded recipe discovery surface.
 5. Import a new non-sample recipe, verify it is saved by default, and complete
    a Shopping Trip so **Shop Again** remains a reachable historical route.
    Remove it from Saved Recipes, relaunch, and verify its retained recipe

@@ -102,7 +102,6 @@ struct ImportActionTile: View {
         case .recipeLink: "Paste link"
         case .pinterest: "Pinterest"
         case .recipeText: "Paste recipe"
-        case .sample: "Try sample"
         }
     }
 }

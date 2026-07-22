@@ -184,6 +184,40 @@ final class AppModel {
     private static let commerceFulfillmentKey = "smartcart.commerce.fulfillment"
     private static let handoffFeedbackKey = "smartcart.commerce.lastFeedback"
 
+    /// `activeRecipe` stays nonoptional for persisted schema compatibility,
+    /// but a fresh install no longer ships tester recipes. This neutral draft
+    /// is never inserted into the Recipes library.
+    private static let emptyActiveRecipe = Recipe(
+        id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
+        title: "Imported Recipe",
+        source: .text,
+        sourceDetail: "No recipe selected",
+        heroSymbol: "fork.knife",
+        servings: 1,
+        prepMinutes: 0,
+        cookMinutes: 0,
+        ingredients: []
+    )
+
+    #if DEBUG
+    /// Explicit test-harness content. It is compiled out of Release and is
+    /// created only when a test opts into `seedDemoShoppingState`.
+    private static let debugShoppingRecipe = Recipe(
+        title: "Debug Shopping Recipe",
+        source: .text,
+        sourceDetail: "DEBUG test fixture",
+        heroSymbol: "fork.knife",
+        servings: 4,
+        prepMinutes: 0,
+        cookMinutes: 0,
+        ingredients: [
+            Ingredient(name: "Chicken breasts", quantity: 1, unit: "lb", category: .meat),
+            Ingredient(name: "Penne pasta", quantity: 8, unit: "oz", category: .pantry),
+            Ingredient(name: "Olive oil", quantity: 2, unit: "tbsp", category: .pantry)
+        ]
+    )
+    #endif
+
     var recentRecipeIDs: [UUID] { recentRecipeRecords.map(\.recipeID) }
 
     /// Records remain available for trip/history resolution even after the
@@ -205,10 +239,6 @@ final class AppModel {
             selectedIDs.contains($0.id) && !savedRecipeIDs.contains($0.id)
         }
     }
-
-    /// A dedicated immutable catalog prevents imported or historical records
-    /// from leaking into Try a Sample.
-    var sampleRecipes: [Recipe] { SampleData.recipes }
 
     var recentRecipes: [Recipe] {
         recentRecipeRecords.compactMap { record in
@@ -441,10 +471,16 @@ final class AppModel {
             )
         ]
 
-        let sampleRecipes = SampleData.recipes
-        let initialRecipes = restoredState?.recipes ?? sampleRecipes
-        let initialRecipe = restoredState?.activeRecipe ?? sampleRecipes[0]
-        let initialServings = restoredState?.desiredServings ?? sampleRecipes[0].servings
+        #if DEBUG
+        let initialRecipes = restoredState?.recipes
+            ?? (seedDemoShoppingState ? [Self.debugShoppingRecipe] : [])
+        #else
+        let initialRecipes = restoredState?.recipes ?? []
+        #endif
+        let initialRecipe = restoredState?.activeRecipe
+            ?? initialRecipes.first
+            ?? Self.emptyActiveRecipe
+        let initialServings = restoredState?.desiredServings ?? initialRecipe.servings
         let initialPreferences = restoredState?.preferences ?? ShoppingPreferences()
         let initialFeatureFlags = restoredState?.featureFlags ?? AppFeatureFlags()
         let initialStoreStrategy = restoredState?.storeStrategy ?? .oneStore
@@ -507,8 +543,8 @@ final class AppModel {
                 preferences: initialPreferences
             )
         } else {
-            // Recipes may be available as samples, but a fresh install must
-            // never imply the user already created a shopping trip.
+            // A fresh install must never imply the user already created a
+            // shopping trip.
             ingredientResolutions = []
             shoppingItems = []
         }
@@ -590,7 +626,7 @@ final class AppModel {
                     )
                 }
             case "import":
-                presentedSheet = .importer(.sample)
+                presentedSheet = .importer(.recipeText)
             default:
                 break
             }
@@ -1633,6 +1669,32 @@ final class AppModel {
         }
     }
 
+    /// Removes one recipe only from the current editable Meal Prep draft.
+    /// Started and completed plans remain frozen, and removal supports Undo.
+    @discardableResult
+    func removeRecipeFromMealPrep(selectionID: UUID) -> Bool {
+        guard var draft = mealPrepDraft,
+              !mealPrepDraftHasStartedOrCompleted(draft),
+              let index = draft.selections.firstIndex(where: { $0.id == selectionID })
+        else { return false }
+
+        let undoState = stateSnapshot()
+        let undoRecents = recentRecipeRecords
+        draft.selections.remove(at: index)
+        draft.updatedAt = .now
+        guard updateMealPrepDraftAndPlan(draft) else { return false }
+
+        registerDomainUndo(
+            message: "Recipe removed from Meal Prep",
+            priorState: undoState,
+            priorRecentRecipeRecords: undoRecents
+        )
+        if draft.selections.isEmpty {
+            homePath = [.mealPrepSelection]
+        }
+        return true
+    }
+
     /// Adds or updates one recipe selection without ever interpreting the
     /// action as a removal. If the current draft has entered a shopping flow,
     /// a new editable draft is created and the historical snapshot is untouched.
@@ -1879,12 +1941,17 @@ final class AppModel {
     private func updateMealPrepDraftAndPlan(_ draft: MealPrepDraft) -> Bool {
         let succeeded = performAtomicMealPrepTransition {
             let previousPlan = mealPrepPlan?.id == draft.id ? mealPrepPlan : nil
-            let rebuilt = try previousPlan.map {
-                try rebuiltMealPrepPlan(
-                    draft: draft,
-                    preserving: $0,
-                    pantryInventory: pantryInventory
-                )
+            let rebuilt: MealPrepPlanSnapshot?
+            if draft.selections.isEmpty {
+                rebuilt = nil
+            } else {
+                rebuilt = try previousPlan.map {
+                    try rebuiltMealPrepPlan(
+                        draft: draft,
+                        preserving: $0,
+                        pantryInventory: pantryInventory
+                    )
+                }
             }
             mealPrepDraft = draft
             mealPrepPlan = rebuilt
@@ -7428,61 +7495,4 @@ enum RecipeImportError: LocalizedError {
             "Enter a complete recipe link beginning with https://."
         }
     }
-}
-
-private enum SampleData {
-    static let recipes: [Recipe] = [
-        Recipe(
-            title: "Lemon Herb Chicken Pasta",
-            source: .sample,
-            sourceDetail: "SmartCart sample recipe",
-            heroSymbol: "fork.knife",
-            servings: 4,
-            prepMinutes: 15,
-            cookMinutes: 30,
-            ingredients: [
-                Ingredient(name: "Chicken breasts", quantity: 1, unit: "lb", category: .meat),
-                Ingredient(name: "Penne pasta", quantity: 8, unit: "oz", category: .pantry),
-                Ingredient(name: "Olive oil", quantity: 2, unit: "tbsp", category: .pantry, pantryState: .runningLow),
-                Ingredient(name: "Lemon zest and juice", quantity: 1, unit: "lemon", category: .produce),
-                Ingredient(name: "Garlic", quantity: 2, unit: "cloves", preparation: "minced", category: .produce),
-                Ingredient(name: "Heavy cream", quantity: 0.5, unit: "cup", category: .dairy),
-                Ingredient(name: "Parmesan cheese", quantity: 0.5, unit: "cup", category: .dairy),
-                Ingredient(name: "Fresh parsley", quantity: 1, unit: "bunch", category: .produce),
-                Ingredient(name: "Salt", quantity: 1, unit: "tsp", category: .pantry, pantryState: .haveEnough)
-            ]
-        ),
-        Recipe(
-            title: "Creamy Garlic Parmesan Pasta",
-            source: .sample,
-            sourceDetail: "SmartCart sample recipe",
-            heroSymbol: "fork.knife",
-            servings: 6,
-            prepMinutes: 10,
-            cookMinutes: 25,
-            ingredients: [
-                Ingredient(name: "Fettuccine pasta", quantity: 16, unit: "oz", category: .pantry),
-                Ingredient(name: "Butter", quantity: 4, unit: "tbsp", category: .dairy),
-                Ingredient(name: "Garlic", quantity: 4, unit: "cloves", preparation: "minced", category: .produce),
-                Ingredient(name: "Heavy cream", quantity: 2, unit: "cups", category: .dairy),
-                Ingredient(name: "Parmesan cheese", quantity: 1, unit: "cup", category: .dairy)
-            ]
-        ),
-        Recipe(
-            title: "Weeknight Beef Stroganoff",
-            source: .sample,
-            sourceDetail: "SmartCart sample recipe",
-            heroSymbol: "flame.fill",
-            servings: 4,
-            prepMinutes: 15,
-            cookMinutes: 25,
-            ingredients: [
-                Ingredient(name: "Ground beef", quantity: 1, unit: "lb", category: .meat),
-                Ingredient(name: "Egg noodles", quantity: 12, unit: "oz", category: .pantry),
-                Ingredient(name: "Mushrooms", quantity: 8, unit: "oz", category: .produce),
-                Ingredient(name: "Sour cream", quantity: 1, unit: "cup", category: .dairy),
-                Ingredient(name: "Yellow onion", quantity: 1, category: .produce)
-            ]
-        )
-    ]
 }

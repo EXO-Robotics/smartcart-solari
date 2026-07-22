@@ -367,6 +367,10 @@ final class SmartCartTests: XCTestCase {
     func testFreshInstallDoesNotManufactureShoppingProgress() {
         let model = AppModel(stateStore: InMemorySmartCartStateStore())
 
+        XCTAssertTrue(model.recipes.isEmpty)
+        XCTAssertTrue(model.savedRecipes.isEmpty)
+        XCTAssertTrue(model.recentRecipeRecords.isEmpty)
+        XCTAssertFalse(model.recipes.contains { $0.id == model.activeRecipe.id })
         XCTAssertTrue(model.shoppingItems.isEmpty)
         XCTAssertTrue(model.savedLists.isEmpty)
         XCTAssertTrue(model.shoppingSessions.isEmpty)
@@ -1779,6 +1783,10 @@ final class SmartCartTests: XCTestCase {
             debugInfo[BarcodeBackendConfiguration.bundleKey] as? String,
             "$(SMARTCART_BARCODE_BACKEND_URL)"
         )
+        XCTAssertEqual(
+            debugInfo[WeeklyMealsRemoteConfiguration.bundleKey] as? String,
+            "$(SMARTCART_WEEKLY_MEALS_BASE_URL)"
+        )
         let debugATS = try XCTUnwrap(
             debugInfo["NSAppTransportSecurity"] as? [String: Any]
         )
@@ -1796,6 +1804,10 @@ final class SmartCartTests: XCTestCase {
             releaseInfo[BarcodeBackendConfiguration.bundleKey] as? String,
             "$(SMARTCART_BARCODE_BACKEND_URL)"
         )
+        XCTAssertEqual(
+            releaseInfo[WeeklyMealsRemoteConfiguration.bundleKey] as? String,
+            "$(SMARTCART_WEEKLY_MEALS_BASE_URL)"
+        )
         XCTAssertNil(releaseInfo["NSAppTransportSecurity"])
         XCTAssertNil(releaseInfo["NSLocalNetworkUsageDescription"])
 
@@ -1806,6 +1818,9 @@ final class SmartCartTests: XCTestCase {
         let publicBarcodeEndpoint =
             "SMARTCART_BARCODE_BACKEND_URL = https:/$()/smartcart-barcode-api-omega.vercel.app"
         XCTAssertTrue(debug.contains(publicBarcodeEndpoint))
+        XCTAssertTrue(debug.contains(
+            "SMARTCART_WEEKLY_MEALS_BASE_URL = https:/$()/smartcart-barcode-api-omega.vercel.app"
+        ))
         XCTAssertFalse(debug.contains("SMARTCART_BARCODE_BACKEND_URL = http:/$()/localhost"))
 
         let release = try String(
@@ -1813,6 +1828,9 @@ final class SmartCartTests: XCTestCase {
             encoding: .utf8
         )
         XCTAssertTrue(release.contains(publicBarcodeEndpoint))
+        XCTAssertTrue(release.contains(
+            "SMARTCART_WEEKLY_MEALS_BASE_URL = https:/$()/smartcart-barcode-api-omega.vercel.app"
+        ))
         XCTAssertFalse(release.contains("localhost"))
 
         let configuredURL = try XCTUnwrap(
@@ -2787,6 +2805,9 @@ final class SmartCartTests: XCTestCase {
         let defaults = isolatedCommerceDefaults()
         let model = AppModel(stateStore: store, commerceDefaults: defaults)
         model.startRetailerGuide(.target)
+        XCTAssertTrue(model.beginRecipe(phase2Recipe(ingredients: [
+            Ingredient(name: "Penne pasta", quantity: 8, unit: "oz")
+        ])))
         await model.startMatching(force: true)
         XCTAssertFalse(model.shoppingItems.isEmpty)
         XCTAssertTrue(model.shoppingItems.allSatisfy { $0.product.retailerID == "target" })
@@ -5081,7 +5102,8 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(homeSource.contains("appModel.openImporter(.recipeLink, initialText: validatedURL.absoluteString)"))
         XCTAssertTrue(homeSource.contains("appModel.openImporter(.recipeText, initialText: trimmedText)"))
         XCTAssertTrue(homeSource.contains("Label(\"Enter Manually\", systemImage: \"keyboard\")"))
-        XCTAssertTrue(homeSource.contains("Label(\"Try a Sample\", systemImage: \"takeoutbag.and.cup.and.straw.fill\")"))
+        XCTAssertFalse(homeSource.contains("Try a Sample"))
+        XCTAssertFalse(homeSource.contains("appModel.openImporter(.sample)"))
 
         let panelStart = try XCTUnwrap(homeSource.range(of: "    private var startShoppingPanel")?.lowerBound)
         let mealPrepStart = try XCTUnwrap(
@@ -5843,7 +5865,7 @@ final class SmartCartTests: XCTestCase {
     }
 
     @MainActor
-    func testMatchingExceptionConfirmationResolvesUnknownPackageCountAndContinuesOnce() async throws {
+    func testBackgroundFinalizationResolvesUnknownPackageCountAndContinuesOnce() async throws {
         let model = AppModel(
             stateStore: InMemorySmartCartStateStore(),
             commerceDefaults: isolatedCommerceDefaults()
@@ -5874,18 +5896,12 @@ final class SmartCartTests: XCTestCase {
         let reviewed = try model.shoppingItems.firstUnwrapped()
         XCTAssertEqual(reviewed.reviewedMatchingFingerprint, reviewed.matchingInputFingerprint)
         XCTAssertEqual(model.unresolvedMatchingExceptionItems.map(\.id), [exception.id])
-        XCTAssertFalse(model.continueToShoppingTrip())
-        XCTAssertEqual(model.toastMessage, "Review or skip every matching exception before continuing")
 
-        XCTAssertTrue(
-            model.applyMatchingExceptionDecisions(
-                [exception.id: true],
-                confirmingUnresolvedPackageCount: 1
-            )
-        )
+        XCTAssertTrue(model.finalizeShoppingPlanForRetailerQueue())
         XCTAssertEqual(model.shoppingItems.first?.purchaseQuantity, 1)
         XCTAssertFalse(model.hasUnresolvedMatchingWork)
-        XCTAssertTrue(model.continueToShoppingTrip())
+        XCTAssertEqual(model.homePath.filter { $0 == .shoppingTrip }.count, 1)
+        XCTAssertTrue(model.finalizeShoppingPlanForRetailerQueue())
         XCTAssertEqual(model.homePath.filter { $0 == .shoppingTrip }.count, 1)
     }
 
@@ -5948,7 +5964,7 @@ final class SmartCartTests: XCTestCase {
         XCTAssertNotNil(model.persistenceIssue)
     }
 
-    func testProductExceptionReviewUsesDefaultOrderTogglesAndOneContinueAction() throws {
+    func testLegacyProductExceptionReviewIsAbsentFromDirectShoppingFlow() throws {
         let repositoryRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -5959,11 +5975,20 @@ final class SmartCartTests: XCTestCase {
             encoding: .utf8
         )
 
-        XCTAssertTrue(ordersSource.contains("shouldOrderByItemID[$0.id] ?? true"))
-        XCTAssertTrue(ordersSource.contains("product-exception-order-toggle-"))
-        XCTAssertTrue(ordersSource.contains("product-exception-continue"))
+        XCTAssertFalse(ordersSource.contains("shouldOrderByItemID[$0.id] ?? true"))
+        XCTAssertFalse(ordersSource.contains("product-exception-order-toggle-"))
+        XCTAssertFalse(ordersSource.contains("product-exception-continue"))
         XCTAssertFalse(ordersSource.contains("product-exception-search-"))
-        XCTAssertFalse(ordersSource.contains("Search at "))
+        XCTAssertFalse(ordersSource.contains("ProductExceptionReviewView"))
+
+        let cartSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "SmartCart/Features/Cart/CartView.swift"
+            ),
+            encoding: .utf8
+        )
+        XCTAssertTrue(cartSource.contains("Shop This Recipe"))
+        XCTAssertTrue(cartSource.contains("appModel.finalizeShoppingPlanForRetailerQueue()"))
     }
 
     @MainActor
@@ -7263,30 +7288,74 @@ final class SmartCartTests: XCTestCase {
     }
 
     @MainActor
-    func testSavedRecipeMembershipStartsEmptyAndNewImportsDoNotPolluteSamples() throws {
+    func testSavedRecipeMembershipStartsEmptyWithoutTesterRecipesAndPersistsImports() throws {
         let store = InMemorySmartCartStateStore()
         let model = AppModel(
             stateStore: store,
             commerceDefaults: isolatedCommerceDefaults()
         )
 
+        XCTAssertTrue(model.recipes.isEmpty)
         XCTAssertTrue(model.savedRecipes.isEmpty)
-        XCTAssertEqual(model.sampleRecipes.count, 3)
-        XCTAssertTrue(model.sampleRecipes.allSatisfy { $0.source == .sample })
-        XCTAssertTrue(model.recipes.allSatisfy { !model.isRecipeSaved($0.id) })
 
         let imported = phase4Recipe(title: "Imported library recipe")
         XCTAssertTrue(model.beginRecipe(imported))
         XCTAssertEqual(model.savedRecipes.map(\.id), [imported.id])
-        XCTAssertEqual(model.sampleRecipes.count, 3)
-        XCTAssertTrue(model.sampleRecipes.allSatisfy { $0.source == .sample })
 
         let restored = AppModel(
             stateStore: store,
             commerceDefaults: isolatedCommerceDefaults()
         )
         XCTAssertEqual(restored.savedRecipes.map(\.id), [imported.id])
-        XCTAssertEqual(restored.sampleRecipes.count, 3)
+        XCTAssertEqual(restored.recipes.map(\.id), [imported.id])
+    }
+
+    @MainActor
+    func testEditableMealPrepRecipeCanBeRemovedAndUndoRestoresPlan() async throws {
+        let store = InMemorySmartCartStateStore()
+        let model = AppModel(
+            stateStore: store,
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        let first = phase4Recipe(title: "First meal prep recipe")
+        let second = phase4Recipe(title: "Second meal prep recipe")
+        XCTAssertTrue(model.ensureRecipeIsIncludedInMealPrep(first, targetServings: 2))
+        XCTAssertTrue(model.ensureRecipeIsIncludedInMealPrep(second, targetServings: 4))
+        XCTAssertTrue(model.buildMealPrepPlan())
+
+        let originalDraft = try XCTUnwrap(model.mealPrepDraft)
+        let originalPlan = try XCTUnwrap(model.currentMealPrepPlan)
+        let firstSelectionID = try XCTUnwrap(
+            originalDraft.selections.first { $0.recipeSnapshot.id == first.id }?.id
+        )
+
+        XCTAssertTrue(model.removeRecipeFromMealPrep(selectionID: firstSelectionID))
+        XCTAssertEqual(model.mealPrepDraft?.selections.map(\.recipeSnapshot.id), [second.id])
+        XCTAssertEqual(model.currentMealPrepPlan?.selections.map(\.recipeSnapshot.id), [second.id])
+        XCTAssertEqual(model.domainUndoAction?.message, "Recipe removed from Meal Prep")
+
+        let didUndo = await model.undoPendingDomainAction()
+        XCTAssertTrue(didUndo)
+        XCTAssertEqual(model.mealPrepDraft, originalDraft)
+        XCTAssertEqual(model.currentMealPrepPlan, originalPlan)
+        XCTAssertEqual(store.state?.mealPrepDraft, originalDraft)
+    }
+
+    @MainActor
+    func testRemovingLastMealPrepRecipeClearsPlanAndReturnsToSelection() throws {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        let recipe = phase4Recipe(title: "Only meal prep recipe")
+        XCTAssertTrue(model.ensureRecipeIsIncludedInMealPrep(recipe, targetServings: 2))
+        XCTAssertTrue(model.buildMealPrepPlan())
+        let selectionID = try XCTUnwrap(model.mealPrepDraft?.selections.first?.id)
+
+        XCTAssertTrue(model.removeRecipeFromMealPrep(selectionID: selectionID))
+        XCTAssertTrue(model.mealPrepDraft?.selections.isEmpty == true)
+        XCTAssertNil(model.mealPrepPlan)
+        XCTAssertEqual(model.homePath, [.mealPrepSelection])
     }
 
     @MainActor
@@ -7488,7 +7557,7 @@ final class SmartCartTests: XCTestCase {
         XCTAssertEqual(normalized.savedRecipeIDs, [imported.id])
     }
 
-    func testSavedRecipeUISurfacesUseMembershipAndDedicatedSampleCatalog() throws {
+    func testSavedRecipeUISurfacesUseMembershipAndExposeMealPrepRemoval() throws {
         let repositoryRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -7516,7 +7585,10 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(cart.contains("recipe-ready-save-recipe"))
         XCTAssertTrue(mealPrep.contains("ForEach(appModel.savedRecipes)"))
         XCTAssertFalse(mealPrep.contains("ForEach(appModel.recipes)"))
-        XCTAssertTrue(composer.contains("appModel.sampleRecipes"))
+        XCTAssertTrue(mealPrep.contains("appModel.removeRecipeFromMealPrep(selectionID: selection.id)"))
+        XCTAssertTrue(cart.contains("appModel.removeRecipeFromMealPrep(selectionID: selection.id)"))
+        XCTAssertFalse(composer.contains("appModel.sampleRecipes"))
+        XCTAssertFalse(composer.contains("methods.append(contentsOf: [.recipeText, .sample])"))
     }
 
     @MainActor

@@ -2,19 +2,11 @@ import SwiftUI
 
 struct WeeklyMealsCollectionView: View {
     @Environment(AppModel.self) private var appModel
+    @Environment(WeeklyMealsStore.self) private var weeklyMealsStore
     @State private var recordedView = false
 
-    private let models: [WeeklyMealDisplayModel]
-    private let collectionID: String?
-
-    init() {
-        let collection = try? BundledWeeklyMealRepository().activeCollection(
-            on: Date(),
-            calendar: Calendar.autoupdatingCurrent
-        )
-        collectionID = collection?.id
-        models = collection.map { WeeklyMealDisplayModelFactory.makeModels(from: $0) } ?? []
-    }
+    private var models: [WeeklyMealDisplayModel] { weeklyMealsStore.displayModels }
+    private var collectionID: String? { weeklyMealsStore.collection?.id }
 
     var body: some View {
         ScrollView {
@@ -52,6 +44,15 @@ struct WeeklyMealsCollectionView: View {
             appModel.recordWeeklyMealEvent(
                 .weeklyMealsViewed,
                 collectionID: collectionID,
+                placement: "see_all"
+            )
+        }
+        .onChange(of: collectionID) { _, newID in
+            guard let newID else { return }
+            recordedView = true
+            appModel.recordWeeklyMealEvent(
+                .weeklyMealsViewed,
+                collectionID: newID,
                 placement: "see_all"
             )
         }

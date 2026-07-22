@@ -2,10 +2,9 @@ import SwiftUI
 
 struct WeeklyMealsSection: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(WeeklyMealsStore.self) private var weeklyMealsStore
     @State private var recordedView = false
 
-    private let collection: ResolvedWeeklyMealCollection?
-    private let models: [WeeklyMealDisplayModel]
     let interaction: WeeklyMealRackInteraction
     let onOpen: (CuratedRecipeID) -> Void
     let onShop: (CuratedRecipeID) -> Void
@@ -23,12 +22,6 @@ struct WeeklyMealsSection: View {
         onFocused: @escaping (WeeklyMealDisplayModel) -> Void,
         onMealOpened: @escaping (WeeklyMealDisplayModel, String) -> Void
     ) {
-        let resolved = try? BundledWeeklyMealRepository().activeCollection(
-            on: Date(),
-            calendar: Calendar.autoupdatingCurrent
-        )
-        collection = resolved
-        models = resolved.map { WeeklyMealDisplayModelFactory.makeModels(from: $0) } ?? []
         self.interaction = interaction
         self.onOpen = onOpen
         self.onShop = onShop
@@ -37,6 +30,9 @@ struct WeeklyMealsSection: View {
         self.onFocused = onFocused
         self.onMealOpened = onMealOpened
     }
+
+    private var collection: ResolvedWeeklyMealCollection? { weeklyMealsStore.collection }
+    private var models: [WeeklyMealDisplayModel] { weeklyMealsStore.displayModels }
 
     var body: some View {
         if let collection, !models.isEmpty {
@@ -60,6 +56,10 @@ struct WeeklyMealsSection: View {
                     recordedView = true
                     onViewed(collection.id)
                 }
+            }
+            .onChange(of: collection.id) { _, newID in
+                recordedView = true
+                onViewed(newID)
             }
         }
     }

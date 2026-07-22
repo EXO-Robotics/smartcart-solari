@@ -139,10 +139,11 @@ test('Vercel rewrite destination parameters reach the same narrow handler', asyn
   }
 });
 
-test('Vercel config restricts deployment to one public barcode function and two route shapes', async () => {
+test('Vercel config restricts dynamic routes while allowing reviewed static Weekly Meals files', async () => {
   const config = JSON.parse(await readFile(new URL('../vercel.json', import.meta.url), 'utf8'));
   assert.deepEqual(Object.keys(config.functions), ['api/index.js']);
   assert.deepEqual(config.routes, [
+    { handle: 'filesystem' },
     {
       src: '/health',
       methods: ['GET', 'HEAD'],
@@ -155,7 +156,6 @@ test('Vercel config restricts deployment to one public barcode function and two 
     },
     { src: '/.*', status: 404 }
   ]);
-
   const entrypoint = await readFile(new URL('../api/index.js', import.meta.url), 'utf8');
   assert.match(entrypoint, /createPublicBarcodeApi/);
   assert.doesNotMatch(entrypoint, /createApp|LocalDemoStore|oauth|manifest|session/iu);
