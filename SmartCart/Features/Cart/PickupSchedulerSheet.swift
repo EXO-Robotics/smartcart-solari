@@ -1577,6 +1577,7 @@ struct StoreDashboardView: View {
     @State private var showRetailerSafari = false
     @State private var focusedRetailer: ShoppingRetailer?
     @State private var zipEntry = ""
+    @FocusState private var isZIPFieldFocused: Bool
 
     private let carouselHeight: CGFloat = 220
 
@@ -1590,6 +1591,14 @@ struct StoreDashboardView: View {
         .padding(.top, 8)
         .smartCartBackground()
         .toolbar(.hidden, for: .navigationBar)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") {
+                    isZIPFieldFocused = false
+                }
+            }
+        }
         .task {
             zipEntry = appModel.zipCode
             focusedRetailer = appModel.selectedRetailer
@@ -1633,6 +1642,7 @@ struct StoreDashboardView: View {
                     .keyboardType(.numberPad)
                     .textContentType(.postalCode)
                     .submitLabel(.search)
+                    .focused($isZIPFieldFocused)
                     .onSubmit(findStores)
                     .onChange(of: zipEntry) { _, newValue in
                         let digits = String(newValue.filter(\.isNumber).prefix(5))
@@ -1699,6 +1709,7 @@ struct StoreDashboardView: View {
             .scrollTargetLayout()
         }
         .scrollIndicators(.hidden)
+        .scrollDismissesKeyboard(.interactively)
         .scrollTargetBehavior(.viewAligned)
         .scrollPosition(id: $focusedRetailer, anchor: .center)
         .contentMargins(.vertical, 32, for: .scrollContent)
@@ -1784,6 +1795,7 @@ struct StoreDashboardView: View {
             .padding(.bottom, 110)
         }
         .scrollIndicators(.hidden)
+        .scrollDismissesKeyboard(.interactively)
     }
 
     private var availableRetailers: [ShoppingRetailer] {
@@ -1822,11 +1834,13 @@ struct StoreDashboardView: View {
     }
 
     private func findStores() {
+        isZIPFieldFocused = false
         Task { await appModel.locateStores(postalCode: zipEntry) }
     }
 
     private func moveCarousel(to retailer: ShoppingRetailer?) {
         guard let retailer else { return }
+        isZIPFieldFocused = false
         withAnimation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.86)) {
             focusedRetailer = retailer
         }
