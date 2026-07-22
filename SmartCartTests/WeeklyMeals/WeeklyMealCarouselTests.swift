@@ -54,6 +54,14 @@ final class WeeklyMealCarouselTests: XCTestCase {
         XCTAssertFalse(carouselSource.contains("DragGesture(minimumDistance: 8)"))
     }
 
+    func testHomeShopActionUsesRecipeReadyEntryInsteadOfDetailNavigation() throws {
+        let homeSource = try source("SmartCart/Features/Home/HomeView.swift")
+
+        XCTAssertTrue(homeSource.contains("onShop: shopWeeklyMeal"))
+        XCTAssertTrue(homeSource.contains("appModel.beginWeeklyMeal("))
+        XCTAssertFalse(homeSource.contains("onShop: { appModel.continueTo(.weeklyMealDetail($0)) }"))
+    }
+
     func testIncomingCardEmergesFromBehindFocusedCardWithRestrainedDepth() {
         let focused = WeeklyMealCarouselLayout.rackTransform(
             relativeIndex: 0,

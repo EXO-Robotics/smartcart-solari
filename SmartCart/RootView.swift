@@ -101,8 +101,6 @@ struct RootView: View {
             WeeklyMealDetailView(recipeID: recipeID)
         case .mealPrepSelection:
             MealPrepSelectionView()
-        case .mealPrepReview:
-            MealPrepReviewView()
         case .mealPrepDashboard:
             MealPrepDashboardView()
         case .recipeReady:

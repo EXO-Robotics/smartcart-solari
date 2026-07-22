@@ -398,6 +398,7 @@ struct RecipeReadyView: View {
                         mealPrepServingControls(selection)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .smartCartCard(padding: 13)
             }
         }
@@ -460,26 +461,32 @@ struct RecipeReadyView: View {
             )
 
             ForEach(Array(mealPrepParticipatingLines.prefix(10))) { line in
-                HStack(spacing: 10) {
-                    Image(systemName: line.needsReview ? "exclamationmark.triangle.fill" : line.category.symbol)
-                        .foregroundStyle(line.needsReview ? SmartCartTheme.coral : SmartCartTheme.green)
-                        .frame(width: 34, height: 34)
-                        .background((line.needsReview ? SmartCartTheme.coral : SmartCartTheme.green).opacity(0.09))
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(line.name)
-                            .font(.subheadline.weight(.bold))
-                            .foregroundStyle(SmartCartTheme.navy)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Text(Ingredient.quantityText(line.quantity, unit: line.unit.symbol == "count" ? "" : line.unit.symbol))
-                            .font(.caption)
-                            .foregroundStyle(SmartCartTheme.secondaryInk)
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 10) {
+                        Image(systemName: line.needsReview ? "exclamationmark.triangle.fill" : line.category.symbol)
+                            .foregroundStyle(line.needsReview ? SmartCartTheme.coral : SmartCartTheme.green)
+                            .frame(width: 34, height: 34)
+                            .background((line.needsReview ? SmartCartTheme.coral : SmartCartTheme.green).opacity(0.09))
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(line.name)
+                                .font(.subheadline.weight(.bold))
+                                .foregroundStyle(SmartCartTheme.navy)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Text(Ingredient.quantityText(line.quantity, unit: line.unit.symbol == "count" ? "" : line.unit.symbol))
+                                .font(.caption)
+                                .foregroundStyle(SmartCartTheme.secondaryInk)
+                        }
+                        Spacer(minLength: 6)
+                        if line.needsReview {
+                            Text("Needs review")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(SmartCartTheme.coral)
+                        }
                     }
-                    Spacer(minLength: 6)
+
                     if line.needsReview {
-                        Text("Needs review")
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(SmartCartTheme.coral)
+                        mealPrepReviewControls(for: line)
                     }
                 }
                 .smartCartCard(padding: 12)
@@ -492,6 +499,63 @@ struct RecipeReadyView: View {
                     .frame(maxWidth: .infinity, alignment: .center)
             }
         }
+    }
+
+    private func mealPrepReviewControls(for line: CombinedIngredientLine) -> some View {
+        VStack(spacing: 8) {
+            Button {
+                performMealPrepReviewAction(for: line)
+            } label: {
+                Label(mealPrepReviewActionTitle(line), systemImage: mealPrepReviewActionSymbol(line))
+                    .font(.subheadline.weight(.bold))
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(SecondaryButtonStyle())
+            .smartCartMinimumHitTarget()
+            .accessibilityIdentifier("recipe-ready-meal-prep-review-\(line.id)")
+
+            if line.mergeReviewReasons.contains(.alternative) {
+                Menu {
+                    Button("Keep every option separately") {
+                        appModel.keepMealPrepAlternativeGroup(line.id)
+                    }
+                    Button("Exclude this ingredient", role: .destructive) {
+                        appModel.excludeMealPrepAlternativeGroup(line.id)
+                    }
+                    Button("Decide later — don’t add this trip") {
+                        appModel.deferMealPrepAlternativeGroup(line.id)
+                    }
+                } label: {
+                    Label("More alternative choices", systemImage: "ellipsis.circle")
+                        .font(.subheadline.weight(.bold))
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(SecondaryButtonStyle())
+                .smartCartMinimumHitTarget()
+            }
+        }
+    }
+
+    private func performMealPrepReviewAction(for line: CombinedIngredientLine) {
+        if line.mergeReviewReasons.contains(.alternative) {
+            appModel.selectMealPrepAlternative(line.id)
+        } else if line.mergeReviewReasons.contains(.uncertainQuantity) {
+            appModel.confirmMealPrepQuantity(line.id)
+        } else {
+            appModel.confirmMealPrepLineSeparate(line.id)
+        }
+    }
+
+    private func mealPrepReviewActionTitle(_ line: CombinedIngredientLine) -> String {
+        if line.mergeReviewReasons.contains(.alternative) { return "Choose this option" }
+        if line.mergeReviewReasons.contains(.uncertainQuantity) { return "Confirm parsed amount" }
+        return "Keep separate"
+    }
+
+    private func mealPrepReviewActionSymbol(_ line: CombinedIngredientLine) -> String {
+        if line.mergeReviewReasons.contains(.alternative) { return "checkmark.circle" }
+        if line.mergeReviewReasons.contains(.uncertainQuantity) { return "number.circle" }
+        return "square.split.2x1"
     }
 
     private var pantrySummary: some View {
@@ -570,7 +634,12 @@ struct RecipeReadyView: View {
     }
 
     private var mealPrepParticipatingLines: [CombinedIngredientLine] {
-        (appModel.currentShoppingMealPrepSnapshot?.lines ?? []).filter(\.participatesInCurrentTrip)
+        (appModel.currentShoppingMealPrepSnapshot?.lines ?? [])
+            .filter(\.participatesInCurrentTrip)
+            .sorted { lhs, rhs in
+                if lhs.needsReview != rhs.needsReview { return lhs.needsReview }
+                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+            }
     }
 
     private var blockingIngredientIDs: [UUID] {

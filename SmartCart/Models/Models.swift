@@ -35,7 +35,6 @@ enum SmartRoute: Hashable {
     case weeklyMealsCollection
     case weeklyMealDetail(CuratedRecipeID)
     case mealPrepSelection
-    case mealPrepReview
     case mealPrepDashboard
     case recipeReady
     case shoppingTrip

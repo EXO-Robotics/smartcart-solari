@@ -37,7 +37,7 @@ struct HomeView: View {
                         WeeklyMealsSection(
                             interaction: weeklyMealRackInteraction,
                             onOpen: { appModel.continueTo(.weeklyMealDetail($0)) },
-                            onShop: { appModel.continueTo(.weeklyMealDetail($0)) },
+                            onShop: shopWeeklyMeal,
                             onSeeAll: { appModel.continueTo(.weeklyMealsCollection) },
                             onViewed: {
                                 appModel.recordWeeklyMealEvent(
@@ -135,6 +135,32 @@ struct HomeView: View {
         )
         .onChanged(weeklyMealRackInteraction.dragChanged)
         .onEnded(weeklyMealRackInteraction.dragEnded)
+    }
+
+    private func shopWeeklyMeal(_ recipeID: CuratedRecipeID) {
+        guard let collection = try? BundledWeeklyMealRepository().activeCollection(
+            on: Date(),
+            calendar: Calendar.autoupdatingCurrent
+        ), let meal = collection.meals.first(where: { $0.recipe.id == recipeID }) else {
+            appModel.showToast("This meal could not be prepared")
+            return
+        }
+
+        appModel.recordWeeklyMealEvent(
+            .weeklyMealShopStarted,
+            collectionID: collection.id,
+            recipeID: meal.recipe.id,
+            contentVersion: meal.recipe.contentVersion,
+            mealSlot: meal.entry.slot,
+            placement: "home",
+            servingCount: meal.recipe.defaultServings,
+            costDisplayAvailable: meal.recipe.metadata.costEstimate?.isPubliclyDisplayable == true
+        )
+        _ = appModel.beginWeeklyMeal(
+            collectionID: collection.id,
+            recipe: meal.recipe,
+            targetServings: meal.recipe.defaultServings
+        )
     }
 
     private var header: some View {

@@ -305,12 +305,17 @@ struct WeeklyMealDetailView: View {
     }
 
     private func shop(_ recipe: CuratedRecipeRecord) {
-        guard let snapshot = makeSnapshot(recipe) else {
+        guard let collectionID else {
             appModel.showToast("This meal could not be prepared")
             return
         }
         record(.weeklyMealShopStarted, recipe: recipe, placement: "detail")
-        _ = appModel.beginRecipe(snapshot)
+        _ = appModel.beginWeeklyMeal(
+            collectionID: collectionID,
+            recipe: recipe,
+            targetServings: servings,
+            includedOptionalIngredientIDs: includedOptionalIngredientIDs
+        )
     }
 
     private func makeSnapshot(_ recipe: CuratedRecipeRecord) -> Recipe? {

@@ -1126,6 +1126,29 @@ final class AppModel {
         return true
     }
 
+    /// Freezes the selected editorial version before entering the existing
+    /// Recipe Ready pipeline. Weekly Meals views never shop mutable bundle data.
+    @discardableResult
+    func beginWeeklyMeal(
+        collectionID: String,
+        recipe: CuratedRecipeRecord,
+        targetServings: Int,
+        includedOptionalIngredientIDs: Set<String> = []
+    ) -> Bool {
+        do {
+            let snapshot = try WeeklyMealSnapshotFactory().makeSnapshot(
+                collectionID: collectionID,
+                recipe: recipe,
+                targetServings: targetServings,
+                includedOptionalIngredientIDs: includedOptionalIngredientIDs
+            )
+            return beginRecipe(snapshot)
+        } catch {
+            showToast("This meal could not be prepared")
+            return false
+        }
+    }
+
     func isRecipeSaved(_ id: UUID) -> Bool {
         savedRecipeIDs.contains(id)
     }
@@ -1314,11 +1337,8 @@ final class AppModel {
             }
         }
         selectedTab = .home
-        if let plan = currentMealPrepPlan {
-            homePath = [.mealPrepSelection, .mealPrepReview]
-            if plan.unresolvedReviewCount == 0 {
-                homePath.append(.recipeReady)
-            }
+        if currentMealPrepPlan != nil {
+            homePath = [.mealPrepSelection, .recipeReady]
         } else {
             homePath = [.mealPrepSelection]
         }
@@ -1451,7 +1471,7 @@ final class AppModel {
             invalidateShoppingPlan()
         }
         if succeeded {
-            homePath = [.mealPrepSelection, .mealPrepReview]
+            homePath = [.mealPrepSelection, .recipeReady]
             return true
         }
         showToast("Meal Prep plan could not be saved")
@@ -1541,10 +1561,6 @@ final class AppModel {
     }
 
     func openMealPrepDashboard() {
-        guard currentMealPrepPlan?.unresolvedReviewCount == 0 else {
-            showToast("Review every possible duplicate before shopping")
-            return
-        }
         homePath.append(.recipeReady)
     }
 

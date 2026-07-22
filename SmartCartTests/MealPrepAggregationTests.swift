@@ -259,14 +259,31 @@ final class MealPrepAggregationTests: XCTestCase {
     }
 
     @MainActor
-    func testMealPrepReviewKeepsSelectionInBackStack() {
+    func testMealPrepPlanSkipsRedundantReviewScreenAndOpensRecipeReady() {
         let model = AppModel(stateStore: InMemorySmartCartStateStore())
         let dinner = recipe("Dinner", servings: 2, [ingredient("Rice", 1, "cup")])
         model.mealPrepDraft = MealPrepDraft(selections: [selection(dinner, target: 2)])
 
         XCTAssertTrue(model.buildMealPrepPlan())
 
-        XCTAssertEqual(model.homePath, [.mealPrepSelection, .mealPrepReview])
+        XCTAssertEqual(model.homePath, [.mealPrepSelection, .recipeReady])
+        XCTAssertEqual(model.recipeReadyBlockingIssueCount, 0)
+    }
+
+    @MainActor
+    func testUnresolvedMealPrepPlanOpensRecipeReadyWithShoppingBlocked() throws {
+        var flour = ingredient("Flour", 2, "cup")
+        flour.quantityReviewRequired = true
+        let model = AppModel(stateStore: InMemorySmartCartStateStore())
+        model.mealPrepDraft = MealPrepDraft(selections: [
+            selection(recipe("Cake", servings: 4, [flour]), target: 4)
+        ])
+
+        XCTAssertTrue(model.buildMealPrepPlan())
+
+        XCTAssertEqual(model.homePath, [.mealPrepSelection, .recipeReady])
+        XCTAssertEqual(model.recipeReadyBlockingIssueCount, 1)
+        XCTAssertFalse(model.recipeReadyCanStartShopping)
     }
 
     func testPantryFullPartialAndInsufficientConversions() throws {
@@ -805,7 +822,7 @@ final class MealPrepAggregationTests: XCTestCase {
             restored.mealPrepPlan?.lines.first { $0.id == selectedID }?.mergeReviewState,
             .selectedAlternative
         )
-        XCTAssertEqual(restored.homePath, [.mealPrepSelection, .mealPrepReview, .recipeReady])
+        XCTAssertEqual(restored.homePath, [.mealPrepSelection, .recipeReady])
     }
 
     private func aggregate(_ selections: [MealPrepSelection]) throws -> MealPrepAggregationResult {

@@ -83,6 +83,31 @@ final class WeeklyMealIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testBeginWeeklyMealFreezesDefaultServingSnapshotAndOpensRecipeReady() throws {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedDefaults()
+        )
+        let recipe = try weeklyRecipe("weekly.chicken-taco-rice-bowls")
+
+        XCTAssertTrue(
+            model.beginWeeklyMeal(
+                collectionID: "weekly.week-01",
+                recipe: recipe,
+                targetServings: recipe.defaultServings
+            )
+        )
+
+        XCTAssertEqual(model.homePath, [.recipeReady])
+        XCTAssertEqual(model.activeRecipe.servings, recipe.defaultServings)
+        XCTAssertEqual(
+            model.activeRecipe.sourceDetail,
+            "Weekly Meals · weekly.week-01 · weekly.chicken-taco-rice-bowls · version 1"
+        )
+        XCTAssertEqual(model.shoppingScope, .singleRecipe(model.activeRecipe.id))
+    }
+
+    @MainActor
     func testWeeklyMealSaveIsIdempotentAndSupportsDurableUndo() async throws {
         let store = InMemorySmartCartStateStore()
         let model = AppModel(stateStore: store, commerceDefaults: isolatedDefaults())
