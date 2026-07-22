@@ -1,0 +1,9 @@
+{
+  "contentSchemaVersion": 1,
+  "recipesResource": "recipes-v1.json",
+  "collectionResources": [
+    "week-01.json"
+  ],
+  "fallbackCollectionID": "weekly.week-01",
+  "pricingResource": "pricing-v1.json"
+}

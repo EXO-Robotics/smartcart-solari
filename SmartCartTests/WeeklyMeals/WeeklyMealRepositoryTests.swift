@@ -184,7 +184,8 @@ private enum Fixture {
                 imageAssetName: "weekly-placeholder",
                 accessibilityDescription: "A plated meal",
                 isMealPrepFriendly: true,
-                isFeaturedEligible: true
+                isFeaturedEligible: true,
+                baseNutritionExcludes: nil
             )
         )
     }

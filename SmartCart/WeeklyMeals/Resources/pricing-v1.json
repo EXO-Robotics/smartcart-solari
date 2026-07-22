@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "pricingVersion": 1,
+  "currencyCode": "USD",
+  "pricingRegion": "US",
+  "snapshotDate": null,
+  "staleAfterDays": null,
+  "prices": []
+}

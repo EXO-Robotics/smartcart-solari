@@ -101,7 +101,8 @@ final class WeeklyMealCostEstimatorTests: XCTestCase {
                 imageAssetName: "fixture",
                 accessibilityDescription: "Fixture",
                 isMealPrepFriendly: false,
-                isFeaturedEligible: true
+                isFeaturedEligible: true,
+                baseNutritionExcludes: nil
             )
         )
     }

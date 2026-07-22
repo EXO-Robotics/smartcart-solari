@@ -1,0 +1,98 @@
+{
+  "id": "weekly.week-01",
+  "contentSchemaVersion": 1,
+  "title": "This Week's Meals",
+  "weekStartDate": "2026-07-20",
+  "weekEndDateExclusive": "2026-07-27",
+  "entries": [
+    {
+      "id": "weekly.week-01.chicken-taco-rice-bowls",
+      "recipeReference": {
+        "recipeID": "weekly.chicken-taco-rice-bowls",
+        "contentVersion": 1
+      },
+      "slot": "lunch",
+      "displayOrder": 0,
+      "isFeatured": true,
+      "promotionalTag": "highProtein"
+    },
+    {
+      "id": "weekly.week-01.protein-overnight-oats",
+      "recipeReference": {
+        "recipeID": "weekly.protein-overnight-oats",
+        "contentVersion": 1
+      },
+      "slot": "breakfast",
+      "displayOrder": 1,
+      "isFeatured": false,
+      "promotionalTag": "makeAhead"
+    },
+    {
+      "id": "weekly.week-01.make-ahead-breakfast-burritos",
+      "recipeReference": {
+        "recipeID": "weekly.make-ahead-breakfast-burritos",
+        "contentVersion": 1
+      },
+      "slot": "breakfast",
+      "displayOrder": 2,
+      "isFeatured": false,
+      "promotionalTag": "freezerFriendly"
+    },
+    {
+      "id": "weekly.week-01.korean-ground-beef-bowls",
+      "recipeReference": {
+        "recipeID": "weekly.korean-ground-beef-bowls",
+        "contentVersion": 1
+      },
+      "slot": "lunch",
+      "displayOrder": 3,
+      "isFeatured": false,
+      "promotionalTag": "reheatsWell"
+    },
+    {
+      "id": "weekly.week-01.honey-garlic-chicken-rice",
+      "recipeReference": {
+        "recipeID": "weekly.honey-garlic-chicken-rice",
+        "contentVersion": 1
+      },
+      "slot": "dinner",
+      "displayOrder": 4,
+      "isFeatured": false,
+      "promotionalTag": "highProtein"
+    },
+    {
+      "id": "weekly.week-01.one-pot-cheeseburger-pasta",
+      "recipeReference": {
+        "recipeID": "weekly.one-pot-cheeseburger-pasta",
+        "contentVersion": 1
+      },
+      "slot": "dinner",
+      "displayOrder": 5,
+      "isFeatured": false,
+      "promotionalTag": "easyCleanup"
+    },
+    {
+      "id": "weekly.week-01.protein-berry-smoothie",
+      "recipeReference": {
+        "recipeID": "weekly.protein-berry-smoothie",
+        "contentVersion": 1
+      },
+      "slot": "snack",
+      "displayOrder": 6,
+      "isFeatured": false,
+      "promotionalTag": "fiveMinutes"
+    },
+    {
+      "id": "weekly.week-01.creamy-buffalo-chicken-dip",
+      "recipeReference": {
+        "recipeID": "weekly.creamy-buffalo-chicken-dip",
+        "contentVersion": 1
+      },
+      "slot": "snack",
+      "displayOrder": 7,
+      "isFeatured": false,
+      "promotionalTag": "crowdFavorite"
+    }
+  ],
+  "promotionalMessage": "Two breakfasts, two lunches, two dinners, and two snacks—ready to add to your shopping trip."
+}

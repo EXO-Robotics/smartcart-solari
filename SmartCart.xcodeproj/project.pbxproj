@@ -66,6 +66,11 @@
 		A70000000000000000000003 /* WeeklyMealCostEstimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B70000000000000000000003 /* WeeklyMealCostEstimator.swift */; };
 		A70000000000000000000004 /* WeeklyMealRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B70000000000000000000004 /* WeeklyMealRepositoryTests.swift */; };
 		A70000000000000000000005 /* WeeklyMealCostEstimatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B70000000000000000000005 /* WeeklyMealCostEstimatorTests.swift */; };
+		A70000000000000000000006 /* WeeklyMealContentResourceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B70000000000000000000006 /* WeeklyMealContentResourceTests.swift */; };
+		A70000000000000000000007 /* manifest-v1.json in Resources */ = {isa = PBXBuildFile; fileRef = B70000000000000000000007 /* manifest-v1.json */; };
+		A70000000000000000000008 /* recipes-v1.json in Resources */ = {isa = PBXBuildFile; fileRef = B70000000000000000000008 /* recipes-v1.json */; };
+		A70000000000000000000009 /* week-01.json in Resources */ = {isa = PBXBuildFile; fileRef = B70000000000000000000009 /* week-01.json */; };
+		A7000000000000000000000A /* pricing-v1.json in Resources */ = {isa = PBXBuildFile; fileRef = B7000000000000000000000A /* pricing-v1.json */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -145,6 +150,12 @@
 		B70000000000000000000003 /* WeeklyMealCostEstimator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/WeeklyMealCostEstimator.swift; sourceTree = "<group>"; };
 		B70000000000000000000004 /* WeeklyMealRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeeklyMealRepositoryTests.swift; sourceTree = "<group>"; };
 		B70000000000000000000005 /* WeeklyMealCostEstimatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeeklyMealCostEstimatorTests.swift; sourceTree = "<group>"; };
+		B70000000000000000000006 /* WeeklyMealContentResourceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeeklyMealContentResourceTests.swift; sourceTree = "<group>"; };
+		B70000000000000000000007 /* manifest-v1.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "manifest-v1.json"; sourceTree = "<group>"; };
+		B70000000000000000000008 /* recipes-v1.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "recipes-v1.json"; sourceTree = "<group>"; };
+		B70000000000000000000009 /* week-01.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "week-01.json"; sourceTree = "<group>"; };
+		B7000000000000000000000A /* pricing-v1.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "pricing-v1.json"; sourceTree = "<group>"; };
+		B7000000000000000000000B /* MISSING_PRICING_INPUTS.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = MISSING_PRICING_INPUTS.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -321,6 +332,7 @@
 				B70000000000000000000001 /* WeeklyMealModels.swift */,
 				B70000000000000000000002 /* BundledWeeklyMealRepository.swift */,
 				B70000000000000000000003 /* WeeklyMealCostEstimator.swift */,
+				D70000000000000000000003 /* Resources */,
 			);
 			path = WeeklyMeals;
 			sourceTree = "<group>";
@@ -361,8 +373,21 @@
 			children = (
 				B70000000000000000000004 /* WeeklyMealRepositoryTests.swift */,
 				B70000000000000000000005 /* WeeklyMealCostEstimatorTests.swift */,
+				B70000000000000000000006 /* WeeklyMealContentResourceTests.swift */,
 			);
 			path = WeeklyMeals;
+			sourceTree = "<group>";
+		};
+		D70000000000000000000003 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				B70000000000000000000007 /* manifest-v1.json */,
+				B70000000000000000000008 /* recipes-v1.json */,
+				B70000000000000000000009 /* week-01.json */,
+				B7000000000000000000000A /* pricing-v1.json */,
+				B7000000000000000000000B /* MISSING_PRICING_INPUTS.md */,
+			);
+			path = Resources;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -453,6 +478,10 @@
 			files = (
 				A10000000000000000000012 /* PrivacyInfo.xcprivacy in Resources */,
 				A10000000000000000000017 /* Assets.xcassets in Resources */,
+				A70000000000000000000007 /* manifest-v1.json in Resources */,
+				A70000000000000000000008 /* recipes-v1.json in Resources */,
+				A70000000000000000000009 /* week-01.json in Resources */,
+				A7000000000000000000000A /* pricing-v1.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -534,6 +563,7 @@
 				A9B000000000000000000002 /* LocalOperationRecorderTests.swift in Sources */,
 				A70000000000000000000004 /* WeeklyMealRepositoryTests.swift in Sources */,
 				A70000000000000000000005 /* WeeklyMealCostEstimatorTests.swift in Sources */,
+				A70000000000000000000006 /* WeeklyMealContentResourceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

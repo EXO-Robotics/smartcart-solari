@@ -230,6 +230,7 @@ struct CuratedRecipeMetadata: Codable, Hashable, Sendable {
     let accessibilityDescription: String
     let isMealPrepFriendly: Bool
     let isFeaturedEligible: Bool
+    let baseNutritionExcludes: [String]?
 }
 
 struct CuratedRecipeRecord: Codable, Identifiable, Hashable, Sendable {

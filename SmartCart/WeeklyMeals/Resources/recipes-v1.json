@@ -1,0 +1,359 @@
+{
+  "contentSchemaVersion": 1,
+  "recipes": [
+    {
+      "id": "weekly.protein-overnight-oats",
+      "contentVersion": 1,
+      "title": "Protein Overnight Oats",
+      "shortDescription": "Creamy overnight oats with Greek yogurt, berries, and protein powder for an easy make-ahead breakfast.",
+      "defaultServings": 1,
+      "servingDescription": "1 jar",
+      "ingredients": [
+        { "id": "rolled-oats", "rawText": "1/2 cup rolled oats", "name": "Rolled oats", "quantity": 0.5, "unit": "cup", "preparation": "", "category": "pantry", "pricingKey": "rolled-oats", "isQualitative": false },
+        { "id": "milk", "rawText": "1/2 cup milk", "name": "Milk", "quantity": 0.5, "unit": "cup", "preparation": "", "category": "dairy", "pricingKey": "milk", "isQualitative": false },
+        { "id": "plain-greek-yogurt", "rawText": "1/2 cup plain Greek yogurt", "name": "Plain Greek yogurt", "quantity": 0.5, "unit": "cup", "preparation": "", "category": "dairy", "pricingKey": "plain-greek-yogurt", "isQualitative": false },
+        { "id": "vanilla-protein-powder", "rawText": "1/2 scoop vanilla protein powder", "name": "Vanilla protein powder", "quantity": 0.5, "unit": "each", "preparation": "", "category": "pantry", "pricingKey": "vanilla-protein-powder-scoop", "isQualitative": false },
+        { "id": "chia-seeds", "rawText": "1 1/2 teaspoons chia seeds", "name": "Chia seeds", "quantity": 1.5, "unit": "tsp", "preparation": "", "category": "pantry", "pricingKey": "chia-seeds", "isQualitative": false },
+        { "id": "mixed-berries", "rawText": "1/2 cup mixed berries", "name": "Mixed berries", "quantity": 0.5, "unit": "cup", "preparation": "", "category": "produce", "pricingKey": "mixed-berries", "isQualitative": false },
+        { "id": "maple-syrup", "rawText": "1 teaspoon maple syrup, optional", "name": "Maple syrup", "quantity": 1, "unit": "tsp", "preparation": "", "category": "pantry", "pricingKey": "maple-syrup", "optionalPolicy": "excludedByDefault", "isQualitative": false },
+        { "id": "salt", "rawText": "Pinch of salt", "name": "Salt", "quantity": null, "unit": "to taste", "preparation": "", "category": "pantry", "pricingKey": null, "isQualitative": true }
+      ],
+      "instructions": [
+        { "id": 1, "text": "Add the oats, milk, Greek yogurt, protein powder, chia seeds, and salt to a jar or container." },
+        { "id": 2, "text": "Stir until no dry protein-powder pockets remain." },
+        { "id": 3, "text": "Fold in or top with the berries." },
+        { "id": 4, "text": "Cover and refrigerate overnight." },
+        { "id": 5, "text": "Add maple syrup when serving if desired." }
+      ],
+      "substitutions": [
+        { "id": "gluten-free-oats", "ingredientID": "rolled-oats", "replacementName": "Certified gluten-free rolled oats", "note": "Supports a gluten-free option only when all packaged ingredients are verified." }
+      ],
+      "metadata": {
+        "prepMinutes": 5,
+        "cookMinutes": 0,
+        "passiveMinutes": 480,
+        "nutrition": { "caloriesPerServing": 350, "calorieRangeMinimum": 325, "calorieRangeMaximum": 425, "proteinGramsPerServing": 30, "servingDefinition": "1 jar", "verificationStatus": "editorialEstimate", "nutritionVersion": 1 },
+        "costEstimate": { "recipeID": "weekly.protein-overnight-oats", "recipeContentVersion": 1, "servingDefinition": "1 jar", "totalRecipeCost": null, "costPerServing": null, "costRangeMinimumPerServing": null, "costRangeMaximumPerServing": null, "currencyCode": "USD", "basis": "proportionalIngredientValue", "status": "requiresVerification", "pricingRegion": "US", "priceSnapshotDate": null, "pricingVersion": 1, "includedIngredientIDs": [], "excludedIngredientIDs": [], "notes": "Reviewed production pricing inputs are pending." },
+        "mealTypes": ["breakfast"],
+        "verifiedDietaryClaims": [
+          { "claim": "glutenFree", "applicability": "withDocumentedSubstitution", "verificationVersion": 1 }
+        ],
+        "merchandisingTags": ["makeAhead", "highProtein"],
+        "imageAssetName": "weekly-placeholder-protein-overnight-oats",
+        "accessibilityDescription": "A jar of creamy overnight oats with berries.",
+        "isMealPrepFriendly": true,
+        "isFeaturedEligible": true
+      }
+    },
+    {
+      "id": "weekly.honey-garlic-chicken-rice",
+      "contentVersion": 1,
+      "title": "Honey Garlic Chicken and Rice",
+      "shortDescription": "Tender chicken and broccoli with a familiar honey-garlic sauce served over rice.",
+      "defaultServings": 4,
+      "servingDescription": "1 plated serving",
+      "ingredients": [
+        { "id": "chicken-breast", "rawText": "1 1/2 pounds boneless skinless chicken breast", "name": "Boneless skinless chicken breast", "quantity": 1.5, "unit": "lb", "preparation": "", "category": "meat", "pricingKey": "boneless-skinless-chicken-breast", "isQualitative": false },
+        { "id": "cooked-rice", "rawText": "3 cups cooked rice", "name": "Cooked rice", "quantity": 3, "unit": "cup", "preparation": "", "category": "pantry", "pricingKey": "cooked-rice", "isQualitative": false },
+        { "id": "broccoli", "rawText": "4 cups broccoli florets", "name": "Broccoli florets", "quantity": 4, "unit": "cup", "preparation": "", "category": "produce", "pricingKey": "broccoli-florets", "isQualitative": false },
+        { "id": "honey", "rawText": "1/4 cup honey", "name": "Honey", "quantity": 0.25, "unit": "cup", "preparation": "", "category": "pantry", "pricingKey": "honey", "isQualitative": false },
+        { "id": "soy-sauce", "rawText": "1/4 cup reduced-sodium soy sauce", "name": "Reduced-sodium soy sauce", "quantity": 0.25, "unit": "cup", "preparation": "", "category": "pantry", "pricingKey": "reduced-sodium-soy-sauce", "isQualitative": false },
+        { "id": "garlic", "rawText": "4 garlic cloves, minced", "name": "Garlic cloves", "quantity": 4, "unit": "each", "preparation": "minced", "category": "produce", "pricingKey": "garlic-cloves", "isQualitative": false },
+        { "id": "rice-vinegar", "rawText": "1 tablespoon rice vinegar", "name": "Rice vinegar", "quantity": 1, "unit": "tbsp", "preparation": "", "category": "pantry", "pricingKey": "rice-vinegar", "isQualitative": false },
+        { "id": "cornstarch", "rawText": "1 tablespoon cornstarch", "name": "Cornstarch", "quantity": 1, "unit": "tbsp", "preparation": "", "category": "pantry", "pricingKey": "cornstarch", "isQualitative": false },
+        { "id": "water", "rawText": "1 tablespoon water", "name": "Water", "quantity": 1, "unit": "tbsp", "preparation": "", "category": "pantry", "pricingKey": "water", "isQualitative": false },
+        { "id": "cooking-oil", "rawText": "1 tablespoon cooking oil", "name": "Cooking oil", "quantity": 1, "unit": "tbsp", "preparation": "", "category": "pantry", "pricingKey": "cooking-oil", "isQualitative": false },
+        { "id": "salt-and-black-pepper", "rawText": "Salt and black pepper to taste", "name": "Salt and black pepper", "quantity": null, "unit": "to taste", "preparation": "", "category": "pantry", "pricingKey": null, "isQualitative": true }
+      ],
+      "instructions": [
+        { "id": 1, "text": "Cut the chicken into bite-size pieces and season it with salt and pepper." },
+        { "id": 2, "text": "Cook the chicken in oil until browned and fully cooked." },
+        { "id": 3, "text": "Steam or sauté the broccoli." },
+        { "id": 4, "text": "Stir together the honey, soy sauce, garlic, and rice vinegar." },
+        { "id": 5, "text": "Add the sauce to the chicken." },
+        { "id": 6, "text": "Mix the cornstarch and water, then stir it into the sauce." },
+        { "id": 7, "text": "Simmer until the sauce thickens." },
+        { "id": 8, "text": "Serve with the rice and broccoli." }
+      ],
+      "substitutions": [
+        { "id": "gluten-free-tamari", "ingredientID": "soy-sauce", "replacementName": "Verified tamari", "note": "Supports a gluten-free option when verified tamari is used." }
+      ],
+      "metadata": {
+        "prepMinutes": 10, "cookMinutes": 30, "passiveMinutes": 0,
+        "nutrition": { "caloriesPerServing": 540, "calorieRangeMinimum": 475, "calorieRangeMaximum": 625, "proteinGramsPerServing": 45, "servingDefinition": "1 plated serving", "verificationStatus": "editorialEstimate", "nutritionVersion": 1 },
+        "costEstimate": { "recipeID": "weekly.honey-garlic-chicken-rice", "recipeContentVersion": 1, "servingDefinition": "1 plated serving", "totalRecipeCost": null, "costPerServing": null, "costRangeMinimumPerServing": null, "costRangeMaximumPerServing": null, "currencyCode": "USD", "basis": "proportionalIngredientValue", "status": "requiresVerification", "pricingRegion": "US", "priceSnapshotDate": null, "pricingVersion": 1, "includedIngredientIDs": [], "excludedIngredientIDs": [], "notes": "Reviewed production pricing inputs are pending." },
+        "mealTypes": ["dinner"],
+        "verifiedDietaryClaims": [{ "claim": "glutenFree", "applicability": "withDocumentedSubstitution", "verificationVersion": 1 }],
+        "merchandisingTags": ["familyFriendly", "highProtein"],
+        "imageAssetName": "weekly-placeholder-honey-garlic-chicken-rice",
+        "accessibilityDescription": "Honey garlic chicken with broccoli and rice.",
+        "isMealPrepFriendly": true,
+        "isFeaturedEligible": true
+      }
+    },
+    {
+      "id": "weekly.one-pot-cheeseburger-pasta",
+      "contentVersion": 1,
+      "title": "One-Pot Cheeseburger Pasta",
+      "shortDescription": "A family-style ground-beef pasta with cheddar, tomato, mustard, and classic cheeseburger flavors.",
+      "defaultServings": 6,
+      "servingDescription": "Approximately 1 1/2 cups",
+      "ingredients": [
+        { "id": "ground-beef", "rawText": "1 pound lean ground beef", "name": "Lean ground beef", "quantity": 1, "unit": "lb", "preparation": "", "category": "meat", "pricingKey": "lean-ground-beef", "isQualitative": false },
+        { "id": "short-pasta", "rawText": "12 ounces short pasta", "name": "Short pasta", "quantity": 12, "unit": "oz", "preparation": "", "category": "pantry", "pricingKey": "short-pasta", "isQualitative": false },
+        { "id": "onion", "rawText": "1 small onion, diced", "name": "Small onion", "quantity": 1, "unit": "each", "preparation": "diced", "category": "produce", "pricingKey": "small-onion", "isQualitative": false },
+        { "id": "tomato-paste", "rawText": "2 tablespoons tomato paste", "name": "Tomato paste", "quantity": 2, "unit": "tbsp", "preparation": "", "category": "pantry", "pricingKey": "tomato-paste", "isQualitative": false },
+        { "id": "beef-broth", "rawText": "3 cups reduced-sodium beef broth", "name": "Reduced-sodium beef broth", "quantity": 3, "unit": "cup", "preparation": "", "category": "pantry", "pricingKey": "reduced-sodium-beef-broth", "isQualitative": false },
+        { "id": "milk", "rawText": "1 cup milk", "name": "Milk", "quantity": 1, "unit": "cup", "preparation": "", "category": "dairy", "pricingKey": "milk", "isQualitative": false },
+        { "id": "cheddar-cheese", "rawText": "1 1/2 cups shredded cheddar cheese", "name": "Cheddar cheese", "quantity": 1.5, "unit": "cup", "preparation": "shredded", "category": "dairy", "pricingKey": "shredded-cheddar-cheese", "isQualitative": false },
+        { "id": "yellow-mustard", "rawText": "1 tablespoon yellow mustard", "name": "Yellow mustard", "quantity": 1, "unit": "tbsp", "preparation": "", "category": "pantry", "pricingKey": "yellow-mustard", "isQualitative": false },
+        { "id": "smoked-paprika", "rawText": "1 teaspoon smoked paprika", "name": "Smoked paprika", "quantity": 1, "unit": "tsp", "preparation": "", "category": "pantry", "pricingKey": "smoked-paprika", "isQualitative": false },
+        { "id": "garlic-powder", "rawText": "1 teaspoon garlic powder", "name": "Garlic powder", "quantity": 1, "unit": "tsp", "preparation": "", "category": "pantry", "pricingKey": "garlic-powder", "isQualitative": false },
+        { "id": "salt-and-black-pepper", "rawText": "Salt and black pepper to taste", "name": "Salt and black pepper", "quantity": null, "unit": "to taste", "preparation": "", "category": "pantry", "pricingKey": null, "isQualitative": true }
+      ],
+      "instructions": [
+        { "id": 1, "text": "Brown the ground beef with the onion." },
+        { "id": 2, "text": "Drain excess fat if needed." },
+        { "id": 3, "text": "Stir in the tomato paste, mustard, smoked paprika, and garlic powder." },
+        { "id": 4, "text": "Add the broth, milk, and pasta." },
+        { "id": 5, "text": "Bring to a gentle simmer, cover, and cook until the pasta is tender." },
+        { "id": 6, "text": "Stir periodically and add a small amount of water if the pan becomes dry." },
+        { "id": 7, "text": "Remove from the heat and stir in the cheddar cheese." },
+        { "id": 8, "text": "Season to taste." }
+      ],
+      "substitutions": [],
+      "metadata": {
+        "prepMinutes": 10, "cookMinutes": 30, "passiveMinutes": 0,
+        "nutrition": { "caloriesPerServing": 490, "calorieRangeMinimum": 425, "calorieRangeMaximum": 575, "proteinGramsPerServing": 31, "servingDefinition": "Approximately 1 1/2 cups", "verificationStatus": "editorialEstimate", "nutritionVersion": 1 },
+        "costEstimate": { "recipeID": "weekly.one-pot-cheeseburger-pasta", "recipeContentVersion": 1, "servingDefinition": "Approximately 1 1/2 cups", "totalRecipeCost": null, "costPerServing": null, "costRangeMinimumPerServing": null, "costRangeMaximumPerServing": null, "currencyCode": "USD", "basis": "proportionalIngredientValue", "status": "requiresVerification", "pricingRegion": "US", "priceSnapshotDate": null, "pricingVersion": 1, "includedIngredientIDs": [], "excludedIngredientIDs": [], "notes": "Reviewed production pricing inputs are pending." },
+        "mealTypes": ["dinner"],
+        "verifiedDietaryClaims": [],
+        "merchandisingTags": ["familyFriendly", "easyCleanup"],
+        "imageAssetName": "weekly-placeholder-one-pot-cheeseburger-pasta",
+        "accessibilityDescription": "A bowl of creamy cheeseburger pasta.",
+        "isMealPrepFriendly": true,
+        "isFeaturedEligible": true
+      }
+    },
+    {
+      "id": "weekly.protein-berry-smoothie",
+      "contentVersion": 1,
+      "title": "Protein Berry Smoothie",
+      "shortDescription": "A cold berry smoothie with banana, Greek yogurt, milk, and vanilla protein.",
+      "defaultServings": 1,
+      "servingDescription": "1 large smoothie",
+      "ingredients": [
+        { "id": "milk", "rawText": "1 cup milk", "name": "Milk", "quantity": 1, "unit": "cup", "preparation": "", "category": "dairy", "pricingKey": "milk", "isQualitative": false },
+        { "id": "plain-greek-yogurt", "rawText": "1/2 cup plain Greek yogurt", "name": "Plain Greek yogurt", "quantity": 0.5, "unit": "cup", "preparation": "", "category": "dairy", "pricingKey": "plain-greek-yogurt", "isQualitative": false },
+        { "id": "frozen-mixed-berries", "rawText": "1 cup frozen mixed berries", "name": "Frozen mixed berries", "quantity": 1, "unit": "cup", "preparation": "", "category": "frozen", "pricingKey": "frozen-mixed-berries", "isQualitative": false },
+        { "id": "banana", "rawText": "1/2 banana", "name": "Banana", "quantity": 0.5, "unit": "each", "preparation": "", "category": "produce", "pricingKey": "banana", "isQualitative": false },
+        { "id": "vanilla-protein-powder", "rawText": "1 scoop vanilla protein powder", "name": "Vanilla protein powder", "quantity": 1, "unit": "each", "preparation": "", "category": "pantry", "pricingKey": "vanilla-protein-powder-scoop", "isQualitative": false },
+        { "id": "ice", "rawText": "1 cup ice", "name": "Ice", "quantity": 1, "unit": "cup", "preparation": "", "category": "pantry", "pricingKey": "ice", "isQualitative": false },
+        { "id": "water", "rawText": "Water as needed for blending", "name": "Water", "quantity": null, "unit": "as needed", "preparation": "for blending", "category": "pantry", "pricingKey": null, "isQualitative": true }
+      ],
+      "instructions": [
+        { "id": 1, "text": "Add the milk, Greek yogurt, berries, banana, protein powder, and ice to a blender." },
+        { "id": 2, "text": "Blend until smooth." },
+        { "id": 3, "text": "Add water a small amount at a time if a thinner texture is desired." },
+        { "id": 4, "text": "Serve immediately." }
+      ],
+      "substitutions": [
+        { "id": "dairy-free-milk", "ingredientID": "milk", "replacementName": "Verified dairy-free milk", "note": "Use with a verified dairy-free yogurt and protein powder to support a dairy-free option." },
+        { "id": "dairy-free-yogurt", "ingredientID": "plain-greek-yogurt", "replacementName": "Verified dairy-free yogurt", "note": "Use with verified dairy-free milk and protein powder to support a dairy-free option." }
+      ],
+      "metadata": {
+        "prepMinutes": 5, "cookMinutes": 0, "passiveMinutes": 0,
+        "nutrition": { "caloriesPerServing": 410, "calorieRangeMinimum": 350, "calorieRangeMaximum": 475, "proteinGramsPerServing": 40, "servingDefinition": "1 large smoothie", "verificationStatus": "editorialEstimate", "nutritionVersion": 1 },
+        "costEstimate": { "recipeID": "weekly.protein-berry-smoothie", "recipeContentVersion": 1, "servingDefinition": "1 large smoothie", "totalRecipeCost": null, "costPerServing": null, "costRangeMinimumPerServing": null, "costRangeMaximumPerServing": null, "currencyCode": "USD", "basis": "proportionalIngredientValue", "status": "requiresVerification", "pricingRegion": "US", "priceSnapshotDate": null, "pricingVersion": 1, "includedIngredientIDs": [], "excludedIngredientIDs": [], "notes": "Reviewed production pricing inputs are pending." },
+        "mealTypes": ["snack"],
+        "verifiedDietaryClaims": [{ "claim": "dairyFree", "applicability": "withDocumentedSubstitution", "verificationVersion": 1 }],
+        "merchandisingTags": ["fiveMinutes", "highProtein"],
+        "imageAssetName": "weekly-placeholder-protein-berry-smoothie",
+        "accessibilityDescription": "A blended berry protein smoothie.",
+        "isMealPrepFriendly": false,
+        "isFeaturedEligible": true
+      }
+    },
+    {
+      "id": "weekly.creamy-buffalo-chicken-dip",
+      "contentVersion": 1,
+      "title": "Creamy Buffalo Chicken Dip",
+      "shortDescription": "A creamy baked Buffalo chicken dip with shredded chicken, cheese, Greek yogurt, and hot sauce.",
+      "defaultServings": 9,
+      "servingDescription": "1/3 cup dip",
+      "ingredients": [
+        { "id": "shredded-chicken", "rawText": "3 cups cooked shredded chicken", "name": "Cooked shredded chicken", "quantity": 3, "unit": "cup", "preparation": "", "category": "meat", "pricingKey": "cooked-shredded-chicken", "isQualitative": false },
+        { "id": "cream-cheese", "rawText": "8 ounces reduced-fat cream cheese, softened", "name": "Reduced-fat cream cheese", "quantity": 8, "unit": "oz", "preparation": "softened", "category": "dairy", "pricingKey": "reduced-fat-cream-cheese", "isQualitative": false },
+        { "id": "plain-greek-yogurt", "rawText": "1/2 cup plain Greek yogurt", "name": "Plain Greek yogurt", "quantity": 0.5, "unit": "cup", "preparation": "", "category": "dairy", "pricingKey": "plain-greek-yogurt", "isQualitative": false },
+        { "id": "buffalo-hot-sauce", "rawText": "1/2 cup Buffalo-style hot sauce", "name": "Buffalo-style hot sauce", "quantity": 0.5, "unit": "cup", "preparation": "", "category": "pantry", "pricingKey": "buffalo-style-hot-sauce", "isQualitative": false },
+        { "id": "cheddar-cheese", "rawText": "1 cup shredded cheddar cheese", "name": "Cheddar cheese", "quantity": 1, "unit": "cup", "preparation": "shredded", "category": "dairy", "pricingKey": "shredded-cheddar-cheese", "isQualitative": false },
+        { "id": "ranch-seasoning", "rawText": "1 teaspoon ranch seasoning", "name": "Ranch seasoning", "quantity": 1, "unit": "tsp", "preparation": "", "category": "pantry", "pricingKey": "ranch-seasoning", "isQualitative": false },
+        { "id": "green-onions", "rawText": "2 green onions, sliced, optional", "name": "Green onions", "quantity": 2, "unit": "each", "preparation": "sliced", "category": "produce", "pricingKey": "green-onions", "optionalPolicy": "excludedByDefault", "isQualitative": false }
+      ],
+      "instructions": [
+        { "id": 1, "text": "Heat the oven to 375°F." },
+        { "id": 2, "text": "Mix the chicken, cream cheese, Greek yogurt, hot sauce, half of the cheddar, and ranch seasoning." },
+        { "id": 3, "text": "Spread the mixture into a small baking dish." },
+        { "id": 4, "text": "Top with the remaining cheddar." },
+        { "id": 5, "text": "Bake until hot and bubbling." },
+        { "id": 6, "text": "Top with green onions if desired." }
+      ],
+      "substitutions": [],
+      "metadata": {
+        "prepMinutes": 10, "cookMinutes": 25, "passiveMinutes": 0,
+        "nutrition": { "caloriesPerServing": 185, "calorieRangeMinimum": 160, "calorieRangeMaximum": 230, "proteinGramsPerServing": 18, "servingDefinition": "1/3 cup dip", "verificationStatus": "editorialEstimate", "nutritionVersion": 1 },
+        "costEstimate": { "recipeID": "weekly.creamy-buffalo-chicken-dip", "recipeContentVersion": 1, "servingDefinition": "1/3 cup dip", "totalRecipeCost": null, "costPerServing": null, "costRangeMinimumPerServing": null, "costRangeMaximumPerServing": null, "currencyCode": "USD", "basis": "proportionalIngredientValue", "status": "requiresVerification", "pricingRegion": "US", "priceSnapshotDate": null, "pricingVersion": 1, "includedIngredientIDs": [], "excludedIngredientIDs": [], "notes": "Reviewed production pricing inputs are pending. Base nutrition excludes chips, crackers, bread, wraps, and vegetables used for dipping." },
+        "mealTypes": ["snack"],
+        "verifiedDietaryClaims": [],
+        "merchandisingTags": ["crowdFavorite", "easyPrep"],
+        "imageAssetName": "weekly-placeholder-creamy-buffalo-chicken-dip",
+        "accessibilityDescription": "A baked dish of creamy Buffalo chicken dip.",
+        "isMealPrepFriendly": false,
+        "isFeaturedEligible": true,
+        "baseNutritionExcludes": ["chips", "crackers", "bread", "wraps", "vegetables used for dipping"]
+      }
+    },
+    {
+      "id": "weekly.make-ahead-breakfast-burritos",
+      "contentVersion": 1,
+      "title": "Make-Ahead Breakfast Burritos",
+      "shortDescription": "Freezer-friendly breakfast burritos filled with eggs, sausage, potatoes, peppers, cheese, and salsa.",
+      "defaultServings": 8,
+      "servingDescription": "1 burrito",
+      "ingredients": [
+        { "id": "flour-tortillas", "rawText": "8 large flour tortillas", "name": "Large flour tortillas", "quantity": 8, "unit": "each", "preparation": "", "category": "bakery", "pricingKey": "large-flour-tortillas", "isQualitative": false },
+        { "id": "breakfast-sausage", "rawText": "1 pound breakfast sausage", "name": "Breakfast sausage", "quantity": 1, "unit": "lb", "preparation": "", "category": "meat", "pricingKey": "breakfast-sausage", "isQualitative": false },
+        { "id": "eggs", "rawText": "8 large eggs", "name": "Large eggs", "quantity": 8, "unit": "each", "preparation": "", "category": "dairy", "pricingKey": "large-eggs", "isQualitative": false },
+        { "id": "potatoes", "rawText": "2 cups diced cooked potatoes or frozen hash browns", "name": "Cooked potatoes or frozen hash browns", "quantity": 2, "unit": "cup", "preparation": "diced", "category": "frozen", "pricingKey": "potatoes-or-hash-browns", "isQualitative": false },
+        { "id": "bell-pepper", "rawText": "1 bell pepper, diced", "name": "Bell pepper", "quantity": 1, "unit": "each", "preparation": "diced", "category": "produce", "pricingKey": "bell-pepper", "isQualitative": false },
+        { "id": "onion", "rawText": "1/2 medium onion, diced", "name": "Medium onion", "quantity": 0.5, "unit": "each", "preparation": "diced", "category": "produce", "pricingKey": "medium-onion", "isQualitative": false },
+        { "id": "cheddar-cheese", "rawText": "1 cup shredded cheddar cheese", "name": "Cheddar cheese", "quantity": 1, "unit": "cup", "preparation": "shredded", "category": "dairy", "pricingKey": "shredded-cheddar-cheese", "isQualitative": false },
+        { "id": "salsa", "rawText": "1/2 cup salsa", "name": "Salsa", "quantity": 0.5, "unit": "cup", "preparation": "", "category": "pantry", "pricingKey": "salsa", "isQualitative": false },
+        { "id": "cooking-oil", "rawText": "1 tablespoon cooking oil", "name": "Cooking oil", "quantity": 1, "unit": "tbsp", "preparation": "", "category": "pantry", "pricingKey": "cooking-oil", "isQualitative": false },
+        { "id": "salt-and-black-pepper", "rawText": "Salt and black pepper to taste", "name": "Salt and black pepper", "quantity": null, "unit": "to taste", "preparation": "", "category": "pantry", "pricingKey": null, "isQualitative": true }
+      ],
+      "instructions": [
+        { "id": 1, "text": "Cook the sausage until browned, then transfer it to a plate." },
+        { "id": 2, "text": "Cook the potatoes, bell pepper, and onion until tender." },
+        { "id": 3, "text": "Scramble the eggs with salt and pepper." },
+        { "id": 4, "text": "Divide the sausage, vegetables, eggs, cheese, and salsa among the tortillas." },
+        { "id": 5, "text": "Fold into burritos." },
+        { "id": 6, "text": "Serve immediately or cool completely before wrapping and freezing." },
+        { "id": 7, "text": "Reheat until the center reaches a safe serving temperature." }
+      ],
+      "substitutions": [],
+      "metadata": {
+        "prepMinutes": 25,
+        "cookMinutes": 20,
+        "passiveMinutes": 0,
+        "nutrition": { "caloriesPerServing": 430, "calorieRangeMinimum": 375, "calorieRangeMaximum": 500, "proteinGramsPerServing": 24, "servingDefinition": "1 burrito", "verificationStatus": "editorialEstimate", "nutritionVersion": 1 },
+        "costEstimate": { "recipeID": "weekly.make-ahead-breakfast-burritos", "recipeContentVersion": 1, "servingDefinition": "1 burrito", "totalRecipeCost": null, "costPerServing": null, "costRangeMinimumPerServing": null, "costRangeMaximumPerServing": null, "currencyCode": "USD", "basis": "proportionalIngredientValue", "status": "requiresVerification", "pricingRegion": "US", "priceSnapshotDate": null, "pricingVersion": 1, "includedIngredientIDs": [], "excludedIngredientIDs": [], "notes": "Reviewed production pricing inputs are pending." },
+        "mealTypes": ["breakfast"],
+        "verifiedDietaryClaims": [],
+        "merchandisingTags": ["freezerFriendly", "mealPrepFriendly"],
+        "imageAssetName": "weekly-placeholder-make-ahead-breakfast-burritos",
+        "accessibilityDescription": "A serving of folded breakfast burritos.",
+        "isMealPrepFriendly": true,
+        "isFeaturedEligible": true
+      }
+    },
+    {
+      "id": "weekly.chicken-taco-rice-bowls",
+      "contentVersion": 1,
+      "title": "Chicken Taco Rice Bowls",
+      "shortDescription": "Seasoned chicken, rice, black beans, corn, vegetables, salsa, and cheese in a simple meal-prep bowl.",
+      "defaultServings": 4,
+      "servingDescription": "1 bowl",
+      "ingredients": [
+        { "id": "chicken-breast", "rawText": "1 1/4 pounds boneless skinless chicken breast", "name": "Boneless skinless chicken breast", "quantity": 1.25, "unit": "lb", "preparation": "", "category": "meat", "pricingKey": "boneless-skinless-chicken-breast", "isQualitative": false },
+        { "id": "cooked-rice", "rawText": "3 cups cooked rice", "name": "Cooked rice", "quantity": 3, "unit": "cup", "preparation": "", "category": "pantry", "pricingKey": "cooked-rice", "isQualitative": false },
+        { "id": "black-beans", "rawText": "1 can black beans, drained and rinsed", "name": "Black beans", "quantity": 1, "unit": "each", "preparation": "drained and rinsed", "category": "pantry", "pricingKey": "canned-black-beans", "isQualitative": false },
+        { "id": "corn", "rawText": "1 cup corn", "name": "Corn", "quantity": 1, "unit": "cup", "preparation": "", "category": "produce", "pricingKey": "corn", "isQualitative": false },
+        { "id": "bell-pepper", "rawText": "1 bell pepper, sliced", "name": "Bell pepper", "quantity": 1, "unit": "each", "preparation": "sliced", "category": "produce", "pricingKey": "bell-pepper", "isQualitative": false },
+        { "id": "onion", "rawText": "1/2 medium onion, sliced", "name": "Medium onion", "quantity": 0.5, "unit": "each", "preparation": "sliced", "category": "produce", "pricingKey": "medium-onion", "isQualitative": false },
+        { "id": "taco-seasoning", "rawText": "2 tablespoons taco seasoning", "name": "Taco seasoning", "quantity": 2, "unit": "tbsp", "preparation": "", "category": "pantry", "pricingKey": "taco-seasoning", "isQualitative": false },
+        { "id": "salsa", "rawText": "1 cup salsa", "name": "Salsa", "quantity": 1, "unit": "cup", "preparation": "", "category": "pantry", "pricingKey": "salsa", "isQualitative": false },
+        { "id": "shredded-cheese", "rawText": "1/2 cup shredded cheddar or Monterey Jack cheese", "name": "Cheddar or Monterey Jack cheese", "quantity": 0.5, "unit": "cup", "preparation": "shredded", "category": "dairy", "pricingKey": "shredded-cheddar-or-monterey-jack", "isQualitative": false },
+        { "id": "lime", "rawText": "1 lime", "name": "Lime", "quantity": 1, "unit": "each", "preparation": "", "category": "produce", "pricingKey": "lime", "isQualitative": false },
+        { "id": "cooking-oil", "rawText": "1 tablespoon cooking oil", "name": "Cooking oil", "quantity": 1, "unit": "tbsp", "preparation": "", "category": "pantry", "pricingKey": "cooking-oil", "isQualitative": false },
+        { "id": "salt", "rawText": "Salt to taste", "name": "Salt", "quantity": null, "unit": "to taste", "preparation": "", "category": "pantry", "pricingKey": null, "isQualitative": true }
+      ],
+      "instructions": [
+        { "id": 1, "text": "Cut the chicken into bite-size pieces and season it with taco seasoning." },
+        { "id": 2, "text": "Cook the chicken in oil until browned and fully cooked." },
+        { "id": 3, "text": "Add the bell pepper and onion and cook until tender-crisp." },
+        { "id": 4, "text": "Warm the rice, black beans, and corn." },
+        { "id": 5, "text": "Divide the rice among four bowls." },
+        { "id": 6, "text": "Add the chicken, vegetables, beans, corn, salsa, and cheese." },
+        { "id": 7, "text": "Finish with lime juice." }
+      ],
+      "substitutions": [
+        { "id": "gluten-free-seasoning", "ingredientID": "taco-seasoning", "replacementName": "Verified gluten-free taco seasoning", "note": "Supports a gluten-free option only when seasoning and all packaged ingredients are verified." }
+      ],
+      "metadata": {
+        "prepMinutes": 10,
+        "cookMinutes": 25,
+        "passiveMinutes": 0,
+        "nutrition": { "caloriesPerServing": 500, "calorieRangeMinimum": 450, "calorieRangeMaximum": 575, "proteinGramsPerServing": 46, "servingDefinition": "1 bowl", "verificationStatus": "editorialEstimate", "nutritionVersion": 1 },
+        "costEstimate": { "recipeID": "weekly.chicken-taco-rice-bowls", "recipeContentVersion": 1, "servingDefinition": "1 bowl", "totalRecipeCost": null, "costPerServing": null, "costRangeMinimumPerServing": null, "costRangeMaximumPerServing": null, "currencyCode": "USD", "basis": "proportionalIngredientValue", "status": "requiresVerification", "pricingRegion": "US", "priceSnapshotDate": null, "pricingVersion": 1, "includedIngredientIDs": [], "excludedIngredientIDs": [], "notes": "Reviewed production pricing inputs are pending." },
+        "mealTypes": ["lunch"],
+        "verifiedDietaryClaims": [
+          { "claim": "glutenFree", "applicability": "withDocumentedSubstitution", "verificationVersion": 1 }
+        ],
+        "merchandisingTags": ["highProtein", "mealPrepFriendly"],
+        "imageAssetName": "weekly-placeholder-chicken-taco-rice-bowls",
+        "accessibilityDescription": "A chicken taco rice bowl with beans, corn, vegetables, salsa, and cheese.",
+        "isMealPrepFriendly": true,
+        "isFeaturedEligible": true
+      }
+    },
+    {
+      "id": "weekly.korean-ground-beef-bowls",
+      "contentVersion": 1,
+      "title": "Korean Ground Beef Bowls",
+      "shortDescription": "Savory-sweet ground beef with rice, broccoli, garlic, ginger, and green onions.",
+      "defaultServings": 4,
+      "servingDescription": "1 bowl",
+      "ingredients": [
+        { "id": "ground-beef", "rawText": "1 pound 90% lean ground beef", "name": "90% lean ground beef", "quantity": 1, "unit": "lb", "preparation": "", "category": "meat", "pricingKey": "90-percent-lean-ground-beef", "isQualitative": false },
+        { "id": "cooked-rice", "rawText": "3 cups cooked rice", "name": "Cooked rice", "quantity": 3, "unit": "cup", "preparation": "", "category": "pantry", "pricingKey": "cooked-rice", "isQualitative": false },
+        { "id": "broccoli", "rawText": "3 cups broccoli florets", "name": "Broccoli florets", "quantity": 3, "unit": "cup", "preparation": "", "category": "produce", "pricingKey": "broccoli-florets", "isQualitative": false },
+        { "id": "soy-sauce", "rawText": "1/4 cup reduced-sodium soy sauce", "name": "Reduced-sodium soy sauce", "quantity": 0.25, "unit": "cup", "preparation": "", "category": "pantry", "pricingKey": "reduced-sodium-soy-sauce", "isQualitative": false },
+        { "id": "brown-sugar-or-honey", "rawText": "2 tablespoons brown sugar or honey", "name": "Brown sugar or honey", "quantity": 2, "unit": "tbsp", "preparation": "", "category": "pantry", "pricingKey": "brown-sugar-or-honey", "isQualitative": false },
+        { "id": "sesame-oil", "rawText": "1 teaspoon sesame oil", "name": "Sesame oil", "quantity": 1, "unit": "tsp", "preparation": "", "category": "pantry", "pricingKey": "sesame-oil", "isQualitative": false },
+        { "id": "garlic", "rawText": "3 garlic cloves, minced", "name": "Garlic cloves", "quantity": 3, "unit": "each", "preparation": "minced", "category": "produce", "pricingKey": "garlic-cloves", "isQualitative": false },
+        { "id": "fresh-ginger", "rawText": "1 teaspoon grated fresh ginger", "name": "Fresh ginger", "quantity": 1, "unit": "tsp", "preparation": "grated", "category": "produce", "pricingKey": "fresh-ginger", "isQualitative": false },
+        { "id": "green-onions", "rawText": "3 green onions, sliced", "name": "Green onions", "quantity": 3, "unit": "each", "preparation": "sliced", "category": "produce", "pricingKey": "green-onions", "isQualitative": false },
+        { "id": "sesame-seeds", "rawText": "1 teaspoon sesame seeds, optional", "name": "Sesame seeds", "quantity": 1, "unit": "tsp", "preparation": "", "category": "pantry", "pricingKey": "sesame-seeds", "optionalPolicy": "excludedByDefault", "isQualitative": false }
+      ],
+      "instructions": [
+        { "id": 1, "text": "Brown the ground beef and drain excess fat if needed." },
+        { "id": 2, "text": "Add the garlic and ginger and cook briefly." },
+        { "id": 3, "text": "Stir together the soy sauce, brown sugar or honey, and sesame oil." },
+        { "id": 4, "text": "Add the sauce to the beef and simmer until glossy." },
+        { "id": 5, "text": "Steam or sauté the broccoli until tender." },
+        { "id": 6, "text": "Divide the rice among four bowls." },
+        { "id": 7, "text": "Top with beef, broccoli, green onions, and optional sesame seeds." }
+      ],
+      "substitutions": [
+        { "id": "gluten-free-tamari", "ingredientID": "soy-sauce", "replacementName": "Verified tamari", "note": "Supports a gluten-free option when verified tamari is used." }
+      ],
+      "metadata": {
+        "prepMinutes": 10,
+        "cookMinutes": 20,
+        "passiveMinutes": 0,
+        "nutrition": { "caloriesPerServing": 520, "calorieRangeMinimum": 475, "calorieRangeMaximum": 600, "proteinGramsPerServing": 31, "servingDefinition": "1 bowl", "verificationStatus": "editorialEstimate", "nutritionVersion": 1 },
+        "costEstimate": { "recipeID": "weekly.korean-ground-beef-bowls", "recipeContentVersion": 1, "servingDefinition": "1 bowl", "totalRecipeCost": null, "costPerServing": null, "costRangeMinimumPerServing": null, "costRangeMaximumPerServing": null, "currencyCode": "USD", "basis": "proportionalIngredientValue", "status": "requiresVerification", "pricingRegion": "US", "priceSnapshotDate": null, "pricingVersion": 1, "includedIngredientIDs": [], "excludedIngredientIDs": [], "notes": "Reviewed production pricing inputs are pending." },
+        "mealTypes": ["lunch"],
+        "verifiedDietaryClaims": [
+          { "claim": "glutenFree", "applicability": "withDocumentedSubstitution", "verificationVersion": 1 }
+        ],
+        "merchandisingTags": ["thirtyMinutes", "reheatsWell"],
+        "imageAssetName": "weekly-placeholder-korean-ground-beef-bowls",
+        "accessibilityDescription": "A ground beef bowl with rice, broccoli, and green onions.",
+        "isMealPrepFriendly": true,
+        "isFeaturedEligible": true
+      }
+    }
+  ]
+}
