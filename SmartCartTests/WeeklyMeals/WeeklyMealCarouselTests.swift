@@ -21,26 +21,93 @@ final class WeeklyMealCarouselTests: XCTestCase {
         XCTAssertTrue(models.allSatisfy { $0.costPerServingText == nil })
     }
 
-    func testCardWidthIsResponsiveAndCapped() {
-        XCTAssertEqual(WeeklyMealCarouselLayout.cardWidth(containerWidth: 320), 268.8, accuracy: 0.01)
-        XCTAssertEqual(WeeklyMealCarouselLayout.cardWidth(containerWidth: 440), 360, accuracy: 0.01)
+    func testCardUsesFullCarouselWidthWithoutExposingTheNextCard() {
+        XCTAssertEqual(WeeklyMealCarouselLayout.cardWidth(containerWidth: 320), 320, accuracy: 0.01)
+        XCTAssertEqual(WeeklyMealCarouselLayout.cardWidth(containerWidth: 440), 440, accuracy: 0.01)
     }
 
-    func testFirstAndLastCardsReceiveFullCenteringMargin() {
-        let width = WeeklyMealCarouselLayout.cardWidth(containerWidth: 320)
+    func testDragIntentLeavesVerticalHomeScrollingAvailable() {
+        XCTAssertFalse(WeeklyMealCarouselLayout.isHorizontalDrag(CGSize(width: 12, height: 90)))
+        XCTAssertFalse(WeeklyMealCarouselLayout.isHorizontalDrag(CGSize(width: 24, height: 24)))
+        XCTAssertTrue(WeeklyMealCarouselLayout.isHorizontalDrag(CGSize(width: 90, height: 12)))
+    }
+
+    func testIncomingCardEmergesFromBehindFocusedCardWithRestrainedDepth() {
+        let focused = WeeklyMealCarouselLayout.rackTransform(
+            relativeIndex: 0,
+            dragTranslation: -160,
+            cardWidth: 320,
+            reduceMotion: false
+        )
+        let incoming = WeeklyMealCarouselLayout.rackTransform(
+            relativeIndex: 1,
+            dragTranslation: -160,
+            cardWidth: 320,
+            reduceMotion: false
+        )
+
+        XCTAssertEqual(focused.horizontalOffset, -147.2, accuracy: 0.01)
+        XCTAssertEqual(focused.scale, 0.9875, accuracy: 0.001)
+        XCTAssertEqual(incoming.horizontalOffset, 160, accuracy: 0.01)
+        XCTAssertEqual(incoming.scale, 0.97, accuracy: 0.001)
+        XCTAssertEqual(incoming.opacity, 0.5, accuracy: 0.001)
+        XCTAssertEqual(incoming.rotationDegrees, -3, accuracy: 0.001)
+    }
+
+    func testReduceMotionRemovesRackDepthTransforms() {
+        let transform = WeeklyMealCarouselLayout.rackTransform(
+            relativeIndex: 1,
+            dragTranslation: -160,
+            cardWidth: 320,
+            reduceMotion: true
+        )
+
+        XCTAssertEqual(transform.scale, 1, accuracy: 0.001)
+        XCTAssertEqual(transform.verticalOffset, 0, accuracy: 0.001)
+        XCTAssertEqual(transform.rotationDegrees, 0, accuracy: 0.001)
+        XCTAssertEqual(transform.opacity, 0.5, accuracy: 0.001)
+    }
+
+    func testRackPagingUsesPredictedIntentAndStopsAtEnds() {
         XCTAssertEqual(
-            WeeklyMealCarouselLayout.edgeMargin(containerWidth: 320, cardWidth: width),
-            (320 - width) / 2,
-            accuracy: 0.01
+            WeeklyMealCarouselLayout.targetIndex(
+                currentIndex: 3,
+                translation: -30,
+                predictedTranslation: -100,
+                cardWidth: 320,
+                count: 8
+            ),
+            4
+        )
+        XCTAssertEqual(
+            WeeklyMealCarouselLayout.targetIndex(
+                currentIndex: 0,
+                translation: 120,
+                predictedTranslation: 160,
+                cardWidth: 320,
+                count: 8
+            ),
+            0
+        )
+        XCTAssertEqual(
+            WeeklyMealCarouselLayout.targetIndex(
+                currentIndex: 7,
+                translation: -120,
+                predictedTranslation: -160,
+                cardWidth: 320,
+                count: 8
+            ),
+            7
         )
     }
 
-    func testMagnificationReducesAdjacentCardsWithoutEnlargingFocusedCard() {
-        XCTAssertEqual(WeeklyMealCarouselLayout.scale(phase: 0), 1, accuracy: 0.001)
-        XCTAssertEqual(WeeklyMealCarouselLayout.scale(phase: 1), 0.93, accuracy: 0.001)
-        XCTAssertEqual(WeeklyMealCarouselLayout.verticalOffset(phase: 1), 7, accuracy: 0.001)
-        XCTAssertEqual(WeeklyMealCarouselLayout.opacity(phase: 1, reduceMotion: false), 0.84, accuracy: 0.001)
-        XCTAssertEqual(WeeklyMealCarouselLayout.opacity(phase: 1, reduceMotion: true), 0.90, accuracy: 0.001)
+    func testRackArrowAvailabilityMatchesCollectionEnds() {
+        XCTAssertFalse(WeeklyMealCarouselLayout.canMoveBackward(from: 0))
+        XCTAssertTrue(WeeklyMealCarouselLayout.canMoveForward(from: 0, count: 8))
+        XCTAssertTrue(WeeklyMealCarouselLayout.canMoveBackward(from: 4))
+        XCTAssertTrue(WeeklyMealCarouselLayout.canMoveForward(from: 4, count: 8))
+        XCTAssertTrue(WeeklyMealCarouselLayout.canMoveBackward(from: 7))
+        XCTAssertFalse(WeeklyMealCarouselLayout.canMoveForward(from: 7, count: 8))
     }
 
     private var repository: BundledWeeklyMealRepository {

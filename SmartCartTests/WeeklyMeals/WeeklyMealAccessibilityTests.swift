@@ -3,6 +3,15 @@ import XCTest
 @testable import SmartCart
 
 final class WeeklyMealAccessibilityTests: XCTestCase {
+    func testRecipeCardUsesAButtonTraitWithoutAFullCardButtonGesture() throws {
+        let source = try String(contentsOf: weeklyMealCardSourceURL, encoding: .utf8)
+
+        XCTAssertTrue(source.contains(".onTapGesture(perform: onOpen)"))
+        XCTAssertTrue(source.contains(".accessibilityAddTraits(.isButton)"))
+        XCTAssertTrue(source.contains(".accessibilityAction(.default, onOpen)"))
+        XCTAssertFalse(source.contains("Button(action: onOpen)"))
+    }
+
     func testFeaturedCardProvidesOneCoherentEstimatedSummary() throws {
         let featured = try XCTUnwrap(models.first { $0.isFeatured })
 
@@ -48,6 +57,14 @@ final class WeeklyMealAccessibilityTests: XCTestCase {
             )
             return WeeklyMealDisplayModelFactory.makeModels(from: collection)
         }
+    }
+
+    private var weeklyMealCardSourceURL: URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("SmartCart/WeeklyMeals/Features/WeeklyMealCard.swift")
     }
 }
 

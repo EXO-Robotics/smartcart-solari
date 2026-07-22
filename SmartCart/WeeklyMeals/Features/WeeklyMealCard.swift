@@ -12,18 +12,18 @@ struct WeeklyMealCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Button(action: onOpen) {
-                VStack(alignment: .leading, spacing: 0) {
-                    artwork
-                    content
-                }
-                .contentShape(Rectangle())
-                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 0) {
+                artwork
+                content
             }
-            .buttonStyle(.plain)
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onOpen)
+            .accessibilityElement(children: .ignore)
+            .accessibilityAddTraits(.isButton)
             .accessibilityLabel(model.accessibilitySummary)
             .accessibilityHint("Double tap to view recipe")
             .accessibilityIdentifier("weekly-meal-card-\(model.id.rawValue)")
+            .accessibilityAction(.default, onOpen)
             .accessibilityAction(named: "Shop This Meal", onShop)
 
             focusedActions
