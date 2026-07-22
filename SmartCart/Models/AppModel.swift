@@ -131,6 +131,8 @@ final class AppModel {
     var lastInstacartHandoff: InstacartHandoffResponse?
     var lastImportReport: RecipeImportReport?
     var toastMessage: String?
+    private(set) var pendingSharedImport: SmartCartShareEnvelope?
+    private(set) var sharedImportIssue: String?
     private(set) var persistenceIssue: String?
     private(set) var domainUndoAction: DomainUndoAction?
 
@@ -224,6 +226,8 @@ final class AppModel {
     @ObservationIgnored
     private let commerceDefaults: UserDefaults
     @ObservationIgnored
+    private let shareInbox: SmartCartShareInbox
+    @ObservationIgnored
     private let operationObserver: any LocalOperationObserving
     @ObservationIgnored
     private var persistenceReady = false
@@ -235,6 +239,12 @@ final class AppModel {
     private var retailerMatchingGeneration = RetailerMatchingGeneration()
     @ObservationIgnored
     private var pendingDomainUndo: PendingDomainUndo?
+    @ObservationIgnored
+    private var isApplicationActive = false
+    @ObservationIgnored
+    private var presentedSharedImportID: UUID?
+    @ObservationIgnored
+    private var durableRecipeIDs: Set<UUID>
 
     private struct PendingDomainUndo {
         let id: UUID
@@ -249,6 +259,7 @@ final class AppModel {
         retailerAdapters: [ShoppingRetailer: any RetailerGuideAdapter]? = nil,
         instacartHandoffService: any InstacartHandoffServicing = InstacartHandoffClient(),
         commerceDefaults: UserDefaults = .standard,
+        shareInbox: SmartCartShareInbox = SmartCartShareInbox(),
         operationObserver: any LocalOperationObserving = AsyncLocalOperationObserver.shared,
         seedDemoShoppingState: Bool = false
     ) {
@@ -302,6 +313,7 @@ final class AppModel {
             ?? latestManifestRetailer
             ?? .walmart
 
+        durableRecipeIDs = Set(restoredState?.recipes.map(\.id) ?? [])
         persistenceCoordinator = SmartCartPersistenceCoordinator(
             store: stateStore,
             initialRevision: restoredState?.persistenceRevision ?? 0
@@ -311,6 +323,7 @@ final class AppModel {
         retailerMatchingBatchService = RetailerMatchingBatchService()
         self.instacartHandoffService = instacartHandoffService
         self.commerceDefaults = commerceDefaults
+        self.shareInbox = shareInbox
         self.operationObserver = operationObserver
 
         selectedRetailer = initialRetailer
@@ -1043,6 +1056,109 @@ final class AppModel {
         presentedSheet = .importer(method, initialText)
     }
 
+    func applicationDidBecomeActive() {
+        isApplicationActive = true
+        recoverStaleOperationObservations()
+        presentOldestSharedImportIfPossible()
+    }
+
+    func applicationWillResignActive() {
+        isApplicationActive = false
+    }
+
+    /// Presents at most one immutable inbox item and never competes with an
+    /// existing sheet. Reading does not claim the item, so cancel, termination,
+    /// and importer failure all remain retryable on a later activation.
+    func presentOldestSharedImportIfPossible() {
+        guard isApplicationActive, presentedSheet == nil else { return }
+        if pendingSharedImport == nil {
+            do {
+                pendingSharedImport = try shareInbox.oldestReady()
+                sharedImportIssue = nil
+            } catch SmartCartShareInboxError.containerUnavailable {
+                return
+            } catch {
+                showToast("A shared recipe could not be opened. Try again later.")
+                return
+            }
+        }
+        guard let envelope = pendingSharedImport else { return }
+
+        let method: ImportMethod
+        let initialText: String?
+        if !envelope.images.isEmpty {
+            method = .photoLibrary
+            initialText = nil
+        } else if let publicURL = envelope.publicURL {
+            // Bypass openImporter(_:), which correctly hides ordinary link
+            // import in unsupported Release builds. The retained Share item
+            // still needs a local surface offering photo/text alternatives.
+            method = .recipeLink
+            initialText = publicURL.absoluteString
+        } else {
+            method = .recipeText
+            initialText = envelope.plainText
+        }
+
+        presentedSharedImportID = envelope.id
+        track(.importStarted, properties: ["method": "share_extension"])
+        presentedSheet = .importer(method, initialText)
+    }
+
+    /// Called after any importer sheet closes. Cancelling a shared importer
+    /// keeps it for the next activation instead of immediately trapping the
+    /// user in the same sheet. A share deferred behind an unrelated importer
+    /// may present once that competing sheet is gone.
+    func recipeImporterDidDismiss() {
+        if presentedSharedImportID != nil {
+            presentedSharedImportID = nil
+            return
+        }
+        presentOldestSharedImportIfPossible()
+    }
+
+    func sharedImportImageData(for id: UUID) throws -> [Data] {
+        guard let envelope = pendingSharedImport, envelope.id == id else {
+            throw SmartCartShareInboxError.entryNotFound
+        }
+        return try envelope.images.map { image in
+            try shareInbox.imageData(for: image, in: envelope)
+        }
+    }
+
+    @discardableResult
+    func discardSharedImport(_ id: UUID) -> Bool {
+        guard let envelope = pendingSharedImport, envelope.id == id else { return false }
+        let operationToken = operationObserver.start(
+            .recipeImport,
+            importMethod: localOperationImportMethod(for: envelope),
+            retailer: nil
+        )
+        do {
+            _ = try shareInbox.acknowledge(id)
+            pendingSharedImport = nil
+            sharedImportIssue = nil
+            presentedSharedImportID = nil
+            presentedSheet = nil
+            operationObserver.finish(
+                operationToken,
+                event: .abandoned,
+                failureCategory: .discardedByUser
+            )
+            showToast("Shared recipe discarded")
+            return true
+        } catch {
+            operationObserver.finish(
+                operationToken,
+                event: .failedUnrecoverably,
+                failureCategory: .persistenceWriteFailed
+            )
+            sharedImportIssue = "The shared recipe could not be discarded. Nothing was removed."
+            showToast(sharedImportIssue ?? "The shared recipe could not be discarded.")
+            return false
+        }
+    }
+
     @discardableResult
     func beginRecipe(_ recipe: Recipe) -> Bool {
         let operationToken = operationObserver.start(
@@ -1050,6 +1166,14 @@ final class AppModel {
             importMethod: localOperationImportMethod(for: recipe.source),
             retailer: nil
         )
+        return persistAndOpenRecipe(recipe, operationToken: operationToken)
+    }
+
+    private func persistAndOpenRecipe(
+        _ recipe: Recipe,
+        operationToken: LocalOperationToken,
+        afterDurableSave: () throws -> Void = {}
+    ) -> Bool {
         guard persistenceReady else {
             operationObserver.finish(
                 operationToken,
@@ -1095,6 +1219,7 @@ final class AppModel {
 
         do {
             try persistenceCoordinator.saveCompatibility(stateSnapshot())
+            durableRecipeIDs.insert(recipe.id)
             persistenceIssue = nil
         } catch {
             // Keep the imported recipe in memory and leave the source surface
@@ -1110,6 +1235,28 @@ final class AppModel {
             return false
         }
 
+        do {
+            try afterDurableSave()
+        } catch {
+            sharedImportIssue = "Recipe saved, but its shared copy could not be cleared. Retry to finish."
+            operationObserver.finish(
+                operationToken,
+                event: .requiredDecision,
+                failureCategory: .persistenceWriteFailed
+            )
+            showToast(sharedImportIssue ?? "The shared copy could not be cleared.")
+            return false
+        }
+
+        completeRecipeOpening(recipe, operationToken: operationToken)
+        return true
+    }
+
+    private func completeRecipeOpening(
+        _ recipe: Recipe,
+        operationToken: LocalOperationToken,
+        event: LocalOperationTerminalEvent = .handledAutomatically
+    ) {
         recordRecipeOpened(recipe.id)
         selectedTab = .home
         presentedSheet = nil
@@ -1123,10 +1270,88 @@ final class AppModel {
         )
         operationObserver.finish(
             operationToken,
-            event: .handledAutomatically,
+            event: event,
             failureCategory: nil
         )
-        return true
+    }
+
+    /// Opens one durable Share-extension envelope through the ordinary recipe
+    /// boundary. The envelope UUID becomes the recipe UUID, making a retry
+    /// idempotent even if App Group cleanup is interrupted after the app state
+    /// has already committed.
+    @discardableResult
+    func beginSharedRecipe(
+        _ recipe: Recipe,
+        acknowledgingSharedImportID sharedImportID: UUID
+    ) -> Bool {
+        guard let envelope = pendingSharedImport, envelope.id == sharedImportID else {
+            showToast("That shared recipe is no longer available. Nothing was imported.")
+            return false
+        }
+
+        let operationToken = operationObserver.start(
+            .recipeImport,
+            importMethod: localOperationImportMethod(for: envelope),
+            retailer: nil
+        )
+
+        if let existingRecipe = recipes.first(where: { $0.id == sharedImportID }),
+           isRecipeDurable(existingRecipe.id) {
+            do {
+                _ = try shareInbox.acknowledge(sharedImportID)
+                pendingSharedImport = nil
+                sharedImportIssue = nil
+                presentedSharedImportID = nil
+                completeRecipeOpening(
+                    existingRecipe,
+                    operationToken: operationToken,
+                    event: .recovered
+                )
+                return true
+            } catch {
+                operationObserver.finish(
+                    operationToken,
+                    event: .requiredDecision,
+                    failureCategory: .persistenceWriteFailed
+                )
+                sharedImportIssue = "The shared copy could not be cleared. Retry to finish."
+                showToast(sharedImportIssue ?? "The shared copy could not be cleared.")
+                return false
+            }
+        }
+
+        let idempotentRecipe = Recipe(
+            id: sharedImportID,
+            title: recipe.title,
+            source: recipe.source,
+            sourceDetail: recipe.sourceDetail,
+            heroSymbol: recipe.heroSymbol,
+            servings: recipe.servings,
+            prepMinutes: recipe.prepMinutes,
+            cookMinutes: recipe.cookMinutes,
+            ingredients: recipe.ingredients,
+            rawSourceText: recipe.rawSourceText,
+            sourceDocument: recipe.sourceDocument
+        )
+
+        let opened = persistAndOpenRecipe(
+            idempotentRecipe,
+            operationToken: operationToken,
+            afterDurableSave: {
+                _ = try shareInbox.acknowledge(sharedImportID)
+                pendingSharedImport = nil
+                sharedImportIssue = nil
+                presentedSharedImportID = nil
+            }
+        )
+        if !opened, sharedImportIssue == nil {
+            sharedImportIssue = "The shared recipe could not be saved. It remains available to retry."
+        }
+        return opened
+    }
+
+    private func isRecipeDurable(_ id: UUID) -> Bool {
+        durableRecipeIDs.contains(id)
     }
 
     /// Freezes the selected editorial version before entering the existing
@@ -5622,6 +5847,14 @@ final class AppModel {
         case .text: .pastedText
         case .sample: .sample
         }
+    }
+
+    private func localOperationImportMethod(
+        for envelope: SmartCartShareEnvelope
+    ) -> LocalOperationImportMethod {
+        if !envelope.images.isEmpty { return .sharedImages }
+        if envelope.publicURL != nil { return .sharedLink }
+        return .sharedText
     }
 
     private func persistLibraryMutation(

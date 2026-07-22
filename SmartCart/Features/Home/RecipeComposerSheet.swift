@@ -5,6 +5,32 @@ import SwiftUI
 import UIKit
 @preconcurrency import Vision
 
+struct RecipeComposerInitialInput: Equatable {
+    let visibleMethod: ImportMethod
+    let linkText: String
+    let recipeText: String
+    let fallbackMessage: String?
+
+    init(
+        requestedMethod initialMethod: ImportMethod,
+        initialText: String?,
+        recipeLinkCapability: RecipeLinkCapability
+    ) {
+        let requestedMethod = initialMethod == .pinterest ? .recipeLink : initialMethod
+        let requestedUnavailableLink = requestedMethod == .recipeLink
+            && !recipeLinkCapability.isAvailable
+        visibleMethod = requestedUnavailableLink ? .recipeText : requestedMethod
+
+        let trimmedInitialText = initialText?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        linkText = requestedMethod == .recipeLink ? trimmedInitialText : ""
+        recipeText = requestedMethod == .recipeText ? trimmedInitialText : ""
+        fallbackMessage = requestedUnavailableLink
+            ? recipeLinkCapability.fallbackMessage
+            : nil
+    }
+}
+
 struct RecipeComposerSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AppModel.self) private var appModel
@@ -48,6 +74,9 @@ struct RecipeComposerSheet: View {
     @State private var selectedImageSetID: UUID?
     @State private var recognizedImageSetID: UUID?
     @State private var recognitionTask: Task<Void, Never>?
+    @State private var sharedImportID: UUID?
+    @State private var shouldAcknowledgeSharedImport = false
+    @State private var isConfirmingSharedDiscard = false
     @FocusState private var focusedField: Field?
 
     private enum Field {
@@ -61,26 +90,21 @@ struct RecipeComposerSheet: View {
         initialText: String? = nil,
         recipeLinkCapability: RecipeLinkCapability = .current
     ) {
-        let requestedMethod = initialMethod == .pinterest ? .recipeLink : initialMethod
-        let requestedUnavailableLink = requestedMethod == .recipeLink && !recipeLinkCapability.isAvailable
-        let visibleInitialMethod: ImportMethod = requestedUnavailableLink ? .recipeText : requestedMethod
-        let trimmedInitialText = initialText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        self.initialMethod = visibleInitialMethod
+        let input = RecipeComposerInitialInput(
+            requestedMethod: initialMethod,
+            initialText: initialText,
+            recipeLinkCapability: recipeLinkCapability
+        )
+        self.initialMethod = input.visibleMethod
         self.recipeLinkCapability = recipeLinkCapability
-        _selectedMethod = State(initialValue: visibleInitialMethod)
-        _linkText = State(
-            initialValue: requestedMethod == .recipeLink ? trimmedInitialText : ""
-        )
-        _errorMessage = State(
-            initialValue: requestedUnavailableLink ? recipeLinkCapability.fallbackMessage : nil
-        )
-        if visibleInitialMethod == .sample {
+        _selectedMethod = State(initialValue: input.visibleMethod)
+        _linkText = State(initialValue: input.linkText)
+        _errorMessage = State(initialValue: input.fallbackMessage)
+        if input.visibleMethod == .sample {
             _title = State(initialValue: "Lemon Herb Chicken Pasta")
         } else {
             _title = State(initialValue: "Imported Recipe")
-            _recipeText = State(
-                initialValue: visibleInitialMethod == .recipeText ? trimmedInitialText : ""
-            )
+            _recipeText = State(initialValue: input.recipeText)
         }
     }
 
@@ -211,6 +235,17 @@ struct RecipeComposerSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
+                    if sharedImportID != nil {
+                        Label(
+                            "Shared to SmartCart · kept until imported",
+                            systemImage: "tray.and.arrow.down.fill"
+                        )
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(SmartCartTheme.green)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityHint("Cancel keeps this recipe available for a later import")
+                        .accessibilityIdentifier("shared-import-retention-note")
+                    }
                     methodPicker
                     selectedMethodContent
 
@@ -238,6 +273,17 @@ struct RecipeComposerSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .disabled(isProcessing)
+                }
+                if sharedImportID != nil {
+                    ToolbarItem(placement: .destructiveAction) {
+                        Button("Discard", role: .destructive) {
+                            isConfirmingSharedDiscard = true
+                        }
+                        .accessibilityLabel("Discard shared recipe")
+                        .accessibilityHint("Permanently removes this item from SmartCart's import inbox")
+                        .disabled(isProcessing)
+                    }
                 }
             }
             .safeAreaInset(edge: .bottom) {
@@ -275,6 +321,23 @@ struct RecipeComposerSheet: View {
         }
         .presentationDetents([.large])
         .interactiveDismissDisabled(isProcessing)
+        .confirmationDialog(
+            "Discard this shared recipe?",
+            isPresented: $isConfirmingSharedDiscard,
+            titleVisibility: .visible
+        ) {
+            Button("Discard Shared Recipe", role: .destructive) {
+                guard let sharedImportID else { return }
+                if appModel.discardSharedImport(sharedImportID) {
+                    dismiss()
+                } else {
+                    errorMessage = "The shared recipe could not be discarded. Nothing was removed."
+                }
+            }
+            Button("Keep for Later", role: .cancel) {}
+        } message: {
+            Text("Cancel keeps the share available. Discard removes it permanently.")
+        }
         .fullScreenCover(isPresented: $showCamera, onDismiss: presentCapturedImageForFocus) {
             CameraPicker { image in
                 pendingCameraImage = image
@@ -293,7 +356,10 @@ struct RecipeComposerSheet: View {
             matching: .images
         )
         .task {
-            await presentInitialMediaToolIfNeeded()
+            let preparedSharedInput = await prepareSharedInputIfNeeded()
+            if !preparedSharedInput {
+                await presentInitialMediaToolIfNeeded()
+            }
         }
         .onChange(of: photoItems) {
             guard !photoItems.isEmpty else { return }
@@ -536,6 +602,47 @@ struct RecipeComposerSheet: View {
     }
 
     @MainActor
+    private func prepareSharedInputIfNeeded() async -> Bool {
+        guard let envelope = appModel.pendingSharedImport else { return false }
+        sharedImportID = envelope.id
+
+        if !envelope.images.isEmpty {
+            hasAttemptedInitialMediaPresentation = true
+            do {
+                let imageData = try appModel.sharedImportImageData(for: envelope.id)
+                let images = try imageData.map { data -> UIImage in
+                    guard let image = UIImage(data: data) else {
+                        throw RecipeVisionError.unreadableImage
+                    }
+                    return image
+                }
+                presentImagesForFocus(images)
+                shouldAcknowledgeSharedImport = true
+            } catch {
+                shouldAcknowledgeSharedImport = false
+                errorMessage = "The shared images could not be read. Cancel to retry later, or discard this share."
+            }
+            return true
+        }
+
+        if selectedMethod == .recipeLink, envelope.publicURL != nil {
+            shouldAcknowledgeSharedImport = true
+            return true
+        }
+        if selectedMethod == .recipeText, let plainText = envelope.plainText {
+            recipeText = plainText
+            shouldAcknowledgeSharedImport = true
+            return true
+        }
+
+        // A URL can arrive while production link import is intentionally
+        // unavailable. Keep it retryable and leave the ordinary importer
+        // alternatives visible without treating replacement input as the share.
+        shouldAcknowledgeSharedImport = false
+        return true
+    }
+
+    @MainActor
     private func presentInitialMediaToolIfNeeded() async {
         guard !hasAttemptedInitialMediaPresentation else { return }
         hasAttemptedInitialMediaPresentation = true
@@ -775,6 +882,7 @@ struct RecipeComposerSheet: View {
     }
 
     private var importButtonTitle: String {
+        if sharedImportID != nil, appModel.sharedImportIssue != nil { return "Retry" }
         if isProcessing { return processingMessage }
         return switch selectedMethod {
         case .recipeLink, .pinterest: "Import recipe"
@@ -794,6 +902,9 @@ struct RecipeComposerSheet: View {
     }
 
     private func switchImportMethod(to method: ImportMethod) {
+        if sharedImportID != nil, selectedMethod != method {
+            shouldAcknowledgeSharedImport = false
+        }
         guard selectedMethod != method else { return }
         recognitionTask?.cancel()
         recognitionTask = nil
@@ -854,6 +965,7 @@ struct RecipeComposerSheet: View {
 
     private func presentCapturedImageForFocus() {
         guard let image = pendingCameraImage else { return }
+        shouldAcknowledgeSharedImport = false
         pendingCameraImage = nil
         presentImagesForFocus([image])
     }
@@ -879,6 +991,7 @@ struct RecipeComposerSheet: View {
     }
 
     private func beginPhotoLoad(_ items: [PhotosPickerItem]) {
+        shouldAcknowledgeSharedImport = false
         recognitionTask?.cancel()
         let imageSetID = UUID()
         selectedImages = []
@@ -990,8 +1103,10 @@ struct RecipeComposerSheet: View {
                 return
             }
             processingMessage = "Opening Recipe Ready…"
-            guard appModel.beginRecipe(addingSourceCrops(to: draftRecipe)) else {
-                errorMessage = "The ingredient list is empty. Review the recognized text or try another image."
+            guard submitRecipe(addingSourceCrops(to: draftRecipe)) else {
+                errorMessage = sharedImportFailureMessage(
+                    fallback: "The ingredient list is empty. Review the recognized text or try another image."
+                )
                 return
             }
         } catch {
@@ -1020,8 +1135,10 @@ struct RecipeComposerSheet: View {
         switch selectedMethod {
         case .sample:
             guard appModel.sampleRecipes.indices.contains(selectedSampleIndex) else { return }
-            if !appModel.beginRecipe(appModel.sampleRecipes[selectedSampleIndex]) {
-                errorMessage = "That sample has no ingredients. Choose another recipe."
+            if !submitRecipe(appModel.sampleRecipes[selectedSampleIndex]) {
+                errorMessage = sharedImportFailureMessage(
+                    fallback: "That sample has no ingredients. Choose another recipe."
+                )
             }
 
         case .recipeLink, .pinterest:
@@ -1046,8 +1163,10 @@ struct RecipeComposerSheet: View {
                     errorMessage = "No ingredient list was found on that page. Check the link, paste the recipe text, or import a screenshot."
                     return
                 }
-                if !appModel.beginRecipe(imported) {
-                    errorMessage = "No ingredient list was found on that page. Check the link, paste the recipe text, or import a screenshot."
+                if !submitRecipe(imported) {
+                    errorMessage = sharedImportFailureMessage(
+                        fallback: "No ingredient list was found on that page. Check the link, paste the recipe text, or import a screenshot."
+                    )
                 }
             } catch {
                 errorMessage = error.localizedDescription
@@ -1062,10 +1181,28 @@ struct RecipeComposerSheet: View {
             let recipe = selectedMethod == .camera || selectedMethod == .photoLibrary
                 ? addingSourceCrops(to: parsedRecipe)
                 : parsedRecipe
-            if !appModel.beginRecipe(recipe) {
-                errorMessage = "No ingredients detected. Review the text or try another import method."
+            if !submitRecipe(recipe) {
+                errorMessage = sharedImportFailureMessage(
+                    fallback: "No ingredients detected. Review the text or try another import method."
+                )
             }
         }
+    }
+
+    private func submitRecipe(_ recipe: Recipe) -> Bool {
+        guard shouldAcknowledgeSharedImport else {
+            return appModel.beginRecipe(recipe)
+        }
+        guard let sharedImportID else { return false }
+        return appModel.beginSharedRecipe(
+            recipe,
+            acknowledgingSharedImportID: sharedImportID
+        )
+    }
+
+    private func sharedImportFailureMessage(fallback: String) -> String {
+        guard sharedImportID != nil else { return fallback }
+        return appModel.sharedImportIssue ?? fallback
     }
 
     private func hasCredibleIngredients(_ recipe: Recipe) -> Bool {

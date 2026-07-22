@@ -4685,7 +4685,6 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(composerSource.contains("guard !Task.isCancelled, selectedMethod == initialMethod else { return }"))
         XCTAssertTrue(composerSource.contains("showCamera = true"))
         XCTAssertTrue(composerSource.contains("showPhotoLibrary = true"))
-        XCTAssertTrue(composerSource.contains("initialValue: visibleInitialMethod == .recipeText ? trimmedInitialText : \"\""))
         XCTAssertTrue(composerSource.contains(".frame(maxWidth: .infinity, minHeight: 220, alignment: .topLeading)"))
         XCTAssertFalse(recipesSource.contains("private var mealPrepLaunchCard"))
     }

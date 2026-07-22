@@ -70,7 +70,9 @@ struct RootView: View {
             }
         }
         .animation(.spring(response: 0.4, dampingFraction: 0.84), value: appModel.toastMessage)
-        .sheet(item: $appModel.presentedSheet) { destination in
+        .sheet(item: $appModel.presentedSheet, onDismiss: {
+            appModel.recipeImporterDidDismiss()
+        }) { destination in
             switch destination {
             case .importer(let method, let initialText):
                 RecipeComposerSheet(initialMethod: method, initialText: initialText)

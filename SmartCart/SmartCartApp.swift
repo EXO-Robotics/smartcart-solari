@@ -18,19 +18,24 @@ struct SmartCartApp: App {
                        let tab = AppTab(rawValue: raw) {
                         appModel.selectedTab = tab
                     }
+                    if scenePhase == .active {
+                        appModel.applicationDidBecomeActive()
+                    }
                 }
                 .onChange(of: scenePhase) { _, phase in
                     switch phase {
                     case .inactive:
+                        appModel.applicationWillResignActive()
                         appModel.requestLifecyclePersistenceFlush()
                     case .background:
+                        appModel.applicationWillResignActive()
                         let lease = SmartCartBackgroundTaskLease()
                         lease.begin()
                         appModel.requestLifecyclePersistenceFlush { _ in
                             lease.end()
                         }
                     case .active:
-                        appModel.recoverStaleOperationObservations()
+                        appModel.applicationDidBecomeActive()
                     @unknown default:
                         appModel.requestLifecyclePersistenceFlush()
                     }

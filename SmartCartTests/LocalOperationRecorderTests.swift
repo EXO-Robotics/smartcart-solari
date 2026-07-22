@@ -169,6 +169,32 @@ final class LocalOperationRecorderTests: XCTestCase {
         )
     }
 
+    func testSharedImportMethodsRecordOnlyCategoricalMetadata() throws {
+        let fileURL = temporaryFileURL()
+        let recorder = LocalOperationRecorder(fileURL: fileURL)
+
+        for method in [
+            LocalOperationImportMethod.sharedImages,
+            .sharedLink,
+            .sharedText
+        ] {
+            let token = try XCTUnwrap(
+                recorder.start(.recipeImport, importMethod: method, retailer: nil)
+            )
+            XCTAssertTrue(recorder.finish(token, event: .handledAutomatically))
+        }
+
+        XCTAssertEqual(
+            recorder.records().compactMap(\.importMethod),
+            [.sharedImages, .sharedLink, .sharedText]
+        )
+        let encoded = try XCTUnwrap(String(data: Data(contentsOf: fileURL), encoding: .utf8))
+        XCTAssertFalse(encoded.contains("https://private.example/recipe"))
+        XCTAssertFalse(encoded.contains("PRIVATE_SHARED_TEXT"))
+        XCTAssertFalse(encoded.contains("private-photo.heic"))
+        XCTAssertFalse(encoded.contains("inboxItemID"))
+    }
+
     func testConcurrentRecordingIsSerializedAndKeepsOneTerminalResultPerToken() throws {
         let recorder = LocalOperationRecorder(fileURL: temporaryFileURL(), capacity: 100)
         let queue = DispatchQueue(label: "LocalOperationRecorderTests.concurrent", attributes: .concurrent)

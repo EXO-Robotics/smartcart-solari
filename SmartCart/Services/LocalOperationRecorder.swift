@@ -54,6 +54,9 @@ enum LocalOperationImportMethod: String, Codable, CaseIterable, Hashable, Sendab
     case photoLibrary = "photo_library"
     case recipeLink = "recipe_link"
     case pastedText = "pasted_text"
+    case sharedImages = "shared_images"
+    case sharedLink = "shared_link"
+    case sharedText = "shared_text"
     case sample
 }
 
