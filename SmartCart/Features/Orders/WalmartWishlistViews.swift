@@ -69,6 +69,7 @@ struct RetailerSafariHandoffView: View {
                     position: appModel.guidedIndex + 1,
                     total: appModel.shoppingItems.count,
                     productIdentity: productIdentity(for: itemID),
+                    amountNeeded: amountNeeded(for: itemID),
                     replacementCandidates: safeReplacementCandidates,
                     onInitialLoad: { didLoadSuccessfully in
                         if didLoadSuccessfully {
@@ -116,6 +117,14 @@ struct RetailerSafariHandoffView: View {
             return "Current product"
         }
         return "\(item.ingredient.name), \(item.product.brand) \(item.product.name)"
+    }
+
+    private func amountNeeded(for itemID: UUID) -> String {
+        guard let item = appModel.shoppingItems.first(where: { $0.id == itemID }) else {
+            return "Not available"
+        }
+        let requestedQuantity = item.requestedQuantity.trimmingCharacters(in: .whitespacesAndNewlines)
+        return requestedQuantity.isEmpty ? item.ingredient.displayQuantity : requestedQuantity
     }
 
     private func primaryRetailer(for itemID: UUID) -> ShoppingRetailer {
@@ -816,6 +825,7 @@ private struct RetailerTripSafariSheet: View {
     let position: Int
     let total: Int
     let productIdentity: String
+    let amountNeeded: String
     let replacementCandidates: [RetailerProductRecord]
     let onInitialLoad: (Bool) -> Void
     let onNext: () -> Void
@@ -904,15 +914,24 @@ private struct RetailerTripSafariSheet: View {
     }
 
     private var tripPositionLabel: some View {
-        Text("Item \(position) of \(total)")
-            .font(.subheadline.bold())
-            .foregroundStyle(SmartCartTheme.navy)
-            .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
-            .minimumScaleFactor(0.8)
-            .multilineTextAlignment(.center)
-            .accessibilityLabel("Item \(position) of \(total), \(productIdentity)")
-            .accessibilityValue(loadState.accessibilityDescription)
-            .accessibilityAddTraits(.isHeader)
+        VStack(spacing: 2) {
+            Text("Item \(position) of \(total)")
+                .font(.subheadline.bold())
+            Text("Amount needed: \(amountNeeded)")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(SmartCartTheme.secondaryInk)
+                .accessibilityIdentifier("retailer-trip-amount-needed")
+        }
+        .foregroundStyle(SmartCartTheme.navy)
+        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+        .minimumScaleFactor(0.75)
+        .multilineTextAlignment(.center)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            "Item \(position) of \(total), \(productIdentity), amount needed \(amountNeeded)"
+        )
+        .accessibilityValue(loadState.accessibilityDescription)
+        .accessibilityAddTraits(.isHeader)
     }
 
     private var pauseButton: some View {
