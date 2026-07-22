@@ -82,7 +82,119 @@ final class WeeklyMealIntegrationTests: XCTestCase {
         XCTAssertFalse(salt.quantityReviewRequired == true)
     }
 
+    @MainActor
+    func testWeeklyMealSaveIsIdempotentAndSupportsDurableUndo() async throws {
+        let store = InMemorySmartCartStateStore()
+        let model = AppModel(stateStore: store, commerceDefaults: isolatedDefaults())
+        let snapshot = try snapshot("weekly.protein-overnight-oats", servings: 1)
+
+        XCTAssertTrue(model.saveWeeklyMealSnapshot(snapshot))
+        XCTAssertTrue(model.saveWeeklyMealSnapshot(snapshot))
+        XCTAssertTrue(model.isRecipeSaved(snapshot.id))
+        XCTAssertEqual(model.recipes.filter { $0.id == snapshot.id }.count, 1)
+        XCTAssertEqual(model.domainUndoAction?.message, "Recipe saved")
+
+        let didUndo = await model.undoPendingDomainAction()
+        XCTAssertTrue(didUndo)
+        XCTAssertFalse(model.isRecipeSaved(snapshot.id))
+        XCTAssertFalse(model.recipes.contains { $0.id == snapshot.id })
+    }
+
+    @MainActor
+    func testEnsureMealPrepSelectionNeverTogglesOffAndUpdatesServings() throws {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedDefaults()
+        )
+        let snapshot = try snapshot("weekly.chicken-taco-rice-bowls", servings: 4)
+
+        XCTAssertTrue(model.ensureRecipeIsIncludedInMealPrep(snapshot, targetServings: 4))
+        XCTAssertTrue(model.ensureRecipeIsIncludedInMealPrep(snapshot, targetServings: 6))
+        XCTAssertTrue(model.ensureRecipeIsIncludedInMealPrep(snapshot, targetServings: 6))
+
+        let matches = model.mealPrepDraft?.selections.filter { $0.recipeSnapshot.id == snapshot.id }
+        XCTAssertEqual(matches?.count, 1)
+        XCTAssertEqual(matches?.first?.targetServings, 6)
+        XCTAssertTrue(model.isRecipeSelectedForMealPrep(snapshot.id))
+    }
+
+    @MainActor
+    func testMealPrepInclusionDoesNotImplicitlySaveRecipeMembership() throws {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedDefaults()
+        )
+        let snapshot = try snapshot("weekly.korean-ground-beef-bowls", servings: 4)
+
+        XCTAssertTrue(model.ensureRecipeIsIncludedInMealPrep(snapshot, targetServings: 4))
+        XCTAssertFalse(model.isRecipeSaved(snapshot.id))
+        XCTAssertTrue(model.mealPrepCandidateRecipes.contains { $0.id == snapshot.id })
+    }
+
+    @MainActor
+    func testAddingToReviewedDraftReaggregatesExistingMealPrepPlan() throws {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedDefaults()
+        )
+        let first = try snapshot("weekly.protein-overnight-oats", servings: 1)
+        let second = try snapshot("weekly.protein-berry-smoothie", servings: 1)
+
+        XCTAssertTrue(model.ensureRecipeIsIncludedInMealPrep(first, targetServings: 1))
+        XCTAssertTrue(model.buildMealPrepPlan())
+        XCTAssertTrue(model.ensureRecipeIsIncludedInMealPrep(second, targetServings: 1))
+
+        XCTAssertEqual(model.currentMealPrepPlan?.selections.count, 2)
+        XCTAssertEqual(model.currentMealPrepPlan?.id, model.mealPrepDraft?.id)
+    }
+
+    @MainActor
+    func testStartedMealPrepSnapshotRemainsFrozenWhenWeeklyMealIsAdded() throws {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedDefaults()
+        )
+        let first = try snapshot("weekly.protein-overnight-oats", servings: 1)
+        let second = try snapshot("weekly.protein-berry-smoothie", servings: 1)
+        XCTAssertTrue(model.ensureRecipeIsIncludedInMealPrep(first, targetServings: 1))
+        XCTAssertTrue(model.buildMealPrepPlan())
+        let frozenDraft = try XCTUnwrap(model.mealPrepDraft)
+        let frozenPlan = try XCTUnwrap(model.mealPrepPlan)
+        let historicalSession = ShoppingSession(
+            logicalTripID: UUID(),
+            recipeID: frozenPlan.id,
+            recipeTitle: frozenPlan.title,
+            storeID: model.primaryStore.retailerStoreID,
+            retailerID: model.selectedRetailer.rawValue,
+            fulfillmentMode: model.fulfillmentMode,
+            shoppingScope: frozenPlan.shoppingScope,
+            mealPrepSnapshot: frozenPlan,
+            items: []
+        )
+        model.shoppingSessions = [historicalSession]
+
+        XCTAssertTrue(model.ensureRecipeIsIncludedInMealPrep(second, targetServings: 1))
+
+        XCTAssertNotEqual(model.mealPrepDraft?.id, frozenDraft.id)
+        XCTAssertEqual(model.mealPrepDraft?.selections.map(\.recipeSnapshot.id), [second.id])
+        XCTAssertNil(model.mealPrepPlan)
+        XCTAssertEqual(model.shoppingSession(id: historicalSession.id), historicalSession)
+        XCTAssertEqual(model.shoppingSession(id: historicalSession.id)?.mealPrepSnapshot, frozenPlan)
+    }
+
     private let factory = WeeklyMealSnapshotFactory()
+
+    private func snapshot(_ id: String, servings: Int) throws -> Recipe {
+        try factory.makeSnapshot(
+            collectionID: "weekly.week-01",
+            recipe: weeklyRecipe(id),
+            targetServings: servings
+        )
+    }
+
+    private func isolatedDefaults() -> UserDefaults {
+        UserDefaults(suiteName: "WeeklyMealIntegrationTests.\(UUID().uuidString)")!
+    }
 
     private func weeklyRecipe(_ id: String) throws -> CuratedRecipeRecord {
         let resourceDirectory = URL(fileURLWithPath: #filePath)

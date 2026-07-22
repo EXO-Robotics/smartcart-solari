@@ -4,6 +4,8 @@ struct WeeklyMealDetailView: View {
     @Environment(AppModel.self) private var appModel
     @State private var servings: Int
     @State private var includedOptionalIngredientIDs: Set<String> = []
+    @State private var isSaved = false
+    @State private var isInMealPrep = false
 
     let recipeID: CuratedRecipeID
     private let collectionID: String?
@@ -27,6 +29,7 @@ struct WeeklyMealDetailView: View {
                     VStack(alignment: .leading, spacing: 18) {
                         hero(meal)
                         servingCard(meal.recipe)
+                        recipeActions(meal.recipe)
                         nutritionCard(meal.recipe)
                         ingredientsCard(meal.recipe)
                         instructionsCard(meal.recipe)
@@ -57,6 +60,8 @@ struct WeeklyMealDetailView: View {
         .smartCartBackground()
         .navigationTitle("Weekly Meal")
         .navigationBarTitleDisplayMode(.inline)
+        .domainUndoOverlay()
+        .onAppear(perform: refreshActionState)
     }
 
     private func hero(_ meal: ResolvedWeeklyMeal) -> some View {
@@ -116,6 +121,55 @@ struct WeeklyMealDetailView: View {
             }
         }
         .smartCartCard()
+    }
+
+    private func recipeActions(_ recipe: CuratedRecipeRecord) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) {
+                saveButton(recipe)
+                mealPrepButton(recipe)
+            }
+            VStack(spacing: 10) {
+                saveButton(recipe)
+                mealPrepButton(recipe)
+            }
+        }
+        .smartCartCard()
+    }
+
+    private func saveButton(_ recipe: CuratedRecipeRecord) -> some View {
+        Button {
+            guard let snapshot = makeSnapshot(recipe) else { return }
+            if appModel.saveWeeklyMealSnapshot(snapshot) {
+                isSaved = true
+                appModel.showToast("Recipe saved")
+            }
+        } label: {
+            Label(isSaved ? "Recipe Saved" : "Save Recipe", systemImage: isSaved ? "bookmark.fill" : "bookmark")
+                .frame(maxWidth: .infinity, minHeight: 44)
+        }
+        .buttonStyle(SecondaryButtonStyle())
+        .disabled(isSaved)
+        .accessibilityIdentifier("weekly-meal-detail-save")
+    }
+
+    private func mealPrepButton(_ recipe: CuratedRecipeRecord) -> some View {
+        Button {
+            guard let snapshot = makeSnapshot(recipe) else { return }
+            if appModel.ensureRecipeIsIncludedInMealPrep(snapshot, targetServings: servings) {
+                isInMealPrep = true
+                appModel.showToast("Added to Meal Prep")
+            }
+        } label: {
+            Label(
+                isInMealPrep ? "In Meal Prep" : "Add to Meal Prep",
+                systemImage: isInMealPrep ? "checkmark.circle.fill" : "square.stack.3d.up.fill"
+            )
+            .frame(maxWidth: .infinity, minHeight: 44)
+        }
+        .buttonStyle(SecondaryButtonStyle())
+        .accessibilityIdentifier("weekly-meal-detail-add-meal-prep")
+        .accessibilityHint("Adds this frozen recipe without removing an existing selection")
     }
 
     @ViewBuilder
@@ -243,16 +297,27 @@ struct WeeklyMealDetailView: View {
     }
 
     private func shop(_ recipe: CuratedRecipeRecord) {
-        guard let collectionID,
-              let snapshot = try? WeeklyMealSnapshotFactory().makeSnapshot(
-                collectionID: collectionID,
-                recipe: recipe,
-                targetServings: servings,
-                includedOptionalIngredientIDs: includedOptionalIngredientIDs
-              ) else {
+        guard let snapshot = makeSnapshot(recipe) else {
             appModel.showToast("This meal could not be prepared")
             return
         }
         _ = appModel.beginRecipe(snapshot)
+    }
+
+    private func makeSnapshot(_ recipe: CuratedRecipeRecord) -> Recipe? {
+        guard let collectionID else { return nil }
+        return try? WeeklyMealSnapshotFactory().makeSnapshot(
+            collectionID: collectionID,
+            recipe: recipe,
+            targetServings: servings,
+            includedOptionalIngredientIDs: includedOptionalIngredientIDs
+        )
+    }
+
+    private func refreshActionState() {
+        guard let recipe = meal?.recipe,
+              let snapshot = makeSnapshot(recipe) else { return }
+        isSaved = appModel.isRecipeSaved(snapshot.id)
+        isInMealPrep = appModel.isRecipeSelectedForMealPrep(snapshot.id)
     }
 }

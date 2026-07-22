@@ -163,6 +163,17 @@ final class AppModel {
         recipes.filter { savedRecipeIDs.contains($0.id) }
     }
 
+    /// Meal Prep can include a frozen Weekly Meal snapshot without implicitly
+    /// adding Saved Recipes membership. Keep those selected records visible
+    /// alongside the normal saved-recipe candidates.
+    var mealPrepCandidateRecipes: [Recipe] {
+        let selectedIDs = Set(mealPrepDraft?.selections.map(\.recipeSnapshot.id) ?? [])
+        let selectedRetainedRecipes = recipes.filter {
+            selectedIDs.contains($0.id) && !savedRecipeIDs.contains($0.id)
+        }
+        return savedRecipes + selectedRetainedRecipes
+    }
+
     /// A dedicated immutable catalog prevents imported or historical records
     /// from leaking into Try a Sample.
     var sampleRecipes: [Recipe] { SampleData.recipes }
@@ -1146,6 +1157,36 @@ final class AppModel {
         )
     }
 
+    /// Retains and saves one immutable Weekly Meals snapshot without replacing
+    /// an existing record with mutable bundled content from a later load.
+    @discardableResult
+    func saveWeeklyMealSnapshot(_ snapshot: Recipe) -> Bool {
+        if savedRecipeIDs.contains(snapshot.id) { return true }
+        let undoState = stateSnapshot()
+        let undoRecents = recentRecipeRecords
+        let previousRecipes = recipes
+        let previousSavedRecipeIDs = savedRecipeIDs
+        var updatedRecipes = recipes
+        if !updatedRecipes.contains(where: { $0.id == snapshot.id }) {
+            updatedRecipes.insert(snapshot, at: 0)
+        }
+        var updatedSavedRecipeIDs = savedRecipeIDs
+        updatedSavedRecipeIDs.insert(snapshot.id)
+
+        guard persistLibraryMutation(
+            recipes: updatedRecipes,
+            savedRecipeIDs: updatedSavedRecipeIDs,
+            rollbackRecipes: previousRecipes,
+            rollbackSavedRecipeIDs: previousSavedRecipeIDs
+        ) else { return false }
+        registerDomainUndo(
+            message: "Recipe saved",
+            priorState: undoState,
+            priorRecentRecipeRecords: undoRecents
+        )
+        return true
+    }
+
     /// Removes only Saved Recipes membership. Historical records and frozen
     /// shopping/Meal Prep state continue referencing the retained Recipe.
     @discardableResult
@@ -1311,6 +1352,78 @@ final class AppModel {
                 priorRecentRecipeRecords: undoRecents
             )
         }
+    }
+
+    /// Adds or updates one recipe selection without ever interpreting the
+    /// action as a removal. If the current draft has entered a shopping flow,
+    /// a new editable draft is created and the historical snapshot is untouched.
+    @discardableResult
+    func ensureRecipeIsIncludedInMealPrep(
+        _ recipe: Recipe,
+        targetServings: Int
+    ) -> Bool {
+        guard (1...48).contains(targetServings) else { return false }
+        let undoState = stateSnapshot()
+        let undoRecents = recentRecipeRecords
+        let existingDraft = mealPrepDraft
+        let usesFreshDraft = existingDraft.map(mealPrepDraftHasStartedOrCompleted) ?? false
+        var draft = usesFreshDraft ? MealPrepDraft() : (existingDraft ?? MealPrepDraft())
+        let changedMessage: String
+
+        if let index = draft.selections.firstIndex(where: { $0.recipeSnapshot.id == recipe.id }) {
+            if draft.selections[index].targetServings == Double(targetServings) {
+                return true
+            }
+            draft.selections[index].targetServings = Double(targetServings)
+            changedMessage = "Meal Prep servings updated"
+        } else {
+            guard draft.selections.count < MealPrepDraft.selectionLimit else {
+                showToast("Meal Prep supports up to five recipes in this beta")
+                return false
+            }
+            draft.selections.append(
+                MealPrepSelection(recipe: recipe, targetServings: Double(targetServings))
+            )
+            changedMessage = "Recipe added to Meal Prep"
+        }
+        draft.updatedAt = .now
+
+        let succeeded = performAtomicMealPrepTransition {
+            if !recipes.contains(where: { $0.id == recipe.id }) {
+                recipes.insert(recipe, at: 0)
+            }
+            let previousPlan = mealPrepPlan?.id == draft.id ? mealPrepPlan : nil
+            let rebuilt = try previousPlan.map {
+                try rebuiltMealPrepPlan(
+                    draft: draft,
+                    preserving: $0,
+                    pantryInventory: pantryInventory
+                )
+            }
+            mealPrepDraft = draft
+            mealPrepPlan = rebuilt
+            shoppingScope = rebuilt == nil ? nil : draft.shoppingScope
+            invalidateShoppingPlan()
+        }
+        guard succeeded else {
+            showToast("Meal Prep changes could not be saved")
+            return false
+        }
+        registerDomainUndo(
+            message: changedMessage,
+            priorState: undoState,
+            priorRecentRecipeRecords: undoRecents
+        )
+        return true
+    }
+
+    @discardableResult
+    func ensureRecipeIsIncludedInMealPrep(
+        recipeID: UUID,
+        targetServings: Int
+    ) -> Bool {
+        guard let recipe = recipes.first(where: { $0.id == recipeID }) else { return false }
+        return ensureRecipeIsIncludedInMealPrep(recipe, targetServings: targetServings)
     }
 
     func updateMealPrepServings(selectionID: UUID, delta: Double) {
@@ -1488,7 +1601,8 @@ final class AppModel {
     @discardableResult
     private func updateMealPrepDraftAndPlan(_ draft: MealPrepDraft) -> Bool {
         let succeeded = performAtomicMealPrepTransition {
-            let rebuilt = try mealPrepPlan.map {
+            let previousPlan = mealPrepPlan?.id == draft.id ? mealPrepPlan : nil
+            let rebuilt = try previousPlan.map {
                 try rebuiltMealPrepPlan(
                     draft: draft,
                     preserving: $0,
@@ -1552,6 +1666,7 @@ final class AppModel {
 
     private struct MealPrepTransitionBackup {
         var activeRecipe: Recipe
+        var recipes: [Recipe]
         var draft: MealPrepDraft?
         var plan: MealPrepPlanSnapshot?
         var scope: ShoppingScope?
@@ -1581,6 +1696,7 @@ final class AppModel {
         guard persistenceReady else { return false }
         let backup = MealPrepTransitionBackup(
             activeRecipe: activeRecipe,
+            recipes: recipes,
             draft: mealPrepDraft,
             plan: mealPrepPlan,
             scope: shoppingScope,
@@ -1600,6 +1716,7 @@ final class AppModel {
             return true
         } catch {
             activeRecipe = backup.activeRecipe
+            recipes = backup.recipes
             mealPrepDraft = backup.draft
             mealPrepPlan = backup.plan
             shoppingScope = backup.scope
@@ -1611,6 +1728,14 @@ final class AppModel {
             persistenceIssue = error.localizedDescription
             suppressPersistence = false
             return false
+        }
+    }
+
+    private func mealPrepDraftHasStartedOrCompleted(_ draft: MealPrepDraft) -> Bool {
+        shoppingSessions.contains {
+            ($0.shoppingScope ?? .singleRecipe($0.recipeID)) == draft.shoppingScope
+        } || savedLists.contains {
+            ($0.manifest.shoppingScope ?? .singleRecipe($0.manifest.recipeID)) == draft.shoppingScope
         }
     }
 
