@@ -15,7 +15,7 @@ struct SmartCartApp: App {
                 .preferredColorScheme(appearanceController.appearance.colorScheme)
                 .onAppear {
                     if let raw = ProcessInfo.processInfo.environment["SMARTCART_START_TAB"],
-                       let tab = AppTab(rawValue: raw) {
+                       let tab = AppTab.canonicalTab(forRawValue: raw) {
                         appModel.selectedTab = tab
                     }
                     if scenePhase == .active {

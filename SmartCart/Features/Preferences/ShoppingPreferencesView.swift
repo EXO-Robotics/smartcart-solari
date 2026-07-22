@@ -1,51 +1,5 @@
 import SwiftUI
 
-struct ShoppingPreferencesView: View {
-    @Environment(AppModel.self) private var appModel
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                WorkflowHeader(
-                    step: 4,
-                    total: 6,
-                    eyebrow: "Shopping preferences",
-                    title: "Set the rules for matching",
-                    message: "These choices filter and rank retailer products. They are saved on this device for your next recipe."
-                )
-
-                ShoppingPreferenceControls()
-
-                InfoBanner(
-                    symbol: "arrow.up.arrow.down.circle.fill",
-                    title: "How matching uses these rules",
-                    message: "Dietary restrictions and Organic only are hard filters. Other choices rank eligible products by correctness, availability, package fit, purchase price, brand, and unit price.",
-                    color: SmartCartTheme.purple
-                )
-            }
-            .padding(18)
-            .padding(.bottom, 96)
-        }
-        .smartCartBackground()
-        .navigationTitle("Shopping preferences")
-        .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .bottom) {
-            BottomActionBar {
-                Button {
-                    appModel.continueTo(.storeSelection)
-                } label: {
-                    HStack {
-                        Text("Choose retailer")
-                        Spacer()
-                        Image(systemName: "arrow.right")
-                    }
-                }
-                .buttonStyle(PrimaryButtonStyle())
-            }
-        }
-    }
-}
-
 struct ShoppingPreferenceControls: View {
     @Environment(AppModel.self) private var appModel
 

@@ -1104,7 +1104,7 @@ struct RecipeComposerSheet: View {
                 errorMessage = "No ingredients were detected. Keep the photo and try a tighter crop, a clearer image, pasted text, or manual ingredient entry. SmartCart will never invent replacement groceries."
                 return
             }
-            processingMessage = "Opening Recipe Ready…"
+            processingMessage = "Opening Recipe Review…"
             guard submitRecipe(addingSourceCrops(to: draftRecipe)) else {
                 errorMessage = sharedImportFailureMessage(
                     fallback: "The ingredient list is empty. Review the recognized text or try another image."
@@ -1192,14 +1192,20 @@ struct RecipeComposerSheet: View {
     }
 
     private func submitRecipe(_ recipe: Recipe) -> Bool {
-        guard shouldAcknowledgeSharedImport else {
-            return appModel.beginRecipe(recipe)
+        let didImport: Bool
+        if shouldAcknowledgeSharedImport {
+            guard let sharedImportID else { return false }
+            didImport = appModel.beginSharedRecipe(
+                recipe,
+                acknowledgingSharedImportID: sharedImportID
+            )
+        } else {
+            didImport = appModel.beginRecipe(recipe)
         }
-        guard let sharedImportID else { return false }
-        return appModel.beginSharedRecipe(
-            recipe,
-            acknowledgingSharedImportID: sharedImportID
-        )
+        if didImport {
+            appModel.showCompletion(.recipeImported(ingredientCount: recipe.ingredients.count))
+        }
+        return didImport
     }
 
     private func sharedImportFailureMessage(fallback: String) -> String {
@@ -1209,7 +1215,7 @@ struct RecipeComposerSheet: View {
 
     private func hasCredibleIngredients(_ recipe: Recipe) -> Bool {
         // Reuse the parser's existing usable-state boundary. Any ingredient-level
-        // blockers remain visible and actionable on Recipe Ready.
+        // blockers remain visible and actionable on Recipe Review.
         !recipe.ingredients.isEmpty
     }
 }

@@ -8,6 +8,29 @@ struct DomainUndoAction: Identifiable, Equatable {
     let actionTitle: String
 }
 
+enum SmartCartCompletionFeedback: Equatable {
+    case recipeImported(ingredientCount: Int)
+    case barcodeRecognized(productName: String)
+    case pantryUpdated(itemCount: Int)
+    case shoppingCompleted(retailerName: String)
+    case retailerHandoffReturned(retailerName: String)
+
+    var message: String {
+        switch self {
+        case .recipeImported(let ingredientCount):
+            "Recipe imported · \(ingredientCount) ingredient\(ingredientCount == 1 ? "" : "s")"
+        case .barcodeRecognized(let productName):
+            "Barcode recognized · \(productName)"
+        case .pantryUpdated(let itemCount):
+            "Pantry updated · \(itemCount) item\(itemCount == 1 ? "" : "s")"
+        case .shoppingCompleted(let retailerName):
+            "Shopping complete · \(retailerName)"
+        case .retailerHandoffReturned(let retailerName):
+            "Retailer returned · \(retailerName)"
+        }
+    }
+}
+
 @MainActor
 @Observable
 final class AppModel {
@@ -131,6 +154,7 @@ final class AppModel {
     var lastInstacartHandoff: InstacartHandoffResponse?
     var lastImportReport: RecipeImportReport?
     var toastMessage: String?
+    private(set) var completionFeedbackCount = 0
     private(set) var pendingSharedImport: SmartCartShareEnvelope?
     private(set) var sharedImportIssue: String?
     private(set) var persistenceIssue: String?
@@ -524,16 +548,8 @@ final class AppModel {
         let arguments = ProcessInfo.processInfo.arguments
         if let routeIndex = arguments.firstIndex(of: "-SmartCartDemoRoute"),
            arguments.indices.contains(routeIndex + 1) {
-            switch arguments[routeIndex + 1] {
-            case "ingredient":
-                shoppingItems = []
-                homePath = [.ingredientReview]
-            case "servings":
-                shoppingItems = []
-                homePath = [.servingAdjustment]
-            case "pantry":
-                shoppingItems = []
-                homePath = [.pantryCheck]
+            let requestedRoute = arguments[routeIndex + 1]
+            switch requestedRoute {
             case "pantry-match":
                 pantryInventory = [
                     PantryInventoryItem(
@@ -551,20 +567,6 @@ final class AppModel {
                     )
                 )
                 shoppingItems = []
-                homePath = [.pantryCheck]
-            case "preferences":
-                shoppingItems = []
-                homePath = [.preferences]
-            case "store":
-                shoppingItems = []
-                homePath = [.storeSelection]
-            case "matching":
-                shoppingItems = []
-                homePath = [.matching]
-            case "shopping":
-                homePath = [.shoppingList]
-            case "guided":
-                homePath = [.guidedShopping]
             case "walmart-guide":
                 startRetailerGuide(.walmart)
                 if shoppingItems.isEmpty {
@@ -576,7 +578,6 @@ final class AppModel {
                         preferences: preferences
                     )
                 }
-                homePath = [.guidedShopping]
             case "target-guide":
                 startRetailerGuide(.target)
                 if shoppingItems.isEmpty {
@@ -588,11 +589,16 @@ final class AppModel {
                         preferences: preferences
                     )
                 }
-                homePath = [.guidedShopping]
             case "import":
                 presentedSheet = .importer(.sample)
             default:
                 break
+            }
+            if let canonicalRoute = SmartRoute.canonicalRoute(forLegacyName: requestedRoute) {
+                if ["ingredient", "servings", "pantry", "preferences", "store", "matching"].contains(requestedRoute) {
+                    shoppingItems = []
+                }
+                homePath = [canonicalRoute]
             }
         }
         #endif
@@ -1369,7 +1375,7 @@ final class AppModel {
     }
 
     /// Freezes the selected editorial version before entering the existing
-    /// Recipe Ready pipeline. Weekly Meals views never shop mutable bundle data.
+    /// Recipe Review pipeline. Weekly Meals views never shop mutable bundle data.
     @discardableResult
     func beginWeeklyMeal(
         collectionID: String,
@@ -2379,29 +2385,7 @@ final class AppModel {
     }
 
     func continueTo(_ route: SmartRoute) {
-        if route == .matching {
-            // Preferences, pantry decisions, servings, or store selection may
-            // have changed while navigating back. Rebuild from the confirmed
-            // recipe instead of reusing product matches from an older plan.
-            if !isMealPrepShopping {
-                synchronizeActiveRecipeRecord()
-            }
-            invalidateShoppingPlan()
-        }
         homePath.append(route)
-    }
-
-    func commitIngredientReview() {
-        synchronizeActiveRecipeRecord()
-        invalidateShoppingPlan()
-        track(
-            .ingredientsCorrected,
-            properties: [
-                "included": String(includedIngredientCount),
-                "review_required": String(unresolvedQuantityReviewCount)
-            ]
-        )
-        continueTo(.servingAdjustment)
     }
 
     var recipeReadyBlockingIssueCount: Int {
@@ -2975,7 +2959,26 @@ final class AppModel {
     }
 
     @discardableResult
+    func continueToShoppingReview() -> Bool {
+        guard preparedShoppingPlanCanContinue else { return false }
+        selectedTab = .home
+        if homePath.last != .shoppingList {
+            homePath.append(.shoppingList)
+        }
+        return true
+    }
+
+    @discardableResult
     func continueToShoppingTrip() -> Bool {
+        guard preparedShoppingPlanCanContinue else { return false }
+        selectedTab = .home
+        if homePath.last != .shoppingTrip {
+            homePath.append(.shoppingTrip)
+        }
+        return true
+    }
+
+    private var preparedShoppingPlanCanContinue: Bool {
         guard !shoppingItems.isEmpty else {
             showToast("Match at least one shopping item before continuing")
             return false
@@ -2995,10 +2998,6 @@ final class AppModel {
             .allSatisfy({ $0.purchaseQuantity > 0 }) else {
             showToast("Confirm a package quantity before continuing")
             return false
-        }
-        selectedTab = .home
-        if homePath.last != .shoppingTrip {
-            homePath.append(.shoppingTrip)
         }
         return true
     }
@@ -3647,7 +3646,7 @@ final class AppModel {
             persistenceIssue = nil
             suppressPersistence = false
             if completedNow {
-                showToast("\(retailerConfiguration.displayName) shopping trip complete")
+                showCompletion(.shoppingCompleted(retailerName: retailerConfiguration.displayName))
             }
             return true
         } catch {
@@ -4096,7 +4095,11 @@ final class AppModel {
                 properties: ["count": String(validSubstitutions.count)]
             )
         }
-        showToast(outcome == .didNotShop ? "Pantry left unchanged" : "Pantry updated")
+        if outcome == .didNotShop {
+            showToast("Pantry left unchanged")
+        } else {
+            showCompletion(.pantryUpdated(itemCount: touchedPantryIDs.count))
+        }
     }
 
     private func createOrReuseCurrentShoppingSession() throws -> UUID {
@@ -4790,6 +4793,7 @@ final class AppModel {
             placement: "shopping_trip",
             completionState: "retailer_handoff_completed"
         )
+        showCompletion(.retailerHandoffReturned(retailerName: retailerConfiguration.displayName))
     }
 
     func resetFlow() {
@@ -4805,6 +4809,11 @@ final class AppModel {
                 toastMessage = nil
             }
         }
+    }
+
+    func showCompletion(_ feedback: SmartCartCompletionFeedback) {
+        completionFeedbackCount += 1
+        showToast(feedback.message)
     }
 
     func persistNow() {
@@ -4921,7 +4930,11 @@ final class AppModel {
         }
         track(.barcodeScanned, properties: ["matched": record == nil ? "false" : "true"])
         track(.pantryItemAdded, properties: ["source": PantryItemSource.barcode.rawValue])
-        showToast(record.map { "\($0.name) added to pantry" } ?? "UPC saved for later matching")
+        if let record {
+            showCompletion(.barcodeRecognized(productName: record.name))
+        } else {
+            showToast("UPC saved for later matching")
+        }
     }
 
     func addPantryItem(
@@ -4960,7 +4973,11 @@ final class AppModel {
         }
         track(.barcodeScanned, properties: ["matched": submission.requiresUserNaming ? "false" : "true"])
         track(.pantryItemAdded, properties: ["source": PantryItemSource.barcode.rawValue])
-        showToast(submission.requiresUserNaming ? "Barcode saved — product name required" : "\(submission.name) added to pantry")
+        if submission.requiresUserNaming {
+            showToast("Barcode saved — product name required")
+        } else {
+            showCompletion(.barcodeRecognized(productName: submission.name))
+        }
     }
 
     private func pantryItem(from submission: PantryBarcodeSubmission, quantity: Double = 1) -> PantryInventoryItem {

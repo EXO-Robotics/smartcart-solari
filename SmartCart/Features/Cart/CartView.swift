@@ -45,7 +45,7 @@ struct RecipeReadyView: View {
             }
         }
         .smartCartBackground()
-        .navigationTitle("Recipe Ready")
+        .navigationTitle("Recipe Review")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
             BottomActionBar {
@@ -80,12 +80,12 @@ struct RecipeReadyView: View {
                         } else {
                             ViewThatFits(in: .horizontal) {
                                 HStack {
-                                    Text("Start Shopping · \(appModel.recipeReadyExpectedPurchaseCount) items")
+                                    Text("Review Shopping · \(appModel.recipeReadyExpectedPurchaseCount) items")
                                     Spacer()
                                     Image(systemName: "arrow.right")
                                 }
                                 HStack {
-                                    Text("Start Shopping")
+                                    Text("Review Shopping")
                                     Spacer()
                                     Text(appModel.recipeReadyExpectedPurchaseCount, format: .number)
                                     Image(systemName: "arrow.right")
@@ -99,9 +99,9 @@ struct RecipeReadyView: View {
                     .accessibilityLabel(
                         isPreparingProducts
                             ? "Preparing Products"
-                            : "Start Shopping, \(appModel.recipeReadyExpectedPurchaseCount) items"
+                            : "Review Shopping, \(appModel.recipeReadyExpectedPurchaseCount) items"
                     )
-                    .accessibilityHint(appModel.recipeReadyDisabledExplanation ?? "Matches products and opens the shopping trip")
+                    .accessibilityHint(appModel.recipeReadyDisabledExplanation ?? "Matches products and opens Shopping Review")
                 }
             }
         }
@@ -179,7 +179,7 @@ struct RecipeReadyView: View {
         @Bindable var appModel = appModel
 
         return VStack(alignment: .leading, spacing: 16) {
-            Label("RECIPE READY", systemImage: "checkmark.seal.fill")
+            Label("RECIPE REVIEW", systemImage: "checkmark.seal.fill")
                 .smartEyebrow()
 
             TextField("Recipe title", text: $appModel.activeRecipe.title, axis: .vertical)
@@ -438,7 +438,7 @@ struct RecipeReadyView: View {
 
     private var mealPrepHeader: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("MEAL PREP READY", systemImage: "calendar.badge.checkmark")
+            Label("MEAL PREP REVIEW", systemImage: "calendar.badge.checkmark")
                 .smartEyebrow()
             Text(appModel.currentShoppingMealPrepSnapshot?.title ?? appModel.mealPrepDraft?.title ?? "Weekly Meal Prep")
                 .font(.system(.title2, design: .rounded, weight: .bold))
@@ -798,7 +798,7 @@ struct RecipeReadyView: View {
         guard published, !Task.isCancelled else { return }
 
         if !appModel.hasUnresolvedMatchingWork {
-            _ = appModel.continueToShoppingTrip()
+            _ = appModel.continueToShoppingReview()
         } else {
             activeSheet = .productExceptions
         }
@@ -827,7 +827,7 @@ private struct ShoppingLaunchOverlay: View {
                     .scaleEffect(cartPulse ? 1.06 : 0.96)
 
                 VStack(spacing: 6) {
-                    Text("Launching Shopping Trip")
+                    Text("Preparing Shopping Review")
                         .font(.system(.title2, design: .rounded, weight: .bold))
                         .foregroundStyle(.white)
                     Text(stage)
@@ -857,20 +857,9 @@ private struct ShoppingLaunchOverlay: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Launching Shopping Trip, \(stage)")
+        .accessibilityLabel("Preparing Shopping Review, \(stage)")
         .accessibilityIdentifier("shopping-launch-transition")
     }
-}
-
-/// Kept so schema-era navigation values and older tests can still construct
-/// the legacy destination while the live funnel enters Recipe Ready directly.
-struct IngredientReviewView: View {
-    var body: some View { RecipeReadyView() }
-}
-
-/// Compatibility destination only. Serving controls now live in Recipe Ready.
-struct ServingAdjustmentView: View {
-    var body: some View { RecipeReadyView() }
 }
 
 private enum RecipeReadySheet: String, Identifiable {

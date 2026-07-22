@@ -3163,6 +3163,64 @@ final class SmartCartTests: XCTestCase {
     }
 
     @MainActor
+    func testPreparedProductsPauseAtShoppingReviewBeforeRetailer() async throws {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            retailerAdapters: [.walmart: Slice3GuideAdapter()],
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        let ingredient = Ingredient(name: "Penne pasta", quantity: 16, unit: "oz")
+        XCTAssertTrue(model.beginRecipe(phase2Recipe(ingredients: [ingredient])))
+        let matchingPublished = await model.startMatching()
+        XCTAssertTrue(matchingPublished)
+        for item in model.unresolvedMatchingExceptionItems {
+            XCTAssertTrue(model.acceptMatchingException(itemID: item.id))
+        }
+        XCTAssertFalse(model.hasUnresolvedMatchingWork)
+
+        XCTAssertTrue(model.continueToShoppingReview(), model.toastMessage ?? "Unable to continue")
+        XCTAssertEqual(model.homePath.last, .shoppingList)
+        XCTAssertFalse(model.homePath.contains(.shoppingTrip))
+
+        XCTAssertTrue(model.continueToShoppingReview())
+        XCTAssertEqual(model.homePath.filter { $0 == .shoppingList }.count, 1)
+
+        model.beginGuidedShopping()
+        XCTAssertEqual(model.homePath.last, .shoppingTrip)
+    }
+
+    func testRetiredNavigationInputsTranslateToCanonicalDestinations() {
+        XCTAssertEqual(AppTab.allCases, [.home, .lists, .pantry, .account])
+        XCTAssertEqual(AppTab.canonicalTab(forRawValue: "store"), .account)
+        XCTAssertEqual(SmartRoute.canonicalRoute(forLegacyName: "ingredient"), .recipeReady)
+        XCTAssertEqual(SmartRoute.canonicalRoute(forLegacyName: "servings"), .recipeReady)
+        XCTAssertEqual(SmartRoute.canonicalRoute(forLegacyName: "pantry"), .recipeReady)
+        XCTAssertEqual(SmartRoute.canonicalRoute(forLegacyName: "matching"), .shoppingList)
+        XCTAssertEqual(SmartRoute.canonicalRoute(forLegacyName: "shopping"), .shoppingList)
+        XCTAssertEqual(SmartRoute.canonicalRoute(forLegacyName: "preferences"), .shoppingTrip)
+        XCTAssertEqual(SmartRoute.canonicalRoute(forLegacyName: "store"), .shoppingTrip)
+        XCTAssertEqual(SmartRoute.canonicalRoute(forLegacyName: "guided"), .shoppingTrip)
+        XCTAssertNil(SmartRoute.canonicalRoute(forLegacyName: "unknown"))
+    }
+
+    @MainActor
+    func testCompletionFeedbackUsesOneToastAndOneHapticTriggerContract() {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+
+        XCTAssertEqual(model.completionFeedbackCount, 0)
+        model.showCompletion(.recipeImported(ingredientCount: 3))
+        XCTAssertEqual(model.toastMessage, "Recipe imported · 3 ingredients")
+        XCTAssertEqual(model.completionFeedbackCount, 1)
+
+        model.showCompletion(.pantryUpdated(itemCount: 1))
+        XCTAssertEqual(model.toastMessage, "Pantry updated · 1 item")
+        XCTAssertEqual(model.completionFeedbackCount, 2)
+    }
+
+    @MainActor
     func testGuideNavigationDoesNotStartUntilSetupAndExplicitStart() {
         let model = AppModel(
             stateStore: InMemorySmartCartStateStore(),
@@ -3411,7 +3469,7 @@ final class SmartCartTests: XCTestCase {
         model.fulfillmentMode = .delivery
         model.startRetailerGuide(.target)
         model.selectedTab = .pantry
-        model.homePath = [.recipeReady, .preferences]
+        model.homePath = [.recipeReady, .shoppingList]
 
         let originalActiveSessionID = model.activeShoppingSessionID
         let originalScope = model.shoppingScope
@@ -5118,6 +5176,38 @@ final class SmartCartTests: XCTestCase {
         XCTAssertFalse(recipesSource.contains("private var mealPrepLaunchCard"))
     }
 
+    func testPublicShellMovesRetailerSelectionIntoProfileAndUsesOneReviewVocabulary() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let rootSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("SmartCart/RootView.swift"),
+            encoding: .utf8
+        )
+        let accountSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("SmartCart/Features/Orders/OrdersView.swift"),
+            encoding: .utf8
+        )
+        let recipeReviewSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("SmartCart/Features/Cart/CartView.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertFalse(rootSource.contains(".tag(AppTab.store)"))
+        XCTAssertFalse(rootSource.contains("Label(AppTab.store.title"))
+        XCTAssertEqual(AppTab.allCases, [.home, .lists, .pantry, .account])
+        XCTAssertEqual(AppTab.canonicalTab(forRawValue: "store"), .account)
+        XCTAssertEqual(AppTab.account.title, "Profile")
+        XCTAssertTrue(accountSource.contains("NavigationLink {\n            StoreDashboardView()"))
+        XCTAssertTrue(accountSource.contains("accessibilityIdentifier(\"profile-retailer-location\")"))
+
+        XCTAssertTrue(recipeReviewSource.contains(".navigationTitle(\"Recipe Review\")"))
+        XCTAssertTrue(recipeReviewSource.contains("appModel.continueToShoppingReview()"))
+        XCTAssertTrue(accountSource.contains(".navigationTitle(\"Shopping Review\")"))
+        XCTAssertFalse(accountSource.contains(".navigationTitle(\"Review shopping list\")"))
+        XCTAssertFalse(accountSource.contains(".navigationTitle(\"Review product choices\")"))
+    }
+
     @MainActor
     func testPendingShoppingSessionsAreUniqueAndOnlyActiveIncompleteTripIsPromoted() throws {
         let state = try makeState()
@@ -5606,13 +5696,6 @@ final class SmartCartTests: XCTestCase {
             ),
             encoding: .utf8
         )
-        let reconciliationSource = try String(
-            contentsOf: repositoryRoot.appendingPathComponent(
-                "SmartCart/Features/Orders/ShoppingReconciliationView.swift"
-            ),
-            encoding: .utf8
-        )
-
         XCTAssertTrue(themeSource.contains("enum SmartCartMotion"))
         XCTAssertTrue(themeSource.contains("static let quick = Animation.easeOut(duration: 0.12)"))
         XCTAssertTrue(themeSource.contains("static let standard = Animation.spring(response: 0.30"))
@@ -5628,10 +5711,9 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(composerSource.contains("repeatForever(autoreverses: true)"))
         XCTAssertTrue(composerSource.contains("Double(index) * 0.045"))
         XCTAssertTrue(cartSource.contains("ShoppingLaunchOverlay("))
-        XCTAssertTrue(cartSource.contains("Launching Shopping Trip"))
+        XCTAssertTrue(cartSource.contains("Preparing Shopping Review"))
         XCTAssertTrue(cartSource.contains("accessibilityIdentifier(\"shopping-launch-transition\")"))
-        XCTAssertTrue(reconciliationSource.contains(".sensoryFeedback(.success"))
-        XCTAssertTrue(reconciliationSource.contains(".symbolEffect(.bounce"))
+        XCTAssertTrue(rootSource.contains(".sensoryFeedback(.success"))
     }
 
     @MainActor
@@ -6735,7 +6817,7 @@ final class SmartCartTests: XCTestCase {
         let active = phase4Recipe(title: "Active recipe")
         XCTAssertTrue(model.beginRecipe(active))
         model.selectedTab = .pantry
-        model.homePath = [.recipeReady, .preferences]
+        model.homePath = [.recipeReady, .shoppingList]
         model.openImporter(.recipeText, initialText: "draft ingredients")
 
         let originalPath = model.homePath

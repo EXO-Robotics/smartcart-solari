@@ -89,7 +89,6 @@ struct ShoppingReconciliationView: View {
             reduceMotion ? nil : SmartCartMotion.signature,
             value: session?.isCommitted
         )
-        .sensoryFeedback(.success, trigger: session?.isCommitted)
     }
 
     private var outcomeChoices: some View {

@@ -46,7 +46,7 @@ struct WeeklyMealDetailView: View {
                         }
                         .buttonStyle(PrimaryButtonStyle())
                         .accessibilityIdentifier("weekly-meal-detail-shop")
-                        .accessibilityHint("Creates a frozen recipe and opens Recipe Ready")
+                        .accessibilityHint("Creates a frozen recipe and opens Recipe Review")
                     }
                 }
             } else {

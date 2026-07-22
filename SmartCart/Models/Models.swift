@@ -5,7 +5,6 @@ enum AppTab: String, CaseIterable, Identifiable, Codable, Hashable {
     case home
     case lists
     case pantry
-    case store
     case account
 
     var id: String { rawValue }
@@ -15,8 +14,7 @@ enum AppTab: String, CaseIterable, Identifiable, Codable, Hashable {
         case .home: "Home"
         case .lists: "Recipes"
         case .pantry: "Pantry"
-        case .store: "Store"
-        case .account: "Account"
+        case .account: "Profile"
         }
     }
 
@@ -25,9 +23,12 @@ enum AppTab: String, CaseIterable, Identifiable, Codable, Hashable {
         case .home: "house.fill"
         case .lists: "book.fill"
         case .pantry: "cabinet.fill"
-        case .store: "storefront.fill"
         case .account: "person.crop.circle.fill"
         }
+    }
+
+    static func canonicalTab(forRawValue rawValue: String) -> AppTab? {
+        rawValue == "store" ? .account : AppTab(rawValue: rawValue)
     }
 }
 
@@ -35,18 +36,25 @@ enum SmartRoute: Hashable {
     case weeklyMealsCollection
     case weeklyMealDetail(CuratedRecipeID)
     case mealPrepSelection
-    case mealPrepDashboard
     case recipeReady
-    case shoppingTrip
-    case ingredientReview
-    case servingAdjustment
-    case pantryCheck
-    case preferences
-    case storeSelection
-    case matching
     case shoppingList
-    case guidedShopping
+    case shoppingTrip
     case shoppingReconciliation(UUID)
+
+    /// Translates retired QA/deep-link names at the app boundary without
+    /// keeping their duplicate screens in the navigation graph.
+    static func canonicalRoute(forLegacyName name: String) -> SmartRoute? {
+        switch name {
+        case "ingredient", "servings", "pantry", "pantry-match":
+            .recipeReady
+        case "matching", "shopping":
+            .shoppingList
+        case "preferences", "store", "guided", "walmart-guide", "target-guide":
+            .shoppingTrip
+        default:
+            nil
+        }
+    }
 }
 
 enum ImportMethod: String, CaseIterable, Identifiable, Hashable, Codable {

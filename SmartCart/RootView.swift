@@ -42,14 +42,6 @@ struct RootView: View {
                 }
 
                 NavigationStack {
-                    StoreDashboardView()
-                }
-                .tag(AppTab.store)
-                .tabItem {
-                    Label(AppTab.store.title, systemImage: AppTab.store.symbol)
-                }
-
-                NavigationStack {
                     AccountView()
                 }
                 .tag(AppTab.account)
@@ -70,6 +62,7 @@ struct RootView: View {
             }
         }
         .animation(.spring(response: 0.4, dampingFraction: 0.84), value: appModel.toastMessage)
+        .sensoryFeedback(.success, trigger: appModel.completionFeedbackCount)
         .sheet(item: $appModel.presentedSheet, onDismiss: {
             appModel.recipeImporterDidDismiss()
         }) { destination in
@@ -103,8 +96,6 @@ struct RootView: View {
             WeeklyMealDetailView(recipeID: recipeID)
         case .mealPrepSelection:
             MealPrepSelectionView()
-        case .mealPrepDashboard:
-            MealPrepDashboardView()
         case .recipeReady:
             RecipeReadyView()
                 .smartCartNavigationZoom(
@@ -121,26 +112,8 @@ struct RootView: View {
                     sourceID: SmartCartTransitionID.shoppingWorkspace,
                     in: workspaceTransition
                 )
-        case .ingredientReview:
-            IngredientReviewView()
-        case .servingAdjustment:
-            ServingAdjustmentView()
-        case .pantryCheck:
-            PantryCheckView()
-        case .preferences:
-            ShoppingPreferencesView()
-        case .storeSelection:
-            RetailerSelectionView()
-        case .matching:
-            ProductMatchingView()
         case .shoppingList:
             ShoppingListReviewView()
-        case .guidedShopping:
-            RetailerSafariHandoffView()
-                .smartCartNavigationZoom(
-                    sourceID: SmartCartTransitionID.shoppingWorkspace,
-                    in: workspaceTransition
-                )
         case .shoppingReconciliation(let sessionID):
             ShoppingReconciliationView(sessionID: sessionID)
         }

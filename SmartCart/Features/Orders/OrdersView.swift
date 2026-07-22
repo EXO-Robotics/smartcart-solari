@@ -1,96 +1,6 @@
 import SafariServices
 import SwiftUI
 
-struct ProductMatchingView: View {
-    @Environment(AppModel.self) private var appModel
-    @State private var activeSheet: LegacyMatchingSheet?
-    @State private var isPreparingProducts = false
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                WorkflowHeader(
-                    step: 6,
-                    total: 6,
-                    eyebrow: "Product preparation",
-                    title: isPreparingProducts ? "Preparing Products…" : "Products prepared",
-                    message: "SmartCart is preparing the products for this trip. Only matches that need a decision will interrupt you."
-                )
-
-                preparationCard
-            }
-            .padding(18)
-            .padding(.bottom, 30)
-        }
-        .smartCartBackground()
-        .navigationTitle("Prepare products")
-        .navigationBarTitleDisplayMode(.inline)
-        .accessibilityIdentifier("legacy-product-preparation")
-        .task {
-            await prepareProducts()
-        }
-        .sheet(item: $activeSheet) { sheet in
-            switch sheet {
-            case .productExceptions:
-                ProductExceptionReviewSheet()
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
-                    .interactiveDismissDisabled()
-            }
-        }
-    }
-
-    private var preparationCard: some View {
-        HStack(spacing: 14) {
-            if isPreparingProducts {
-                ProgressView()
-                    .controlSize(.large)
-                    .tint(SmartCartTheme.green)
-                    .accessibilityIdentifier("legacy-product-preparation-progress")
-            } else {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.largeTitle)
-                    .foregroundStyle(SmartCartTheme.green)
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(isPreparingProducts ? "Preparing Products…" : "Opening your shopping trip")
-                    .font(.headline)
-                    .foregroundStyle(SmartCartTheme.navy)
-                Text("\(appModel.ingredientsToBuy.count) ingredients · \(appModel.retailerConfiguration.displayName)")
-                    .font(.caption)
-                    .foregroundStyle(SmartCartTheme.secondaryInk)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .smartCartCard()
-        .smartCartShadow()
-    }
-
-    private func prepareProducts() async {
-        guard !isPreparingProducts else { return }
-        isPreparingProducts = true
-        let published = await appModel.startMatching()
-        guard published, !Task.isCancelled else {
-            isPreparingProducts = false
-            return
-        }
-        isPreparingProducts = false
-
-        if !appModel.hasUnresolvedMatchingWork {
-            _ = appModel.continueToShoppingTrip()
-        } else {
-            activeSheet = .productExceptions
-        }
-    }
-}
-
-private enum LegacyMatchingSheet: String, Identifiable {
-    case productExceptions
-
-    var id: String { rawValue }
-}
-
 struct ProductExceptionReviewSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AppModel.self) private var appModel
@@ -168,14 +78,14 @@ struct ProductExceptionReviewSheet: View {
             .safeAreaInset(edge: .bottom) {
                 confirmationBar(for: reviewItems)
             }
-            .navigationTitle("Review product choices")
+            .navigationTitle("Shopping Review")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
                         returnToRecipeReady()
                     } label: {
-                        Label("Recipe Ready", systemImage: "chevron.backward")
+                        Label("Recipe Review", systemImage: "chevron.backward")
                     }
                     .accessibilityIdentifier("product-exception-return-recipe-ready")
                 }
@@ -234,7 +144,7 @@ struct ProductExceptionReviewSheet: View {
                 ) else { return }
                 continueIfResolved()
             } label: {
-                Label("Confirm & Start Shopping", systemImage: "arrow.right.circle.fill")
+                Label("Continue to Shopping Review", systemImage: "arrow.right.circle.fill")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(PrimaryButtonStyle())
@@ -259,7 +169,7 @@ struct ProductExceptionReviewSheet: View {
 
     private func continueIfResolved() {
         guard !appModel.hasUnresolvedMatchingWork else { return }
-        if appModel.continueToShoppingTrip() {
+        if appModel.continueToShoppingReview() {
             dismiss()
         }
     }
@@ -497,7 +407,7 @@ struct ShoppingListReviewView: View {
             .padding(.bottom, 138)
         }
         .smartCartBackground()
-        .navigationTitle("Review shopping list")
+        .navigationTitle("Shopping Review")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
             BottomActionBar {
@@ -548,12 +458,12 @@ struct ShoppingListReviewView: View {
 
     private var retailerGuideButtonTitle: String {
         if appModel.retailerGuideIsComplete {
-            return "Review shopping results"
+            return "Review Shopping Results"
         }
         if appModel.guidedCompletedCount > 0 {
-            return "Resume \(appModel.retailerConfiguration.displayName) Shopping Trip"
+            return "Resume \(appModel.retailerConfiguration.displayName)"
         }
-        return "Start \(appModel.retailerConfiguration.displayName) Shopping Trip"
+        return "Continue to \(appModel.retailerConfiguration.displayName)"
     }
 
     private var listHeader: some View {
@@ -878,6 +788,7 @@ struct AccountView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 21) {
                 accountHeader
+                retailerAndLocationCard
                 appearanceCard
                 preferenceCard
                 testerModeCard
@@ -936,6 +847,52 @@ struct AccountView: View {
         .tint(SmartCartTheme.green)
         .accessibilityIdentifier("smartcart.appearance.cleanLight")
         .smartCartCard()
+    }
+
+    private var retailerAndLocationCard: some View {
+        NavigationLink {
+            StoreDashboardView()
+        } label: {
+            HStack(spacing: 13) {
+                Image(systemName: "storefront.fill")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(SmartCartTheme.green)
+                    .frame(width: 42, height: 42)
+                    .background(SmartCartTheme.herbLight)
+                    .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Retailer & location")
+                        .font(.headline)
+                        .foregroundStyle(SmartCartTheme.navy)
+                    Text(retailerProfileSummary)
+                        .font(.caption)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
+                        .lineLimit(2)
+                }
+
+                Spacer(minLength: 6)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.bold())
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
+                    .accessibilityHidden(true)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressableButtonStyle())
+        .smartCartCard()
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("profile-retailer-location")
+        .accessibilityHint("Opens retailer and nearby store settings")
+    }
+
+    private var retailerProfileSummary: String {
+        if appModel.selectedRetailer == .walmart {
+            return "\(appModel.retailerConfiguration.displayName) · \(appModel.primaryStore.name)"
+        }
+        return "\(appModel.retailerConfiguration.displayName) · Store confirmed by retailer"
     }
 
     private var accountHeader: some View {
