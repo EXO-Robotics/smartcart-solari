@@ -22,6 +22,31 @@ enum LocalOperationType: String, Codable, CaseIterable, Hashable, Sendable {
     case pantryMutation = "pantry_mutation"
     case shoppingReconciliation = "shopping_reconciliation"
     case mealPrepAggregation = "meal_prep_aggregation"
+    case weeklyMeals = "weekly_meals"
+}
+
+enum WeeklyMealOperationEvent: String, Codable, CaseIterable, Hashable, Sendable {
+    case weeklyMealsViewed
+    case weeklyMealCardFocused
+    case weeklyMealOpened
+    case weeklyMealSaved
+    case weeklyMealServingsChanged
+    case weeklyMealShopStarted
+    case weeklyMealAddedToMealPrep
+    case weeklyMealRetailerHandoffStarted
+    case weeklyMealShoppingCompleted
+}
+
+struct WeeklyMealOperationMetadata: Codable, Equatable, Sendable {
+    let collectionID: String
+    let recipeID: String?
+    let contentVersion: Int?
+    let mealSlot: String?
+    let placement: String
+    let servingCountBucket: String?
+    let costDisplayAvailability: String?
+    let completionState: String?
+    let elapsedTimeBucket: String?
 }
 
 enum LocalOperationImportMethod: String, Codable, CaseIterable, Hashable, Sendable {
@@ -97,6 +122,8 @@ struct LocalOperationRecord: Codable, Equatable, Sendable {
     fileprivate(set) var eventName: LocalOperationTerminalEvent?
     fileprivate(set) var failureCategory: LocalOperationFailureCategory?
     fileprivate(set) var durationBucket: LocalOperationDurationBucket?
+    let weeklyMealEvent: WeeklyMealOperationEvent?
+    let weeklyMealMetadata: WeeklyMealOperationMetadata?
     fileprivate var runtimeToken: LocalOperationToken?
     fileprivate var runtimeStartedAt: Date?
 
@@ -110,6 +137,8 @@ struct LocalOperationRecord: Codable, Equatable, Sendable {
         case eventName
         case failureCategory
         case durationBucket
+        case weeklyMealEvent
+        case weeklyMealMetadata
     }
 
     init(
@@ -121,7 +150,9 @@ struct LocalOperationRecord: Codable, Equatable, Sendable {
         failureCategory: LocalOperationFailureCategory?,
         durationBucket: LocalOperationDurationBucket?,
         runtimeToken: LocalOperationToken?,
-        runtimeStartedAt: Date?
+        runtimeStartedAt: Date?,
+        weeklyMealEvent: WeeklyMealOperationEvent? = nil,
+        weeklyMealMetadata: WeeklyMealOperationMetadata? = nil
     ) {
         self.operationType = operationType
         self.importMethod = importMethod
@@ -132,6 +163,8 @@ struct LocalOperationRecord: Codable, Equatable, Sendable {
         self.durationBucket = durationBucket
         self.runtimeToken = runtimeToken
         self.runtimeStartedAt = runtimeStartedAt
+        self.weeklyMealEvent = weeklyMealEvent
+        self.weeklyMealMetadata = weeklyMealMetadata
     }
 
     init(from decoder: Decoder) throws {
@@ -148,6 +181,14 @@ struct LocalOperationRecord: Codable, Equatable, Sendable {
         durationBucket = try values.decodeIfPresent(
             LocalOperationDurationBucket.self,
             forKey: .durationBucket
+        )
+        weeklyMealEvent = try values.decodeIfPresent(
+            WeeklyMealOperationEvent.self,
+            forKey: .weeklyMealEvent
+        )
+        weeklyMealMetadata = try values.decodeIfPresent(
+            WeeklyMealOperationMetadata.self,
+            forKey: .weeklyMealMetadata
         )
         runtimeToken = nil
         runtimeStartedAt = nil
@@ -181,6 +222,10 @@ protocol LocalOperationObserving: Sendable {
     func setRecordingEnabled(_ enabled: Bool)
     func clear()
     func recoverStaleInFlightOperations()
+    func recordWeeklyMealEvent(
+        _ event: WeeklyMealOperationEvent,
+        metadata: WeeklyMealOperationMetadata
+    )
 }
 
 final class AsyncLocalOperationObserver: LocalOperationObserving, @unchecked Sendable {
@@ -244,6 +289,15 @@ final class AsyncLocalOperationObserver: LocalOperationObserving, @unchecked Sen
 
     func recoverStaleInFlightOperations() {
         queue.async { [recorder] in _ = recorder.recoverStaleInFlightOperations() }
+    }
+
+    func recordWeeklyMealEvent(
+        _ event: WeeklyMealOperationEvent,
+        metadata: WeeklyMealOperationMetadata
+    ) {
+        queue.async { [recorder] in
+            _ = recorder.recordWeeklyMealEvent(event, metadata: metadata)
+        }
     }
 
     func waitUntilIdle() {
@@ -449,6 +503,34 @@ final class LocalOperationRecorder: @unchecked Sendable {
             if let failureCategory { snapshot.records[index].failureCategory = failureCategory }
             snapshot.records[index].durationBucket = elapsed.map(LocalOperationDurationBucket.bucket)
                 ?? .unknown
+            trimTerminalRecordsToCapacityLocked()
+            persistLocked()
+            return true
+        }
+    }
+
+    @discardableResult
+    func recordWeeklyMealEvent(
+        _ event: WeeklyMealOperationEvent,
+        metadata: WeeklyMealOperationMetadata
+    ) -> Bool {
+        locked {
+            guard snapshot.recordingEnabled, makeRoomForNewRecordLocked() else { return false }
+            snapshot.records.append(
+                LocalOperationRecord(
+                    operationType: .weeklyMeals,
+                    importMethod: nil,
+                    retailer: nil,
+                    retryCount: 0,
+                    eventName: .handledAutomatically,
+                    failureCategory: nil,
+                    durationBucket: .unknown,
+                    runtimeToken: nil,
+                    runtimeStartedAt: nil,
+                    weeklyMealEvent: event,
+                    weeklyMealMetadata: metadata
+                )
+            )
             trimTerminalRecordsToCapacityLocked()
             persistLocked()
             return true

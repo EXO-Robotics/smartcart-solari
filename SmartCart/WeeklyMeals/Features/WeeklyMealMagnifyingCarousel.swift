@@ -5,10 +5,12 @@ struct WeeklyMealMagnifyingCarousel: View {
     @State private var focusedID: CuratedRecipeID?
     @State private var userDragPendingFocus = false
     @State private var focusFeedbackCount = 0
+    @State private var dwellTask: Task<Void, Never>?
 
     let models: [WeeklyMealDisplayModel]
     let onOpen: (CuratedRecipeID) -> Void
     let onShop: (CuratedRecipeID) -> Void
+    let onFocused: (WeeklyMealDisplayModel) -> Void
 
     var body: some View {
         let reduceMotionEnabled = reduceMotion
@@ -50,6 +52,7 @@ struct WeeklyMealMagnifyingCarousel: View {
                     .onChanged { _ in userDragPendingFocus = true }
             )
             .onChange(of: focusedID) { oldValue, newValue in
+                scheduleDwell(for: newValue)
                 guard oldValue != nil, oldValue != newValue, userDragPendingFocus else { return }
                 userDragPendingFocus = false
                 focusFeedbackCount += 1
@@ -61,7 +64,9 @@ struct WeeklyMealMagnifyingCarousel: View {
             if focusedID == nil {
                 focusedID = models.first(where: \.isFeatured)?.id ?? models.first?.id
             }
+            scheduleDwell(for: focusedID)
         }
+        .onDisappear { dwellTask?.cancel() }
         .overlay(alignment: .bottom) {
             positionIndicator
         }
@@ -86,6 +91,18 @@ struct WeeklyMealMagnifyingCarousel: View {
             return "Eight weekly meals"
         }
         return "Meal \(index + 1) of \(models.count)"
+    }
+
+    private func scheduleDwell(for id: CuratedRecipeID?) {
+        dwellTask?.cancel()
+        guard let id else { return }
+        dwellTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled,
+                  focusedID == id,
+                  let model = models.first(where: { $0.id == id }) else { return }
+            onFocused(model)
+        }
     }
 
 }

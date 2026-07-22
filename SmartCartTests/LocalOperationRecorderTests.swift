@@ -253,6 +253,35 @@ final class LocalOperationRecorderTests: XCTestCase {
         XCTAssertFalse(encoded.contains(sensitiveTitle))
     }
 
+    func testWeeklyMealEventsPersistOnlyAllowlistedMetadata() throws {
+        let fileURL = temporaryFileURL()
+        let recorder = LocalOperationRecorder(fileURL: fileURL)
+        let metadata = WeeklyMealOperationMetadata(
+            collectionID: "weekly.week-01",
+            recipeID: "weekly.chicken-taco-rice-bowls",
+            contentVersion: 1,
+            mealSlot: "lunch",
+            placement: "home_carousel",
+            servingCountBucket: "three_to_four",
+            costDisplayAvailability: "unavailable",
+            completionState: nil,
+            elapsedTimeBucket: "under_one_second"
+        )
+
+        XCTAssertTrue(recorder.recordWeeklyMealEvent(.weeklyMealCardFocused, metadata: metadata))
+        let record = try XCTUnwrap(recorder.records().first)
+        XCTAssertEqual(record.operationType, .weeklyMeals)
+        XCTAssertEqual(record.weeklyMealEvent, .weeklyMealCardFocused)
+        XCTAssertEqual(record.weeklyMealMetadata, metadata)
+
+        let encoded = try XCTUnwrap(String(data: Data(contentsOf: fileURL), encoding: .utf8))
+        XCTAssertFalse(encoded.contains("ingredient"))
+        XCTAssertFalse(encoded.contains("instruction"))
+        XCTAssertFalse(encoded.contains("product"))
+        XCTAssertFalse(encoded.contains("https://"))
+        XCTAssertFalse(encoded.contains("@"))
+    }
+
     @MainActor
     private func isolatedDefaults() -> UserDefaults {
         let suite = "LocalOperationRecorderTests.\(UUID().uuidString)"

@@ -80,6 +80,7 @@
 		A70000000000000000000011 /* WeeklyMealCarouselTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B70000000000000000000012 /* WeeklyMealCarouselTests.swift */; };
 		A70000000000000000000012 /* WeeklyMealSnapshotFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = B70000000000000000000013 /* WeeklyMealSnapshotFactory.swift */; };
 		A70000000000000000000013 /* WeeklyMealIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B70000000000000000000014 /* WeeklyMealIntegrationTests.swift */; };
+		A70000000000000000000014 /* WeeklyMealAccessibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B70000000000000000000015 /* WeeklyMealAccessibilityTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -174,6 +175,8 @@
 		B70000000000000000000012 /* WeeklyMealCarouselTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeeklyMealCarouselTests.swift; sourceTree = "<group>"; };
 		B70000000000000000000013 /* WeeklyMealSnapshotFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/WeeklyMealSnapshotFactory.swift; sourceTree = "<group>"; };
 		B70000000000000000000014 /* WeeklyMealIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeeklyMealIntegrationTests.swift; sourceTree = "<group>"; };
+		B70000000000000000000015 /* WeeklyMealAccessibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeeklyMealAccessibilityTests.swift; sourceTree = "<group>"; };
+		B70000000000000000000016 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -357,6 +360,7 @@
 				B7000000000000000000000F /* WeeklyMealsSection.swift */,
 				B70000000000000000000010 /* WeeklyMealsCollectionView.swift */,
 				B70000000000000000000011 /* WeeklyMealDetailView.swift */,
+				B70000000000000000000016 /* README.md */,
 				D70000000000000000000003 /* Resources */,
 			);
 			path = WeeklyMeals;
@@ -401,6 +405,7 @@
 				B70000000000000000000006 /* WeeklyMealContentResourceTests.swift */,
 				B70000000000000000000012 /* WeeklyMealCarouselTests.swift */,
 				B70000000000000000000014 /* WeeklyMealIntegrationTests.swift */,
+				B70000000000000000000015 /* WeeklyMealAccessibilityTests.swift */,
 			);
 			path = WeeklyMeals;
 			sourceTree = "<group>";
@@ -600,6 +605,7 @@
 				A70000000000000000000006 /* WeeklyMealContentResourceTests.swift in Sources */,
 				A70000000000000000000011 /* WeeklyMealCarouselTests.swift in Sources */,
 				A70000000000000000000013 /* WeeklyMealIntegrationTests.swift in Sources */,
+				A70000000000000000000014 /* WeeklyMealAccessibilityTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

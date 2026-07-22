@@ -14,7 +14,11 @@ struct MealPrepSelectionView: View {
                     subtitle: "Choose 1–5 reviewed recipes. Each keeps its own serving count."
                 )
 
-                ForEach(appModel.mealPrepCandidateRecipes) { recipe in
+                ForEach(appModel.savedRecipes) { recipe in
+                    recipeCard(recipe)
+                }
+
+                ForEach(appModel.mealPrepSelectedUnsavedRecipes) { recipe in
                     recipeCard(recipe)
                 }
 

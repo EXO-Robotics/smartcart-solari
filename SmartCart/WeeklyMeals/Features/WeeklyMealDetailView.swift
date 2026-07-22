@@ -93,7 +93,10 @@ struct WeeklyMealDetailView: View {
                 .font(.headline)
                 .foregroundStyle(SmartCartTheme.ink)
             HStack {
-                Button { servings = max(1, servings - 1) } label: {
+                Button {
+                    servings = max(1, servings - 1)
+                    record(.weeklyMealServingsChanged, recipe: recipe, placement: "detail")
+                } label: {
                     Image(systemName: "minus")
                         .frame(width: 44, height: 44)
                 }
@@ -111,7 +114,10 @@ struct WeeklyMealDetailView: View {
                 }
                 Spacer()
 
-                Button { servings = min(48, servings + 1) } label: {
+                Button {
+                    servings = min(48, servings + 1)
+                    record(.weeklyMealServingsChanged, recipe: recipe, placement: "detail")
+                } label: {
                     Image(systemName: "plus")
                         .frame(width: 44, height: 44)
                 }
@@ -142,6 +148,7 @@ struct WeeklyMealDetailView: View {
             guard let snapshot = makeSnapshot(recipe) else { return }
             if appModel.saveWeeklyMealSnapshot(snapshot) {
                 isSaved = true
+                record(.weeklyMealSaved, recipe: recipe, placement: "detail")
                 appModel.showToast("Recipe saved")
             }
         } label: {
@@ -158,6 +165,7 @@ struct WeeklyMealDetailView: View {
             guard let snapshot = makeSnapshot(recipe) else { return }
             if appModel.ensureRecipeIsIncludedInMealPrep(snapshot, targetServings: servings) {
                 isInMealPrep = true
+                record(.weeklyMealAddedToMealPrep, recipe: recipe, placement: "detail")
                 appModel.showToast("Added to Meal Prep")
             }
         } label: {
@@ -301,6 +309,7 @@ struct WeeklyMealDetailView: View {
             appModel.showToast("This meal could not be prepared")
             return
         }
+        record(.weeklyMealShopStarted, recipe: recipe, placement: "detail")
         _ = appModel.beginRecipe(snapshot)
     }
 
@@ -319,5 +328,23 @@ struct WeeklyMealDetailView: View {
               let snapshot = makeSnapshot(recipe) else { return }
         isSaved = appModel.isRecipeSaved(snapshot.id)
         isInMealPrep = appModel.isRecipeSelectedForMealPrep(snapshot.id)
+    }
+
+    private func record(
+        _ event: WeeklyMealOperationEvent,
+        recipe: CuratedRecipeRecord,
+        placement: String
+    ) {
+        guard let collectionID else { return }
+        appModel.recordWeeklyMealEvent(
+            event,
+            collectionID: collectionID,
+            recipeID: recipe.id,
+            contentVersion: recipe.contentVersion,
+            mealSlot: recipe.metadata.mealTypes.first,
+            placement: placement,
+            servingCount: servings,
+            costDisplayAvailable: recipe.metadata.costEstimate?.isPubliclyDisplayable == true
+        )
     }
 }

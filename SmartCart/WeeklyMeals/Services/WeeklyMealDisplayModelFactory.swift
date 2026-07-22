@@ -23,6 +23,18 @@ struct WeeklyMealDisplayModel: Identifiable, Hashable, Sendable {
 
     var primaryTag: MerchandisingTag? { merchandisingTags.first }
     var secondaryTag: MerchandisingTag? { merchandisingTags.dropFirst().first }
+
+    var accessibilitySummary: String {
+        var parts = [title]
+        parts.append(isFeatured ? "Featured \(slot.displayName.lowercased())" : slot.displayName)
+        if let caloriesPerServing { parts.append("Estimated \(caloriesPerServing) calories") }
+        if let proteinGramsPerServing { parts.append("\(proteinGramsPerServing.formatted()) grams of protein") }
+        if let costPerServingText { parts.append(costPerServingText) }
+        parts.append("Serves \(defaultServings)")
+        parts.append("\(totalMinutes) minutes")
+        parts.append(merchandisingTags.map(\.displayName).joined(separator: " and "))
+        return parts.filter { !$0.isEmpty }.joined(separator: ". ")
+    }
 }
 
 enum WeeklyMealDisplayModelFactory {

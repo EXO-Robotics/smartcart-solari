@@ -18,10 +18,10 @@ struct WeeklyMealCard: View {
                     content
                 }
                 .contentShape(Rectangle())
+                .accessibilityHidden(true)
             }
             .buttonStyle(.plain)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(accessibilitySummary)
+            .accessibilityLabel(model.accessibilitySummary)
             .accessibilityHint("Double tap to view recipe")
             .accessibilityIdentifier("weekly-meal-card-\(model.id.rawValue)")
             .accessibilityAction(named: "Shop This Meal", onShop)
@@ -157,18 +157,6 @@ struct WeeklyMealCard: View {
             .padding(.horizontal, 9)
             .padding(.vertical, 5)
             .background(SmartCartTheme.herbLight, in: Capsule())
-    }
-
-    private var accessibilitySummary: String {
-        var parts = [model.title]
-        parts.append(model.isFeatured ? "Featured \(model.slot.displayName.lowercased())" : model.slot.displayName)
-        if let calories = model.caloriesPerServing { parts.append("Estimated \(calories) calories") }
-        if let protein = model.proteinGramsPerServing { parts.append("\(protein.formatted()) grams of protein") }
-        if let cost = model.costPerServingText { parts.append(cost) }
-        parts.append("Serves \(model.defaultServings)")
-        parts.append("\(model.totalMinutes) minutes")
-        parts.append(model.merchandisingTags.map(\.displayName).joined(separator: " and "))
-        return parts.filter { !$0.isEmpty }.joined(separator: ". ")
     }
 
     private var artworkColors: [Color] {

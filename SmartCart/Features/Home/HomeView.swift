@@ -36,7 +36,28 @@ struct HomeView: View {
                         WeeklyMealsSection(
                             onOpen: { appModel.continueTo(.weeklyMealDetail($0)) },
                             onShop: { appModel.continueTo(.weeklyMealDetail($0)) },
-                            onSeeAll: { appModel.continueTo(.weeklyMealsCollection) }
+                            onSeeAll: { appModel.continueTo(.weeklyMealsCollection) },
+                            onViewed: {
+                                appModel.recordWeeklyMealEvent(
+                                    .weeklyMealsViewed,
+                                    collectionID: $0,
+                                    placement: "home"
+                                )
+                            },
+                            onFocused: { model in
+                                appModel.recordWeeklyMealEvent(
+                                    .weeklyMealCardFocused,
+                                    model: model,
+                                    placement: "home_carousel"
+                                )
+                            },
+                            onMealOpened: { model, placement in
+                                appModel.recordWeeklyMealEvent(
+                                    .weeklyMealOpened,
+                                    model: model,
+                                    placement: placement
+                                )
+                            }
                         )
                     }
                     .padding(.horizontal, 20)

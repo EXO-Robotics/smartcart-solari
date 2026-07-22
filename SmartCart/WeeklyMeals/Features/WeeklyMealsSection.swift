@@ -2,17 +2,24 @@ import SwiftUI
 
 struct WeeklyMealsSection: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var recordedView = false
 
     private let collection: ResolvedWeeklyMealCollection?
     private let models: [WeeklyMealDisplayModel]
     let onOpen: (CuratedRecipeID) -> Void
     let onShop: (CuratedRecipeID) -> Void
     let onSeeAll: () -> Void
+    let onViewed: (String) -> Void
+    let onFocused: (WeeklyMealDisplayModel) -> Void
+    let onMealOpened: (WeeklyMealDisplayModel, String) -> Void
 
     init(
         onOpen: @escaping (CuratedRecipeID) -> Void,
         onShop: @escaping (CuratedRecipeID) -> Void,
-        onSeeAll: @escaping () -> Void
+        onSeeAll: @escaping () -> Void,
+        onViewed: @escaping (String) -> Void,
+        onFocused: @escaping (WeeklyMealDisplayModel) -> Void,
+        onMealOpened: @escaping (WeeklyMealDisplayModel, String) -> Void
     ) {
         let resolved = try? BundledWeeklyMealRepository().activeCollection(
             on: Date(),
@@ -23,6 +30,9 @@ struct WeeklyMealsSection: View {
         self.onOpen = onOpen
         self.onShop = onShop
         self.onSeeAll = onSeeAll
+        self.onViewed = onViewed
+        self.onFocused = onFocused
+        self.onMealOpened = onMealOpened
     }
 
     var body: some View {
@@ -35,13 +45,17 @@ struct WeeklyMealsSection: View {
                 } else {
                     WeeklyMealMagnifyingCarousel(
                         models: models,
-                        onOpen: onOpen,
-                        onShop: onShop
+                        onOpen: { open($0, placement: "home_carousel") },
+                        onShop: { open($0, placement: "home_carousel_shop") },
+                        onFocused: onFocused
                     )
                 }
             }
             .onAppear {
-                _ = collection.id
+                if !recordedView {
+                    recordedView = true
+                    onViewed(collection.id)
+                }
             }
         }
     }
@@ -73,10 +87,20 @@ struct WeeklyMealsSection: View {
                     model: model,
                     isFocused: true,
                     fixedHeight: nil,
-                    onOpen: { onOpen(model.id) },
-                    onShop: { onShop(model.id) }
+                    onOpen: { open(model.id, placement: "home_accessibility_list") },
+                    onShop: { open(model.id, placement: "home_accessibility_list_shop") }
                 )
             }
+        }
+    }
+
+    private func open(_ id: CuratedRecipeID, placement: String) {
+        guard let model = models.first(where: { $0.id == id }) else { return }
+        onMealOpened(model, placement)
+        if placement.hasSuffix("_shop") {
+            onShop(id)
+        } else {
+            onOpen(id)
         }
     }
 }

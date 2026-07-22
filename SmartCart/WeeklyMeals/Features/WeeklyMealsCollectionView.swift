@@ -2,14 +2,17 @@ import SwiftUI
 
 struct WeeklyMealsCollectionView: View {
     @Environment(AppModel.self) private var appModel
+    @State private var recordedView = false
 
     private let models: [WeeklyMealDisplayModel]
+    private let collectionID: String?
 
     init() {
         let collection = try? BundledWeeklyMealRepository().activeCollection(
             on: Date(),
             calendar: Calendar.autoupdatingCurrent
         )
+        collectionID = collection?.id
         models = collection.map { WeeklyMealDisplayModelFactory.makeModels(from: $0) } ?? []
     }
 
@@ -22,6 +25,11 @@ struct WeeklyMealsCollectionView: View {
                         Section {
                             ForEach(meals) { model in
                                 WeeklyMealCollectionRow(model: model) {
+                                    appModel.recordWeeklyMealEvent(
+                                        .weeklyMealOpened,
+                                        model: model,
+                                        placement: "see_all"
+                                    )
                                     appModel.continueTo(.weeklyMealDetail(model.id))
                                 }
                             }
@@ -38,6 +46,15 @@ struct WeeklyMealsCollectionView: View {
         .smartCartBackground()
         .navigationTitle("This Week’s Meals")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            guard !recordedView, let collectionID else { return }
+            recordedView = true
+            appModel.recordWeeklyMealEvent(
+                .weeklyMealsViewed,
+                collectionID: collectionID,
+                placement: "see_all"
+            )
+        }
     }
 }
 

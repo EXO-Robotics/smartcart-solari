@@ -167,11 +167,14 @@ final class AppModel {
     /// adding Saved Recipes membership. Keep those selected records visible
     /// alongside the normal saved-recipe candidates.
     var mealPrepCandidateRecipes: [Recipe] {
+        savedRecipes + mealPrepSelectedUnsavedRecipes
+    }
+
+    var mealPrepSelectedUnsavedRecipes: [Recipe] {
         let selectedIDs = Set(mealPrepDraft?.selections.map(\.recipeSnapshot.id) ?? [])
-        let selectedRetainedRecipes = recipes.filter {
+        return recipes.filter {
             selectedIDs.contains($0.id) && !savedRecipeIDs.contains($0.id)
         }
-        return savedRecipes + selectedRetainedRecipes
     }
 
     /// A dedicated immutable catalog prevents imported or historical records
@@ -2908,6 +2911,11 @@ final class AppModel {
             try persistenceCoordinator.saveCompatibility(stateSnapshot())
             persistenceIssue = nil
             suppressPersistence = false
+            recordWeeklyMealEventForActiveRecipe(
+                .weeklyMealRetailerHandoffStarted,
+                placement: "shopping_trip",
+                completionState: "started"
+            )
             return true
         } catch {
             shoppingItems = originalItems
@@ -4367,6 +4375,11 @@ final class AppModel {
 
     func completeRetailerHandoff() {
         persistCurrentManifest(progress: .completed)
+        recordWeeklyMealEventForActiveRecipe(
+            .weeklyMealShoppingCompleted,
+            placement: "shopping_trip",
+            completionState: "retailer_handoff_completed"
+        )
     }
 
     func resetFlow() {
@@ -4728,6 +4741,88 @@ final class AppModel {
         if analyticsEvents.count > 500 {
             analyticsEvents.removeFirst(analyticsEvents.count - 500)
         }
+    }
+
+    func recordWeeklyMealEvent(
+        _ event: WeeklyMealOperationEvent,
+        collectionID: String,
+        recipeID: CuratedRecipeID? = nil,
+        contentVersion: Int? = nil,
+        mealSlot: WeeklyMealSlot? = nil,
+        placement: String,
+        servingCount: Int? = nil,
+        costDisplayAvailable: Bool? = nil,
+        completionState: String? = nil,
+        elapsedTimeBucket: String? = nil
+    ) {
+        operationObserver.recordWeeklyMealEvent(
+            event,
+            metadata: WeeklyMealOperationMetadata(
+                collectionID: collectionID,
+                recipeID: recipeID?.rawValue,
+                contentVersion: contentVersion,
+                mealSlot: mealSlot?.rawValue,
+                placement: placement,
+                servingCountBucket: servingCount.map(Self.weeklyMealServingBucket),
+                costDisplayAvailability: costDisplayAvailable.map { $0 ? "available" : "unavailable" },
+                completionState: completionState,
+                elapsedTimeBucket: elapsedTimeBucket
+            )
+        )
+    }
+
+    func recordWeeklyMealEvent(
+        _ event: WeeklyMealOperationEvent,
+        model: WeeklyMealDisplayModel,
+        placement: String,
+        servingCount: Int? = nil,
+        completionState: String? = nil,
+        elapsedTimeBucket: String? = nil
+    ) {
+        recordWeeklyMealEvent(
+            event,
+            collectionID: model.collectionID,
+            recipeID: model.id,
+            contentVersion: model.contentVersion,
+            mealSlot: model.slot,
+            placement: placement,
+            servingCount: servingCount,
+            costDisplayAvailable: model.costPerServingText != nil,
+            completionState: completionState,
+            elapsedTimeBucket: elapsedTimeBucket
+        )
+    }
+
+    private static func weeklyMealServingBucket(_ count: Int) -> String {
+        switch count {
+        case ...1: "one"
+        case 2: "two"
+        case 3...4: "three_to_four"
+        case 5...8: "five_to_eight"
+        default: "nine_or_more"
+        }
+    }
+
+    private func recordWeeklyMealEventForActiveRecipe(
+        _ event: WeeklyMealOperationEvent,
+        placement: String,
+        completionState: String
+    ) {
+        let parts = activeRecipe.sourceDetail.components(separatedBy: " · ")
+        guard parts.count == 4,
+              parts[0] == "Weekly Meals",
+              let version = Int(parts[3].replacingOccurrences(of: "version ", with: "")) else { return }
+        recordWeeklyMealEvent(
+            event,
+            collectionID: parts[1],
+            recipeID: CuratedRecipeID(rawValue: parts[2]),
+            contentVersion: version,
+            mealSlot: nil,
+            placement: placement,
+            servingCount: desiredServings,
+            costDisplayAvailable: false,
+            completionState: completionState
+        )
     }
 
     private var currentSavedManifest: ShoppingManifest? {
