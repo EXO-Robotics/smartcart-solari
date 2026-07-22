@@ -190,8 +190,8 @@ struct RecipeReadyView: View {
 
             VStack(spacing: 12) {
                 servingInput(
-                    title: "Recipe makes",
-                    subtitle: "Servings in the original recipe",
+                    title: "Recipe servings",
+                    subtitle: "Servings the recipe makes",
                     value: appModel.activeRecipe.servings,
                     decrease: { appModel.updateRecipeServings(by: -1) },
                     increase: { appModel.updateRecipeServings(by: 1) },
@@ -201,7 +201,7 @@ struct RecipeReadyView: View {
                 Divider()
 
                 servingInput(
-                    title: "I want to make",
+                    title: "Wanted servings",
                     subtitle: "Servings to shop for",
                     value: appModel.desiredServings,
                     decrease: { appModel.updateServings(by: -1) },

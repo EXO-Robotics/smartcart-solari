@@ -4901,6 +4901,16 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(composerSource.contains("showPhotoLibrary = true"))
         XCTAssertTrue(composerSource.contains("if !draft.ingredients.isEmpty {\n                            detectedIngredients(in: draft)"))
         XCTAssertTrue(composerSource.contains(".frame(maxWidth: .infinity, minHeight: 220, alignment: .topLeading)"))
+        XCTAssertTrue(recipesSource.contains("title: \"Recipe servings\""))
+        XCTAssertTrue(recipesSource.contains("title: \"Wanted servings\""))
+        XCTAssertTrue(recipesSource.contains("appModel.updateRecipeServings(by: -1)"))
+        XCTAssertTrue(recipesSource.contains("appModel.updateRecipeServings(by: 1)"))
+        XCTAssertTrue(recipesSource.contains("appModel.updateServings(by: -1)"))
+        XCTAssertTrue(recipesSource.contains("appModel.updateServings(by: 1)"))
+        XCTAssertTrue(recipesSource.contains("identifierPrefix: \"recipe-ready-recipe-servings\""))
+        XCTAssertTrue(recipesSource.contains("identifierPrefix: \"recipe-ready-desired-servings\""))
+        XCTAssertTrue(recipesSource.contains("identifier: \"\\(identifierPrefix)-decrease\""))
+        XCTAssertTrue(recipesSource.contains("identifier: \"\\(identifierPrefix)-increase\""))
         XCTAssertFalse(recipesSource.contains("private var mealPrepLaunchCard"))
     }
 
