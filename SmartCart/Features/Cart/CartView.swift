@@ -1379,7 +1379,9 @@ struct RecipesView: View {
     }
 
     private func recipeLibraryCard(_ recipe: Recipe) -> some View {
-        HStack(spacing: 8) {
+        let isInMealPrep = appModel.isRecipeIncludedInCurrentMealPrep(recipe.id)
+
+        return HStack(spacing: 8) {
             Button {
                 openRecipe(recipe)
             } label: {
@@ -1402,6 +1404,18 @@ struct RecipesView: View {
                 } label: {
                     Label("Open Recipe", systemImage: "book.fill")
                 }
+                Button {
+                    appModel.ensureRecipeIsIncludedInMealPrep(
+                        recipe,
+                        targetServings: max(1, recipe.servings)
+                    )
+                } label: {
+                    Label(
+                        isInMealPrep ? "In Meal Prep" : "Add to Meal Prep",
+                        systemImage: isInMealPrep ? "checkmark.circle.fill" : "calendar.badge.plus"
+                    )
+                }
+                .disabled(isInMealPrep)
                 Button(role: .destructive) {
                     pendingRecipeRemoval = recipe
                 } label: {

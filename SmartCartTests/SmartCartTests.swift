@@ -7001,6 +7001,65 @@ final class SmartCartTests: XCTestCase {
     }
 
     @MainActor
+    func testSavedRecipeAddsToCurrentMealPrepWithoutDuplicateSnapshot() throws {
+        let store = InMemorySmartCartStateStore()
+        let defaults = isolatedCommerceDefaults()
+        let model = AppModel(stateStore: store, commerceDefaults: defaults)
+        let recipe = phase4Recipe(title: "Saved meal prep recipe")
+        XCTAssertTrue(model.beginRecipe(recipe))
+        XCTAssertTrue(model.isRecipeSaved(recipe.id))
+
+        XCTAssertTrue(
+            model.ensureRecipeIsIncludedInMealPrep(
+                recipeID: recipe.id,
+                targetServings: recipe.servings
+            )
+        )
+        XCTAssertTrue(
+            model.ensureRecipeIsIncludedInMealPrep(
+                recipeID: recipe.id,
+                targetServings: recipe.servings
+            )
+        )
+
+        let matchingSelections = model.mealPrepDraft?.selections.filter {
+            $0.recipeSnapshot.id == recipe.id
+        }
+        XCTAssertEqual(matchingSelections?.count, 1)
+        XCTAssertEqual(matchingSelections?.first?.targetServings, Double(recipe.servings))
+        XCTAssertTrue(model.isRecipeSaved(recipe.id))
+        XCTAssertTrue(model.isRecipeIncludedInCurrentMealPrep(recipe.id))
+
+        let startedDraft = try XCTUnwrap(model.mealPrepDraft)
+        model.shoppingSessions = [
+            ShoppingSession(
+                logicalTripID: UUID(),
+                recipeID: recipe.id,
+                recipeTitle: recipe.title,
+                storeID: model.primaryStore.retailerStoreID,
+                retailerID: model.selectedRetailer.rawValue,
+                fulfillmentMode: model.fulfillmentMode,
+                shoppingScope: startedDraft.shoppingScope,
+                items: []
+            )
+        ]
+        XCTAssertFalse(model.isRecipeIncludedInCurrentMealPrep(recipe.id))
+        XCTAssertTrue(
+            model.ensureRecipeIsIncludedInMealPrep(
+                recipeID: recipe.id,
+                targetServings: recipe.servings
+            )
+        )
+        XCTAssertNotEqual(model.mealPrepDraft?.id, startedDraft.id)
+        XCTAssertTrue(model.isRecipeIncludedInCurrentMealPrep(recipe.id))
+
+        let restored = AppModel(stateStore: store, commerceDefaults: defaults)
+        XCTAssertEqual(restored.mealPrepDraft?.selections.count, 1)
+        XCTAssertEqual(restored.mealPrepDraft?.selections.first?.recipeSnapshot.id, recipe.id)
+        XCTAssertTrue(restored.isRecipeSaved(recipe.id))
+    }
+
+    @MainActor
     func testRemovingSavedMembershipPreservesTripsSnapshotsPantryAndPreferences() throws {
         let store = InMemorySmartCartStateStore()
         let defaults = isolatedCommerceDefaults()
@@ -7160,6 +7219,10 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(cart.contains("Text(\"Saved Recipes\")"))
         XCTAssertTrue(cart.contains("appModel.savedRecipes"))
         XCTAssertTrue(cart.contains("Remove from Saved Recipes"))
+        XCTAssertTrue(cart.contains("isInMealPrep ? \"In Meal Prep\" : \"Add to Meal Prep\""))
+        XCTAssertTrue(cart.contains("appModel.isRecipeIncludedInCurrentMealPrep(recipe.id)"))
+        XCTAssertTrue(cart.contains("appModel.ensureRecipeIsIncludedInMealPrep("))
+        XCTAssertTrue(cart.contains(".disabled(isInMealPrep)"))
         XCTAssertTrue(cart.contains("Existing Shopping Trips and pantry history will remain available."))
         XCTAssertTrue(cart.contains("recipe-ready-save-recipe"))
         XCTAssertTrue(mealPrep.contains("ForEach(appModel.savedRecipes)"))

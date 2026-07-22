@@ -1576,6 +1576,14 @@ final class AppModel {
         mealPrepDraft?.selections.contains { $0.recipeSnapshot.id == recipeID } == true
     }
 
+    /// Saved Recipes should reflect only the editable list. A recipe from a
+    /// started or completed plan can be added again without mutating history.
+    func isRecipeIncludedInCurrentMealPrep(_ recipeID: UUID) -> Bool {
+        guard let draft = mealPrepDraft,
+              !mealPrepDraftHasStartedOrCompleted(draft) else { return false }
+        return draft.selections.contains { $0.recipeSnapshot.id == recipeID }
+    }
+
     func toggleMealPrepRecipe(_ recipe: Recipe) {
         var draft = mealPrepDraft ?? MealPrepDraft()
         let undoState = stateSnapshot()
