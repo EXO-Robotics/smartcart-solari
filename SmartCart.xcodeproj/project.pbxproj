@@ -61,6 +61,11 @@
 		A8B000000000000000000001 /* RecipeLinkCapabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8B000000000000000000001 /* RecipeLinkCapabilityTests.swift */; };
 		A9B000000000000000000001 /* LocalOperationRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9B000000000000000000001 /* LocalOperationRecorder.swift */; };
 		A9B000000000000000000002 /* LocalOperationRecorderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9B000000000000000000002 /* LocalOperationRecorderTests.swift */; };
+		A70000000000000000000001 /* WeeklyMealModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B70000000000000000000001 /* WeeklyMealModels.swift */; };
+		A70000000000000000000002 /* BundledWeeklyMealRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = B70000000000000000000002 /* BundledWeeklyMealRepository.swift */; };
+		A70000000000000000000003 /* WeeklyMealCostEstimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B70000000000000000000003 /* WeeklyMealCostEstimator.swift */; };
+		A70000000000000000000004 /* WeeklyMealRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B70000000000000000000004 /* WeeklyMealRepositoryTests.swift */; };
+		A70000000000000000000005 /* WeeklyMealCostEstimatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B70000000000000000000005 /* WeeklyMealCostEstimatorTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -135,6 +140,11 @@
 		B30000000000000000000001 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
 		B30000000000000000000002 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		B30000000000000000000003 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
+		B70000000000000000000001 /* WeeklyMealModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models/WeeklyMealModels.swift; sourceTree = "<group>"; };
+		B70000000000000000000002 /* BundledWeeklyMealRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/BundledWeeklyMealRepository.swift; sourceTree = "<group>"; };
+		B70000000000000000000003 /* WeeklyMealCostEstimator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/WeeklyMealCostEstimator.swift; sourceTree = "<group>"; };
+		B70000000000000000000004 /* WeeklyMealRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeeklyMealRepositoryTests.swift; sourceTree = "<group>"; };
+		B70000000000000000000005 /* WeeklyMealCostEstimatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeeklyMealCostEstimatorTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -193,6 +203,7 @@
 				D10000000000000000000009 /* Preferences */,
 				D1000000000000000000000C /* Pantry */,
 				D1000000000000000000000D /* MealPrep */,
+				D70000000000000000000001 /* WeeklyMeals */,
 				D1000000000000000000000B /* Services */,
 			);
 			path = SmartCart;
@@ -304,6 +315,16 @@
 			path = Features/MealPrep;
 			sourceTree = "<group>";
 		};
+		D70000000000000000000001 /* WeeklyMeals */ = {
+			isa = PBXGroup;
+			children = (
+				B70000000000000000000001 /* WeeklyMealModels.swift */,
+				B70000000000000000000002 /* BundledWeeklyMealRepository.swift */,
+				B70000000000000000000003 /* WeeklyMealCostEstimator.swift */,
+			);
+			path = WeeklyMeals;
+			sourceTree = "<group>";
+		};
 		D1000000000000000000000A /* Products */ = {
 			isa = PBXGroup;
 			children = (
@@ -330,8 +351,18 @@
 				B2000000000000000000000D /* SmartCartPersistenceCoordinatorTests.swift */,
 				B8B000000000000000000001 /* RecipeLinkCapabilityTests.swift */,
 				B9B000000000000000000002 /* LocalOperationRecorderTests.swift */,
+				D70000000000000000000002 /* WeeklyMeals */,
 			);
 			path = SmartCartTests;
+			sourceTree = "<group>";
+		};
+		D70000000000000000000002 /* WeeklyMeals */ = {
+			isa = PBXGroup;
+			children = (
+				B70000000000000000000004 /* WeeklyMealRepositoryTests.swift */,
+				B70000000000000000000005 /* WeeklyMealCostEstimatorTests.swift */,
+			);
+			path = WeeklyMeals;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -477,6 +508,9 @@
 				A10000000000000000000026 /* ProductPurchaseGroupingService.swift in Sources */,
 				A10000000000000000000027 /* SmartCartPersistenceCoordinator.swift in Sources */,
 				A9B000000000000000000001 /* LocalOperationRecorder.swift in Sources */,
+				A70000000000000000000001 /* WeeklyMealModels.swift in Sources */,
+				A70000000000000000000002 /* BundledWeeklyMealRepository.swift in Sources */,
+				A70000000000000000000003 /* WeeklyMealCostEstimator.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -498,6 +532,8 @@
 				A2000000000000000000000C /* SmartCartPersistenceCoordinatorTests.swift in Sources */,
 				A8B000000000000000000001 /* RecipeLinkCapabilityTests.swift in Sources */,
 				A9B000000000000000000002 /* LocalOperationRecorderTests.swift in Sources */,
+				A70000000000000000000004 /* WeeklyMealRepositoryTests.swift in Sources */,
+				A70000000000000000000005 /* WeeklyMealCostEstimatorTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
