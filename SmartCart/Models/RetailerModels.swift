@@ -1,4 +1,5 @@
 import Foundation
+import MapKit
 
 enum PriceType: String, Codable, CaseIterable, Hashable {
     case exact
@@ -345,6 +346,130 @@ enum ShoppingRetailer: String, CaseIterable, Identifiable, Codable, Hashable {
                 instructions: []
             )
         }
+    }
+}
+
+enum RetailerStoreLocatorError: LocalizedError, Equatable {
+    case invalidPostalCode
+    case postalCodeNotFound
+    case noStoresFound(retailer: String, postalCode: String)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidPostalCode:
+            "Enter a five-digit US ZIP code."
+        case .postalCodeNotFound:
+            "SmartCart could not locate that ZIP code."
+        case .noStoresFound(let retailer, let postalCode):
+            "No nearby \(retailer) locations were found for \(postalCode)."
+        }
+    }
+}
+
+protocol RetailerStoreLocating {
+    func stores(
+        for retailer: ShoppingRetailer,
+        postalCode: String,
+        limit: Int
+    ) async throws -> [RetailerStore]
+}
+
+/// Uses Apple's local-search index for nearby storefront discovery. This is
+/// location lookup only; it does not claim retailer inventory, fulfillment,
+/// pricing, account, or API access.
+struct MapKitRetailerStoreLocator: RetailerStoreLocating {
+    func stores(
+        for retailer: ShoppingRetailer,
+        postalCode: String,
+        limit: Int = 5
+    ) async throws -> [RetailerStore] {
+        let postalCode = postalCode.filter(\.isNumber)
+        guard postalCode.count == 5 else { throw RetailerStoreLocatorError.invalidPostalCode }
+
+        let postalRequest = MKLocalSearch.Request()
+        postalRequest.naturalLanguageQuery = postalCode
+        let postalResponse = try await MKLocalSearch(request: postalRequest).start()
+        guard let postalCoordinate = postalResponse.mapItems.first?.placemark.coordinate else {
+            throw RetailerStoreLocatorError.postalCodeNotFound
+        }
+
+        let request = MKLocalSearch.Request()
+        request.naturalLanguageQuery = retailer.configuration.displayName
+        request.region = MKCoordinateRegion(
+            center: postalCoordinate,
+            latitudinalMeters: 80_000,
+            longitudinalMeters: 80_000
+        )
+        request.resultTypes = .pointOfInterest
+        let response = try await MKLocalSearch(request: request).start()
+        let origin = CLLocation(latitude: postalCoordinate.latitude, longitude: postalCoordinate.longitude)
+        let retailerToken = retailer.configuration.displayName.lowercased()
+
+        let results = response.mapItems.compactMap { item -> RetailerStore? in
+            let name = item.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard name.lowercased().contains(retailerToken) else { return nil }
+            let coordinate = item.placemark.coordinate
+            let distance = origin.distance(
+                from: CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+            ) / 1_609.344
+            guard distance.isFinite, distance <= 50 else { return nil }
+
+            let address = formattedAddress(for: item.placemark)
+            let identity = "\(retailer.rawValue)|\(name)|\(address)|\(coordinate.latitude)|\(coordinate.longitude)"
+            let stableID = stableUUID(for: identity)
+            return RetailerStore(
+                id: stableID,
+                retailerID: retailer.rawValue,
+                retailerStoreID: "mapkit-\(stableID.uuidString.lowercased())",
+                name: name,
+                format: "Nearby store",
+                address: address,
+                distance: distance,
+                pickupWindow: "Confirmed by \(retailer.configuration.displayName)"
+            )
+        }
+        .sorted { first, second in
+            if first.distance != second.distance { return first.distance < second.distance }
+            return first.name.localizedCaseInsensitiveCompare(second.name) == .orderedAscending
+        }
+
+        let unique = results.reduce(into: [RetailerStore]()) { stores, candidate in
+            guard !stores.contains(where: { $0.id == candidate.id }) else { return }
+            stores.append(candidate)
+        }
+        guard !unique.isEmpty else {
+            throw RetailerStoreLocatorError.noStoresFound(
+                retailer: retailer.configuration.displayName,
+                postalCode: postalCode
+            )
+        }
+        return Array(unique.prefix(max(1, limit)))
+    }
+
+    private func formattedAddress(for placemark: MKPlacemark) -> String {
+        let street = [placemark.subThoroughfare, placemark.thoroughfare]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        let locality = [placemark.locality, placemark.administrativeArea, placemark.postalCode]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: ", ")
+        let address = [street, locality].filter { !$0.isEmpty }.joined(separator: ", ")
+        return address.isEmpty ? "Address available in Maps" : address
+    }
+
+    private func stableUUID(for value: String) -> UUID {
+        func fnv1a(_ input: String, seed: UInt64) -> UInt64 {
+            input.utf8.reduce(seed) { hash, byte in
+                (hash ^ UInt64(byte)) &* 1_099_511_628_211
+            }
+        }
+        let high = fnv1a(value, seed: 14_695_981_039_346_656_037)
+        let low = fnv1a("smartcart-store|\(value)", seed: 1_099_511_628_211)
+        let hex = String(format: "%016llx%016llx", high, low)
+        let uuidText = "\(hex.prefix(8))-\(hex.dropFirst(8).prefix(4))-\(hex.dropFirst(12).prefix(4))-\(hex.dropFirst(16).prefix(4))-\(hex.dropFirst(20).prefix(12))"
+        return UUID(uuidString: uuidText) ?? UUID()
     }
 }
 

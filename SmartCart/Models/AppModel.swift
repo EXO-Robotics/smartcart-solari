@@ -135,6 +135,9 @@ final class AppModel {
     private(set) var sharedImportIssue: String?
     private(set) var persistenceIssue: String?
     private(set) var domainUndoAction: DomainUndoAction?
+    private(set) var isLocatingStores = false
+    private(set) var storeLookupMessage: String?
+    private(set) var resolvedStorePostalCode: String?
 
     /// Whole-recipe opens, newest first. Stored in UserDefaults rather than
     /// the JSON state schema because this is UI history, not shopping state.
@@ -212,7 +215,7 @@ final class AppModel {
             .first
     }
 
-    let stores: [RetailerStore]
+    private(set) var stores: [RetailerStore]
     let deliveryPartners: [DeliveryPartner]
 
     @ObservationIgnored
@@ -230,6 +233,8 @@ final class AppModel {
     @ObservationIgnored
     private let operationObserver: any LocalOperationObserving
     @ObservationIgnored
+    private let storeLocator: any RetailerStoreLocating
+    @ObservationIgnored
     private var persistenceReady = false
     @ObservationIgnored
     private var suppressPersistence = false
@@ -243,6 +248,8 @@ final class AppModel {
     private var isApplicationActive = false
     @ObservationIgnored
     private var presentedSharedImportID: UUID?
+    @ObservationIgnored
+    private var storeLookupRequestID = UUID()
     @ObservationIgnored
     private var durableRecipeIDs: Set<UUID>
 
@@ -261,6 +268,7 @@ final class AppModel {
         commerceDefaults: UserDefaults = .standard,
         shareInbox: SmartCartShareInbox = SmartCartShareInbox(),
         operationObserver: any LocalOperationObserving = AsyncLocalOperationObserver.shared,
+        storeLocator: any RetailerStoreLocating = MapKitRetailerStoreLocator(),
         seedDemoShoppingState: Bool = false
     ) {
         var availableAdapters: [ShoppingRetailer: any RetailerGuideAdapter] = [
@@ -325,6 +333,7 @@ final class AppModel {
         self.commerceDefaults = commerceDefaults
         self.shareInbox = shareInbox
         self.operationObserver = operationObserver
+        self.storeLocator = storeLocator
 
         selectedRetailer = initialRetailer
         retailerSetupCompletedIDs = Set(
@@ -604,7 +613,12 @@ final class AppModel {
     }
 
     var storesForSelectedRetailer: [RetailerStore] {
-        stores.filter { $0.retailerID == selectedRetailer.rawValue }
+        stores
+            .filter { $0.retailerID == selectedRetailer.rawValue }
+            .sorted { first, second in
+                if first.distance != second.distance { return first.distance < second.distance }
+                return first.name.localizedCaseInsensitiveCompare(second.name) == .orderedAscending
+            }
     }
 
     var retailerConfiguration: RetailerGuideConfiguration {
@@ -2518,6 +2532,77 @@ final class AppModel {
         invalidateShoppingPlan(preservingMatches: false)
     }
 
+    func locateStores(postalCode rawPostalCode: String) async {
+        let postalCode = rawPostalCode.filter(\.isNumber)
+        guard postalCode.count == 5 else {
+            storeLookupMessage = RetailerStoreLocatorError.invalidPostalCode.localizedDescription
+            return
+        }
+        if zipCode != postalCode { zipCode = postalCode }
+        await refreshStoresForSelectedRetailer(force: true)
+    }
+
+    func refreshStoresForSelectedRetailer(force: Bool = false) async {
+        let retailer = selectedRetailer
+        let postalCode = zipCode.filter(\.isNumber)
+        guard retailer.configuration.isAvailable else {
+            storeLookupMessage = "\(retailer.configuration.displayName) locations are coming soon."
+            return
+        }
+        guard postalCode.count == 5 else {
+            storeLookupMessage = RetailerStoreLocatorError.invalidPostalCode.localizedDescription
+            return
+        }
+        if !force,
+           resolvedStorePostalCode == postalCode,
+           storesForSelectedRetailer.contains(where: { $0.retailerID == retailer.rawValue }) {
+            return
+        }
+
+        let requestID = UUID()
+        storeLookupRequestID = requestID
+        isLocatingStores = true
+        defer {
+            if storeLookupRequestID == requestID { isLocatingStores = false }
+        }
+        storeLookupMessage = "Finding nearby \(retailer.configuration.displayName) stores…"
+        let previousPrimaryStoreID = primaryStore.id
+
+        do {
+            let searchResults = try await storeLocator.stores(
+                for: retailer,
+                postalCode: postalCode,
+                limit: 5
+            )
+            let locatedStores = searchResults.sorted { first, second in
+                if first.distance != second.distance { return first.distance < second.distance }
+                return first.name.localizedCaseInsensitiveCompare(second.name) == .orderedAscending
+            }
+            try Task.checkCancellation()
+            guard storeLookupRequestID == requestID,
+                  selectedRetailer == retailer,
+                  zipCode.filter(\.isNumber) == postalCode else { return }
+
+            stores.removeAll { $0.retailerID == retailer.rawValue }
+            stores.append(contentsOf: locatedStores)
+            let locatedIDs = Set(locatedStores.map(\.id))
+            selectedStoreIDs = selectedStoreIDs.intersection(Set(stores.map(\.id)))
+            if selectedStoreIDs.isDisjoint(with: locatedIDs), let nearest = locatedStores.first {
+                retainOnlyStore(nearest.id, for: retailer)
+            }
+            resolvedStorePostalCode = postalCode
+            storeLookupMessage = "Showing \(locatedStores.count) location\(locatedStores.count == 1 ? "" : "s") near \(postalCode)."
+            if primaryStore.id != previousPrimaryStoreID {
+                invalidateShoppingPlan(preservingMatches: false)
+            }
+        } catch is CancellationError {
+            return
+        } catch {
+            guard storeLookupRequestID == requestID else { return }
+            storeLookupMessage = error.localizedDescription
+        }
+    }
+
     func startRetailerGuide(_ retailer: ShoppingRetailer) {
         let configuration = retailer.configuration
         guard retailerEngine.supports(retailer) else {
@@ -2527,6 +2612,7 @@ final class AppModel {
 
         let retailerChanged = selectedRetailer != retailer
         selectedRetailer = retailer
+        resolvedStorePostalCode = nil
         if let store = stores.first(where: { $0.retailerID == retailer.rawValue }) {
             retainOnlyStore(store.id, for: retailer)
         }

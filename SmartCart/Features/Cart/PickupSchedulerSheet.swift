@@ -945,6 +945,11 @@ private struct StoreContextCard: View {
             }
         }
         .buttonStyle(PressableButtonStyle())
+        .accessibilityIdentifier("store-location-\(store.id.uuidString)")
+        .accessibilityLabel("\(store.name), \(store.distance.formatted(.number.precision(.fractionLength(1)))) miles, \(store.address)")
+        .accessibilityValue(selected ? "Selected" : "Not selected")
+        .accessibilityHint("Selects this location for the next Shopping Trip")
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
@@ -1568,122 +1573,34 @@ private struct PantryInventoryEditor: View {
 
 struct StoreDashboardView: View {
     @Environment(AppModel.self) private var appModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showRetailerSafari = false
+    @State private var focusedRetailer: ShoppingRetailer?
+    @State private var zipEntry = ""
+
+    private let carouselHeight: CGFloat = 220
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 21) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Retailers")
-                        .font(.system(size: 29, weight: .bold, design: .rounded))
-                        .foregroundStyle(SmartCartTheme.navy)
-                    Text("Choose where SmartCart should match this trip")
-                        .font(.subheadline)
-                        .foregroundStyle(SmartCartTheme.secondaryInk)
-                }
-                .padding(.top, 8)
-
-                VStack(spacing: 12) {
-                    ForEach(ShoppingRetailer.allCases) { retailer in
-                        RetailerChoiceCard(
-                            retailer: retailer,
-                            selected: appModel.selectedRetailer == retailer
-                        ) {
-                            appModel.startRetailerGuide(retailer)
-                        }
-                    }
-                    MoreRetailersCard()
-                }
-
-                VStack(alignment: .leading, spacing: 14) {
-                    HStack {
-                        Image(systemName: "storefront.fill")
-                            .font(.title2.bold())
-                            .foregroundStyle(SmartCartTheme.green)
-                            .frame(width: 56, height: 56)
-                            .background(SmartCartTheme.herbLight)
-                            .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("Selected retailer")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(SmartCartTheme.green)
-                                .textCase(.uppercase)
-                            Text(appModel.retailerConfiguration.displayName)
-                                .font(.headline)
-                                .foregroundStyle(SmartCartTheme.navy)
-                            Text(appModel.primaryStore.address)
-                                .font(.caption)
-                                .foregroundStyle(SmartCartTheme.secondaryInk)
-                                .lineLimit(2)
-                        }
-                    }
-
-                    if appModel.selectedRetailer == .walmart {
-                        ForEach(appModel.storesForSelectedRetailer) { store in
-                            Button {
-                                appModel.selectStore(store)
-                            } label: {
-                                HStack {
-                                    Image(systemName: appModel.selectedStoreIDs.contains(store.id) ? "checkmark.circle.fill" : "circle")
-                                        .foregroundStyle(appModel.selectedStoreIDs.contains(store.id) ? SmartCartTheme.green : SmartCartTheme.border)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(store.name)
-                                            .font(.subheadline.weight(.bold))
-                                            .foregroundStyle(SmartCartTheme.navy)
-                                        Text("\(store.distance, specifier: "%.1f") mi · \(store.format)")
-                                            .font(.caption)
-                                            .foregroundStyle(SmartCartTheme.secondaryInk)
-                                    }
-                                    Spacer()
-                                }
-                                .padding(.vertical, 5)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    } else {
-                        Label(
-                            "Target confirms your local store and fulfillment options after Safari opens.",
-                            systemImage: "location.viewfinder"
-                        )
-                        .font(.caption)
-                        .foregroundStyle(SmartCartTheme.secondaryInk)
-                    }
-                }
-                .smartCartCard()
-
-                VStack(alignment: .leading, spacing: 14) {
-                    SectionHeader(
-                        title: "Open in Safari",
-                        subtitle: "SmartCart does not connect to a retailer account"
-                    )
-
-                    Button {
-                        showRetailerSafari = true
-                    } label: {
-                        HStack {
-                            Label("Open \(appModel.retailerConfiguration.displayName) in Safari", systemImage: "safari.fill")
-                            Spacer()
-                            Image(systemName: "arrow.up.right")
-                        }
-                    }
-                    .buttonStyle(BlueButtonStyle())
-                }
-                .smartCartCard()
-
-                InfoBanner(
-                    symbol: "building.columns.fill",
-                    title: "\(appModel.retailerConfiguration.displayName) owns the transaction",
-                    message: "SmartCart opens exact product pages or clearly labeled searches. The retailer controls sign-in, live inventory, final price, list or cart actions, fulfillment, substitutions, payment, and checkout.",
-                    color: appModel.selectedRetailer == .walmart ? SmartCartTheme.walmartBlue : .red
-                )
-            }
-            .padding(.horizontal, 18)
-            .padding(.bottom, 34)
+        VStack(alignment: .leading, spacing: 12) {
+            header
+            zipLookup
+            retailerCarousel
+            nearbyStores
         }
+        .padding(.top, 8)
         .smartCartBackground()
         .toolbar(.hidden, for: .navigationBar)
-        .onAppear {
-            appModel.prepareRetailerSafariWorkflow()
+        .task {
+            zipEntry = appModel.zipCode
+            focusedRetailer = appModel.selectedRetailer
+            await appModel.refreshStoresForSelectedRetailer()
+        }
+        .onChange(of: focusedRetailer) { _, retailer in
+            guard let retailer,
+                  retailer.configuration.isAvailable,
+                  retailer != appModel.selectedRetailer else { return }
+            appModel.startRetailerGuide(retailer)
+            Task { await appModel.refreshStoresForSelectedRetailer(force: true) }
         }
         .sheet(isPresented: $showRetailerSafari) {
             RetailerSafariSheet(
@@ -1693,5 +1610,245 @@ struct StoreDashboardView: View {
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Stores")
+                .font(.system(size: 29, weight: .bold, design: .rounded))
+                .foregroundStyle(SmartCartTheme.navy)
+            Text("Choose a retailer, then find its locations near your ZIP code.")
+                .font(.subheadline)
+                .foregroundStyle(SmartCartTheme.secondaryInk)
+        }
+        .padding(.horizontal, 18)
+    }
+
+    private var zipLookup: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 9) {
+                Image(systemName: "location.fill")
+                    .foregroundStyle(SmartCartTheme.green)
+                TextField("ZIP code", text: $zipEntry)
+                    .keyboardType(.numberPad)
+                    .textContentType(.postalCode)
+                    .submitLabel(.search)
+                    .onSubmit(findStores)
+                    .onChange(of: zipEntry) { _, newValue in
+                        let digits = String(newValue.filter(\.isNumber).prefix(5))
+                        if digits != newValue { zipEntry = digits }
+                    }
+                Button(action: findStores) {
+                    if appModel.isLocatingStores {
+                        ProgressView()
+                            .tint(SmartCartTheme.onAccent)
+                    } else {
+                        Label("Find", systemImage: "magnifyingglass")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(SmartCartTheme.green)
+                .disabled(appModel.isLocatingStores || zipEntry.count != 5)
+            }
+
+            if let message = appModel.storeLookupMessage {
+                Label(message, systemImage: locationStatusSymbol)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(hasResolvedCurrentZIP ? SmartCartTheme.green : SmartCartTheme.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("store-location-status")
+            }
+        }
+        .padding(12)
+        .background(SmartCartTheme.paper)
+        .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 17, style: .continuous)
+                .stroke(SmartCartTheme.border, lineWidth: 1)
+        }
+        .padding(.horizontal, 18)
+    }
+
+    private var retailerCarousel: some View {
+        let motionIsReduced = reduceMotion
+        return ScrollView(.vertical) {
+            LazyVStack(spacing: 12) {
+                ForEach(availableRetailers) { retailer in
+                    RetailerChoiceCard(
+                        retailer: retailer,
+                        selected: appModel.selectedRetailer == retailer
+                    ) {
+                        withAnimation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.86)) {
+                            focusedRetailer = retailer
+                        }
+                        if appModel.selectedRetailer != retailer {
+                            appModel.startRetailerGuide(retailer)
+                            Task { await appModel.refreshStoresForSelectedRetailer(force: true) }
+                        }
+                    }
+                    .frame(height: 156)
+                    .id(retailer)
+                    .scrollTransition(.interactive, axis: .vertical) { content, phase in
+                        content
+                            .scaleEffect(motionIsReduced ? 1 : (phase.isIdentity ? 1 : 0.93))
+                            .opacity(phase.isIdentity ? 1 : 0.72)
+                            .offset(y: motionIsReduced ? 0 : phase.value * 8)
+                    }
+                }
+            }
+            .scrollTargetLayout()
+        }
+        .scrollIndicators(.hidden)
+        .scrollTargetBehavior(.viewAligned)
+        .scrollPosition(id: $focusedRetailer, anchor: .center)
+        .contentMargins(.vertical, 32, for: .scrollContent)
+        .contentMargins(.horizontal, 18, for: .scrollContent)
+        .frame(height: carouselHeight)
+        .overlay(alignment: .top) {
+            if previousRetailer != nil {
+                carouselArrow(symbol: "chevron.up", label: "Previous retailer") {
+                    moveCarousel(to: previousRetailer)
+                }
+            }
+        }
+        .overlay(alignment: .bottom) {
+            VStack(spacing: 2) {
+                Text(carouselPositionText)
+                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
+                if nextRetailer != nil {
+                    carouselArrow(symbol: "chevron.down", label: "Next retailer") {
+                        moveCarousel(to: nextRetailer)
+                    }
+                }
+            }
+        }
+        .accessibilityIdentifier("store-retailer-vertical-carousel")
+    }
+
+    private var nearbyStores: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 12) {
+                SectionHeader(
+                    title: "Nearby \(appModel.retailerConfiguration.displayName) stores",
+                    subtitle: hasResolvedCurrentZIP
+                        ? "Sorted by distance from \(normalizedZIP)"
+                        : "Enter a ZIP code to load real nearby locations"
+                )
+
+                if appModel.isLocatingStores {
+                    ForEach(0..<3, id: \.self) { _ in
+                        RoundedRectangle(cornerRadius: 17, style: .continuous)
+                            .fill(SmartCartTheme.paper)
+                            .frame(height: 78)
+                            .redacted(reason: .placeholder)
+                    }
+                } else if hasResolvedCurrentZIP {
+                    ForEach(appModel.storesForSelectedRetailer) { store in
+                        StoreContextCard(
+                            store: store,
+                            selected: appModel.selectedStoreIDs.contains(store.id)
+                        ) {
+                            appModel.selectStore(store)
+                        }
+                    }
+                } else {
+                    EmptyStateView(
+                        symbol: "location.magnifyingglass",
+                        title: "No location list yet",
+                        message: appModel.storeLookupMessage
+                            ?? "Enter your five-digit ZIP code to find nearby stores."
+                    )
+                }
+
+                if hasResolvedCurrentZIP {
+                    Label(
+                        "Locations and distance come from Apple Maps. \(appModel.retailerConfiguration.displayName) confirms hours, fulfillment, inventory, and final availability.",
+                        systemImage: "map.fill"
+                    )
+                    .font(.caption2)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                    Button {
+                        showRetailerSafari = true
+                    } label: {
+                        Label("Open selected retailer", systemImage: "safari.fill")
+                    }
+                    .buttonStyle(BlueButtonStyle())
+                }
+
+                MoreRetailersCard()
+            }
+            .padding(.horizontal, 18)
+            .padding(.bottom, 110)
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    private var availableRetailers: [ShoppingRetailer] {
+        ShoppingRetailer.allCases.filter { $0.configuration.isAvailable }
+    }
+
+    private var focusedRetailerIndex: Int {
+        availableRetailers.firstIndex(of: focusedRetailer ?? appModel.selectedRetailer) ?? 0
+    }
+
+    private var previousRetailer: ShoppingRetailer? {
+        guard focusedRetailerIndex > 0 else { return nil }
+        return availableRetailers[focusedRetailerIndex - 1]
+    }
+
+    private var nextRetailer: ShoppingRetailer? {
+        let nextIndex = focusedRetailerIndex + 1
+        guard availableRetailers.indices.contains(nextIndex) else { return nil }
+        return availableRetailers[nextIndex]
+    }
+
+    private var carouselPositionText: String {
+        "\(focusedRetailerIndex + 1) of \(availableRetailers.count)"
+    }
+
+    private var normalizedZIP: String { zipEntry.filter(\.isNumber) }
+
+    private var hasResolvedCurrentZIP: Bool {
+        appModel.resolvedStorePostalCode == normalizedZIP &&
+            !appModel.storesForSelectedRetailer.isEmpty
+    }
+
+    private var locationStatusSymbol: String {
+        if appModel.isLocatingStores { return "location.magnifyingglass" }
+        return hasResolvedCurrentZIP ? "checkmark.circle.fill" : "exclamationmark.circle"
+    }
+
+    private func findStores() {
+        Task { await appModel.locateStores(postalCode: zipEntry) }
+    }
+
+    private func moveCarousel(to retailer: ShoppingRetailer?) {
+        guard let retailer else { return }
+        withAnimation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.86)) {
+            focusedRetailer = retailer
+        }
+    }
+
+    private func carouselArrow(
+        symbol: String,
+        label: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.caption.bold())
+                .foregroundStyle(SmartCartTheme.green)
+                .frame(width: 34, height: 24)
+                .background(SmartCartTheme.paper.opacity(0.92))
+                .clipShape(Capsule())
+                .overlay {
+                    Capsule().stroke(SmartCartTheme.border, lineWidth: 1)
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
     }
 }

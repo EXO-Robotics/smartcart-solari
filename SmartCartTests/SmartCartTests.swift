@@ -2638,6 +2638,96 @@ final class SmartCartTests: XCTestCase {
     }
 
     @MainActor
+    func testStoreLookupReplacesStaticLocationsWithZIPFilteredNearestStores() async throws {
+        let farther = RetailerStore(
+            id: UUID(uuidString: "10000000-0000-0000-0000-000000000002")!,
+            retailerStoreID: "ny-farther",
+            name: "Walmart Chelsea",
+            format: "Nearby store",
+            address: "6th Ave, New York, NY, 10011",
+            distance: 3.8,
+            pickupWindow: "Confirmed by Walmart"
+        )
+        let nearest = RetailerStore(
+            id: UUID(uuidString: "10000000-0000-0000-0000-000000000001")!,
+            retailerStoreID: "ny-nearest",
+            name: "Walmart Herald Square",
+            format: "Nearby store",
+            address: "W 34th St, New York, NY, 10001",
+            distance: 0.7,
+            pickupWindow: "Confirmed by Walmart"
+        )
+        let locator = StubRetailerStoreLocator(results: [.walmart: [farther, nearest]])
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedCommerceDefaults(),
+            storeLocator: locator
+        )
+        let staticIDs = Set(model.storesForSelectedRetailer.map(\.id))
+
+        await model.locateStores(postalCode: "10001")
+
+        XCTAssertEqual(model.zipCode, "10001")
+        XCTAssertEqual(model.resolvedStorePostalCode, "10001")
+        XCTAssertEqual(model.storesForSelectedRetailer.map(\.id), [nearest.id, farther.id])
+        XCTAssertEqual(model.primaryStore.id, nearest.id)
+        XCTAssertEqual(model.selectedStoreIDs, [nearest.id])
+        XCTAssertTrue(staticIDs.isDisjoint(with: Set(model.storesForSelectedRetailer.map(\.id))))
+        XCTAssertEqual(model.storeLookupMessage, "Showing 2 locations near 10001.")
+        XCTAssertFalse(model.isLocatingStores)
+    }
+
+    @MainActor
+    func testInvalidStoreZIPDoesNotReplacePersistedLocationOrCallLocator() async {
+        let locator = StubRetailerStoreLocator(results: [:])
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedCommerceDefaults(),
+            storeLocator: locator
+        )
+        let originalZIP = model.zipCode
+        let originalStores = model.stores
+
+        await model.locateStores(postalCode: "12A")
+
+        XCTAssertEqual(model.zipCode, originalZIP)
+        XCTAssertEqual(model.stores, originalStores)
+        XCTAssertEqual(model.storeLookupMessage, "Enter a five-digit US ZIP code.")
+        XCTAssertNil(model.resolvedStorePostalCode)
+    }
+
+    func testStoreDashboardUsesVerticalCarouselAndZIPBackedLocationResults() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "SmartCart/Features/Cart/PickupSchedulerSheet.swift"
+            ),
+            encoding: .utf8
+        )
+        let modelSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "SmartCart/Models/RetailerModels.swift"
+            ),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(source.contains("ScrollView(.vertical)"))
+        XCTAssertTrue(source.contains(".scrollTargetBehavior(.viewAligned)"))
+        XCTAssertTrue(source.contains(".scrollPosition(id: $focusedRetailer, anchor: .center)"))
+        XCTAssertTrue(source.contains("store-retailer-vertical-carousel"))
+        XCTAssertTrue(source.contains("carouselPositionText"))
+        XCTAssertTrue(source.contains("Previous retailer"))
+        XCTAssertTrue(source.contains("Next retailer"))
+        XCTAssertTrue(source.contains("TextField(\"ZIP code\", text: $zipEntry)"))
+        XCTAssertTrue(source.contains("appModel.locateStores(postalCode: zipEntry)"))
+        XCTAssertTrue(source.contains("Locations and distance come from Apple Maps."))
+        XCTAssertTrue(modelSource.contains("struct MapKitRetailerStoreLocator"))
+        XCTAssertTrue(modelSource.contains("request.naturalLanguageQuery = retailer.configuration.displayName"))
+    }
+
+    @MainActor
     func testTargetGuideSelectionMatchingAndPersistenceUseSharedWorkflow() async throws {
         let store = InMemorySmartCartStateStore()
         let defaults = isolatedCommerceDefaults()
@@ -8653,6 +8743,18 @@ private final class ControllableSmartCartStateStore: SmartCartStateStoring {
             throw Failure.requested
         }
         self.state = state
+    }
+}
+
+private struct StubRetailerStoreLocator: RetailerStoreLocating {
+    let results: [ShoppingRetailer: [RetailerStore]]
+
+    func stores(
+        for retailer: ShoppingRetailer,
+        postalCode: String,
+        limit: Int
+    ) async throws -> [RetailerStore] {
+        Array((results[retailer] ?? []).prefix(limit))
     }
 }
 
