@@ -1729,7 +1729,7 @@ final class SmartCartTests: XCTestCase {
         XCTAssertEqual(release.baseURL.absoluteString, "https://bundle.smartcart.app")
     }
 
-    func testBarcodeBuildConfigurationSeparatesDebugLocalNetworkingFromRelease() throws {
+    func testBarcodeBuildConfigurationEmbedsVerifiedPublicServiceInDebugAndRelease() throws {
         let repositoryRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -1768,14 +1768,26 @@ final class SmartCartTests: XCTestCase {
             contentsOf: repositoryRoot.appendingPathComponent("Config/Debug.xcconfig"),
             encoding: .utf8
         )
-        XCTAssertTrue(debug.contains("SMARTCART_BARCODE_BACKEND_URL = http:/$()/localhost:8787"))
+        let publicBarcodeEndpoint =
+            "SMARTCART_BARCODE_BACKEND_URL = https:/$()/smartcart-barcode-api-omega.vercel.app"
+        XCTAssertTrue(debug.contains(publicBarcodeEndpoint))
+        XCTAssertFalse(debug.contains("SMARTCART_BARCODE_BACKEND_URL = http:/$()/localhost"))
 
         let release = try String(
             contentsOf: repositoryRoot.appendingPathComponent("Config/Release.xcconfig"),
             encoding: .utf8
         )
-        XCTAssertTrue(release.contains("SMARTCART_BARCODE_BACKEND_URL ="))
+        XCTAssertTrue(release.contains(publicBarcodeEndpoint))
         XCTAssertFalse(release.contains("localhost"))
+
+        let configuredURL = try XCTUnwrap(
+            URL(string: "https://smartcart-barcode-api-omega.vercel.app")
+        )
+        let validatedRelease = try BarcodeBackendConfiguration.resolve(
+            explicitURL: configuredURL,
+            buildMode: .release
+        ).get()
+        XCTAssertEqual(validatedRelease.baseURL, configuredURL)
     }
 
     func testBarcodeBackendConfigurationRejectsUnsafeReleaseEndpoints() {
