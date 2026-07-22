@@ -415,7 +415,11 @@ struct MapKitRetailerStoreLocator: RetailerStoreLocating {
             guard distance.isFinite, distance <= 50 else { return nil }
 
             let address = formattedAddress(for: item.placemark)
-            let identity = "\(retailer.rawValue)|\(name)|\(address)|\(coordinate.latitude)|\(coordinate.longitude)"
+            let normalizedAddress = RetailerStoreResultNormalizer.normalizedAddressKey(address)
+            let locationKey = normalizedAddress.isEmpty || normalizedAddress == "address available in maps"
+                ? String(format: "%.4f|%.4f", coordinate.latitude, coordinate.longitude)
+                : normalizedAddress
+            let identity = "\(retailer.rawValue)|\(locationKey)"
             let stableID = stableUUID(for: identity)
             return RetailerStore(
                 id: stableID,
@@ -433,17 +437,18 @@ struct MapKitRetailerStoreLocator: RetailerStoreLocating {
             return first.name.localizedCaseInsensitiveCompare(second.name) == .orderedAscending
         }
 
-        let unique = results.reduce(into: [RetailerStore]()) { stores, candidate in
-            guard !stores.contains(where: { $0.id == candidate.id }) else { return }
-            stores.append(candidate)
-        }
+        let unique = RetailerStoreResultNormalizer.deduplicated(
+            results,
+            retailer: retailer,
+            limit: limit
+        )
         guard !unique.isEmpty else {
             throw RetailerStoreLocatorError.noStoresFound(
                 retailer: retailer.configuration.displayName,
                 postalCode: postalCode
             )
         }
-        return Array(unique.prefix(max(1, limit)))
+        return unique
     }
 
     private func formattedAddress(for placemark: MKPlacemark) -> String {
@@ -470,6 +475,109 @@ struct MapKitRetailerStoreLocator: RetailerStoreLocating {
         let hex = String(format: "%016llx%016llx", high, low)
         let uuidText = "\(hex.prefix(8))-\(hex.dropFirst(8).prefix(4))-\(hex.dropFirst(12).prefix(4))-\(hex.dropFirst(16).prefix(4))-\(hex.dropFirst(20).prefix(12))"
         return UUID(uuidString: uuidText) ?? UUID()
+    }
+}
+
+enum RetailerStoreResultNormalizer {
+    static func deduplicated(
+        _ stores: [RetailerStore],
+        retailer: ShoppingRetailer,
+        limit: Int
+    ) -> [RetailerStore] {
+        let grouped = Dictionary(grouping: stores) { store in
+            let addressKey = normalizedAddressKey(store.address)
+            if addressKey.isEmpty || addressKey == "address available in maps" {
+                return "store-id|\(store.retailerStoreID.lowercased())"
+            }
+            return addressKey
+        }
+
+        let representatives = grouped.values.compactMap { group -> RetailerStore? in
+            guard var preferred = group.min(by: { first, second in
+                isPreferred(first, over: second, for: retailer)
+            }) else { return nil }
+            preferred.name = canonicalStoreName(for: retailer, names: group.map(\.name))
+            return preferred
+        }
+        .sorted { first, second in
+            if first.distance != second.distance { return first.distance < second.distance }
+            return first.name.localizedCaseInsensitiveCompare(second.name) == .orderedAscending
+        }
+
+        return Array(representatives.prefix(max(1, limit)))
+    }
+
+    static func normalizedAddressKey(_ address: String) -> String {
+        let folded = address
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .lowercased()
+        let words = folded
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+        let abbreviations = [
+            "street": "st", "avenue": "ave", "boulevard": "blvd", "road": "rd",
+            "drive": "dr", "lane": "ln", "highway": "hwy", "route": "rte",
+            "north": "n", "south": "s", "east": "e", "west": "w"
+        ]
+        return words.map { abbreviations[$0] ?? $0 }.joined(separator: " ")
+    }
+
+    private static func isPreferred(
+        _ first: RetailerStore,
+        over second: RetailerStore,
+        for retailer: ShoppingRetailer
+    ) -> Bool {
+        let firstRank = storefrontRank(first.name, retailer: retailer)
+        let secondRank = storefrontRank(second.name, retailer: retailer)
+        if firstRank != secondRank { return firstRank < secondRank }
+        if first.distance != second.distance { return first.distance < second.distance }
+        return first.name.localizedCaseInsensitiveCompare(second.name) == .orderedAscending
+    }
+
+    private static func storefrontRank(_ name: String, retailer: ShoppingRetailer) -> Int {
+        let normalizedName = name
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        let retailerName = retailer.configuration.displayName.lowercased()
+        if normalizedName == retailerName { return 0 }
+
+        switch retailer {
+        case .walmart:
+            if normalizedName.contains("supercenter") { return 1 }
+            if normalizedName.contains("neighborhood market") { return 2 }
+        case .target:
+            if normalizedName == "target store" { return 1 }
+        case .kroger:
+            if normalizedName.hasPrefix("kroger marketplace") { return 1 }
+        }
+
+        let departmentTerms = [
+            "auto care", "bakery", "photo", "pharmacy", "vision", "garden center",
+            "fuel station", "money center", "optical", "cafe", "grocery pickup"
+        ]
+        if departmentTerms.contains(where: { normalizedName.contains($0) }) { return 50 }
+        return normalizedName.hasPrefix(retailerName) ? 10 : 25
+    }
+
+    private static func canonicalStoreName(
+        for retailer: ShoppingRetailer,
+        names: [String]
+    ) -> String {
+        let normalizedNames = names.map { $0.lowercased() }
+        switch retailer {
+        case .walmart:
+            if normalizedNames.contains(where: { $0.contains("supercenter") }) {
+                return "Walmart Supercenter"
+            }
+            if normalizedNames.contains(where: { $0.contains("neighborhood market") }) {
+                return "Walmart Neighborhood Market"
+            }
+            return "Walmart"
+        case .target:
+            return "Target"
+        case .kroger:
+            return "Kroger"
+        }
     }
 }
 

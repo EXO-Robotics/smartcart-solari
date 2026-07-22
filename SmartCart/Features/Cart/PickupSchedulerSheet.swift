@@ -1208,17 +1208,14 @@ struct StoreDashboardView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showRetailerSafari = false
-    @State private var focusedRetailer: ShoppingRetailer?
     @State private var zipEntry = ""
     @FocusState private var isZIPFieldFocused: Bool
-
-    private let carouselHeight: CGFloat = 220
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
             zipLookup
-            retailerCarousel
+            retailerSwitcher
             nearbyStores
         }
         .padding(.top, 8)
@@ -1235,15 +1232,7 @@ struct StoreDashboardView: View {
         }
         .task {
             zipEntry = appModel.zipCode
-            focusedRetailer = appModel.selectedRetailer
             await appModel.refreshStoresForSelectedRetailer()
-        }
-        .onChange(of: focusedRetailer) { _, retailer in
-            guard let retailer,
-                  retailer.configuration.isAvailable,
-                  retailer != appModel.selectedRetailer else { return }
-            appModel.startRetailerGuide(retailer)
-            Task { await appModel.refreshStoresForSelectedRetailer(force: true) }
         }
         .sheet(isPresented: $showRetailerSafari) {
             RetailerSafariSheet(
@@ -1313,62 +1302,37 @@ struct StoreDashboardView: View {
         .padding(.horizontal, 18)
     }
 
-    private var retailerCarousel: some View {
-        let motionIsReduced = reduceMotion
-        return ScrollView(.vertical) {
-            LazyVStack(spacing: 12) {
+    private var retailerSwitcher: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Choose retailer")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(SmartCartTheme.navy)
+                Spacer()
+                Text("\(availableRetailers.count) choices")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
+            }
+
+            HStack(spacing: 10) {
                 ForEach(availableRetailers) { retailer in
-                    RetailerChoiceCard(
+                    RetailerSwitcherButton(
                         retailer: retailer,
                         selected: appModel.selectedRetailer == retailer
                     ) {
-                        withAnimation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.86)) {
-                            focusedRetailer = retailer
-                        }
-                        if appModel.selectedRetailer != retailer {
+                        guard appModel.selectedRetailer != retailer else { return }
+                        isZIPFieldFocused = false
+                        withAnimation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.88)) {
                             appModel.startRetailerGuide(retailer)
-                            Task { await appModel.refreshStoresForSelectedRetailer(force: true) }
                         }
+                        Task { await appModel.refreshStoresForSelectedRetailer(force: true) }
                     }
-                    .frame(height: 156)
-                    .id(retailer)
-                    .scrollTransition(.interactive, axis: .vertical) { content, phase in
-                        content
-                            .scaleEffect(motionIsReduced ? 1 : (phase.isIdentity ? 1 : 0.93))
-                            .opacity(phase.isIdentity ? 1 : 0.72)
-                            .offset(y: motionIsReduced ? 0 : phase.value * 8)
-                    }
-                }
-            }
-            .scrollTargetLayout()
-        }
-        .scrollIndicators(.hidden)
-        .scrollDismissesKeyboard(.interactively)
-        .scrollTargetBehavior(.viewAligned)
-        .scrollPosition(id: $focusedRetailer, anchor: .center)
-        .contentMargins(.vertical, 32, for: .scrollContent)
-        .contentMargins(.horizontal, 18, for: .scrollContent)
-        .frame(height: carouselHeight)
-        .overlay(alignment: .top) {
-            if previousRetailer != nil {
-                carouselArrow(symbol: "chevron.up", label: "Previous retailer") {
-                    moveCarousel(to: previousRetailer)
+                    .frame(maxWidth: .infinity)
                 }
             }
         }
-        .overlay(alignment: .bottom) {
-            VStack(spacing: 2) {
-                Text(carouselPositionText)
-                    .font(.system(size: 9, weight: .bold, design: .rounded))
-                    .foregroundStyle(SmartCartTheme.secondaryInk)
-                if nextRetailer != nil {
-                    carouselArrow(symbol: "chevron.down", label: "Next retailer") {
-                        moveCarousel(to: nextRetailer)
-                    }
-                }
-            }
-        }
-        .accessibilityIdentifier("store-retailer-vertical-carousel")
+        .padding(.horizontal, 18)
+        .accessibilityIdentifier("store-retailer-switcher")
     }
 
     private var nearbyStores: some View {
@@ -1436,25 +1400,6 @@ struct StoreDashboardView: View {
         ShoppingRetailer.allCases.filter { $0.configuration.isAvailable }
     }
 
-    private var focusedRetailerIndex: Int {
-        availableRetailers.firstIndex(of: focusedRetailer ?? appModel.selectedRetailer) ?? 0
-    }
-
-    private var previousRetailer: ShoppingRetailer? {
-        guard focusedRetailerIndex > 0 else { return nil }
-        return availableRetailers[focusedRetailerIndex - 1]
-    }
-
-    private var nextRetailer: ShoppingRetailer? {
-        let nextIndex = focusedRetailerIndex + 1
-        guard availableRetailers.indices.contains(nextIndex) else { return nil }
-        return availableRetailers[nextIndex]
-    }
-
-    private var carouselPositionText: String {
-        "\(focusedRetailerIndex + 1) of \(availableRetailers.count)"
-    }
-
     private var normalizedZIP: String { zipEntry.filter(\.isNumber) }
 
     private var hasResolvedCurrentZIP: Bool {
@@ -1472,31 +1417,69 @@ struct StoreDashboardView: View {
         Task { await appModel.locateStores(postalCode: zipEntry) }
     }
 
-    private func moveCarousel(to retailer: ShoppingRetailer?) {
-        guard let retailer else { return }
-        isZIPFieldFocused = false
-        withAnimation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.86)) {
-            focusedRetailer = retailer
+}
+
+private struct RetailerSwitcherButton: View {
+    let retailer: ShoppingRetailer
+    let selected: Bool
+    let action: () -> Void
+
+    private var brandColor: Color {
+        switch retailer {
+        case .walmart: SmartCartTheme.walmartBlue
+        case .target: .red
+        case .kroger: Color(red: 0.08, green: 0.34, blue: 0.67)
         }
     }
 
-    private func carouselArrow(
-        symbol: String,
-        label: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.caption.bold())
-                .foregroundStyle(SmartCartTheme.green)
-                .frame(width: 34, height: 24)
-                .background(SmartCartTheme.paper.opacity(0.92))
-                .clipShape(Capsule())
-                .overlay {
-                    Capsule().stroke(SmartCartTheme.border, lineWidth: 1)
-                }
+    private var brandSymbol: String {
+        switch retailer {
+        case .walmart: "sparkle"
+        case .target: "circle.circle.fill"
+        case .kroger: "cart.fill"
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(label)
+    }
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 9) {
+                HStack {
+                    Image(systemName: brandSymbol)
+                        .font(.headline.bold())
+                        .foregroundStyle(.white)
+                        .frame(width: 40, height: 40)
+                        .background(brandColor)
+                        .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+
+                    Spacer(minLength: 6)
+
+                    Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(selected ? brandColor : SmartCartTheme.mutedInk)
+                }
+
+                Text(retailer.configuration.displayName)
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(SmartCartTheme.navy)
+
+                Text(selected ? "Selected" : "Tap to choose")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(selected ? brandColor : SmartCartTheme.secondaryInk)
+            }
+            .frame(maxWidth: .infinity, minHeight: 102, alignment: .leading)
+            .padding(13)
+            .background(selected ? brandColor.opacity(0.10) : SmartCartTheme.paper)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(selected ? brandColor : SmartCartTheme.border, lineWidth: selected ? 2.5 : 1)
+            }
+        }
+        .buttonStyle(PressableButtonStyle())
+        .accessibilityLabel(retailer.configuration.displayName)
+        .accessibilityValue(selected ? "Selected" : "Not selected")
+        .accessibilityHint("Selects \(retailer.configuration.displayName) and loads nearby locations.")
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityIdentifier("store-retailer-option-\(retailer.rawValue)")
     }
 }

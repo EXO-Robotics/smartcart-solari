@@ -2695,6 +2695,71 @@ final class SmartCartTests: XCTestCase {
         XCTAssertFalse(model.isLocatingStores)
     }
 
+    func testRetailerStoreResultsCollapseDepartmentsAtTheSameAddress() {
+        let autoCare = RetailerStore(
+            retailerStoreID: "auto-care",
+            name: "Walmart Auto Care Center",
+            format: "Nearby store",
+            address: "12751 Washington Township Boulevard, Waynesboro, PA 17268",
+            distance: 3.6,
+            pickupWindow: "Confirmed by Walmart"
+        )
+        let photoCenter = RetailerStore(
+            retailerStoreID: "photo-center",
+            name: "Walmart Photo Center",
+            format: "Nearby store",
+            address: "12751 Washington Township Blvd., Waynesboro, PA, 17268",
+            distance: 3.7,
+            pickupWindow: "Confirmed by Walmart"
+        )
+        let supercenter = RetailerStore(
+            retailerStoreID: "supercenter",
+            name: "Walmart Supercenter",
+            format: "Nearby store",
+            address: "12751 Washington Township Blvd, Waynesboro, PA 17268",
+            distance: 3.7,
+            pickupWindow: "Confirmed by Walmart"
+        )
+        let secondStore = RetailerStore(
+            retailerStoreID: "second-store",
+            name: "Walmart Supercenter",
+            format: "Nearby store",
+            address: "1730 Lincoln Way E, Chambersburg, PA 17202",
+            distance: 9.3,
+            pickupWindow: "Confirmed by Walmart"
+        )
+
+        let results = RetailerStoreResultNormalizer.deduplicated(
+            [autoCare, photoCenter, secondStore, supercenter],
+            retailer: .walmart,
+            limit: 5
+        )
+
+        XCTAssertEqual(results.count, 2)
+        XCTAssertEqual(results[0].retailerStoreID, "supercenter")
+        XCTAssertEqual(results[0].name, "Walmart Supercenter")
+        XCTAssertEqual(results[1].retailerStoreID, "second-store")
+    }
+
+    func testRetailerStoreResultsCanonicalizeDepartmentOnlyResult() {
+        let bakery = RetailerStore(
+            retailerStoreID: "bakery-only",
+            name: "Walmart Bakery",
+            format: "Nearby store",
+            address: "100 Main Street, Example, PA 17000",
+            distance: 2.2,
+            pickupWindow: "Confirmed by Walmart"
+        )
+
+        let results = RetailerStoreResultNormalizer.deduplicated(
+            [bakery],
+            retailer: .walmart,
+            limit: 5
+        )
+
+        XCTAssertEqual(results.map(\.name), ["Walmart"])
+    }
+
     @MainActor
     func testInvalidStoreZIPDoesNotReplacePersistedLocationOrCallLocator() async {
         let locator = StubRetailerStoreLocator(results: [:])
@@ -2714,7 +2779,7 @@ final class SmartCartTests: XCTestCase {
         XCTAssertNil(model.resolvedStorePostalCode)
     }
 
-    func testStoreDashboardUsesVerticalCarouselAndZIPBackedLocationResults() throws {
+    func testStoreDashboardShowsBothRetailersAndZIPBackedLocationResults() throws {
         let repositoryRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -2731,13 +2796,11 @@ final class SmartCartTests: XCTestCase {
             encoding: .utf8
         )
 
-        XCTAssertTrue(source.contains("ScrollView(.vertical)"))
-        XCTAssertTrue(source.contains(".scrollTargetBehavior(.viewAligned)"))
-        XCTAssertTrue(source.contains(".scrollPosition(id: $focusedRetailer, anchor: .center)"))
-        XCTAssertTrue(source.contains("store-retailer-vertical-carousel"))
-        XCTAssertTrue(source.contains("carouselPositionText"))
-        XCTAssertTrue(source.contains("Previous retailer"))
-        XCTAssertTrue(source.contains("Next retailer"))
+        XCTAssertTrue(source.contains("Text(\"Choose retailer\")"))
+        XCTAssertTrue(source.contains("store-retailer-switcher"))
+        XCTAssertTrue(source.contains("store-retailer-option-\\(retailer.rawValue)"))
+        XCTAssertTrue(source.contains("Text(selected ? \"Selected\" : \"Tap to choose\")"))
+        XCTAssertFalse(source.contains("store-retailer-vertical-carousel"))
         XCTAssertTrue(source.contains("TextField(\"ZIP code\", text: $zipEntry)"))
         XCTAssertTrue(source.contains("@FocusState private var isZIPFieldFocused: Bool"))
         XCTAssertTrue(source.contains(".focused($isZIPFieldFocused)"))
@@ -2747,6 +2810,7 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(source.contains("Locations and distance come from Apple Maps."))
         XCTAssertTrue(modelSource.contains("struct MapKitRetailerStoreLocator"))
         XCTAssertTrue(modelSource.contains("request.naturalLanguageQuery = retailer.configuration.displayName"))
+        XCTAssertTrue(modelSource.contains("RetailerStoreResultNormalizer.deduplicated"))
     }
 
     @MainActor
