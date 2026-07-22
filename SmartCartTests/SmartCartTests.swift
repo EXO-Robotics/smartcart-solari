@@ -60,6 +60,19 @@ final class SmartCartTests: XCTestCase {
         XCTAssertFalse(recipe.ingredients[3].quantityReviewRequired ?? false)
     }
 
+    func testKitchenQuantityFormatterUsesCookingFractionsAndCondensesLargeSpoonMeasures() {
+        XCTAssertEqual(KitchenQuantityFormatter.text(quantity: 2.5, unit: "tsp"), "2 1/2 tsp")
+        XCTAssertEqual(KitchenQuantityFormatter.text(quantity: 40, unit: "tbsp"), "2 1/2 cups")
+        XCTAssertEqual(KitchenQuantityFormatter.text(quantity: 16, unit: "tablespoons"), "1 cup")
+        XCTAssertEqual(KitchenQuantityFormatter.text(quantity: 6.7, unit: "cups"), "6 2/3 cups")
+        XCTAssertEqual(KitchenQuantityFormatter.text(quantity: 5, unit: "cup"), "5 cups")
+    }
+
+    func testKitchenQuantityFormatterDoesNotPromoteSmallSpoonMeasures() {
+        XCTAssertEqual(KitchenQuantityFormatter.text(quantity: 2.5, unit: "teaspoons"), "2 1/2 tsp")
+        XCTAssertEqual(KitchenQuantityFormatter.text(quantity: 3.25, unit: "tbsp"), "3 1/4 tbsp")
+    }
+
     func testParserKeepsCommaNamesAndPackageMeasurements() throws {
         let recipe = RecipeParser.parse(
             title: "Weeknight Dinner",
@@ -663,6 +676,28 @@ final class SmartCartTests: XCTestCase {
         let url = model.targetSearchURL(for: item)
 
         XCTAssertEqual(url.host, "www.target.com")
+        XCTAssertTrue(url.absoluteString.localizedCaseInsensitiveContains("organic"))
+        for term in item.ingredient.name.split(whereSeparator: { !$0.isLetter && !$0.isNumber }) {
+            XCTAssertTrue(url.absoluteString.localizedCaseInsensitiveContains(term))
+        }
+        XCTAssertEqual(model.selectedRetailer, selectedRetailer)
+        XCTAssertEqual(model.shoppingItems.first?.product, selectedProduct)
+    }
+
+    @MainActor
+    func testWalmartComparisonURLResearchesCurrentIngredientWithoutChangingRetailer() throws {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            seedDemoShoppingState: true
+        )
+        model.preferences.organicPolicy = .only
+        let item = try XCTUnwrap(model.shoppingItems.first)
+        let selectedRetailer = model.selectedRetailer
+        let selectedProduct = item.product
+
+        let url = model.walmartSearchURL(for: item)
+
+        XCTAssertEqual(url.host, "www.walmart.com")
         XCTAssertTrue(url.absoluteString.localizedCaseInsensitiveContains("organic"))
         for term in item.ingredient.name.split(whereSeparator: { !$0.isLetter && !$0.isNumber }) {
             XCTAssertTrue(url.absoluteString.localizedCaseInsensitiveContains(term))
@@ -1802,6 +1837,12 @@ final class SmartCartTests: XCTestCase {
             "https://[::ffff:127.0.0.1]",
             "https://[::ffff:192.168.1.12]",
             "https://192.168.1.12",
+            "https://10.0.0.8",
+            "https://100.64.0.1",
+            "https://169.254.10.20",
+            "https://172.16.0.1",
+            "https://172.31.255.255",
+            "https://198.18.0.1",
             "https://catalog.example.com",
             "https://catalog.example.com.",
             "https://catalog.example.net",
@@ -1845,6 +1886,80 @@ final class SmartCartTests: XCTestCase {
                 buildMode: .release
             ).get()
         )
+    }
+
+    func testReleaseBarcodeConfigurationNeverFallsBackToDevelopmentEnvironment() {
+        let developmentOnlyValues = [
+            "http://localhost:8787",
+            "http://127.0.0.1:8787",
+            "http://192.168.1.25:8787",
+            "https://dev-machine.local"
+        ]
+
+        for value in developmentOnlyValues {
+            let result = BarcodeBackendConfiguration.resolve(
+                environment: ["SMARTCART_BARCODE_BACKEND_URL": value],
+                bundleInfo: [:],
+                buildMode: .release
+            )
+            if case .failure(let error) = result {
+                XCTAssertEqual(error, .missing)
+            } else {
+                XCTFail("Release must ignore development endpoint \(value)")
+            }
+        }
+    }
+
+    func testBarcodeResolutionOrderIsSavedThenBundledThenRemote() async throws {
+        let barcode = try BarcodeNormalizer.normalize("078742002163").get()
+        let localProduct = BarcodeProduct(identifier: "local", name: "Saved Chips", brand: "Kitchen")
+        let bundledProduct = BarcodeProduct(identifier: "bundled", name: "Bundled Chips", brand: "SmartCart")
+        let remoteProduct = BarcodeProduct(identifier: "remote", name: "Remote Chips", brand: "Provider")
+        let remote = RecordingBarcodeAdapter(product: remoteProduct)
+        let fixtures = BundledBarcodeFixtureCatalog(
+            fixtures: [BundledBarcodeFixture(barcode: barcode.digits, product: bundledProduct)]
+        )
+
+        let savedFirst = BarcodeResolutionService(
+            userEditedCache: InMemoryBarcodeUserEditedCache(
+                entries: [UserEditedBarcodeEntry(canonicalGTIN14: barcode.canonicalGTIN14, product: localProduct)]
+            ),
+            fixtures: fixtures,
+            adapters: [remote]
+        )
+        guard case .resolved(let saved) = await savedFirst.resolve(BarcodeScan(rawBarcode: barcode.digits)) else {
+            return XCTFail("Saved mapping must resolve")
+        }
+        XCTAssertEqual(saved.source, .localUserEditedCache)
+        XCTAssertEqual(saved.product.name, "Saved Chips")
+        let callsAfterSavedResolution = await remote.callCount()
+        XCTAssertEqual(callsAfterSavedResolution, 0)
+
+        let bundledSecond = BarcodeResolutionService(
+            userEditedCache: InMemoryBarcodeUserEditedCache(),
+            fixtures: fixtures,
+            adapters: [remote]
+        )
+        guard case .resolved(let bundled) = await bundledSecond.resolve(BarcodeScan(rawBarcode: barcode.digits)) else {
+            return XCTFail("Bundled mapping must resolve")
+        }
+        XCTAssertEqual(bundled.source, .bundledFixture)
+        XCTAssertEqual(bundled.product.name, "Bundled Chips")
+        let callsAfterBundledResolution = await remote.callCount()
+        XCTAssertEqual(callsAfterBundledResolution, 0)
+
+        let remoteLast = BarcodeResolutionService(
+            userEditedCache: InMemoryBarcodeUserEditedCache(),
+            fixtures: BundledBarcodeFixtureCatalog(fixtures: []),
+            adapters: [remote]
+        )
+        guard case .resolved(let remoteResult) = await remoteLast.resolve(BarcodeScan(rawBarcode: barcode.digits)) else {
+            return XCTFail("Remote adapter must remain the final automatic lookup")
+        }
+        XCTAssertEqual(remoteResult.source, .adapter(identifier: remote.identifier))
+        XCTAssertEqual(remoteResult.product.name, "Remote Chips")
+        let callsAfterRemoteResolution = await remote.callCount()
+        XCTAssertEqual(callsAfterRemoteResolution, 1)
     }
 
     @MainActor
@@ -4390,6 +4505,85 @@ final class SmartCartTests: XCTestCase {
     }
 
     @MainActor
+    func testRecipeReadyScalesFromUserConfirmedRecipeYieldToDesiredServings() throws {
+        let model = AppModel(stateStore: InMemorySmartCartStateStore())
+        let recipe = Recipe(
+            title: "Bread",
+            source: .text,
+            sourceDetail: "Test",
+            heroSymbol: "fork.knife",
+            servings: 4,
+            prepMinutes: 0,
+            cookMinutes: 0,
+            ingredients: [Ingredient(name: "Flour", quantity: 2, unit: "cup")]
+        )
+        XCTAssertTrue(model.beginRecipe(recipe))
+        let ingredient = try model.activeRecipe.ingredients.firstUnwrapped()
+
+        model.updateRecipeServings(by: 4)
+
+        XCTAssertEqual(model.activeRecipe.servings, 8)
+        XCTAssertEqual(model.desiredServings, 4)
+        XCTAssertEqual(model.servingScale, 0.5, accuracy: 0.001)
+        XCTAssertEqual(model.scaledQuantity(for: ingredient), 1, accuracy: 0.001)
+
+        model.updateServings(by: 8)
+
+        XCTAssertEqual(model.desiredServings, 12)
+        XCTAssertEqual(model.servingScale, 1.5, accuracy: 0.001)
+        XCTAssertEqual(model.scaledQuantity(for: ingredient), 3, accuracy: 0.001)
+    }
+
+    @MainActor
+    func testRecipeReadyUsesKitchenDisplayWithoutChangingStoredMeasurement() throws {
+        let model = AppModel(stateStore: InMemorySmartCartStateStore())
+        let recipe = Recipe(
+            title: "Cookies",
+            source: .text,
+            sourceDetail: "Test",
+            heroSymbol: "fork.knife",
+            servings: 1,
+            prepMinutes: 0,
+            cookMinutes: 0,
+            ingredients: [Ingredient(name: "Mini Chocolate Chips", quantity: 4, unit: "tbsp")]
+        )
+        XCTAssertTrue(model.beginRecipe(recipe))
+        model.updateServings(by: 9)
+        let ingredient = try model.activeRecipe.ingredients.firstUnwrapped()
+
+        XCTAssertEqual(model.scaledQuantity(for: ingredient), 40, accuracy: 0.001)
+        XCTAssertEqual(model.scaledQuantityText(for: ingredient), "2 1/2 cups")
+        XCTAssertEqual(ingredient.quantity, 4, accuracy: 0.001)
+        XCTAssertEqual(ingredient.unit, "tbsp")
+    }
+
+    @MainActor
+    func testRecipeYieldCorrectionPersistsWithRecipeRecord() throws {
+        let store = InMemorySmartCartStateStore()
+        let model = AppModel(stateStore: store)
+        let recipe = Recipe(
+            title: "Soup",
+            source: .text,
+            sourceDetail: "Test",
+            heroSymbol: "fork.knife",
+            servings: 4,
+            prepMinutes: 0,
+            cookMinutes: 0,
+            ingredients: [Ingredient(name: "Stock", quantity: 4, unit: "cup")]
+        )
+        XCTAssertTrue(model.beginRecipe(recipe))
+
+        model.updateRecipeServings(by: 2)
+        model.persistNow()
+
+        let restored = AppModel(stateStore: store)
+        XCTAssertEqual(restored.activeRecipe.servings, 6)
+        XCTAssertEqual(restored.recipes.first(where: { $0.id == recipe.id })?.servings, 6)
+        XCTAssertEqual(restored.desiredServings, 4)
+        XCTAssertEqual(restored.servingScale, 2.0 / 3.0, accuracy: 0.001)
+    }
+
+    @MainActor
     func testRecipeReadyReusesPersistedRetailerPreferencesAndDetectsMissingSetup() {
         let store = InMemorySmartCartStateStore()
         let defaults = isolatedCommerceDefaults()
@@ -4495,7 +4689,28 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(source[pauseStart..<prewarmStart].contains("appModel.homePath = []"))
     }
 
-    func testRetailerTripPlacesMoreBelowPauseAndTargetBelowNext() throws {
+    func testRetailerComparisonButtonFlipsBetweenWalmartAndTarget() {
+        XCTAssertEqual(RetailerComparisonPolicy.comparisonRetailer(for: .walmart), .target)
+        XCTAssertEqual(
+            RetailerComparisonPolicy.buttonRetailer(for: .walmart, isShowingComparison: false),
+            .target
+        )
+        XCTAssertEqual(
+            RetailerComparisonPolicy.buttonRetailer(for: .walmart, isShowingComparison: true),
+            .walmart
+        )
+        XCTAssertEqual(RetailerComparisonPolicy.comparisonRetailer(for: .target), .walmart)
+        XCTAssertEqual(
+            RetailerComparisonPolicy.buttonRetailer(for: .target, isShowingComparison: false),
+            .walmart
+        )
+        XCTAssertEqual(
+            RetailerComparisonPolicy.buttonRetailer(for: .target, isShowingComparison: true),
+            .target
+        )
+    }
+
+    func testRetailerTripPlacesMoreBelowPauseAndComparisonBelowNext() throws {
         let repositoryRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -4506,14 +4721,13 @@ final class SmartCartTests: XCTestCase {
             encoding: .utf8
         )
 
-        XCTAssertTrue(tripSource.contains("private var checkTargetButton: some View"))
-        XCTAssertTrue(tripSource.contains("Label(\"Check Target\", systemImage: \"magnifyingglass\")"))
-        XCTAssertTrue(tripSource.contains("checkedTargetURL = targetSearchURL"))
+        XCTAssertTrue(tripSource.contains("private var checkRetailerButton: some View"))
+        XCTAssertTrue(tripSource.contains("Label(\"Check \\(retailer.configuration.displayName)\""))
+        XCTAssertTrue(tripSource.contains("checkedComparisonURL == nil ? comparisonSearchURL : nil"))
         XCTAssertTrue(tripSource.contains("url: displayedURL"))
-        XCTAssertTrue(tripSource.contains("retailer-trip-check-target"))
-        XCTAssertFalse(tripSource.contains("Button(\"Check Target\", systemImage: \"magnifyingglass\")"))
+        XCTAssertTrue(tripSource.contains("retailer-trip-check-other-retailer"))
         XCTAssertTrue(tripSource.contains("VStack(spacing: 6) {\n                        pauseButton\n                        moreMenu"))
-        XCTAssertTrue(tripSource.contains("VStack(spacing: 6) {\n                        nextButton\n                        checkTargetButton"))
+        XCTAssertTrue(tripSource.contains("VStack(spacing: 6) {\n                        nextButton\n                        checkRetailerButton"))
         XCTAssertFalse(tripSource.contains("retailerOwnershipLabel"))
         XCTAssertFalse(tripSource.contains("Shopping stays with"))
         XCTAssertFalse(tripSource.contains(".frame(minWidth: 72, minHeight: 48)"))
@@ -4685,6 +4899,7 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(composerSource.contains("guard !Task.isCancelled, selectedMethod == initialMethod else { return }"))
         XCTAssertTrue(composerSource.contains("showCamera = true"))
         XCTAssertTrue(composerSource.contains("showPhotoLibrary = true"))
+        XCTAssertTrue(composerSource.contains("if !draft.ingredients.isEmpty {\n                            detectedIngredients(in: draft)"))
         XCTAssertTrue(composerSource.contains(".frame(maxWidth: .infinity, minHeight: 220, alignment: .topLeading)"))
         XCTAssertFalse(recipesSource.contains("private var mealPrepLaunchCard"))
     }
@@ -7968,6 +8183,23 @@ private struct ThrowingBarcodeAdapter: BarcodeProductAdapter {
     func resolve(_ barcode: NormalizedBarcode) async throws -> BarcodeProduct? {
         throw Failure.offline
     }
+}
+
+private actor RecordingBarcodeAdapter: BarcodeProductAdapter {
+    nonisolated let identifier = "recording-test-adapter"
+    private let product: BarcodeProduct?
+    private var calls = 0
+
+    init(product: BarcodeProduct?) {
+        self.product = product
+    }
+
+    func resolve(_ barcode: NormalizedBarcode) async throws -> BarcodeProduct? {
+        calls += 1
+        return product
+    }
+
+    func callCount() -> Int { calls }
 }
 
 private final class BarcodeURLProtocolStub: URLProtocol {

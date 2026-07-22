@@ -1987,12 +1987,18 @@ final class AppModel {
     }
 
     func scaledQuantity(for ingredient: Ingredient) -> Double {
-        guard activeRecipe.servings > 0 else { return ingredient.quantity }
-        return ingredient.quantity * Double(desiredServings) / Double(activeRecipe.servings)
+        ingredient.quantity * servingScale
+    }
+
+    var servingScale: Double {
+        Double(desiredServings) / Double(max(1, activeRecipe.servings))
     }
 
     func scaledQuantityText(for ingredient: Ingredient) -> String {
-        Ingredient.quantityText(scaledQuantity(for: ingredient), unit: ingredient.unit)
+        KitchenQuantityFormatter.text(
+            quantity: scaledQuantity(for: ingredient),
+            unit: ingredient.unit
+        )
     }
 
     func quantityToBuy(for ingredient: Ingredient) -> Double {
@@ -2003,12 +2009,35 @@ final class AppModel {
     }
 
     func quantityToBuyText(for ingredient: Ingredient) -> String {
-        Ingredient.quantityText(quantityToBuy(for: ingredient), unit: ingredient.unit)
+        KitchenQuantityFormatter.text(
+            quantity: quantityToBuy(for: ingredient),
+            unit: ingredient.unit
+        )
     }
 
     func updateServings(by delta: Int) {
         desiredServings = min(24, max(1, desiredServings + delta))
         refreshPantrySuggestions()
+        invalidateShoppingPlan()
+    }
+
+    func updateRecipeServings(by delta: Int) {
+        let updatedServings = min(24, max(1, activeRecipe.servings + delta))
+        guard updatedServings != activeRecipe.servings else { return }
+
+        suppressPersistence = true
+        var updatedRecipe = activeRecipe
+        updatedRecipe.servings = updatedServings
+        applyPantrySuggestions(to: &updatedRecipe)
+        activeRecipe = updatedRecipe
+        if let index = recipes.firstIndex(where: { $0.id == updatedRecipe.id }) {
+            recipes[index] = updatedRecipe
+        } else {
+            recipes.insert(updatedRecipe, at: 0)
+        }
+        suppressPersistence = false
+
+        persistState()
         invalidateShoppingPlan()
     }
 
@@ -4550,6 +4579,14 @@ final class AppModel {
         DemoTargetCatalogService.searchFallback(
             for: item.ingredient,
             storeID: "target-online",
+            preferences: preferences
+        ).exactURL
+    }
+
+    func walmartSearchURL(for item: ShoppingListItem) -> URL {
+        DemoWalmartCatalogService.searchFallback(
+            for: item.ingredient,
+            storeID: "walmart-online",
             preferences: preferences
         ).exactURL
     }

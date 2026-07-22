@@ -346,6 +346,84 @@ struct IngredientMeasurement: Hashable, Codable {
     }
 }
 
+/// Human-friendly recipe quantity text. This formatter is presentation-only:
+/// canonical quantities, matching inputs, and persisted request strings retain
+/// their original numeric value and unit.
+enum KitchenQuantityFormatter {
+    private struct Fraction {
+        let value: Double
+        let text: String
+    }
+
+    private static let commonFractions = [
+        Fraction(value: 1.0 / 8.0, text: "1/8"),
+        Fraction(value: 1.0 / 4.0, text: "1/4"),
+        Fraction(value: 1.0 / 3.0, text: "1/3"),
+        Fraction(value: 3.0 / 8.0, text: "3/8"),
+        Fraction(value: 1.0 / 2.0, text: "1/2"),
+        Fraction(value: 5.0 / 8.0, text: "5/8"),
+        Fraction(value: 2.0 / 3.0, text: "2/3"),
+        Fraction(value: 3.0 / 4.0, text: "3/4"),
+        Fraction(value: 7.0 / 8.0, text: "7/8")
+    ]
+
+    static func text(quantity: Double, unit: String) -> String {
+        guard quantity.isFinite, quantity >= 0 else {
+            return "Unknown quantity"
+        }
+
+        let preferred = preferredMeasurement(quantity: quantity, unit: unit)
+        let value = fractionText(preferred.quantity)
+        let displayUnit = displayUnit(preferred.unit, quantity: preferred.quantity)
+        return displayUnit.isEmpty ? value : "\(value) \(displayUnit)"
+    }
+
+    private static func preferredMeasurement(
+        quantity: Double,
+        unit: String
+    ) -> (quantity: Double, unit: String) {
+        let normalizedUnit = QuantityEngine.normalizedUnit(for: unit)
+        let shouldPromoteToCups =
+            (normalizedUnit == "tbsp" && quantity >= 16) ||
+            (normalizedUnit == "tsp" && quantity >= 48)
+
+        if shouldPromoteToCups,
+           let converted = QuantityEngine.convertedValue(
+               doubleValue: quantity,
+               from: normalizedUnit,
+               to: "cup"
+           ).quantity {
+            return (
+                NSDecimalNumber(decimal: converted.value).doubleValue,
+                converted.unit
+            )
+        }
+
+        return (quantity, normalizedUnit ?? unit.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    private static func fractionText(_ quantity: Double) -> String {
+        let whole = Int(quantity.rounded(.down))
+        let remainder = quantity - Double(whole)
+        if remainder < 0.001 {
+            return String(whole)
+        }
+
+        if let fraction = commonFractions.min(by: {
+            abs($0.value - remainder) < abs($1.value - remainder)
+        }), abs(fraction.value - remainder) <= 0.04 {
+            return whole == 0 ? fraction.text : "\(whole) \(fraction.text)"
+        }
+
+        return Ingredient.quantityText(quantity, unit: "")
+    }
+
+    private static func displayUnit(_ unit: String, quantity: Double) -> String {
+        guard unit == "cup" else { return unit }
+        return abs(quantity - 1) < 0.001 ? "cup" : "cups"
+    }
+}
+
 struct NormalizedSourceRect: Hashable, Codable {
     var x: Double
     var y: Double

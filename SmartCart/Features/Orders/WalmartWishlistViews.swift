@@ -64,7 +64,8 @@ struct RetailerSafariHandoffView: View {
                     sessionID: sessionID,
                     itemID: itemID,
                     url: url,
-                    targetSearchURL: targetSearchURL(for: itemID),
+                    primaryRetailer: primaryRetailer(for: itemID),
+                    comparisonSearchURL: comparisonSearchURL(for: itemID),
                     position: appModel.guidedIndex + 1,
                     total: appModel.shoppingItems.count,
                     productIdentity: productIdentity(for: itemID),
@@ -117,11 +118,27 @@ struct RetailerSafariHandoffView: View {
         return "\(item.ingredient.name), \(item.product.brand) \(item.product.name)"
     }
 
-    private func targetSearchURL(for itemID: UUID) -> URL {
+    private func primaryRetailer(for itemID: UUID) -> ShoppingRetailer {
         guard let item = appModel.shoppingItems.first(where: { $0.id == itemID }) else {
-            return ShoppingRetailer.target.configuration.homeURL
+            return appModel.selectedRetailer
         }
-        return appModel.targetSearchURL(for: item)
+        return ShoppingRetailer(rawValue: item.product.retailerID) ?? appModel.selectedRetailer
+    }
+
+    private func comparisonSearchURL(for itemID: UUID) -> URL {
+        guard let item = appModel.shoppingItems.first(where: { $0.id == itemID }) else {
+            return RetailerComparisonPolicy.comparisonRetailer(
+                for: appModel.selectedRetailer
+            ).configuration.homeURL
+        }
+        switch RetailerComparisonPolicy.comparisonRetailer(for: primaryRetailer(for: itemID)) {
+        case .walmart:
+            return appModel.walmartSearchURL(for: item)
+        case .target:
+            return appModel.targetSearchURL(for: item)
+        case .kroger:
+            return ShoppingRetailer.kroger.configuration.homeURL
+        }
     }
 
     private var safeReplacementCandidates: [RetailerProductRecord] {
@@ -772,6 +789,21 @@ enum RetailerTripPageLoadState: Equatable {
     }
 }
 
+enum RetailerComparisonPolicy {
+    static func comparisonRetailer(for primaryRetailer: ShoppingRetailer) -> ShoppingRetailer {
+        primaryRetailer == .walmart ? .target : .walmart
+    }
+
+    static func buttonRetailer(
+        for primaryRetailer: ShoppingRetailer,
+        isShowingComparison: Bool
+    ) -> ShoppingRetailer {
+        isShowingComparison
+            ? primaryRetailer
+            : comparisonRetailer(for: primaryRetailer)
+    }
+}
+
 private struct RetailerTripSafariSheet: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -779,7 +811,8 @@ private struct RetailerTripSafariSheet: View {
     let sessionID: UUID
     let itemID: UUID
     let url: URL
-    let targetSearchURL: URL
+    let primaryRetailer: ShoppingRetailer
+    let comparisonSearchURL: URL
     let position: Int
     let total: Int
     let productIdentity: String
@@ -794,7 +827,7 @@ private struct RetailerTripSafariSheet: View {
 
     @State private var loadState = RetailerTripPageLoadState.loading
     @State private var loadAttempt = 0
-    @State private var checkedTargetURL: URL?
+    @State private var checkedComparisonURL: URL?
     @State private var showsHelp = false
 
     var body: some View {
@@ -844,7 +877,7 @@ private struct RetailerTripSafariSheet: View {
                         .frame(maxWidth: .infinity)
                     nextButton
                         .frame(maxWidth: .infinity)
-                    checkTargetButton
+                    checkRetailerButton
                         .frame(maxWidth: .infinity)
                 }
             } else {
@@ -859,7 +892,7 @@ private struct RetailerTripSafariSheet: View {
                     Spacer(minLength: 4)
                     VStack(spacing: 6) {
                         nextButton
-                        checkTargetButton
+                        checkRetailerButton
                     }
                 }
             }
@@ -944,13 +977,17 @@ private struct RetailerTripSafariSheet: View {
         .disabled(!loadState.canRecordVisited)
     }
 
-    private var checkTargetButton: some View {
-        Button {
-            checkedTargetURL = targetSearchURL
+    private var checkRetailerButton: some View {
+        let retailer = RetailerComparisonPolicy.buttonRetailer(
+            for: primaryRetailer,
+            isShowingComparison: checkedComparisonURL != nil
+        )
+        return Button {
+            checkedComparisonURL = checkedComparisonURL == nil ? comparisonSearchURL : nil
             loadState = .loading
             loadAttempt += 1
         } label: {
-            Label("Check Target", systemImage: "magnifyingglass")
+            Label("Check \(retailer.configuration.displayName)", systemImage: "magnifyingglass")
                 .font(.caption.bold())
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -963,8 +1000,10 @@ private struct RetailerTripSafariSheet: View {
         }
         .buttonStyle(PressableButtonStyle())
         .frame(minHeight: 44)
-        .accessibilityIdentifier("retailer-trip-check-target")
-        .accessibilityHint("Opens a fresh Target search for this ingredient without changing the shopping trip")
+        .accessibilityIdentifier("retailer-trip-check-other-retailer")
+        .accessibilityHint(
+            "Opens \(retailer.configuration.displayName) for this ingredient without changing the shopping trip"
+        )
     }
 
     private var moreMenu: some View {
@@ -1020,7 +1059,7 @@ private struct RetailerTripSafariSheet: View {
     }
 
     private var displayedURL: URL {
-        checkedTargetURL ?? url
+        checkedComparisonURL ?? url
     }
 
     private var loadFailureView: some View {
@@ -1046,7 +1085,7 @@ private struct RetailerTripSafariSheet: View {
                 .buttonStyle(PrimaryButtonStyle())
                 .accessibilityIdentifier("retailer-trip-retry")
 
-                Button("Open externally") { openURL(url) }
+                Button("Open externally") { openURL(displayedURL) }
                     .buttonStyle(SecondaryButtonStyle())
                     .accessibilityIdentifier("retailer-trip-open-externally")
 

@@ -251,7 +251,9 @@ struct RecipeComposerSheet: View {
 
                     if selectedMethod != .sample && selectedMethod != .recipeLink && selectedMethod != .pinterest {
                         editableRecipeFields(for: draft)
-                        detectedIngredients(in: draft)
+                        if !draft.ingredients.isEmpty {
+                            detectedIngredients(in: draft)
+                        }
                     }
 
                     if let errorMessage {

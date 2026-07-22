@@ -188,16 +188,32 @@ struct RecipeReadyView: View {
                 .textInputAutocapitalization(.words)
                 .accessibilityIdentifier("recipe-ready-title")
 
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 14) {
-                    servingIdentity
-                    Spacer(minLength: 8)
-                    servingControls
-                }
-                VStack(alignment: .leading, spacing: 12) {
-                    servingIdentity
-                    servingControls
-                }
+            VStack(spacing: 12) {
+                servingInput(
+                    title: "Recipe makes",
+                    subtitle: "Servings in the original recipe",
+                    value: appModel.activeRecipe.servings,
+                    decrease: { appModel.updateRecipeServings(by: -1) },
+                    increase: { appModel.updateRecipeServings(by: 1) },
+                    identifierPrefix: "recipe-ready-recipe-servings"
+                )
+
+                Divider()
+
+                servingInput(
+                    title: "I want to make",
+                    subtitle: "Servings to shop for",
+                    value: appModel.desiredServings,
+                    decrease: { appModel.updateServings(by: -1) },
+                    increase: { appModel.updateServings(by: 1) },
+                    identifierPrefix: "recipe-ready-desired-servings"
+                )
+
+                Text(servingScaleSummary)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("recipe-ready-serving-scale-summary")
             }
 
             if hasRawSourceText {
@@ -233,34 +249,87 @@ struct RecipeReadyView: View {
         return !rawSourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    private var servingIdentity: some View {
+    private var servingScaleSummary: String {
+        let scale = appModel.servingScale
+        if abs(scale - 1) < 0.001 {
+            return "Ingredient amounts stay the same."
+        }
+        let direction = scale > 1 ? "up" : "down"
+        let formattedScale = scale.formatted(.number.precision(.fractionLength(0...2)))
+        return "Ingredient amounts scale \(direction) to \(formattedScale)×."
+    }
+
+    private func servingInput(
+        title: String,
+        subtitle: String,
+        value: Int,
+        decrease: @escaping () -> Void,
+        increase: @escaping () -> Void,
+        identifierPrefix: String
+    ) -> some View {
+        HStack(alignment: .center, spacing: 14) {
+            servingLabel(title: title, subtitle: subtitle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
+            servingControls(
+                value: value,
+                title: title,
+                decrease: decrease,
+                increase: increase,
+                identifierPrefix: identifierPrefix
+            )
+            .fixedSize(horizontal: true, vertical: false)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func servingLabel(title: String, subtitle: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text("Servings")
+            Text(title)
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(SmartCartTheme.navy)
-            Text("Original recipe: \(appModel.activeRecipe.servings)")
+            Text(subtitle)
                 .font(.caption)
                 .foregroundStyle(SmartCartTheme.secondaryInk)
         }
     }
 
-    private var servingControls: some View {
+    private func servingControls(
+        value: Int,
+        title: String,
+        decrease: @escaping () -> Void,
+        increase: @escaping () -> Void,
+        identifierPrefix: String
+    ) -> some View {
         HStack(spacing: 12) {
-            servingButton(symbol: "minus", delta: -1)
-            Text(appModel.desiredServings, format: .number)
+            servingButton(
+                symbol: "minus",
+                action: decrease,
+                accessibilityLabel: "Decrease \(title.lowercased())",
+                identifier: "\(identifierPrefix)-decrease"
+            )
+            Text(value, format: .number)
                 .font(.title2.bold().monospacedDigit())
                 .foregroundStyle(SmartCartTheme.navy)
                 .frame(minWidth: 38)
-                .accessibilityLabel("\(appModel.desiredServings) servings")
-            servingButton(symbol: "plus", delta: 1)
+                .accessibilityLabel("\(value) servings")
+            servingButton(
+                symbol: "plus",
+                action: increase,
+                accessibilityLabel: "Increase \(title.lowercased())",
+                identifier: "\(identifierPrefix)-increase"
+            )
         }
         .accessibilityElement(children: .contain)
     }
 
-    private func servingButton(symbol: String, delta: Int) -> some View {
-        Button {
-            appModel.updateServings(by: delta)
-        } label: {
+    private func servingButton(
+        symbol: String,
+        action: @escaping () -> Void,
+        accessibilityLabel: String,
+        identifier: String
+    ) -> some View {
+        Button(action: action) {
             Image(systemName: symbol)
                 .font(.headline.bold())
                 .foregroundStyle(SmartCartTheme.green)
@@ -269,8 +338,8 @@ struct RecipeReadyView: View {
                 .clipShape(Circle())
         }
         .buttonStyle(PressableButtonStyle())
-        .accessibilityLabel(delta > 0 ? "Increase servings" : "Decrease servings")
-        .accessibilityIdentifier(delta > 0 ? "recipe-ready-servings-increase" : "recipe-ready-servings-decrease")
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityIdentifier(identifier)
     }
 
     @ViewBuilder
