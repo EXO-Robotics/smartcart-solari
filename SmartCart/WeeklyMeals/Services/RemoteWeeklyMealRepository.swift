@@ -181,6 +181,16 @@ struct FileWeeklyMealsCacheStore: WeeklyMealsCacheStoring, @unchecked Sendable {
 enum RemoteWeeklyMealsValidator {
     static let maximumManifestBytes = 64 * 1_024
     static let maximumCollectionBytes = 1_024 * 1_024
+    static let approvedImageAssetNames: Set<String> = [
+        "weekly-placeholder-chicken-taco-rice-bowls",
+        "weekly-placeholder-creamy-buffalo-chicken-dip",
+        "weekly-placeholder-honey-garlic-chicken-rice",
+        "weekly-placeholder-korean-ground-beef-bowls",
+        "weekly-placeholder-make-ahead-breakfast-burritos",
+        "weekly-placeholder-one-pot-cheeseburger-pasta",
+        "weekly-placeholder-protein-berry-smoothie",
+        "weekly-placeholder-protein-overnight-oats"
+    ]
     private static let supportedUnits: Set<String> = [
         "", "as needed", "can", "clove", "cup", "each", "g", "kg", "l", "lb",
         "ml", "oz", "package", "pinch", "tbsp", "to taste", "tsp"
@@ -242,7 +252,7 @@ enum RemoteWeeklyMealsValidator {
             if recipe.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
                 recipe.shortDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
                 recipe.metadata.accessibilityDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                !isSafeAssetName(recipe.metadata.imageAssetName) {
+                !isApprovedAssetName(recipe.metadata.imageAssetName) {
                 issues.append(.init(code: .invalidRecipe, path: path, message: "Public recipe text or image reference is invalid."))
             }
             for ingredient in recipe.ingredients {
@@ -302,6 +312,10 @@ enum RemoteWeeklyMealsValidator {
 
     private static func isSafeAssetName(_ value: String) -> Bool {
         !value.isEmpty && value.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
+    }
+
+    private static func isApprovedAssetName(_ value: String) -> Bool {
+        isSafeAssetName(value) && approvedImageAssetNames.contains(value)
     }
 
     private static func isFinitePositive(_ value: Decimal) -> Bool {

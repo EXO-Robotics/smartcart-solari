@@ -114,6 +114,68 @@ final class WeeklyMealRepositoryTests: XCTestCase {
         }
     }
 
+    func testMinimumAppVersionUsesNumericComponentOrdering() throws {
+        let supportedCases = [
+            (current: "1.10.0", minimum: "1.9.0"),
+            (current: "1.2.10", minimum: "1.2.9"),
+            (current: "2.0", minimum: "1.99.99")
+        ]
+        for versionCase in supportedCases {
+            let remote = try Fixture.remote(minimumAppVersion: versionCase.minimum)
+            XCTAssertNoThrow(
+                try RemoteWeeklyMealsValidator.validate(
+                    manifest: remote.manifest,
+                    document: remote.document,
+                    currentAppVersion: versionCase.current
+                ),
+                "Expected \(versionCase.current) to satisfy \(versionCase.minimum)"
+            )
+        }
+
+        let release = try Fixture.remote(minimumAppVersion: "1.0.0")
+        XCTAssertThrowsError(
+            try RemoteWeeklyMealsValidator.validate(
+                manifest: release.manifest,
+                document: release.document,
+                currentAppVersion: "1.0.0-beta"
+            )
+        ) { error in
+            XCTAssertEqual(error as? WeeklyMealsRemoteError, .unsupportedAppVersion)
+        }
+    }
+
+    func testRemoteCollectionRejectsUnapprovedImageAsset() throws {
+        let remote = try Fixture.remote(imageAssetName: "AppIcon")
+
+        XCTAssertThrowsError(
+            try RemoteWeeklyMealsValidator.validate(
+                manifest: remote.manifest,
+                document: remote.document,
+                currentAppVersion: "0.3.0"
+            )
+        ) { error in
+            guard case let WeeklyMealsRemoteError.invalidCollection(issues) = error else {
+                return XCTFail("Expected invalid collection, got \(error)")
+            }
+            XCTAssertTrue(issues.contains { $0.code == .invalidRecipe })
+        }
+    }
+
+    @MainActor
+    func testMissingConfigurationAndCorruptedCacheUseBundledFallback() async {
+        let store = WeeklyMealsStore(
+            configuration: nil,
+            cacheStore: MemoryWeeklyMealsCacheStore(data: Data("corrupt".utf8)),
+            currentAppVersion: "0.3.0"
+        )
+
+        await store.refreshIfNeeded(force: true)
+
+        XCTAssertEqual(store.source, .bundledFallback)
+        XCTAssertEqual(store.collection?.meals.count, 8)
+        XCTAssertNil(store.lastRefreshError)
+    }
+
     @MainActor
     func testStoreUsesValidatedCacheImmediatelyThenPromotesFreshRemoteContent() async throws {
         let remote = try Fixture.remote()
@@ -197,17 +259,247 @@ final class WeeklyMealRepositoryTests: XCTestCase {
         XCTAssertEqual(store.collection?.id, "week-01")
         XCTAssertNotNil(store.lastRefreshError)
     }
+
+    @MainActor
+    func testOversizedManifestAndCollectionPreserveLastKnownGoodContent() async throws {
+        let remote = try Fixture.remote()
+        let cached = Fixture.cached(remote)
+        let configuration = try Fixture.configuration()
+        let collectionURL = try RemoteWeeklyMealsValidator.collectionURL(
+            from: remote.manifest,
+            relativeTo: configuration
+        )
+
+        var oversizedManifestResponses = try Fixture.responses(for: remote, configuration: configuration)
+        oversizedManifestResponses[configuration.manifestURL] = .init(
+            data: Data(repeating: 0x20, count: RemoteWeeklyMealsValidator.maximumManifestBytes + 1),
+            finalURL: configuration.manifestURL
+        )
+        let manifestStore = WeeklyMealsStore(
+            configuration: configuration,
+            cacheStore: MemoryWeeklyMealsCacheStore(data: try Fixture.encoded(cached)),
+            client: StaticWeeklyMealsHTTPClient(responses: oversizedManifestResponses),
+            clock: FixedWeeklyMealsClock(now: Date(timeIntervalSince1970: 2_000)),
+            currentAppVersion: "0.3.0",
+            refreshInterval: 1
+        )
+
+        await manifestStore.refreshIfNeeded(force: true)
+
+        XCTAssertEqual(manifestStore.source, .cachedRemote)
+        XCTAssertEqual(manifestStore.lastRefreshError, .payloadTooLarge)
+
+        var oversizedCollectionResponses = try Fixture.responses(for: remote, configuration: configuration)
+        oversizedCollectionResponses[collectionURL] = .init(
+            data: Data(repeating: 0x20, count: RemoteWeeklyMealsValidator.maximumCollectionBytes + 1),
+            finalURL: collectionURL
+        )
+        let collectionStore = WeeklyMealsStore(
+            configuration: configuration,
+            cacheStore: MemoryWeeklyMealsCacheStore(data: try Fixture.encoded(cached)),
+            client: StaticWeeklyMealsHTTPClient(responses: oversizedCollectionResponses),
+            clock: FixedWeeklyMealsClock(now: Date(timeIntervalSince1970: 2_000)),
+            currentAppVersion: "0.3.0",
+            refreshInterval: 1
+        )
+
+        await collectionStore.refreshIfNeeded(force: true)
+
+        XCTAssertEqual(collectionStore.source, .cachedRemote)
+        XCTAssertEqual(collectionStore.lastRefreshError, .payloadTooLarge)
+    }
+
+    @MainActor
+    func testCrossOriginRedirectPreservesLastKnownGoodContent() async throws {
+        let remote = try Fixture.remote()
+        let configuration = try Fixture.configuration()
+        let collectionURL = try RemoteWeeklyMealsValidator.collectionURL(
+            from: remote.manifest,
+            relativeTo: configuration
+        )
+        var responses = try Fixture.responses(for: remote, configuration: configuration)
+        responses[configuration.manifestURL] = .init(
+            data: try Fixture.encoded(remote.manifest),
+            finalURL: URL(string: "https://other.example/weekly-meals/manifest.json")!
+        )
+        let store = WeeklyMealsStore(
+            configuration: configuration,
+            cacheStore: MemoryWeeklyMealsCacheStore(data: try Fixture.encoded(Fixture.cached(remote))),
+            client: StaticWeeklyMealsHTTPClient(responses: responses),
+            clock: FixedWeeklyMealsClock(now: Date(timeIntervalSince1970: 2_000)),
+            currentAppVersion: "0.3.0",
+            refreshInterval: 1
+        )
+
+        await store.refreshIfNeeded(force: true)
+
+        XCTAssertEqual(store.source, .cachedRemote)
+        XCTAssertEqual(store.lastRefreshError, .crossOriginRedirect)
+
+        var collectionRedirectResponses = try Fixture.responses(for: remote, configuration: configuration)
+        collectionRedirectResponses[collectionURL] = .init(
+            data: try Fixture.encoded(remote.document),
+            finalURL: URL(string: "https://other.example/weekly-meals/collections/week-001-v1.json")!
+        )
+        let collectionRedirectStore = WeeklyMealsStore(
+            configuration: configuration,
+            cacheStore: MemoryWeeklyMealsCacheStore(data: try Fixture.encoded(Fixture.cached(remote))),
+            client: StaticWeeklyMealsHTTPClient(responses: collectionRedirectResponses),
+            clock: FixedWeeklyMealsClock(now: Date(timeIntervalSince1970: 2_000)),
+            currentAppVersion: "0.3.0",
+            refreshInterval: 1
+        )
+
+        await collectionRedirectStore.refreshIfNeeded(force: true)
+
+        XCTAssertEqual(collectionRedirectStore.source, .cachedRemote)
+        XCTAssertEqual(collectionRedirectStore.lastRefreshError, .crossOriginRedirect)
+    }
+
+    @MainActor
+    func testOlderPublicationAndLowerRevisionAreRejected() async throws {
+        let base = try Fixture.remote(revision: 2)
+        let configuration = try Fixture.configuration()
+
+        let older = try Fixture.remote(
+            revision: 3,
+            publishedAt: base.manifest.publishedAt.addingTimeInterval(-1)
+        )
+        let olderStore = WeeklyMealsStore(
+            configuration: configuration,
+            cacheStore: MemoryWeeklyMealsCacheStore(data: try Fixture.encoded(Fixture.cached(base))),
+            client: StaticWeeklyMealsHTTPClient(
+                responses: try Fixture.responses(for: older, configuration: configuration)
+            ),
+            clock: FixedWeeklyMealsClock(now: Date(timeIntervalSince1970: 2_000)),
+            currentAppVersion: "0.3.0",
+            refreshInterval: 1
+        )
+
+        await olderStore.refreshIfNeeded(force: true)
+
+        XCTAssertEqual(olderStore.source, .cachedRemote)
+        XCTAssertEqual(olderStore.lastRefreshError, .staleManifest)
+
+        let lowerRevision = try Fixture.remote(revision: 1)
+        let lowerRevisionStore = WeeklyMealsStore(
+            configuration: configuration,
+            cacheStore: MemoryWeeklyMealsCacheStore(data: try Fixture.encoded(Fixture.cached(base))),
+            client: StaticWeeklyMealsHTTPClient(
+                responses: try Fixture.responses(for: lowerRevision, configuration: configuration)
+            ),
+            clock: FixedWeeklyMealsClock(now: Date(timeIntervalSince1970: 2_000)),
+            currentAppVersion: "0.3.0",
+            refreshInterval: 1
+        )
+
+        await lowerRevisionStore.refreshIfNeeded(force: true)
+
+        XCTAssertEqual(lowerRevisionStore.source, .cachedRemote)
+        XCTAssertEqual(lowerRevisionStore.lastRefreshError, .staleManifest)
+    }
+
+    @MainActor
+    func testSameRevisionMutationIsRejectedAndHigherRevisionIsAccepted() async throws {
+        let base = try Fixture.remote()
+        let configuration = try Fixture.configuration()
+        let changedAtSameRevision = try Fixture.remote(revision: 1, collectionTitle: "Changed without revision")
+        let staleStore = WeeklyMealsStore(
+            configuration: configuration,
+            cacheStore: MemoryWeeklyMealsCacheStore(data: try Fixture.encoded(Fixture.cached(base))),
+            client: StaticWeeklyMealsHTTPClient(
+                responses: try Fixture.responses(for: changedAtSameRevision, configuration: configuration)
+            ),
+            clock: FixedWeeklyMealsClock(now: Date(timeIntervalSince1970: 2_000)),
+            currentAppVersion: "0.3.0",
+            refreshInterval: 1
+        )
+
+        await staleStore.refreshIfNeeded(force: true)
+
+        XCTAssertEqual(staleStore.source, .cachedRemote)
+        XCTAssertEqual(staleStore.lastRefreshError, .staleManifest)
+
+        let higherRevision = try Fixture.remote(revision: 2, collectionTitle: "Approved revision")
+        let promotedStore = WeeklyMealsStore(
+            configuration: configuration,
+            cacheStore: MemoryWeeklyMealsCacheStore(data: try Fixture.encoded(Fixture.cached(base))),
+            client: StaticWeeklyMealsHTTPClient(
+                responses: try Fixture.responses(for: higherRevision, configuration: configuration)
+            ),
+            clock: FixedWeeklyMealsClock(now: Date(timeIntervalSince1970: 2_000)),
+            currentAppVersion: "0.3.0",
+            refreshInterval: 1
+        )
+
+        await promotedStore.refreshIfNeeded(force: true)
+
+        XCTAssertEqual(promotedStore.source, .freshRemote)
+        XCTAssertEqual(promotedStore.collection?.collection.title, "Approved revision")
+        XCTAssertNil(promotedStore.lastRefreshError)
+    }
+
+    @MainActor
+    func testSimultaneousRefreshesCoalesceAndForcedRefreshBypassesInterval() async throws {
+        let remote = try Fixture.remote()
+        let configuration = try Fixture.configuration()
+        let counter = WeeklyMealsRequestCounter()
+        let client = StaticWeeklyMealsHTTPClient(
+            responses: try Fixture.responses(for: remote, configuration: configuration),
+            delayNanoseconds: 50_000_000,
+            counter: counter
+        )
+        let store = WeeklyMealsStore(
+            configuration: configuration,
+            cacheStore: MemoryWeeklyMealsCacheStore(),
+            client: client,
+            clock: FixedWeeklyMealsClock(now: Date(timeIntervalSince1970: 2_000)),
+            currentAppVersion: "0.3.0",
+            refreshInterval: 3_600
+        )
+
+        async let first: Void = store.refreshIfNeeded(force: true)
+        async let second: Void = store.refreshIfNeeded(force: true)
+        _ = await (first, second)
+
+        let coalescedRequestCount = await counter.value
+        XCTAssertEqual(coalescedRequestCount, 2)
+        XCTAssertEqual(store.source, .freshRemote)
+
+        await store.refreshIfNeeded()
+        let intervalRequestCount = await counter.value
+        XCTAssertEqual(intervalRequestCount, 2)
+
+        await store.refreshIfNeeded(force: true)
+        let forcedRequestCount = await counter.value
+        XCTAssertEqual(forcedRequestCount, 4)
+    }
 }
 
 private struct StaticWeeklyMealsHTTPClient: WeeklyMealsHTTPClient {
     let responses: [URL: WeeklyMealsHTTPResponse]
+    var delayNanoseconds: UInt64 = 0
+    var counter: WeeklyMealsRequestCounter?
 
     func get(_ url: URL, maximumBytes: Int) async throws -> WeeklyMealsHTTPResponse {
-        guard let response = responses[url], response.data.count <= maximumBytes else {
-            throw WeeklyMealsRemoteError.invalidResponse
+        await counter?.record()
+        if delayNanoseconds > 0 {
+            try await Task.sleep(nanoseconds: delayNanoseconds)
         }
+        guard let response = responses[url] else { throw WeeklyMealsRemoteError.invalidResponse }
+        guard response.data.count <= maximumBytes else { throw WeeklyMealsRemoteError.payloadTooLarge }
         return response
     }
+}
+
+private actor WeeklyMealsRequestCounter {
+    private var count = 0
+
+    func record() {
+        count += 1
+    }
+
+    var value: Int { count }
 }
 
 private final class MemoryWeeklyMealsCacheStore: WeeklyMealsCacheStoring, @unchecked Sendable {
@@ -299,26 +591,82 @@ private enum Fixture {
         )
     }
 
-    static func remote(minimumAppVersion: String = "0.3.0") throws -> RemoteValues {
+    static func remote(
+        minimumAppVersion: String = "0.3.0",
+        revision: Int = 1,
+        publishedAt: Date = Date(timeIntervalSince1970: 1_753_200_000),
+        collectionTitle: String? = nil,
+        imageAssetName: String? = nil
+    ) throws -> RemoteValues {
         let values = try make()
-        let publishedAt = Date(timeIntervalSince1970: 1_753_200_000)
+        let collection = WeeklyMealCollection(
+            id: values.collection.id,
+            contentSchemaVersion: values.collection.contentSchemaVersion,
+            title: collectionTitle ?? values.collection.title,
+            weekStartDate: values.collection.weekStartDate,
+            weekEndDateExclusive: values.collection.weekEndDateExclusive,
+            entries: values.collection.entries,
+            promotionalMessage: values.collection.promotionalMessage
+        )
+        var recipes = values.recipes.recipes
+        if let imageAssetName {
+            recipes[0] = replacingImageAssetName(in: recipes[0], with: imageAssetName)
+        }
         return RemoteValues(
             manifest: RemoteWeeklyMealsManifest(
                 schemaVersion: 1,
-                currentCollectionID: values.collection.id,
+                currentCollectionID: collection.id,
                 currentCollectionURL: "/weekly-meals/collections/week-001-v1.json",
                 publishedAt: publishedAt,
                 minimumAppVersion: minimumAppVersion
             ),
             document: RemoteWeeklyMealCollectionDocument(
                 schemaVersion: 1,
-                id: values.collection.id,
-                revision: 1,
+                id: collection.id,
+                revision: revision,
                 publishedAt: publishedAt,
-                collection: values.collection,
-                recipes: values.recipes.recipes
+                collection: collection,
+                recipes: recipes
             )
         )
+    }
+
+    static func cached(_ remote: RemoteValues) -> CachedWeeklyMealsContent {
+        CachedWeeklyMealsContent(
+            manifest: remote.manifest,
+            document: remote.document,
+            validatedAt: Date(timeIntervalSince1970: 100)
+        )
+    }
+
+    static func configuration() throws -> WeeklyMealsRemoteConfiguration {
+        try WeeklyMealsRemoteConfiguration.resolve(
+            explicitURL: URL(string: "https://content.smartcart.app")!
+        ).get()
+    }
+
+    static func responses(
+        for remote: RemoteValues,
+        configuration: WeeklyMealsRemoteConfiguration
+    ) throws -> [URL: WeeklyMealsHTTPResponse] {
+        let collectionURL = try RemoteWeeklyMealsValidator.collectionURL(
+            from: remote.manifest,
+            relativeTo: configuration
+        )
+        return [
+            configuration.manifestURL: .init(
+                data: try encoded(remote.manifest),
+                finalURL: configuration.manifestURL
+            ),
+            collectionURL: .init(
+                data: try encoded(remote.document),
+                finalURL: collectionURL
+            )
+        ]
+    }
+
+    static func encoded<T: Encodable>(_ value: T) throws -> Data {
+        try RemoteWeeklyMealsValidator.encoder().encode(value)
     }
 
     static func recipe(index: Int, slot: WeeklyMealSlot) -> CuratedRecipeRecord {
@@ -380,12 +728,45 @@ private enum Fixture {
                 mealTypes: [slot],
                 verifiedDietaryClaims: [],
                 merchandisingTags: [.highProtein],
-                imageAssetName: "weekly-placeholder",
+                imageAssetName: "weekly-placeholder-protein-overnight-oats",
                 accessibilityDescription: "A plated meal",
                 isMealPrepFriendly: true,
                 isFeaturedEligible: true,
                 baseNutritionExcludes: nil
             )
+        )
+    }
+
+    private static func replacingImageAssetName(
+        in recipe: CuratedRecipeRecord,
+        with imageAssetName: String
+    ) -> CuratedRecipeRecord {
+        let metadata = CuratedRecipeMetadata(
+            prepMinutes: recipe.metadata.prepMinutes,
+            cookMinutes: recipe.metadata.cookMinutes,
+            passiveMinutes: recipe.metadata.passiveMinutes,
+            nutrition: recipe.metadata.nutrition,
+            costEstimate: recipe.metadata.costEstimate,
+            mealTypes: recipe.metadata.mealTypes,
+            verifiedDietaryClaims: recipe.metadata.verifiedDietaryClaims,
+            merchandisingTags: recipe.metadata.merchandisingTags,
+            imageAssetName: imageAssetName,
+            accessibilityDescription: recipe.metadata.accessibilityDescription,
+            isMealPrepFriendly: recipe.metadata.isMealPrepFriendly,
+            isFeaturedEligible: recipe.metadata.isFeaturedEligible,
+            baseNutritionExcludes: recipe.metadata.baseNutritionExcludes
+        )
+        return CuratedRecipeRecord(
+            id: recipe.id,
+            contentVersion: recipe.contentVersion,
+            title: recipe.title,
+            shortDescription: recipe.shortDescription,
+            defaultServings: recipe.defaultServings,
+            servingDescription: recipe.servingDescription,
+            ingredients: recipe.ingredients,
+            instructions: recipe.instructions,
+            substitutions: recipe.substitutions,
+            metadata: metadata
         )
     }
 }
