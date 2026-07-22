@@ -2958,14 +2958,30 @@ final class AppModel {
         }
     }
 
+    /// Applies the conservative defaults formerly exposed by two review
+    /// screens, persists the prepared plan, and opens the existing retailer
+    /// queue. A genuinely unresolved ingredient remains on Recipe Review
+    /// instead of being silently excluded.
     @discardableResult
-    func continueToShoppingReview() -> Bool {
-        guard preparedShoppingPlanCanContinue else { return false }
-        selectedTab = .home
-        if homePath.last != .shoppingList {
-            homePath.append(.shoppingList)
+    func finalizeShoppingPlanForRetailerQueue() -> Bool {
+        guard unresolvedIngredientResolutions.isEmpty else {
+            let count = unresolvedIngredientResolutions.count
+            showToast("SmartCart could not prepare \(count) ingredient\(count == 1 ? "" : "s"). Try again.")
+            return false
         }
-        return true
+
+        let exceptions = unresolvedMatchingExceptionItems
+        if !exceptions.isEmpty {
+            let orderEveryItem = Dictionary(
+                uniqueKeysWithValues: exceptions.map { ($0.id, true) }
+            )
+            guard applyMatchingExceptionDecisions(
+                orderEveryItem,
+                confirmingUnresolvedPackageCount: 1
+            ) else { return false }
+        }
+
+        return continueToShoppingTrip()
     }
 
     @discardableResult
@@ -2986,7 +3002,7 @@ final class AppModel {
         guard editableResolutionValidation.canStartShoppingTrip,
               editableResolutionActionsAreComplete,
               !hasUnresolvedMatchingWork else {
-            showToast("Review or skip every matching exception before continuing")
+            showToast("SmartCart could not finish preparing every product. Try again.")
             return false
         }
         guard shoppingItems.contains(where: { $0.status == .waiting }) else {
@@ -3486,7 +3502,7 @@ final class AppModel {
             .max { $0.startedAt < $1.startedAt }
         if let session = identitySession ?? manifestSession {
             if openShoppingSession(session.id) {
-                homePath = [.shoppingList]
+                homePath = [.shoppingTrip]
             }
             return
         }
@@ -3533,7 +3549,7 @@ final class AppModel {
         persistState()
 
         selectedTab = .home
-        homePath = [.shoppingList]
+        homePath = [.shoppingTrip]
     }
 
     func retailerSetupURL() -> URL {

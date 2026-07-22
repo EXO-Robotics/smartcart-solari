@@ -37,7 +37,6 @@ enum SmartRoute: Hashable {
     case weeklyMealDetail(CuratedRecipeID)
     case mealPrepSelection
     case recipeReady
-    case shoppingList
     case shoppingTrip
     case shoppingReconciliation(UUID)
 
@@ -48,7 +47,7 @@ enum SmartRoute: Hashable {
         case "ingredient", "servings", "pantry", "pantry-match":
             .recipeReady
         case "matching", "shopping":
-            .shoppingList
+            .shoppingTrip
         case "preferences", "store", "guided", "walmart-guide", "target-guide":
             .shoppingTrip
         default:

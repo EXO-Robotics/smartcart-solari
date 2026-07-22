@@ -2,16 +2,14 @@ import SwiftUI
 import UIKit
 
 /// The adaptive confirmation surface shared by single recipes and reviewed
-/// Meal Prep plans. Internal pipeline stages stay available to legacy routes,
-/// but the normal funnel no longer asks the user to visit them one by one.
+/// Meal Prep plans. Matching and package planning remain model-owned and run
+/// behind the single action that opens the retailer Safari queue.
 struct RecipeReadyView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var expandedIngredientIDs: Set<UUID> = []
     @State private var activeSheet: RecipeReadySheet?
-    @State private var continueAfterRetailerSetup = false
-    @State private var tripSettingsConfirmed = false
     @State private var issueCursor = 0
     @State private var isPreparingProducts = false
     @State private var pendingIngredientDeletion: PendingIngredientDeletion?
@@ -71,7 +69,7 @@ struct RecipeReadyView: View {
                             }
                         } else if dynamicTypeSize.isAccessibilitySize {
                             HStack {
-                                Text("Start\nShopping")
+                                Text(appModel.isMealPrepShopping ? "Shop Meal\nPrep" : "Shop This\nRecipe")
                                     .multilineTextAlignment(.leading)
                                     .fixedSize(horizontal: false, vertical: true)
                                 Spacer(minLength: 12)
@@ -80,12 +78,12 @@ struct RecipeReadyView: View {
                         } else {
                             ViewThatFits(in: .horizontal) {
                                 HStack {
-                                    Text("Review Shopping · \(appModel.recipeReadyExpectedPurchaseCount) items")
+                                    Text(appModel.isMealPrepShopping ? "Shop Meal Prep" : "Shop This Recipe")
                                     Spacer()
                                     Image(systemName: "arrow.right")
                                 }
                                 HStack {
-                                    Text("Review Shopping")
+                                    Text(appModel.isMealPrepShopping ? "Shop Meal Prep" : "Shop This Recipe")
                                     Spacer()
                                     Text(appModel.recipeReadyExpectedPurchaseCount, format: .number)
                                     Image(systemName: "arrow.right")
@@ -99,29 +97,22 @@ struct RecipeReadyView: View {
                     .accessibilityLabel(
                         isPreparingProducts
                             ? "Preparing Products"
-                            : "Review Shopping, \(appModel.recipeReadyExpectedPurchaseCount) items"
+                            : "\(appModel.isMealPrepShopping ? "Shop Meal Prep" : "Shop This Recipe"), \(appModel.recipeReadyExpectedPurchaseCount) items"
                     )
-                    .accessibilityHint(appModel.recipeReadyDisabledExplanation ?? "Matches products and opens Shopping Review")
+                    .accessibilityHint(appModel.recipeReadyDisabledExplanation ?? "Prepares products in the background and opens the Safari shopping queue")
                 }
             }
         }
-        .sheet(item: $activeSheet, onDismiss: sheetDidDismiss) { sheet in
+        .sheet(item: $activeSheet) { sheet in
             switch sheet {
             case .pantry:
                 RecipeReadyPantrySheet()
                     .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
             case .shoppingSettings:
-                RecipeReadyTripSettingsSheet {
-                    tripSettingsConfirmed = true
-                }
+                RecipeReadyTripSettingsSheet {}
                     .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
-            case .productExceptions:
-                ProductExceptionReviewSheet()
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
-                    .interactiveDismissDisabled()
             case .sourceText:
                 NavigationStack {
                     ScrollView {
@@ -650,8 +641,6 @@ struct RecipeReadyView: View {
 
     private var shoppingSettingsSummary: some View {
         Button {
-            continueAfterRetailerSetup = false
-            tripSettingsConfirmed = false
             activeSheet = .shoppingSettings
         } label: {
             RecipeReadySummaryRow(
@@ -675,7 +664,7 @@ struct RecipeReadyView: View {
         InfoBanner(
             symbol: "basket.fill",
             title: "\(appModel.recipeReadyExpectedPurchaseCount) items to buy",
-            message: "SmartCart will match products now. Exact high-confidence matches continue automatically; only product exceptions need another decision.",
+            message: "SmartCart matches products and calculates package quantities in the background, then opens each item in the Safari shopping queue.",
             color: SmartCartTheme.green
         )
         .accessibilityIdentifier("recipe-ready-purchase-summary")
@@ -770,22 +759,7 @@ struct RecipeReadyView: View {
 
     private func startShopping() async {
         guard appModel.recipeReadyCanStartShopping, !isPreparingProducts else { return }
-        if appModel.retailerSetupIsComplete {
-            await prepareProducts()
-        } else {
-            continueAfterRetailerSetup = true
-            tripSettingsConfirmed = false
-            activeSheet = .shoppingSettings
-        }
-    }
-
-    private func sheetDidDismiss() {
-        let shouldContinue = continueAfterRetailerSetup && tripSettingsConfirmed
-        continueAfterRetailerSetup = false
-        tripSettingsConfirmed = false
-        guard shouldContinue else { return }
-        guard appModel.retailerSetupIsComplete else { return }
-        Task { await prepareProducts() }
+        await prepareProducts()
     }
 
     private func prepareProducts() async {
@@ -797,11 +771,7 @@ struct RecipeReadyView: View {
         let published = await appModel.startMatching()
         guard published, !Task.isCancelled else { return }
 
-        if !appModel.hasUnresolvedMatchingWork {
-            _ = appModel.continueToShoppingReview()
-        } else {
-            activeSheet = .productExceptions
-        }
+        _ = appModel.finalizeShoppingPlanForRetailerQueue()
     }
 }
 
@@ -827,7 +797,7 @@ private struct ShoppingLaunchOverlay: View {
                     .scaleEffect(cartPulse ? 1.06 : 0.96)
 
                 VStack(spacing: 6) {
-                    Text("Preparing Shopping Review")
+                    Text("Preparing Safari Queue")
                         .font(.system(.title2, design: .rounded, weight: .bold))
                         .foregroundStyle(.white)
                     Text(stage)
@@ -857,7 +827,7 @@ private struct ShoppingLaunchOverlay: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Preparing Shopping Review, \(stage)")
+        .accessibilityLabel("Preparing Safari Queue, \(stage)")
         .accessibilityIdentifier("shopping-launch-transition")
     }
 }
@@ -865,7 +835,6 @@ private struct ShoppingLaunchOverlay: View {
 private enum RecipeReadySheet: String, Identifiable {
     case pantry
     case shoppingSettings
-    case productExceptions
     case sourceText
 
     var id: String { rawValue }

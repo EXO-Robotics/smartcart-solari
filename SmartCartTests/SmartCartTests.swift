@@ -3163,7 +3163,7 @@ final class SmartCartTests: XCTestCase {
     }
 
     @MainActor
-    func testPreparedProductsPauseAtShoppingReviewBeforeRetailer() async throws {
+    func testPreparedProductsOpenRetailerQueueWithoutReviewScreens() async throws {
         let model = AppModel(
             stateStore: InMemorySmartCartStateStore(),
             retailerAdapters: [.walmart: Slice3GuideAdapter()],
@@ -3173,20 +3173,17 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(model.beginRecipe(phase2Recipe(ingredients: [ingredient])))
         let matchingPublished = await model.startMatching()
         XCTAssertTrue(matchingPublished)
-        for item in model.unresolvedMatchingExceptionItems {
-            XCTAssertTrue(model.acceptMatchingException(itemID: item.id))
-        }
+        XCTAssertTrue(
+            model.finalizeShoppingPlanForRetailerQueue(),
+            model.toastMessage ?? "Unable to continue"
+        )
         XCTAssertFalse(model.hasUnresolvedMatchingWork)
-
-        XCTAssertTrue(model.continueToShoppingReview(), model.toastMessage ?? "Unable to continue")
-        XCTAssertEqual(model.homePath.last, .shoppingList)
-        XCTAssertFalse(model.homePath.contains(.shoppingTrip))
-
-        XCTAssertTrue(model.continueToShoppingReview())
-        XCTAssertEqual(model.homePath.filter { $0 == .shoppingList }.count, 1)
-
-        model.beginGuidedShopping()
+        XCTAssertTrue(model.shoppingItems.allSatisfy { $0.purchaseQuantity > 0 })
         XCTAssertEqual(model.homePath.last, .shoppingTrip)
+        XCTAssertFalse(model.homePath.contains(.recipeReady) && model.homePath.count > 2)
+
+        XCTAssertTrue(model.finalizeShoppingPlanForRetailerQueue())
+        XCTAssertEqual(model.homePath.filter { $0 == .shoppingTrip }.count, 1)
     }
 
     func testRetiredNavigationInputsTranslateToCanonicalDestinations() {
@@ -3195,8 +3192,8 @@ final class SmartCartTests: XCTestCase {
         XCTAssertEqual(SmartRoute.canonicalRoute(forLegacyName: "ingredient"), .recipeReady)
         XCTAssertEqual(SmartRoute.canonicalRoute(forLegacyName: "servings"), .recipeReady)
         XCTAssertEqual(SmartRoute.canonicalRoute(forLegacyName: "pantry"), .recipeReady)
-        XCTAssertEqual(SmartRoute.canonicalRoute(forLegacyName: "matching"), .shoppingList)
-        XCTAssertEqual(SmartRoute.canonicalRoute(forLegacyName: "shopping"), .shoppingList)
+        XCTAssertEqual(SmartRoute.canonicalRoute(forLegacyName: "matching"), .shoppingTrip)
+        XCTAssertEqual(SmartRoute.canonicalRoute(forLegacyName: "shopping"), .shoppingTrip)
         XCTAssertEqual(SmartRoute.canonicalRoute(forLegacyName: "preferences"), .shoppingTrip)
         XCTAssertEqual(SmartRoute.canonicalRoute(forLegacyName: "store"), .shoppingTrip)
         XCTAssertEqual(SmartRoute.canonicalRoute(forLegacyName: "guided"), .shoppingTrip)
@@ -3469,7 +3466,7 @@ final class SmartCartTests: XCTestCase {
         model.fulfillmentMode = .delivery
         model.startRetailerGuide(.target)
         model.selectedTab = .pantry
-        model.homePath = [.recipeReady, .shoppingList]
+        model.homePath = [.recipeReady, .shoppingTrip]
 
         let originalActiveSessionID = model.activeShoppingSessionID
         let originalScope = model.shoppingScope
@@ -3651,7 +3648,7 @@ final class SmartCartTests: XCTestCase {
 
         model.openSavedList(savedID)
 
-        XCTAssertEqual(model.homePath, [.shoppingList])
+        XCTAssertEqual(model.homePath, [.shoppingTrip])
         XCTAssertEqual(model.fulfillmentMode, .pickup)
         XCTAssertEqual(model.shoppingItems.map(\.product.retailerProductID), expectedProductIDs)
     }
@@ -5202,8 +5199,10 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(accountSource.contains("accessibilityIdentifier(\"profile-retailer-location\")"))
 
         XCTAssertTrue(recipeReviewSource.contains(".navigationTitle(\"Recipe Review\")"))
-        XCTAssertTrue(recipeReviewSource.contains("appModel.continueToShoppingReview()"))
-        XCTAssertTrue(accountSource.contains(".navigationTitle(\"Shopping Review\")"))
+        XCTAssertTrue(recipeReviewSource.contains("appModel.finalizeShoppingPlanForRetailerQueue()"))
+        XCTAssertTrue(recipeReviewSource.contains("Shop This Recipe"))
+        XCTAssertFalse(rootSource.contains("ShoppingListReviewView()"))
+        XCTAssertFalse(recipeReviewSource.contains("ProductExceptionReviewSheet()"))
         XCTAssertFalse(accountSource.contains(".navigationTitle(\"Review shopping list\")"))
         XCTAssertFalse(accountSource.contains(".navigationTitle(\"Review product choices\")"))
     }
@@ -5711,7 +5710,7 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(composerSource.contains("repeatForever(autoreverses: true)"))
         XCTAssertTrue(composerSource.contains("Double(index) * 0.045"))
         XCTAssertTrue(cartSource.contains("ShoppingLaunchOverlay("))
-        XCTAssertTrue(cartSource.contains("Preparing Shopping Review"))
+        XCTAssertTrue(cartSource.contains("Preparing Safari Queue"))
         XCTAssertTrue(cartSource.contains("accessibilityIdentifier(\"shopping-launch-transition\")"))
         XCTAssertTrue(rootSource.contains(".sensoryFeedback(.success"))
     }
@@ -6817,7 +6816,7 @@ final class SmartCartTests: XCTestCase {
         let active = phase4Recipe(title: "Active recipe")
         XCTAssertTrue(model.beginRecipe(active))
         model.selectedTab = .pantry
-        model.homePath = [.recipeReady, .shoppingList]
+        model.homePath = [.recipeReady, .shoppingTrip]
         model.openImporter(.recipeText, initialText: "draft ingredients")
 
         let originalPath = model.homePath
@@ -7124,7 +7123,7 @@ final class SmartCartTests: XCTestCase {
         model.openSavedList(completed.listID)
 
         XCTAssertEqual(model.activeShoppingSessionID, completed.sessionID)
-        XCTAssertEqual(model.homePath, [.shoppingList])
+        XCTAssertEqual(model.homePath, [.shoppingTrip])
         XCTAssertEqual(
             model.shoppingSession(id: completed.sessionID)?.pantryUpdateReminderArchivedAt,
             archivedAt
@@ -7593,6 +7592,9 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(model.beginRecipe(phase2Recipe(ingredients: [exact, unresolved])))
         await model.startMatching()
 
+        XCTAssertFalse(model.finalizeShoppingPlanForRetailerQueue())
+        XCTAssertFalse(model.homePath.contains(.shoppingTrip))
+        XCTAssertEqual(model.unresolvedIngredientResolutions.map(\.id), [unresolved.id])
         XCTAssertFalse(model.continueToShoppingTrip())
         XCTAssertTrue(model.excludeUnresolvedIngredient(unresolved.id))
         for item in model.unresolvedMatchingExceptionItems {

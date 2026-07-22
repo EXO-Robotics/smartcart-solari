@@ -112,8 +112,6 @@ struct RootView: View {
                     sourceID: SmartCartTransitionID.shoppingWorkspace,
                     in: workspaceTransition
                 )
-        case .shoppingList:
-            ShoppingListReviewView()
         case .shoppingReconciliation(let sessionID):
             ShoppingReconciliationView(sessionID: sessionID)
         }
