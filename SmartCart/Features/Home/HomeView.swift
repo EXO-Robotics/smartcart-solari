@@ -33,6 +33,11 @@ struct HomeView: View {
                     VStack(alignment: .leading, spacing: 24) {
                         header
                         startShoppingSection
+                        WeeklyMealsSection(
+                            onOpen: { appModel.continueTo(.weeklyMealDetail($0)) },
+                            onShop: { appModel.continueTo(.weeklyMealDetail($0)) },
+                            onSeeAll: { appModel.continueTo(.weeklyMealsCollection) }
+                        )
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 10)

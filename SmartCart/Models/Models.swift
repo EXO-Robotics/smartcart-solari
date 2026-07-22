@@ -32,6 +32,8 @@ enum AppTab: String, CaseIterable, Identifiable, Codable, Hashable {
 }
 
 enum SmartRoute: Hashable {
+    case weeklyMealsCollection
+    case weeklyMealDetail(CuratedRecipeID)
     case mealPrepSelection
     case mealPrepReview
     case mealPrepDashboard
