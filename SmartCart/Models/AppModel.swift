@@ -734,12 +734,15 @@ final class AppModel {
 
     /// Pre-trip matches that require an explicit keep-or-skip decision.
     /// A review applies only to the exact matching input fingerprint, so a
-    /// quantity edit safely reopens the decision.
+    /// quantity edit safely reopens the decision. A waiting item with no
+    /// package count always remains unresolved, even when an older persisted
+    /// match fingerprint was already reviewed.
     var unresolvedMatchingExceptionItems: [ShoppingListItem] {
         guard activeShoppingSessionID == nil else { return [] }
         return shoppingItems.filter { item in
-            guard item.status == .waiting,
-                  !matchingExceptionReasons(for: item).isEmpty else { return false }
+            guard item.status == .waiting else { return false }
+            if item.purchaseQuantity <= 0 { return true }
+            guard !matchingExceptionReasons(for: item).isEmpty else { return false }
             guard let input = item.matchingInputFingerprint else { return true }
             return item.reviewedMatchingFingerprint != input
         }

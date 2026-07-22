@@ -5249,23 +5249,26 @@ final class SmartCartTests: XCTestCase {
         XCTAssertFalse(model.continueToShoppingTrip())
 
         XCTAssertTrue(model.acceptMatchingException(itemID: fallback.id))
-        XCTAssertEqual(model.unresolvedMatchingExceptionItems.map(\.id), [lowConfidence.id])
+        XCTAssertTrue(model.unresolvedMatchingExceptionItems.contains(where: { $0.id == lowConfidence.id }))
         XCTAssertFalse(model.continueToShoppingTrip())
 
         XCTAssertTrue(model.acceptMatchingException(itemID: lowConfidence.id))
+        let unresolvedPackageItems = model.unresolvedMatchingExceptionItems
+        XCTAssertTrue(unresolvedPackageItems.allSatisfy { $0.purchaseQuantity == 0 })
+        if !unresolvedPackageItems.isEmpty {
+            XCTAssertTrue(
+                model.applyMatchingExceptionDecisions(
+                    Dictionary(uniqueKeysWithValues: unresolvedPackageItems.map { ($0.id, true) }),
+                    confirmingUnresolvedPackageCount: 1
+                )
+            )
+        }
         XCTAssertTrue(model.unresolvedMatchingExceptionItems.isEmpty)
         for itemID in [fallback.id, lowConfidence.id] {
             let reviewed = try model.shoppingItems
                 .first(where: { $0.id == itemID })
                 .firstUnwrapped()
             XCTAssertEqual(reviewed.reviewedMatchingFingerprint, reviewed.matchingInputFingerprint)
-            if reviewed.purchaseQuantity == 0 {
-                model.updatePurchaseQuantity(for: reviewed.id, delta: 1)
-                XCTAssertEqual(
-                    model.shoppingItems.first(where: { $0.id == reviewed.id })?.purchaseQuantity,
-                    1
-                )
-            }
         }
         XCTAssertEqual(model.shoppingItems.map(\.purchaseQuantity), [1, 1])
         XCTAssertFalse(model.hasUnresolvedMatchingWork)
@@ -5339,7 +5342,15 @@ final class SmartCartTests: XCTestCase {
 
         let exception = try model.unresolvedMatchingExceptionItems.firstUnwrapped()
         XCTAssertEqual(exception.purchaseQuantity, 0)
+
+        // A previously accepted product match must not bypass package-count
+        // confirmation when restored with an unresolved zero quantity.
+        XCTAssertTrue(model.acceptMatchingException(itemID: exception.id))
+        let reviewed = try model.shoppingItems.firstUnwrapped()
+        XCTAssertEqual(reviewed.reviewedMatchingFingerprint, reviewed.matchingInputFingerprint)
+        XCTAssertEqual(model.unresolvedMatchingExceptionItems.map(\.id), [exception.id])
         XCTAssertFalse(model.continueToShoppingTrip())
+        XCTAssertEqual(model.toastMessage, "Review or skip every matching exception before continuing")
 
         XCTAssertTrue(
             model.applyMatchingExceptionDecisions(
