@@ -27,9 +27,31 @@ final class WeeklyMealCarouselTests: XCTestCase {
     }
 
     func testDragIntentLeavesVerticalHomeScrollingAvailable() {
-        XCTAssertFalse(WeeklyMealCarouselLayout.isHorizontalDrag(CGSize(width: 12, height: 90)))
-        XCTAssertFalse(WeeklyMealCarouselLayout.isHorizontalDrag(CGSize(width: 24, height: 24)))
-        XCTAssertTrue(WeeklyMealCarouselLayout.isHorizontalDrag(CGSize(width: 90, height: 12)))
+        XCTAssertEqual(
+            WeeklyMealCarouselLayout.dragIntent(CGSize(width: 12, height: 90)),
+            .vertical
+        )
+        XCTAssertEqual(
+            WeeklyMealCarouselLayout.dragIntent(CGSize(width: 24, height: 24)),
+            .undetermined
+        )
+        XCTAssertEqual(
+            WeeklyMealCarouselLayout.dragIntent(CGSize(width: 90, height: 12)),
+            .horizontal
+        )
+    }
+
+    func testHomeOwnsRackGestureInsteadOfTheCardHierarchy() throws {
+        let homeSource = try source("SmartCart/Features/Home/HomeView.swift")
+        let carouselSource = try source(
+            "SmartCart/WeeklyMeals/Features/WeeklyMealMagnifyingCarousel.swift"
+        )
+
+        XCTAssertTrue(homeSource.contains(".simultaneousGesture(homeWeeklyMealRackGesture, including: .gesture)"))
+        XCTAssertTrue(homeSource.contains("coordinateSpace: .named(WeeklyMealRackCoordinateSpace.name)"))
+        XCTAssertTrue(homeSource.contains("weeklyMealRackInteraction.frame = frame"))
+        XCTAssertFalse(carouselSource.contains(".simultaneousGesture(rackDragGesture"))
+        XCTAssertFalse(carouselSource.contains("DragGesture(minimumDistance: 8)"))
     }
 
     func testIncomingCardEmergesFromBehindFocusedCardWithRestrainedDepth() {
@@ -50,8 +72,15 @@ final class WeeklyMealCarouselTests: XCTestCase {
         XCTAssertEqual(focused.scale, 0.9875, accuracy: 0.001)
         XCTAssertEqual(incoming.horizontalOffset, 160, accuracy: 0.01)
         XCTAssertEqual(incoming.scale, 0.97, accuracy: 0.001)
-        XCTAssertEqual(incoming.opacity, 0.5, accuracy: 0.001)
+        XCTAssertEqual(incoming.opacity, 1, accuracy: 0.001)
         XCTAssertEqual(incoming.rotationDegrees, -3, accuracy: 0.001)
+    }
+
+    func testIncomingCardKeepsAnOpaqueFallbackBehindItsGlassMaterial() throws {
+        let cardSource = try source("SmartCart/WeeklyMeals/Features/WeeklyMealCard.swift")
+
+        XCTAssertTrue(cardSource.contains(".fill(SmartCartTheme.paper)"))
+        XCTAssertTrue(cardSource.contains("SmartCartSmokedGlassSurface("))
     }
 
     func testReduceMotionRemovesRackDepthTransforms() {
@@ -65,7 +94,7 @@ final class WeeklyMealCarouselTests: XCTestCase {
         XCTAssertEqual(transform.scale, 1, accuracy: 0.001)
         XCTAssertEqual(transform.verticalOffset, 0, accuracy: 0.001)
         XCTAssertEqual(transform.rotationDegrees, 0, accuracy: 0.001)
-        XCTAssertEqual(transform.opacity, 0.5, accuracy: 0.001)
+        XCTAssertEqual(transform.opacity, 1, accuracy: 0.001)
     }
 
     func testRackPagingUsesPredictedIntentAndStopsAtEnds() {
@@ -120,6 +149,17 @@ final class WeeklyMealCarouselTests: XCTestCase {
         var value = Calendar(identifier: .gregorian)
         value.timeZone = TimeZone(secondsFromGMT: 0)!
         return value
+    }
+
+    private func source(_ relativePath: String) throws -> String {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        return try String(
+            contentsOf: repositoryRoot.appendingPathComponent(relativePath),
+            encoding: .utf8
+        )
     }
 }
 

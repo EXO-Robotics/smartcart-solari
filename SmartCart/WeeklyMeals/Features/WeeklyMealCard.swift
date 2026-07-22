@@ -36,7 +36,14 @@ struct WeeklyMealCard: View {
         }
         .frame(maxWidth: .infinity, minHeight: fixedHeight, maxHeight: fixedHeight, alignment: .top)
         .background {
-            SmartCartSmokedGlassSurface(radius: 26, darkness: colorScheme == .dark ? 0.34 : 0.12)
+            ZStack {
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .fill(SmartCartTheme.paper)
+                SmartCartSmokedGlassSurface(
+                    radius: 26,
+                    darkness: colorScheme == .dark ? 0.34 : 0.12
+                )
+            }
         }
         .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
         .overlay {

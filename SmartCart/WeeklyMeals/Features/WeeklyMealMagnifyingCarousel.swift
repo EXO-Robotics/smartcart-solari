@@ -10,6 +10,7 @@ struct WeeklyMealMagnifyingCarousel: View {
     @State private var dwellTask: Task<Void, Never>?
 
     let models: [WeeklyMealDisplayModel]
+    let interaction: WeeklyMealRackInteraction
     let onOpen: (CuratedRecipeID) -> Void
     let onShop: (CuratedRecipeID) -> Void
     let onFocused: (WeeklyMealDisplayModel) -> Void
@@ -38,13 +39,23 @@ struct WeeklyMealMagnifyingCarousel: View {
             .frame(width: proxy.size.width, height: 468)
             .contentShape(Rectangle())
             .clipped()
-            .simultaneousGesture(rackDragGesture(cardWidth: cardWidth))
             .overlay(alignment: .top) {
                 rackArrows(focusedIndex: focusedIndex)
                     .padding(.top, 52)
             }
+            .onChange(of: interaction.command) { _, command in
+                handleInteraction(command, cardWidth: cardWidth)
+            }
         }
         .frame(height: 492)
+        .background {
+            GeometryReader { geometry in
+                Color.clear.preference(
+                    key: WeeklyMealRackFramePreferenceKey.self,
+                    value: geometry.frame(in: .named(WeeklyMealRackCoordinateSpace.name))
+                )
+            }
+        }
         .overlay(alignment: .bottom) {
             positionIndicator
         }
@@ -150,46 +161,46 @@ struct WeeklyMealMagnifyingCarousel: View {
         .accessibilityLabel(label)
     }
 
-    private func rackDragGesture(cardWidth: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 8)
-            .onChanged { value in
-                if !horizontalDragActive {
-                    guard WeeklyMealCarouselLayout.isHorizontalDrag(value.translation) else { return }
-                    horizontalDragActive = true
-                }
-
-                dragTranslation = WeeklyMealCarouselLayout.clampedDragTranslation(
-                    value.translation.width,
-                    focusedIndex: WeeklyMealCarouselLayout.focusedIndex(
-                        focusedID: focusedID,
-                        models: models
-                    ),
-                    count: models.count,
-                    cardWidth: cardWidth
-                )
-            }
-            .onEnded { value in
-                guard horizontalDragActive else { return }
-                horizontalDragActive = false
-
-                let currentIndex = WeeklyMealCarouselLayout.focusedIndex(
+    private func handleInteraction(
+        _ command: WeeklyMealRackGestureCommand,
+        cardWidth: CGFloat
+    ) {
+        switch command.phase {
+        case .idle:
+            return
+        case .dragging:
+            horizontalDragActive = true
+            dragTranslation = WeeklyMealCarouselLayout.clampedDragTranslation(
+                command.translation,
+                focusedIndex: WeeklyMealCarouselLayout.focusedIndex(
                     focusedID: focusedID,
                     models: models
-                )
-                let targetIndex = WeeklyMealCarouselLayout.targetIndex(
-                    currentIndex: currentIndex,
-                    translation: value.translation.width,
-                    predictedTranslation: value.predictedEndTranslation.width,
-                    cardWidth: cardWidth,
-                    count: models.count
-                )
+                ),
+                count: models.count,
+                cardWidth: cardWidth
+            )
+        case .ended:
+            guard horizontalDragActive else { return }
+            horizontalDragActive = false
 
-                userInteractionPendingFocus = targetIndex != currentIndex
-                withAnimation(settleAnimation) {
-                    focusedID = models[targetIndex].id
-                    dragTranslation = 0
-                }
+            let currentIndex = WeeklyMealCarouselLayout.focusedIndex(
+                focusedID: focusedID,
+                models: models
+            )
+            let targetIndex = WeeklyMealCarouselLayout.targetIndex(
+                currentIndex: currentIndex,
+                translation: command.translation,
+                predictedTranslation: command.predictedTranslation,
+                cardWidth: cardWidth,
+                count: models.count
+            )
+
+            userInteractionPendingFocus = targetIndex != currentIndex
+            withAnimation(settleAnimation) {
+                focusedID = models[targetIndex].id
+                dragTranslation = 0
             }
+        }
     }
 
     private var settleAnimation: Animation {
@@ -247,6 +258,97 @@ struct WeeklyMealMagnifyingCarousel: View {
     }
 }
 
+enum WeeklyMealRackCoordinateSpace {
+    static let name = "home-weekly-meal-rack"
+}
+
+struct WeeklyMealRackFramePreferenceKey: PreferenceKey {
+    static var defaultValue: CGRect = .null
+
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        let next = nextValue()
+        if !next.isNull {
+            value = next
+        }
+    }
+}
+
+struct WeeklyMealRackGestureCommand: Equatable {
+    enum Phase: Equatable {
+        case idle
+        case dragging
+        case ended
+    }
+
+    let phase: Phase
+    let translation: CGFloat
+    let predictedTranslation: CGFloat
+    let sequence: Int
+
+    static let idle = WeeklyMealRackGestureCommand(
+        phase: .idle,
+        translation: 0,
+        predictedTranslation: 0,
+        sequence: 0
+    )
+}
+
+@Observable
+final class WeeklyMealRackInteraction {
+    var frame: CGRect = .null
+    private(set) var command = WeeklyMealRackGestureCommand.idle
+
+    @ObservationIgnored private var isTracking = false
+    @ObservationIgnored private var beganInsideRack = false
+    @ObservationIgnored private var intent: WeeklyMealRackDragIntent = .undetermined
+    @ObservationIgnored private var sequence = 0
+
+    func dragChanged(_ value: DragGesture.Value) {
+        if !isTracking {
+            isTracking = true
+            beganInsideRack = frame.contains(value.startLocation)
+        }
+        guard beganInsideRack else { return }
+
+        if intent == .undetermined {
+            intent = WeeklyMealCarouselLayout.dragIntent(value.translation)
+        }
+        guard intent == .horizontal else { return }
+
+        command = WeeklyMealRackGestureCommand(
+            phase: .dragging,
+            translation: value.translation.width,
+            predictedTranslation: value.predictedEndTranslation.width,
+            sequence: sequence
+        )
+    }
+
+    func dragEnded(_ value: DragGesture.Value) {
+        defer { resetTracking() }
+        guard beganInsideRack, intent == .horizontal else { return }
+
+        sequence += 1
+        command = WeeklyMealRackGestureCommand(
+            phase: .ended,
+            translation: value.translation.width,
+            predictedTranslation: value.predictedEndTranslation.width,
+            sequence: sequence
+        )
+    }
+
+    private func resetTracking() {
+        isTracking = false
+        beganInsideRack = false
+        intent = .undetermined
+    }
+}
+
+enum WeeklyMealRackDragIntent: Equatable {
+    case undetermined
+    case horizontal
+    case vertical
+}
+
 struct WeeklyMealRackTransform: Equatable {
     let horizontalOffset: CGFloat
     let verticalOffset: CGFloat
@@ -269,8 +371,16 @@ enum WeeklyMealCarouselLayout {
         return index
     }
 
-    static func isHorizontalDrag(_ translation: CGSize) -> Bool {
-        abs(translation.width) > abs(translation.height) * 1.12
+    static func dragIntent(_ translation: CGSize) -> WeeklyMealRackDragIntent {
+        let horizontalDistance = abs(translation.width)
+        let verticalDistance = abs(translation.height)
+        if horizontalDistance > verticalDistance * 1.12 {
+            return .horizontal
+        }
+        if verticalDistance > horizontalDistance * 1.12 {
+            return .vertical
+        }
+        return .undetermined
     }
 
     static func clampedDragTranslation(
@@ -317,7 +427,7 @@ enum WeeklyMealCarouselLayout {
                 horizontalOffset: 0,
                 verticalOffset: 0,
                 scale: 1,
-                opacity: relativeIndex == 0 ? 1 : 0,
+                opacity: 1,
                 rotationDegrees: 0
             )
         }
@@ -343,7 +453,7 @@ enum WeeklyMealCarouselLayout {
             horizontalOffset: horizontalOffset,
             verticalOffset: reduceMotion ? 0 : (1 - revealProgress) * 10,
             scale: reduceMotion ? 1 : 0.94 + revealProgress * 0.06,
-            opacity: revealProgress,
+            opacity: 1,
             rotationDegrees: reduceMotion
                 ? 0
                 : Double(relativeIndex) * -6 * Double(1 - revealProgress)

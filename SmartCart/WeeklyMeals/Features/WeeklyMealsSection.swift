@@ -6,6 +6,7 @@ struct WeeklyMealsSection: View {
 
     private let collection: ResolvedWeeklyMealCollection?
     private let models: [WeeklyMealDisplayModel]
+    let interaction: WeeklyMealRackInteraction
     let onOpen: (CuratedRecipeID) -> Void
     let onShop: (CuratedRecipeID) -> Void
     let onSeeAll: () -> Void
@@ -14,6 +15,7 @@ struct WeeklyMealsSection: View {
     let onMealOpened: (WeeklyMealDisplayModel, String) -> Void
 
     init(
+        interaction: WeeklyMealRackInteraction,
         onOpen: @escaping (CuratedRecipeID) -> Void,
         onShop: @escaping (CuratedRecipeID) -> Void,
         onSeeAll: @escaping () -> Void,
@@ -27,6 +29,7 @@ struct WeeklyMealsSection: View {
         )
         collection = resolved
         models = resolved.map { WeeklyMealDisplayModelFactory.makeModels(from: $0) } ?? []
+        self.interaction = interaction
         self.onOpen = onOpen
         self.onShop = onShop
         self.onSeeAll = onSeeAll
@@ -45,6 +48,7 @@ struct WeeklyMealsSection: View {
                 } else {
                     WeeklyMealMagnifyingCarousel(
                         models: models,
+                        interaction: interaction,
                         onOpen: { open($0, placement: "home_carousel") },
                         onShop: { open($0, placement: "home_carousel_shop") },
                         onFocused: onFocused

@@ -9,6 +9,7 @@ struct HomeView: View {
     @State private var pendingDiscardAction: HomeTripActionPresentation?
     @State private var shoppingTripsExpanded = false
     @State private var shoppingTripsDrag: CGFloat = 0
+    @State private var weeklyMealRackInteraction = WeeklyMealRackInteraction()
 
     private var collapsedShoppingTripsDrawerHeight: CGFloat {
         dynamicTypeSize.isAccessibilitySize ? 148 : 92
@@ -34,6 +35,7 @@ struct HomeView: View {
                         header
                         startShoppingSection
                         WeeklyMealsSection(
+                            interaction: weeklyMealRackInteraction,
                             onOpen: { appModel.continueTo(.weeklyMealDetail($0)) },
                             onShop: { appModel.continueTo(.weeklyMealDetail($0)) },
                             onSeeAll: { appModel.continueTo(.weeklyMealsCollection) },
@@ -68,6 +70,11 @@ struct HomeView: View {
                     )
                 }
                 .scrollIndicators(.hidden)
+                .coordinateSpace(name: WeeklyMealRackCoordinateSpace.name)
+                .onPreferenceChange(WeeklyMealRackFramePreferenceKey.self) { frame in
+                    weeklyMealRackInteraction.frame = frame
+                }
+                .simultaneousGesture(homeWeeklyMealRackGesture, including: .gesture)
 
                 if hasTripActions {
                     continueShoppingTripsDrawer(
@@ -119,6 +126,15 @@ struct HomeView: View {
             Text("This removes the paused shopping trip and its generated list. Completed order history is not affected.")
         }
         .domainUndoOverlay()
+    }
+
+    private var homeWeeklyMealRackGesture: some Gesture {
+        DragGesture(
+            minimumDistance: 8,
+            coordinateSpace: .named(WeeklyMealRackCoordinateSpace.name)
+        )
+        .onChanged(weeklyMealRackInteraction.dragChanged)
+        .onEnded(weeklyMealRackInteraction.dragEnded)
     }
 
     private var header: some View {
