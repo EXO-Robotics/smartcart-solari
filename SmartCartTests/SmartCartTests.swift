@@ -5315,6 +5315,45 @@ final class SmartCartTests: XCTestCase {
     }
 
     @MainActor
+    func testMatchingExceptionConfirmationResolvesUnknownPackageCountAndContinuesOnce() async throws {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        let recipe = Recipe(
+            title: "Meal Prep Search Fallback",
+            source: .text,
+            sourceDetail: "Test",
+            heroSymbol: "fork.knife",
+            servings: 1,
+            prepMinutes: 0,
+            cookMinutes: 0,
+            ingredients: [Ingredient(name: "Baking powder", quantity: 0.25, unit: "tsp")]
+        )
+        model.mealPrepDraft = MealPrepDraft(selections: [
+            MealPrepSelection(recipe: recipe, targetServings: 1)
+        ])
+        XCTAssertTrue(model.buildMealPrepPlan())
+
+        await model.startMatching()
+
+        let exception = try model.unresolvedMatchingExceptionItems.firstUnwrapped()
+        XCTAssertEqual(exception.purchaseQuantity, 0)
+        XCTAssertFalse(model.continueToShoppingTrip())
+
+        XCTAssertTrue(
+            model.applyMatchingExceptionDecisions(
+                [exception.id: true],
+                confirmingUnresolvedPackageCount: 1
+            )
+        )
+        XCTAssertEqual(model.shoppingItems.first?.purchaseQuantity, 1)
+        XCTAssertFalse(model.hasUnresolvedMatchingWork)
+        XCTAssertTrue(model.continueToShoppingTrip())
+        XCTAssertEqual(model.homePath.filter { $0 == .shoppingTrip }.count, 1)
+    }
+
+    @MainActor
     func testMatchingExceptionsRemainBlockedUntilFinalDecisionThenContinueOnce() async throws {
         let model = AppModel(
             stateStore: InMemorySmartCartStateStore(),

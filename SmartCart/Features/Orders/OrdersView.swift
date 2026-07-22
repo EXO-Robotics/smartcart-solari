@@ -94,7 +94,6 @@ private enum LegacyMatchingSheet: String, Identifiable {
 struct ProductExceptionReviewSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AppModel.self) private var appModel
-    @State private var activeSheet: ProductExceptionSheetDestination?
     @State private var shouldOrderByItemID: [UUID: Bool] = [:]
     @State private var isRetryingMatching = false
     @AccessibilityFocusState private var focusedExceptionItemID: UUID?
@@ -110,16 +109,6 @@ struct ProductExceptionReviewSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     exceptionHeader
-
-                    Button {
-                        activeSheet = .allProducts
-                    } label: {
-                        Label("View All Products", systemImage: "list.bullet.rectangle.portrait.fill")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(SecondaryButtonStyle())
-                    .accessibilityIdentifier("product-exception-view-all-products")
-                    .accessibilityHint("Opens the complete prepared product list without resolving these decisions")
 
                     if !appModel.unresolvedIngredientResolutions.isEmpty {
                         Button {
@@ -193,14 +182,6 @@ struct ProductExceptionReviewSheet: View {
             }
             .accessibilityIdentifier("product-exception-review")
         }
-        .sheet(item: $activeSheet) { sheet in
-            switch sheet {
-            case .allProducts:
-                AllPreparedProductsSheet()
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
-            }
-        }
         .domainUndoOverlay()
     }
 
@@ -212,7 +193,7 @@ struct ProductExceptionReviewSheet: View {
             Text("Review \(decisionCount) product \(decisionCount == 1 ? "choice" : "choices")")
                 .font(.system(.title2, design: .rounded, weight: .bold))
                 .foregroundStyle(SmartCartTheme.navy)
-            Text("Products default to Order. Turn off only the ingredients you do not want, then continue once.")
+            Text("Products default to Order. Turn off anything you do not want. Confirming starts unresolved package plans at one package so you can verify the final amount at the retailer.")
                 .font(.subheadline)
                 .foregroundStyle(SmartCartTheme.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
@@ -247,16 +228,19 @@ struct ProductExceptionReviewSheet: View {
                         ($0.id, shouldOrderByItemID[$0.id] ?? true)
                     }
                 )
-                guard appModel.applyMatchingExceptionDecisions(decisions) else { return }
+                guard appModel.applyMatchingExceptionDecisions(
+                    decisions,
+                    confirmingUnresolvedPackageCount: 1
+                ) else { return }
                 continueIfResolved()
             } label: {
-                Label("Continue to products", systemImage: "arrow.right.circle.fill")
+                Label("Confirm & Start Shopping", systemImage: "arrow.right.circle.fill")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(PrimaryButtonStyle())
             .disabled(!appModel.unresolvedIngredientResolutions.isEmpty)
             .accessibilityIdentifier("product-exception-continue")
-            .accessibilityHint("Applies every Order or Skip choice and opens the product list")
+            .accessibilityHint("Applies every Order or Skip choice, confirms one package where sizing is unresolved, and starts the shopping trip")
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 12)
@@ -277,8 +261,6 @@ struct ProductExceptionReviewSheet: View {
         guard !appModel.hasUnresolvedMatchingWork else { return }
         if appModel.continueToShoppingTrip() {
             dismiss()
-        } else {
-            returnToRecipeReady()
         }
     }
 
@@ -355,17 +337,6 @@ private struct UnresolvedIngredientDecisionRow: View {
         .smartCartCard()
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("unresolved-ingredient-\(resolution.id.uuidString)")
-    }
-}
-
-private enum ProductExceptionSheetDestination: Identifiable {
-    case allProducts
-
-    var id: String {
-        switch self {
-        case .allProducts:
-            "all-products"
-        }
     }
 }
 
@@ -478,43 +449,6 @@ private struct ProductExceptionCard: View {
             ? candidate.price.formatted(.currency(code: "USD"))
             : "price unavailable"
         return "\(candidate.brand) \(candidate.name) · \(price)"
-    }
-}
-
-private struct AllPreparedProductsSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @Environment(AppModel.self) private var appModel
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 12) {
-                    SectionHeader(
-                        title: "All prepared products",
-                        subtitle: "\(appModel.shoppingItems.count) products · this list does not block your exception review"
-                    )
-
-                    ForEach(appModel.shoppingItems) { item in
-                        ShoppingProductRow(
-                            item: item,
-                            isReadOnly: appModel.activeShoppingSessionID != nil
-                        )
-                    }
-                }
-                .padding(18)
-                .padding(.bottom, 24)
-            }
-            .smartCartBackground()
-            .navigationTitle("All Products")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                        .accessibilityIdentifier("all-prepared-products-done")
-                }
-            }
-            .accessibilityIdentifier("all-prepared-products")
-        }
     }
 }
 

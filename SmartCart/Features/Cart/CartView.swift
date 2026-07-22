@@ -387,16 +387,9 @@ struct RecipeReadyView: View {
         VStack(alignment: .leading, spacing: 10) {
             SectionHeader(title: "Recipes and servings", subtitle: "Each recipe keeps its own scale")
             ForEach(appModel.currentShoppingMealPrepSnapshot?.selections ?? []) { selection in
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 10) {
-                        mealPrepRecipeIdentity(selection)
-                        Spacer(minLength: 8)
-                        mealPrepServingControls(selection)
-                    }
-                    VStack(alignment: .leading, spacing: 10) {
-                        mealPrepRecipeIdentity(selection)
-                        mealPrepServingControls(selection)
-                    }
+                VStack(alignment: .leading, spacing: 10) {
+                    mealPrepRecipeIdentity(selection)
+                    mealPrepServingControls(selection)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .smartCartCard(padding: 13)
@@ -417,14 +410,17 @@ struct RecipeReadyView: View {
     }
 
     private func mealPrepServingControls(_ selection: MealPrepSelection) -> some View {
-        HStack(spacing: 9) {
+        HStack(spacing: 12) {
             mealPrepServingButton(selection: selection, symbol: "minus", delta: -1)
+            Spacer(minLength: 8)
             Text(Int(selection.targetServings), format: .number)
                 .font(.headline.monospacedDigit())
                 .foregroundStyle(SmartCartTheme.navy)
                 .frame(minWidth: 34)
+            Spacer(minLength: 8)
             mealPrepServingButton(selection: selection, symbol: "plus", delta: 1)
         }
+        .frame(maxWidth: .infinity)
         .accessibilityElement(children: .contain)
     }
 

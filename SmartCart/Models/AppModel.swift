@@ -2524,8 +2524,12 @@ final class AppModel {
     }
 
     @discardableResult
-    func applyMatchingExceptionDecisions(_ shouldOrderByItemID: [UUID: Bool]) -> Bool {
+    func applyMatchingExceptionDecisions(
+        _ shouldOrderByItemID: [UUID: Bool],
+        confirmingUnresolvedPackageCount: Int? = nil
+    ) -> Bool {
         guard persistenceReady, activeShoppingSessionID == nil else { return false }
+        guard confirmingUnresolvedPackageCount.map({ $0 > 0 }) ?? true else { return false }
 
         let unresolvedIDs = Set(unresolvedMatchingExceptionItems.map(\.id))
         guard !unresolvedIDs.isEmpty,
@@ -2553,6 +2557,15 @@ final class AppModel {
             if shouldOrderByItemID[itemID] == false {
                 shoppingItems[index].status = .skipped
                 replaceIngredientResolution(itemID: itemID, with: .userExcluded)
+            } else if shoppingItems[index].purchaseQuantity == 0,
+                      let confirmedPackageCount = confirmingUnresolvedPackageCount {
+                shoppingItems[index].purchaseQuantity = confirmedPackageCount
+                if var group = shoppingItems[index].purchaseGroup,
+                   var plan = group.packagePlan {
+                    plan.packageCount = confirmedPackageCount
+                    group.packagePlan = plan
+                    shoppingItems[index].purchaseGroup = group
+                }
             }
         }
 
