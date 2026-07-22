@@ -77,13 +77,18 @@ enum RetailerServiceError: LocalizedError, Equatable {
     }
 }
 
-private enum RetailerSearchQueryBuilder {
+enum RetailerSearchQueryBuilder {
     static func query(for ingredient: Ingredient, preferences: ShoppingPreferences) -> String {
         var terms: [String] = []
         if preferences.organicPolicy == .only {
             terms.append("organic")
         }
         terms.append(contentsOf: preferences.dietaryRestrictions.map(\.label).sorted())
+        if let preferredProductName = ingredient.preferredProductName?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !preferredProductName.isEmpty {
+            terms.append(preferredProductName)
+        }
         terms.append(ingredient.name)
         return terms.joined(separator: " ")
     }

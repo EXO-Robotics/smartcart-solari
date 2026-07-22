@@ -1824,7 +1824,9 @@ final class AppModel {
             preferenceNote: source.ingredient.preferenceNote,
             brandNote: source.ingredient.brandNote,
             alternativeGroup: source.ingredient.alternativeGroup,
-            quantityReviewRequired: false
+            quantityReviewRequired: false,
+            preferredPantryItemID: source.ingredient.preferredPantryItemID,
+            preferredProductName: source.ingredient.preferredProductName
         )
     }
 
@@ -2305,6 +2307,10 @@ final class AppModel {
         let inventory = inventory ?? pantryInventory
         let multiplier = Double(desiredServings) / Double(max(1, recipe.servings))
         for index in recipe.ingredients.indices {
+            applyPantryProductPreference(
+                to: &recipe.ingredients[index],
+                inventory: inventory
+            )
             let previousItemID = recipe.ingredients[index].pantrySuggestion?.pantryItemID
             let suggestion = PantryMatchingService.bestSuggestion(
                 for: recipe.ingredients[index],
@@ -2319,6 +2325,22 @@ final class AppModel {
                 recipe.ingredients[index].pantryState = .alwaysAsk
             }
         }
+    }
+
+    private func applyPantryProductPreference(
+        to ingredient: inout Ingredient,
+        inventory: [PantryInventoryItem]
+    ) {
+        guard let item = PantryMatchingService.preferredProduct(
+            for: ingredient,
+            inventory: inventory
+        ) else {
+            ingredient.preferredPantryItemID = nil
+            ingredient.preferredProductName = nil
+            return
+        }
+        ingredient.preferredPantryItemID = item.id
+        ingredient.preferredProductName = PantryMatchingService.preferredProductDisplayName(for: item)
     }
 
     @discardableResult
@@ -5635,6 +5657,8 @@ final class AppModel {
                 ingredient.category.rawValue,
                 ingredient.brandNote ?? "",
                 ingredient.preferenceNote,
+                ingredient.preferredPantryItemID?.uuidString.lowercased() ?? "",
+                ingredient.preferredProductName ?? "",
                 retailerID,
                 store.id.uuidString.lowercased(),
                 store.retailerStoreID,

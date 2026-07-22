@@ -1007,7 +1007,7 @@ private struct RecipeReadyIngredientRow: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(ingredient.name)
+                Text(ingredient.preferredProductName ?? ingredient.name)
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(SmartCartTheme.navy)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1015,6 +1015,12 @@ private struct RecipeReadyIngredientRow: View {
                     .font(.caption)
                     .foregroundStyle(SmartCartTheme.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
+                if ingredient.preferredProductName != nil {
+                    Label("Pantry favorite for \(ingredient.name)", systemImage: "heart.fill")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(SmartCartTheme.green)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
             Spacer(minLength: 6)
@@ -1236,6 +1242,9 @@ private struct RecipeReadyIngredientRow: View {
 
     private var summaryAccessibilityLabel: String {
         var value = "\(ingredient.name), \(compactDetail)"
+        if let preferredProductName = ingredient.preferredProductName {
+            value += ", preferred product \(preferredProductName)"
+        }
         if ingredient.quantityReviewRequired == true { value += ", quantity must be confirmed" }
         else if ingredient.confidence != .high { value += ", \(ingredient.confidence.label)" }
         return value

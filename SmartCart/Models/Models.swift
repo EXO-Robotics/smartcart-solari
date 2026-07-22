@@ -263,6 +263,11 @@ struct Ingredient: Identifiable, Hashable, Codable {
     var quantityReviewRequired: Bool?
     var pantrySuggestion: PantrySuggestion?
     var pantryDecision: PantryDecision?
+    /// A pantry product the user prefers for this semantic ingredient. The
+    /// recipe name remains unchanged so quantity, aggregation, and identity
+    /// safety continue to operate on the ingredient rather than a package.
+    var preferredPantryItemID: UUID?
+    var preferredProductName: String?
 
     init(
         id: UUID = UUID(),
@@ -285,7 +290,9 @@ struct Ingredient: Identifiable, Hashable, Codable {
         sourceEvidence: IngredientSourceEvidence? = nil,
         quantityReviewRequired: Bool? = nil,
         pantrySuggestion: PantrySuggestion? = nil,
-        pantryDecision: PantryDecision? = nil
+        pantryDecision: PantryDecision? = nil,
+        preferredPantryItemID: UUID? = nil,
+        preferredProductName: String? = nil
     ) {
         self.id = id
         self.rawText = rawText.isEmpty ? "\(quantity) \(unit) \(name)" : rawText
@@ -308,6 +315,8 @@ struct Ingredient: Identifiable, Hashable, Codable {
         self.quantityReviewRequired = quantityReviewRequired
         self.pantrySuggestion = pantrySuggestion
         self.pantryDecision = pantryDecision
+        self.preferredPantryItemID = preferredPantryItemID
+        self.preferredProductName = preferredProductName
     }
 
     var displayQuantity: String {
@@ -827,6 +836,12 @@ struct PantryInventoryItem: Identifiable, Hashable, Codable {
     var quantity: Double
     var unit: String
     var preferredRetailerProductID: String?
+    /// The generic ingredient name used by recipes, such as `coffee`. This is
+    /// distinct from the branded package name and from inventory quantity.
+    var preferredIngredientName: String?
+    /// Nil lets older saved products use conservative inference. False is an
+    /// explicit opt-out; true is an explicit user preference.
+    var isRecipeFavorite: Bool?
     /// Persisted value-level proof used for exact matching. The neighboring
     /// UPC, GTIN, and retailer fields remain compatibility/display mirrors.
     private(set) var identityClaims: [PantryIdentityClaim]
@@ -857,6 +872,8 @@ struct PantryInventoryItem: Identifiable, Hashable, Codable {
         quantity: Double = 1,
         unit: String = "item",
         preferredRetailerProductID: String? = nil,
+        preferredIngredientName: String? = nil,
+        isRecipeFavorite: Bool? = nil,
         identityClaims: [PantryIdentityClaim] = [],
         source: PantryItemSource = .manual,
         updatedAt: Date = .now,
@@ -879,6 +896,8 @@ struct PantryInventoryItem: Identifiable, Hashable, Codable {
         self.quantity = quantity
         self.unit = unit
         self.preferredRetailerProductID = preferredRetailerProductID
+        self.preferredIngredientName = preferredIngredientName
+        self.isRecipeFavorite = isRecipeFavorite
         self.identityClaims = Self.canonicalizedIdentityClaims(identityClaims)
         self.source = source
         self.updatedAt = updatedAt
@@ -907,6 +926,7 @@ struct PantryInventoryItem: Identifiable, Hashable, Codable {
 
     private enum CodingKeys: String, CodingKey {
         case id, upc, name, brand, quantity, unit, preferredRetailerProductID
+        case preferredIngredientName, isRecipeFavorite
         case identityClaims
         case source, updatedAt, packageCount, packageSize, packageUnit
         case remainingAmount, remainingUnit, requiresUserNaming, rawBarcode
@@ -922,6 +942,8 @@ struct PantryInventoryItem: Identifiable, Hashable, Codable {
         quantity = try values.decode(Double.self, forKey: .quantity)
         unit = try values.decode(String.self, forKey: .unit)
         preferredRetailerProductID = try values.decodeIfPresent(String.self, forKey: .preferredRetailerProductID)
+        preferredIngredientName = try values.decodeIfPresent(String.self, forKey: .preferredIngredientName)
+        isRecipeFavorite = try values.decodeIfPresent(Bool.self, forKey: .isRecipeFavorite)
         identityClaims = Self.canonicalizedIdentityClaims(
             try values.decodeIfPresent([PantryIdentityClaim].self, forKey: .identityClaims) ?? []
         )

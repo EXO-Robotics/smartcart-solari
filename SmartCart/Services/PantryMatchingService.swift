@@ -19,6 +19,71 @@ enum RecipeQuantityUnitNormalizer {
 }
 
 enum PantryMatchingService {
+    /// A small, conservative inference list lets previously scanned pantry
+    /// products participate immediately. Users can override the inferred value
+    /// with `preferredIngredientName` in Pantry.
+    private static let inferredIngredientNames = ["coffee", "espresso", "tea"]
+    private static let inferenceBlockingWords = [
+        "candy", "creamer", "flavor", "flavored", "syrup"
+    ]
+
+    static func recipeIngredientName(for item: PantryInventoryItem) -> String? {
+        guard item.isRecipeFavorite != false else { return nil }
+        if let explicit = item.preferredIngredientName?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !explicit.isEmpty {
+            return explicit
+        }
+
+        let searchable = normalizedWords("\(item.brand) \(item.name)")
+        guard !searchable.isEmpty,
+              !inferenceBlockingWords.contains(where: { searchable.contains(" \($0) ") }) else {
+            return nil
+        }
+        return inferredIngredientNames.first { candidate in
+            let phrase = normalizedWords(candidate)
+            return searchable.range(of: phrase) != nil
+        }
+    }
+
+    static func preferredProductDisplayName(for item: PantryInventoryItem) -> String {
+        let name = item.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let brand = item.brand.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !brand.isEmpty else { return name }
+        guard name.range(of: brand, options: [.caseInsensitive, .diacriticInsensitive]) == nil else {
+            return name
+        }
+        return "\(brand) \(name)"
+    }
+
+    static func preferredProduct(
+        for ingredient: Ingredient,
+        inventory: [PantryInventoryItem]
+    ) -> PantryInventoryItem? {
+        guard ingredient.brandNote?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false else {
+            // An explicitly branded recipe remains authoritative.
+            return nil
+        }
+
+        let candidates = inventory.filter { item in
+            guard item.requiresUserNaming != true,
+                  let preferredIngredientName = recipeIngredientName(for: item) else { return false }
+            return IngredientIdentityService.relationship(
+                between: ingredient.name,
+                and: preferredIngredientName,
+                lhsPreparation: ingredient.preparation
+            ) == .exact
+        }
+
+        return candidates.sorted { first, second in
+            let firstIsExplicit = first.isRecipeFavorite == true
+            let secondIsExplicit = second.isRecipeFavorite == true
+            if firstIsExplicit != secondIsExplicit { return firstIsExplicit }
+            if first.updatedAt != second.updatedAt { return first.updatedAt > second.updatedAt }
+            return first.id.uuidString < second.id.uuidString
+        }.first
+    }
+
     static func convertedQuantity(
         _ quantity: Double,
         from source: String,
@@ -51,14 +116,22 @@ enum PantryMatchingService {
 
         let candidates = inventory.compactMap { item -> PantrySuggestion? in
             guard item.requiresUserNaming != true else { return nil }
+            let explicitIngredientName = item.preferredIngredientName?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let pantryIngredientName: String
+            if let explicitIngredientName, !explicitIngredientName.isEmpty {
+                pantryIngredientName = explicitIngredientName
+            } else {
+                pantryIngredientName = item.name
+            }
             let relationship = IngredientIdentityService.relationship(
                 between: ingredient.name,
-                and: item.name,
+                and: pantryIngredientName,
                 lhsPreparation: ingredient.preparation
             )
             guard relationship != .incompatible else { return nil }
 
-            let itemTokens = tokens(for: item.name)
+            let itemTokens = tokens(for: pantryIngredientName)
             let tokenScore = matchScore(ingredientTokens, itemTokens)
             let score = relationship == .exact ? 1 : tokenScore
             guard score >= 0.62 else { return nil }
@@ -147,6 +220,15 @@ enum PantryMatchingService {
             .map(singularized)
             .filter { !stopWords.contains($0) }
         return Set(normalized)
+    }
+
+    private static func normalizedWords(_ value: String) -> String {
+        let words = value
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+        return " \(words.joined(separator: " ")) "
     }
 
     private static func singularized(_ token: String) -> String {

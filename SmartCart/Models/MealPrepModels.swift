@@ -38,6 +38,8 @@ struct FrozenMealPrepIngredient: Identifiable, Hashable, Codable {
     var brandNote: String?
     var alternativeGroup: String?
     var quantityReviewRequired: Bool
+    var preferredPantryItemID: UUID?
+    var preferredProductName: String?
 
     init(ingredient: Ingredient) {
         id = ingredient.id
@@ -54,6 +56,8 @@ struct FrozenMealPrepIngredient: Identifiable, Hashable, Codable {
         brandNote = ingredient.brandNote
         alternativeGroup = ingredient.alternativeGroup
         quantityReviewRequired = ingredient.quantityReviewRequired == true
+        preferredPantryItemID = ingredient.preferredPantryItemID
+        preferredProductName = ingredient.preferredProductName
     }
 }
 

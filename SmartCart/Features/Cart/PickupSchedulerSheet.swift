@@ -614,11 +614,15 @@ private struct PantryIngredientRow: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(ingredient.name)
+                    Text(ingredient.preferredProductName ?? ingredient.name)
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(SmartCartTheme.navy)
-                        .lineLimit(1)
-                    Text(ingredient.displayQuantity)
+                        .lineLimit(2)
+                    Text(
+                        ingredient.preferredProductName == nil
+                            ? ingredient.displayQuantity
+                            : "\(ingredient.displayQuantity) · Recipe calls for \(ingredient.name)"
+                    )
                         .font(.caption)
                         .foregroundStyle(SmartCartTheme.secondaryInk)
                 }
@@ -1029,7 +1033,7 @@ struct PantryDashboardView: View {
             Text("Pantry")
                 .font(.system(size: 29, weight: .bold, design: .rounded))
                 .foregroundStyle(SmartCartTheme.navy)
-            Text("Search, rename, and adjust everything you have on hand.")
+            Text("Save favorite products and track what you have on hand.")
                 .font(.subheadline)
                 .foregroundStyle(SmartCartTheme.secondaryInk)
         }
@@ -1120,7 +1124,7 @@ struct PantryDashboardView: View {
             VStack(alignment: .leading, spacing: 14) {
                 SectionHeader(
                     title: "Pantry inventory",
-                    subtitle: "Search and edit without leaving this screen"
+                    subtitle: "Saved products can personalize new recipes"
                 )
 
                 HStack(spacing: 10) {
@@ -1345,6 +1349,12 @@ private struct PantryInlineRow: View {
                     .font(.caption2)
                     .foregroundStyle(SmartCartTheme.secondaryInk)
                     .lineLimit(1)
+                if let ingredientName = PantryMatchingService.recipeIngredientName(for: item) {
+                    Label("Preferred for \(ingredientName)", systemImage: "heart.fill")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(SmartCartTheme.green)
+                        .lineLimit(1)
+                }
             }
 
             Spacer(minLength: 6)
@@ -1440,7 +1450,14 @@ private struct PantryInventoryEditor: View {
     let onSave: (PantryInventoryItem) -> Void
 
     init(item: PantryInventoryItem, onSave: @escaping (PantryInventoryItem) -> Void) {
-        _draft = State(initialValue: item)
+        var initialDraft = item
+        if initialDraft.preferredIngredientName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
+            initialDraft.preferredIngredientName = PantryMatchingService.recipeIngredientName(for: item)
+        }
+        if initialDraft.isRecipeFavorite == nil {
+            initialDraft.isRecipeFavorite = initialDraft.preferredIngredientName != nil
+        }
+        _draft = State(initialValue: initialDraft)
         self.onSave = onSave
     }
 
@@ -1457,6 +1474,31 @@ private struct PantryInventoryEditor: View {
                         Label("Name this product before pantry matching can use it", systemImage: "exclamationmark.triangle.fill")
                             .font(.caption)
                             .foregroundStyle(SmartCartTheme.amber)
+                    }
+                }
+
+                Section("Recipe favorite") {
+                    Toggle("Use as a recipe favorite", isOn: Binding(
+                        get: { draft.isRecipeFavorite == true },
+                        set: { isFavorite in
+                            draft.isRecipeFavorite = isFavorite
+                            if !isFavorite { draft.preferredIngredientName = nil }
+                        }
+                    ))
+                    if draft.isRecipeFavorite == true {
+                        TextField(
+                            "Ingredient recipes call this, such as coffee",
+                            text: Binding(
+                                get: { draft.preferredIngredientName ?? "" },
+                                set: { value in
+                                    draft.preferredIngredientName = value.isEmpty ? nil : value
+                                }
+                            )
+                        )
+                        .textInputAutocapitalization(.never)
+                        Text("When a new recipe uses this ingredient, SmartCart keeps the recipe measurement but prefers \(PantryMatchingService.preferredProductDisplayName(for: draft)).")
+                            .font(.caption)
+                            .foregroundStyle(SmartCartTheme.secondaryInk)
                     }
                 }
 
@@ -1503,11 +1545,21 @@ private struct PantryInventoryEditor: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
                         draft.name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                        draft.preferredIngredientName = draft.preferredIngredientName?
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                        if draft.preferredIngredientName?.isEmpty == true {
+                            draft.preferredIngredientName = nil
+                        }
                         draft.requiresUserNaming = draft.name.isEmpty || draft.name == "Unknown Product"
                         onSave(draft)
                         dismiss()
                     }
-                    .disabled(draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(
+                        draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                            (draft.isRecipeFavorite == true &&
+                                draft.preferredIngredientName?
+                                    .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false)
+                    )
                 }
             }
         }

@@ -2270,6 +2270,116 @@ final class SmartCartTests: XCTestCase {
     }
 
     @MainActor
+    func testImportedGenericIngredientUsesSavedPantryFavoriteWithoutRenamingRecipeIdentity() throws {
+        let store = InMemorySmartCartStateStore()
+        let model = AppModel(stateStore: store, commerceDefaults: isolatedCommerceDefaults())
+        let favorite = PantryInventoryItem(
+            name: "Major Dickason's Blend",
+            brand: "Peet's Coffee",
+            quantity: 1,
+            unit: "package",
+            source: .barcode
+        )
+        model.pantryInventory = [favorite]
+
+        let recipe = Recipe(
+            title: "Coffee recipe",
+            source: .text,
+            sourceDetail: "Test",
+            heroSymbol: "cup.and.saucer.fill",
+            servings: 1,
+            prepMinutes: 0,
+            cookMinutes: 0,
+            ingredients: [Ingredient(name: "Coffee", quantity: 2, unit: "tbsp")]
+        )
+
+        XCTAssertTrue(model.beginRecipe(recipe))
+        let imported = try model.activeRecipe.ingredients.firstUnwrapped()
+
+        XCTAssertEqual(imported.name, "Coffee", "Recipe scaling must keep the semantic ingredient")
+        XCTAssertEqual(imported.preferredPantryItemID, favorite.id)
+        XCTAssertEqual(imported.preferredProductName, "Peet's Coffee Major Dickason's Blend")
+        XCTAssertNil(
+            imported.pantrySuggestion,
+            "An inferred product favorite must not silently become quantity evidence"
+        )
+        XCTAssertNil(imported.pantryDecision)
+        XCTAssertEqual(
+            RetailerSearchQueryBuilder.query(for: imported, preferences: ShoppingPreferences()),
+            "Peet's Coffee Major Dickason's Blend Coffee"
+        )
+
+        let restored = AppModel(stateStore: store, commerceDefaults: isolatedCommerceDefaults())
+        XCTAssertEqual(restored.activeRecipe.ingredients.first?.preferredPantryItemID, favorite.id)
+        XCTAssertEqual(
+            restored.activeRecipe.ingredients.first?.preferredProductName,
+            "Peet's Coffee Major Dickason's Blend"
+        )
+    }
+
+    @MainActor
+    func testExplicitPantryIngredientPreferenceOverridesInferenceButNotBrandedRecipe() throws {
+        let preferred = PantryInventoryItem(
+            name: "House Dark Roast",
+            brand: "Neighborhood Roasters",
+            preferredIngredientName: "coffee",
+            isRecipeFavorite: true,
+            source: .manual
+        )
+        XCTAssertEqual(PantryMatchingService.recipeIngredientName(for: preferred), "coffee")
+
+        let generic = Ingredient(name: "Coffee")
+        XCTAssertEqual(
+            PantryMatchingService.preferredProduct(for: generic, inventory: [preferred])?.id,
+            preferred.id
+        )
+
+        let recipeSpecified = Ingredient(name: "Coffee", brandNote: "Starbucks")
+        XCTAssertNil(
+            PantryMatchingService.preferredProduct(for: recipeSpecified, inventory: [preferred]),
+            "A recipe's explicit brand must remain authoritative"
+        )
+
+        let roundTrip = try JSONDecoder().decode(
+            PantryInventoryItem.self,
+            from: JSONEncoder().encode(preferred)
+        )
+        XCTAssertEqual(roundTrip.preferredIngredientName, "coffee")
+        XCTAssertEqual(roundTrip.isRecipeFavorite, true)
+
+        var optedOut = preferred
+        optedOut.isRecipeFavorite = false
+        XCTAssertNil(PantryMatchingService.recipeIngredientName(for: optedOut))
+        XCTAssertNil(PantryMatchingService.preferredProduct(for: generic, inventory: [optedOut]))
+    }
+
+    func testPantryFavoriteUISurfacesExplainRecipePersonalization() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let pantrySource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "SmartCart/Features/Cart/PickupSchedulerSheet.swift"
+            ),
+            encoding: .utf8
+        )
+        let recipeReadySource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "SmartCart/Features/Cart/CartView.swift"
+            ),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(pantrySource.contains("Save favorite products and track what you have on hand."))
+        XCTAssertTrue(pantrySource.contains("Section(\"Recipe favorite\")"))
+        XCTAssertTrue(pantrySource.contains("Toggle(\"Use as a recipe favorite\""))
+        XCTAssertTrue(pantrySource.contains("preferredIngredientName"))
+        XCTAssertTrue(pantrySource.contains("Preferred for \\(ingredientName)"))
+        XCTAssertTrue(recipeReadySource.contains("ingredient.preferredProductName ?? ingredient.name"))
+        XCTAssertTrue(recipeReadySource.contains("Pantry favorite for \\(ingredient.name)"))
+    }
+
+    @MainActor
     func testBulkUsePantryAllocatesOneSharedStockAmountAcrossDuplicateIngredients() throws {
         let model = AppModel(stateStore: InMemorySmartCartStateStore())
         model.pantryInventory = [
