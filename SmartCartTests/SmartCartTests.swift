@@ -1313,111 +1313,6 @@ final class SmartCartTests: XCTestCase {
         XCTAssertLessThan(suggestion.confidence, 0.70)
     }
 
-    func testIngredientCaptureQualityRecognizesClearVerticalList() {
-        let samples = (0..<7).map { index in
-            IngredientCaptureTextSample(
-                boundingBox: OCRNormalizedBoundingBox(
-                    x: 0.12,
-                    y: 0.78 - (Double(index) * 0.085),
-                    width: 0.52,
-                    height: 0.045
-                ),
-                confidence: 0.91
-            )
-        }
-
-        let assessment = IngredientCaptureQualityEvaluator.evaluate(
-            samples: samples,
-            metrics: IngredientCaptureFrameMetrics(contrast: 0.28, sharpness: 0.18)
-        )
-
-        XCTAssertEqual(assessment.state, .ready)
-        XCTAssertEqual(assessment.message, "Ingredient list detected — ready to scan")
-    }
-
-    func testIngredientCaptureQualityRequestsCloserFramingForSparseText() {
-        let assessment = IngredientCaptureQualityEvaluator.evaluate(
-            samples: [
-                IngredientCaptureTextSample(
-                    boundingBox: OCRNormalizedBoundingBox(
-                        x: 0.2,
-                        y: 0.7,
-                        width: 0.5,
-                        height: 0.05
-                    ),
-                    confidence: 0.92
-                )
-            ],
-            metrics: IngredientCaptureFrameMetrics(contrast: 0.3, sharpness: 0.2)
-        )
-
-        XCTAssertEqual(assessment.state, .adjust)
-        XCTAssertTrue(assessment.message.localizedCaseInsensitiveContains("move closer"))
-    }
-
-    func testIngredientCaptureQualityRejectsDecorativeNonHorizontalLayout() {
-        let samples = (0..<6).map { index in
-            IngredientCaptureTextSample(
-                boundingBox: OCRNormalizedBoundingBox(
-                    x: 0.12 + (Double(index % 3) * 0.22),
-                    y: 0.2 + (Double(index / 3) * 0.35),
-                    width: 0.06,
-                    height: 0.12
-                ),
-                confidence: 0.86
-            )
-        }
-
-        let assessment = IngredientCaptureQualityEvaluator.evaluate(
-            samples: samples,
-            metrics: IngredientCaptureFrameMetrics(contrast: 0.3, sharpness: 0.2)
-        )
-
-        XCTAssertEqual(assessment.state, .unsupportedLayout)
-        XCTAssertEqual(assessment.message, "This image may not scan reliably")
-    }
-
-    func testIngredientCaptureQualityCallsOutBlurBeforeLayout() {
-        let samples = (0..<5).map { index in
-            IngredientCaptureTextSample(
-                boundingBox: OCRNormalizedBoundingBox(
-                    x: 0.14,
-                    y: 0.75 - (Double(index) * 0.1),
-                    width: 0.5,
-                    height: 0.05
-                ),
-                confidence: 0.9
-            )
-        }
-
-        let assessment = IngredientCaptureQualityEvaluator.evaluate(
-            samples: samples,
-            metrics: IngredientCaptureFrameMetrics(contrast: 0.25, sharpness: 0.01)
-        )
-
-        XCTAssertEqual(assessment.state, .adjust)
-        XCTAssertTrue(assessment.guidance.localizedCaseInsensitiveContains("blurry"))
-    }
-
-    func testIngredientCaptureGuidanceKeepsPasteAndManualRecoveryVisible() throws {
-        let source = try String(
-            contentsOf: URL(fileURLWithPath: #filePath)
-                .deletingLastPathComponent()
-                .deletingLastPathComponent()
-                .appendingPathComponent("SmartCart/Features/Home/RecipeComposerSheet.swift"),
-            encoding: .utf8
-        )
-
-        XCTAssertTrue(source.contains("Text(\"Use a clear, text-only list with one ingredient per line. Avoid photos, decorative layouts, and cooking instructions.\")"))
-        XCTAssertTrue(source.contains("Label(\"Paste List\", systemImage: \"doc.on.clipboard.fill\")"))
-        XCTAssertTrue(source.contains("Label(\"Enter ingredients manually\", systemImage: \"square.and.pencil\")"))
-        XCTAssertTrue(source.contains("Label(\"Scan Ingredients\", systemImage: \"camera.shutter.button.fill\")"))
-        XCTAssertTrue(source.contains(".disabled(assessment.state != .ready || unavailableMessage != nil)"))
-        XCTAssertTrue(source.contains("message: \"This image may not scan reliably\""))
-        XCTAssertTrue(source.contains("if initialMethod == .photoLibrary"))
-        XCTAssertFalse(source.contains("if initialMethod == .camera {\n            if UIImagePickerController.isSourceTypeAvailable(.camera)"))
-    }
-
     func testFocusedImageUsesTransientAxisAlignedCrop() throws {
         let format = UIGraphicsImageRendererFormat.default()
         format.scale = 1
@@ -5366,6 +5261,37 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(recipesSource.contains("identifier: \"\\(identifierPrefix)-decrease\""))
         XCTAssertTrue(recipesSource.contains("identifier: \"\\(identifierPrefix)-increase\""))
         XCTAssertFalse(recipesSource.contains("private var mealPrepLaunchCard"))
+    }
+
+    func testIntroExplainsSupportedIngredientPhotoContractWithoutChangingCameraImporter() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let rootSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("SmartCart/RootView.swift"),
+            encoding: .utf8
+        )
+        let composerSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "SmartCart/Features/Home/RecipeComposerSheet.swift"
+            ),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(rootSource.contains("private var ingredientPhotoGuidance: some View"))
+        XCTAssertTrue(rootSource.contains("Label(\"Scan a clear ingredient list\", systemImage: \"text.viewfinder\")"))
+        XCTAssertTrue(rootSource.contains("Photo scanning works best with a clear, text-only list and one ingredient per line."))
+        XCTAssertTrue(rootSource.contains("title: \"WORKS BEST\""))
+        XCTAssertTrue(rootSource.contains("title: \"MAY REQUIRE MANUAL ENTRY\""))
+        XCTAssertTrue(rootSource.contains("choose a saved photo, paste the ingredient list, or enter it manually"))
+        XCTAssertTrue(rootSource.contains("accessibilityIdentifier(\"intro-ingredient-photo-guidance\")"))
+
+        XCTAssertTrue(composerSource.contains("title: \"Snap any recipe\""))
+        XCTAssertTrue(composerSource.contains("private struct CameraPicker: UIViewControllerRepresentable"))
+        XCTAssertFalse(composerSource.contains("IngredientCameraCaptureView"))
+        XCTAssertFalse(composerSource.contains("IngredientCaptureQualityEvaluator"))
+        XCTAssertFalse(composerSource.contains("Text(\"WORKS BEST\")"))
+        XCTAssertFalse(composerSource.contains("Text(\"MAY REQUIRE MANUAL ENTRY\")"))
     }
 
     func testPublicShellMovesRetailerSelectionIntoProfileAndUsesOneReviewVocabulary() throws {

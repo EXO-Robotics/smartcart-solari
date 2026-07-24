@@ -30,7 +30,7 @@
 		<true/>
 	</dict>
 	<key>NSCameraUsageDescription</key>
-	<string>SmartCart uses the camera to scan clear ingredient lists and pantry barcodes.</string>
+	<string>SmartCart uses the camera to scan recipe cards, cookbook pages, and pantry barcodes.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>SmartCart connects to local recipe and barcode services during development.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

@@ -179,6 +179,8 @@ struct IntroJourneyView: View {
                     }
                     .smartCartCard()
                     .smartCartShadow()
+
+                    ingredientPhotoGuidance
                 }
                 .padding(.horizontal, 22)
                 .padding(.top, 30)
@@ -198,6 +200,71 @@ struct IntroJourneyView: View {
         }
         .smartCartBackground()
         .interactiveDismissDisabled()
+    }
+
+    private var ingredientPhotoGuidance: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Label("Scan a clear ingredient list", systemImage: "text.viewfinder")
+                .font(.headline)
+                .foregroundStyle(SmartCartTheme.navy)
+
+            Text("Photo scanning works best with a clear, text-only list and one ingredient per line. Avoid photos, decorative layouts, and cooking instructions.")
+                .font(.subheadline)
+                .foregroundStyle(SmartCartTheme.secondaryInk)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Divider()
+
+            captureGuidanceSection(
+                title: "WORKS BEST",
+                color: SmartCartTheme.green,
+                symbol: "checkmark.circle.fill",
+                items: [
+                    "One ingredient per line",
+                    "Clear contrast and even lighting",
+                    "Entire ingredient list straight and visible"
+                ]
+            )
+
+            captureGuidanceSection(
+                title: "MAY REQUIRE MANUAL ENTRY",
+                color: SmartCartTheme.coral,
+                symbol: "exclamationmark.circle.fill",
+                items: [
+                    "Infographics or text around food photos",
+                    "Decorative, cursive, or obstructed text",
+                    "Multiple columns with unclear reading order"
+                ]
+            )
+
+            Text("For difficult images, choose a saved photo, paste the ingredient list, or enter it manually.")
+                .font(.caption)
+                .foregroundStyle(SmartCartTheme.secondaryInk)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .smartCartCard()
+        .smartCartShadow()
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("intro-ingredient-photo-guidance")
+    }
+
+    private func captureGuidanceSection(
+        title: String,
+        color: Color,
+        symbol: String,
+        items: [String]
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(title)
+                .smartEyebrow(color)
+
+            ForEach(items, id: \.self) { item in
+                Label(item, systemImage: symbol)
+                    .font(.caption)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 
     private func trustPoint(symbol: String, title: String, message: String) -> some View {

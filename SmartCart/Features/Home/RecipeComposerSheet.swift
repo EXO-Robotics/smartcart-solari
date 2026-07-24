@@ -1,5 +1,3 @@
-import AVFoundation
-import Combine
 import CoreImage
 import ImageIO
 import PhotosUI
@@ -56,9 +54,6 @@ struct RecipeComposerSheet: View {
     @State private var showCamera = false
     @State private var showPhotoLibrary = false
     @State private var pendingCameraImage: UIImage?
-    @State private var pendingCameraAssessment: IngredientCaptureQualityAssessment?
-    @State private var captureQualityReview: CaptureQualityReview?
-    @State private var isEvaluatingCapture = false
     @State private var focusSession: IngredientFocusSession?
     @State private var hasAttemptedInitialMediaPresentation = false
     @State private var isProcessing = false
@@ -74,7 +69,6 @@ struct RecipeComposerSheet: View {
     @State private var lastVisionIgnoredInstructionCount = 0
     @State private var selectedImageSetID: UUID?
     @State private var recognizedImageSetID: UUID?
-    @State private var captureEvaluationTask: Task<Void, Never>?
     @State private var recognitionTask: Task<Void, Never>?
     @State private var sharedImportID: UUID?
     @State private var shouldAcknowledgeSharedImport = false
@@ -335,10 +329,9 @@ struct RecipeComposerSheet: View {
         } message: {
             Text("Cancel keeps the share available. Discard removes it permanently.")
         }
-        .fullScreenCover(isPresented: $showCamera, onDismiss: evaluateCapturedImageIfNeeded) {
-            IngredientCameraCaptureView { image, assessment in
+        .fullScreenCover(isPresented: $showCamera, onDismiss: presentCapturedImageForFocus) {
+            CameraPicker { image in
                 pendingCameraImage = image
-                pendingCameraAssessment = assessment
             }
             .ignoresSafeArea()
         }
@@ -364,7 +357,6 @@ struct RecipeComposerSheet: View {
             beginPhotoLoad(photoItems)
         }
         .onDisappear {
-            captureEvaluationTask?.cancel()
             recognitionTask?.cancel()
         }
     }
@@ -409,7 +401,20 @@ struct RecipeComposerSheet: View {
     private var selectedMethodContent: some View {
         switch selectedMethod {
         case .camera:
-            cameraImportCard
+            mediaImportCard(
+                title: "Snap any recipe",
+                message: UIImagePickerController.isSourceTypeAvailable(.camera)
+                    ? "Keep the ingredient list flat, bright, and fully in frame."
+                    : "The Simulator has no camera. Use Upload Photo to test image recognition.",
+                buttonTitle: selectedImages.isEmpty ? "Open camera" : "Retake photo",
+                symbol: "camera.fill"
+            ) {
+                if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                    showCamera = true
+                } else {
+                    errorMessage = "Camera capture is unavailable in the iOS Simulator. Upload a saved recipe image instead."
+                }
+            }
 
         case .photoLibrary:
             largeImportCard {
@@ -509,206 +514,6 @@ struct RecipeComposerSheet: View {
         }
     }
 
-    private var cameraImportCard: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            if !selectedImages.isEmpty {
-                mediaPreview
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                Label("Scan an ingredient list", systemImage: "text.viewfinder")
-                    .font(.headline)
-                    .foregroundStyle(SmartCartTheme.navy)
-                Text("Use a clear, text-only list with one ingredient per line. Avoid photos, decorative layouts, and cooking instructions.")
-                    .font(.subheadline)
-                    .foregroundStyle(SmartCartTheme.secondaryInk)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            captureSupportChecklist
-
-            if isEvaluatingCapture {
-                HStack(spacing: 10) {
-                    ProgressView()
-                        .tint(SmartCartTheme.green)
-                    Text("Checking image quality…")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(SmartCartTheme.secondaryInk)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(14)
-                .background(SmartCartTheme.herbLight.opacity(0.55))
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .accessibilityIdentifier("ingredient-capture-quality-progress")
-            }
-
-            if let captureQualityReview {
-                captureQualityReviewCard(captureQualityReview)
-            }
-
-            Button {
-                openIngredientCamera()
-            } label: {
-                Label(
-                    selectedImages.isEmpty ? "Open ingredient scanner" : "Retake photo",
-                    systemImage: "camera.fill"
-                )
-                .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(SecondaryButtonStyle())
-            .disabled(isEvaluatingCapture)
-
-            Divider()
-
-            Text("OTHER WAYS TO IMPORT")
-                .smartEyebrow(SmartCartTheme.mutedInk)
-
-            HStack(spacing: 10) {
-                Button {
-                    switchImportMethod(to: .photoLibrary)
-                    showPhotoLibrary = true
-                } label: {
-                    Label("Choose Photos", systemImage: "photo.stack.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(SecondaryButtonStyle())
-
-                Button {
-                    beginTextEntry(clearExistingText: false)
-                } label: {
-                    Label("Paste List", systemImage: "doc.on.clipboard.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(SecondaryButtonStyle())
-            }
-
-            Button {
-                beginTextEntry(clearExistingText: true)
-            } label: {
-                Label("Enter ingredients manually", systemImage: "square.and.pencil")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(SecondaryButtonStyle())
-        }
-        .smartCartCard()
-    }
-
-    private var captureSupportChecklist: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            captureChecklistSection(
-                title: "WORKS BEST",
-                color: SmartCartTheme.green,
-                symbol: "checkmark.circle.fill",
-                items: [
-                    "One ingredient per line",
-                    "Clear contrast and even lighting",
-                    "Entire list straight and visible"
-                ]
-            )
-
-            captureChecklistSection(
-                title: "MAY REQUIRE MANUAL ENTRY",
-                color: SmartCartTheme.coral,
-                symbol: "exclamationmark.circle.fill",
-                items: [
-                    "Infographics or text around photos",
-                    "Decorative, cursive, or obstructed text",
-                    "Multiple columns with unclear reading order"
-                ]
-            )
-        }
-        .padding(14)
-        .background(SmartCartTheme.paper)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(SmartCartTheme.border, lineWidth: 1)
-        }
-    }
-
-    private func captureChecklistSection(
-        title: String,
-        color: Color,
-        symbol: String,
-        items: [String]
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Text(title)
-                .smartEyebrow(color)
-
-            ForEach(items, id: \.self) { item in
-                Label(item, systemImage: symbol)
-                    .font(.caption)
-                    .foregroundStyle(SmartCartTheme.secondaryInk)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-
-    private func captureQualityReviewCard(_ review: CaptureQualityReview) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label(review.assessment.message, systemImage: review.assessment.state.symbol)
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(review.assessment.state.tint)
-
-            Text(review.recoveryMessage)
-                .font(.caption)
-                .foregroundStyle(SmartCartTheme.secondaryInk)
-                .fixedSize(horizontal: false, vertical: true)
-
-            HStack(spacing: 10) {
-                Button {
-                    presentImagesForFocus([review.image])
-                    captureQualityReview = nil
-                } label: {
-                    Label("Recrop", systemImage: "crop")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(SecondaryButtonStyle())
-
-                Button {
-                    beginTextEntry(clearExistingText: false)
-                } label: {
-                    Label("Paste instead", systemImage: "doc.on.clipboard")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(SecondaryButtonStyle())
-            }
-        }
-        .padding(14)
-        .background(review.assessment.state.tint.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(review.assessment.state.tint.opacity(0.45), lineWidth: 1)
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("ingredient-capture-quality-review")
-    }
-
-    private func openIngredientCamera() {
-        guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
-            errorMessage = "Camera capture is unavailable in the iOS Simulator. Choose a saved ingredient-list image instead."
-            return
-        }
-        captureQualityReview = nil
-        pendingCameraImage = nil
-        pendingCameraAssessment = nil
-        showCamera = true
-    }
-
-    private func beginTextEntry(clearExistingText: Bool) {
-        if clearExistingText {
-            recipeText = ""
-        }
-        captureQualityReview = nil
-        selectedImages = []
-        selectedImageSetID = nil
-        recognizedImageSetID = nil
-        switchImportMethod(to: .recipeText)
-        focusedField = .recipe
-    }
-
     private func mediaImportCard(
         title: String,
         message: String,
@@ -797,7 +602,13 @@ struct RecipeComposerSheet: View {
         try? await Task.sleep(for: .milliseconds(300))
         guard !Task.isCancelled, selectedMethod == initialMethod else { return }
 
-        if initialMethod == .photoLibrary {
+        if initialMethod == .camera {
+            if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                showCamera = true
+            } else {
+                errorMessage = "Camera capture is unavailable in the iOS Simulator. Upload a saved recipe image instead."
+            }
+        } else {
             showPhotoLibrary = true
         }
     }
@@ -1043,15 +854,10 @@ struct RecipeComposerSheet: View {
             shouldAcknowledgeSharedImport = false
         }
         guard selectedMethod != method else { return }
-        captureEvaluationTask?.cancel()
-        captureEvaluationTask = nil
         recognitionTask?.cancel()
         recognitionTask = nil
         focusSession = nil
         pendingCameraImage = nil
-        pendingCameraAssessment = nil
-        captureQualityReview = nil
-        isEvaluatingCapture = false
         selectedImages = []
         photoItems = []
         selectedImageSetID = nil
@@ -1105,38 +911,11 @@ struct RecipeComposerSheet: View {
         }
     }
 
-    private func evaluateCapturedImageIfNeeded() {
+    private func presentCapturedImageForFocus() {
         guard let image = pendingCameraImage else { return }
         shouldAcknowledgeSharedImport = false
         pendingCameraImage = nil
-        let liveAssessment = pendingCameraAssessment
-        pendingCameraAssessment = nil
-        isEvaluatingCapture = true
-        errorMessage = nil
-
-        captureEvaluationTask?.cancel()
-        captureEvaluationTask = Task {
-            let assessment = await IngredientCaptureQualityAnalyzer.assess(image)
-            guard !Task.isCancelled else { return }
-            isEvaluatingCapture = false
-
-            if assessment.state == .ready {
-                captureQualityReview = nil
-                presentImagesForFocus([image])
-            } else {
-                let resolvedAssessment = assessment.confidence >= (liveAssessment?.confidence ?? 0)
-                    ? assessment
-                    : liveAssessment ?? assessment
-                selectedImages = [image]
-                selectedImageSetID = nil
-                recognizedImageSetID = nil
-                clearVisionResult()
-                captureQualityReview = CaptureQualityReview(
-                    image: image,
-                    assessment: resolvedAssessment
-                )
-            }
-        }
+        presentImagesForFocus([image])
     }
 
     private func handleFocusCompletion(
@@ -1974,694 +1753,43 @@ private struct IngredientFocusSession: Identifiable {
     let images: [UIImage]
 }
 
-private struct CaptureQualityReview {
-    let image: UIImage
-    let assessment: IngredientCaptureQualityAssessment
-
-    var recoveryMessage: String {
-        switch assessment.state {
-        case .ready:
-            "The ingredient list looks ready."
-        case .adjust:
-            "Retake the photo, recrop the ingredient region, or paste the list. SmartCart will keep uncertain amounts marked for review."
-        case .unsupportedLayout:
-            "Try a text-only ingredient list, recrop a single list region, or paste the ingredients instead."
-        }
-    }
-}
-
-enum IngredientCaptureQualityState: String, Equatable, Sendable {
-    case ready
-    case adjust
-    case unsupportedLayout
-
-    var symbol: String {
-        switch self {
-        case .ready: "checkmark.circle.fill"
-        case .adjust: "viewfinder.circle"
-        case .unsupportedLayout: "exclamationmark.triangle.fill"
-        }
-    }
-
-    var tint: Color {
-        switch self {
-        case .ready: SmartCartTheme.green
-        case .adjust: SmartCartTheme.amber
-        case .unsupportedLayout: SmartCartTheme.coral
-        }
-    }
-}
-
-struct IngredientCaptureQualityAssessment: Equatable, Sendable {
-    let state: IngredientCaptureQualityState
-    let message: String
-    let guidance: String
-    let confidence: Double
-
-    static let looking = IngredientCaptureQualityAssessment(
-        state: .adjust,
-        message: "Looking for an ingredient list…",
-        guidance: "Keep the full list inside the frame.",
-        confidence: 0
-    )
-}
-
-struct IngredientCaptureTextSample: Equatable, Sendable {
-    let boundingBox: OCRNormalizedBoundingBox
-    let confidence: Double
-}
-
-struct IngredientCaptureFrameMetrics: Equatable, Sendable {
-    let contrast: Double
-    let sharpness: Double
-}
-
-enum IngredientCaptureQualityEvaluator {
-    static func evaluate(
-        samples: [IngredientCaptureTextSample],
-        metrics: IngredientCaptureFrameMetrics
-    ) -> IngredientCaptureQualityAssessment {
-        let credible = samples.filter { sample in
-            sample.confidence >= 0.35
-                && sample.boundingBox.width > 0
-                && sample.boundingBox.height > 0
-        }
-        guard credible.count >= 3 else {
-            return IngredientCaptureQualityAssessment(
-                state: .adjust,
-                message: "Move closer and keep the list inside the frame",
-                guidance: "SmartCart needs at least three readable ingredient lines.",
-                confidence: 0.78
-            )
-        }
-
-        let averageHeight = credible.map(\.boundingBox.height).reduce(0, +)
-            / Double(credible.count)
-        if averageHeight < 0.017 {
-            return IngredientCaptureQualityAssessment(
-                state: .adjust,
-                message: "Move closer and keep the list inside the frame",
-                guidance: "The text is too small to read reliably.",
-                confidence: 0.86
-            )
-        }
-
-        let clippedCount = credible.filter {
-            $0.boundingBox.x < 0.015
-                || $0.boundingBox.y < 0.015
-                || $0.boundingBox.x + $0.boundingBox.width > 0.985
-                || $0.boundingBox.y + $0.boundingBox.height > 0.985
-        }.count
-        if Double(clippedCount) / Double(credible.count) > 0.25 {
-            return IngredientCaptureQualityAssessment(
-                state: .adjust,
-                message: "Keep the entire ingredient list inside the frame",
-                guidance: "Some detected text is cropped at the edge.",
-                confidence: 0.84
-            )
-        }
-
-        if metrics.contrast < 0.105 {
-            return IngredientCaptureQualityAssessment(
-                state: .adjust,
-                message: "Improve lighting and reduce glare",
-                guidance: "More contrast will make the ingredient lines easier to read.",
-                confidence: 0.82
-            )
-        }
-
-        if metrics.sharpness < 0.022 {
-            return IngredientCaptureQualityAssessment(
-                state: .adjust,
-                message: "Hold steady and move slightly closer",
-                guidance: "The text appears blurry.",
-                confidence: 0.83
-            )
-        }
-
-        let horizontalLineRatio = Double(credible.filter {
-            $0.boundingBox.width >= $0.boundingBox.height * 2.1
-        }.count) / Double(credible.count)
-        let textCoverage = min(
-            1,
-            credible.map { $0.boundingBox.width * $0.boundingBox.height }.reduce(0, +)
-        )
-        if credible.count >= 4,
-           horizontalLineRatio < 0.55 || textCoverage < 0.018 {
-            return IngredientCaptureQualityAssessment(
-                state: .unsupportedLayout,
-                message: "This image may not scan reliably",
-                guidance: "Use a text-only ingredient list or enter it manually.",
-                confidence: 0.81
-            )
-        }
-
-        let averageConfidence = credible.map(\.confidence).reduce(0, +)
-            / Double(credible.count)
-        guard averageConfidence >= 0.52, horizontalLineRatio >= 0.62 else {
-            return IngredientCaptureQualityAssessment(
-                state: .adjust,
-                message: "Move closer and keep the list inside the frame",
-                guidance: "Use a straight, well-lit view of the ingredient lines.",
-                confidence: 0.72
-            )
-        }
-
-        return IngredientCaptureQualityAssessment(
-            state: .ready,
-            message: "Ingredient list detected — ready to scan",
-            guidance: "Keep the phone steady and capture the full list.",
-            confidence: min(0.98, (averageConfidence * 0.65) + (horizontalLineRatio * 0.35))
-        )
-    }
-}
-
-enum IngredientCaptureQualityAnalyzer {
-    static func assess(_ image: UIImage) async -> IngredientCaptureQualityAssessment {
-        let normalized = RecipeImagePreprocessor.normalizeOrientation(image)
-        guard let cgImage = normalized.cgImage else {
-            return IngredientCaptureQualityAssessment(
-                state: .adjust,
-                message: "Move closer and keep the list inside the frame",
-                guidance: "SmartCart could not read this image.",
-                confidence: 0.95
-            )
-        }
-
-        return await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let request = VNRecognizeTextRequest()
-                request.recognitionLevel = .fast
-                request.usesLanguageCorrection = false
-                request.minimumTextHeight = 0.008
-
-                do {
-                    try VNImageRequestHandler(cgImage: cgImage).perform([request])
-                    let samples: [IngredientCaptureTextSample] = (request.results ?? []).compactMap {
-                        observation -> IngredientCaptureTextSample? in
-                        guard let candidate = observation.topCandidates(1).first else { return nil }
-                        return IngredientCaptureTextSample(
-                            boundingBox: OCRNormalizedBoundingBox(
-                                x: observation.boundingBox.minX,
-                                y: observation.boundingBox.minY,
-                                width: observation.boundingBox.width,
-                                height: observation.boundingBox.height
-                            ),
-                            confidence: Double(candidate.confidence)
-                        )
-                    }
-                    continuation.resume(
-                        returning: IngredientCaptureQualityEvaluator.evaluate(
-                            samples: samples,
-                            metrics: IngredientCaptureLuminanceMetrics.from(cgImage: cgImage)
-                        )
-                    )
-                } catch {
-                    continuation.resume(
-                        returning: IngredientCaptureQualityAssessment(
-                            state: .adjust,
-                            message: "Move closer and keep the list inside the frame",
-                            guidance: "SmartCart could not evaluate this image yet.",
-                            confidence: 0.7
-                        )
-                    )
-                }
-            }
-        }
-    }
-}
-
-private enum IngredientCaptureLuminanceMetrics {
-    static func from(cgImage: CGImage) -> IngredientCaptureFrameMetrics {
-        let width = 128
-        let height = 128
-        var pixels = [UInt8](repeating: 0, count: width * height)
-        guard let context = CGContext(
-            data: &pixels,
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bytesPerRow: width,
-            space: CGColorSpaceCreateDeviceGray(),
-            bitmapInfo: CGImageAlphaInfo.none.rawValue
-        ) else {
-            return IngredientCaptureFrameMetrics(contrast: 0, sharpness: 0)
-        }
-        context.interpolationQuality = .medium
-        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
-        return calculate(pixels: pixels, width: width, height: height)
-    }
-
-    static func from(pixelBuffer: CVPixelBuffer) -> IngredientCaptureFrameMetrics {
-        CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
-        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
-
-        let plane = CVPixelBufferIsPlanar(pixelBuffer) ? 0 : -1
-        let baseAddress: UnsafeMutableRawPointer?
-        let width: Int
-        let height: Int
-        let bytesPerRow: Int
-        if plane == 0 {
-            baseAddress = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 0)
-            width = CVPixelBufferGetWidthOfPlane(pixelBuffer, 0)
-            height = CVPixelBufferGetHeightOfPlane(pixelBuffer, 0)
-            bytesPerRow = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0)
-        } else {
-            baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer)
-            width = CVPixelBufferGetWidth(pixelBuffer)
-            height = CVPixelBufferGetHeight(pixelBuffer)
-            bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
-        }
-        guard let baseAddress, width > 0, height > 0 else {
-            return IngredientCaptureFrameMetrics(contrast: 0, sharpness: 0)
-        }
-
-        let pointer = baseAddress.assumingMemoryBound(to: UInt8.self)
-        let stride = max(4, min(width, height) / 64)
-        var pixels: [UInt8] = []
-        var sampledWidth = 0
-        var sampledHeight = 0
-        for y in Swift.stride(from: 0, to: height, by: stride) {
-            var rowCount = 0
-            for x in Swift.stride(from: 0, to: width, by: stride) {
-                pixels.append(pointer[(y * bytesPerRow) + x])
-                rowCount += 1
-            }
-            sampledWidth = max(sampledWidth, rowCount)
-            sampledHeight += 1
-        }
-        return calculate(pixels: pixels, width: sampledWidth, height: sampledHeight)
-    }
-
-    private static func calculate(
-        pixels: [UInt8],
-        width: Int,
-        height: Int
-    ) -> IngredientCaptureFrameMetrics {
-        guard !pixels.isEmpty, width > 1, height > 1 else {
-            return IngredientCaptureFrameMetrics(contrast: 0, sharpness: 0)
-        }
-        let values = pixels.map(Double.init)
-        let mean = values.reduce(0, +) / Double(values.count)
-        let variance = values.reduce(0) { partial, value in
-            let delta = value - mean
-            return partial + (delta * delta)
-        } / Double(values.count)
-
-        var gradientTotal = 0.0
-        var gradientCount = 0
-        for y in 0..<(height - 1) {
-            for x in 0..<(width - 1) {
-                let index = (y * width) + x
-                guard index + width < values.count, index + 1 < values.count else { continue }
-                gradientTotal += abs(values[index] - values[index + 1])
-                gradientTotal += abs(values[index] - values[index + width])
-                gradientCount += 2
-            }
-        }
-        return IngredientCaptureFrameMetrics(
-            contrast: min(1, sqrt(variance) / 128),
-            sharpness: gradientCount == 0
-                ? 0
-                : min(1, (gradientTotal / Double(gradientCount)) / 64)
-        )
-    }
-}
-
-private struct IngredientCameraCaptureView: View {
+private struct CameraPicker: UIViewControllerRepresentable {
+    let onImage: (UIImage) -> Void
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var bridge = IngredientCameraBridge()
-    @State private var assessment = IngredientCaptureQualityAssessment.looking
-    @State private var unavailableMessage: String?
 
-    let onImage: (UIImage, IngredientCaptureQualityAssessment) -> Void
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
 
-    var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.cameraCaptureMode = .photo
+        picker.delegate = context.coordinator
+        return picker
+    }
 
-            IngredientCameraPreview(
-                bridge: bridge,
-                onAssessment: { assessment = $0 },
-                onUnavailable: { unavailableMessage = $0 }
-            )
-            .ignoresSafeArea()
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
 
-            VStack(spacing: 16) {
-                HStack {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.headline.bold())
-                            .foregroundStyle(.white)
-                            .frame(width: 46, height: 46)
-                            .background(.black.opacity(0.54))
-                            .clipShape(Circle())
-                    }
-                    .accessibilityLabel("Close ingredient scanner")
+    final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
+        let parent: CameraPicker
 
-                    Spacer()
-
-                    Text("Scan an ingredient list")
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 16)
-                        .frame(height: 46)
-                        .background(.black.opacity(0.54))
-                        .clipShape(Capsule())
-                }
-
-                Text("Keep a clear, text-only list with one ingredient per line inside the frame.")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(.black.opacity(0.54))
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .stroke(
-                        assessment.state == .ready ? SmartCartTheme.green : .white.opacity(0.85),
-                        style: StrokeStyle(lineWidth: assessment.state == .ready ? 4 : 2, dash: [10, 8])
-                    )
-                    .overlay(alignment: .topLeading) {
-                        Text("INGREDIENT LIST")
-                            .font(.caption2.weight(.black))
-                            .tracking(1.2)
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 7)
-                            .background(.black.opacity(0.58))
-                            .clipShape(Capsule())
-                            .padding(12)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .aspectRatio(0.76, contentMode: .fit)
-                    .accessibilityHidden(true)
-
-                Spacer(minLength: 0)
-
-                VStack(spacing: 6) {
-                    Label(assessment.message, systemImage: assessment.state.symbol)
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(.white)
-                    Text(assessment.guidance)
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.82))
-                        .multilineTextAlignment(.center)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(14)
-                .background(.black.opacity(0.68))
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(assessment.state.tint.opacity(0.8), lineWidth: 1)
-                }
-                .accessibilityElement(children: .combine)
-                .accessibilityIdentifier("ingredient-camera-quality-status")
-
-                Button {
-                    bridge.capture()
-                } label: {
-                    Label("Scan Ingredients", systemImage: "camera.shutter.button.fill")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(PrimaryButtonStyle())
-                .disabled(assessment.state != .ready || unavailableMessage != nil)
-                .accessibilityHint(
-                    assessment.state == .ready
-                        ? "Captures the ingredient list"
-                        : assessment.guidance
-                )
-            }
-            .padding(18)
-
-            if let unavailableMessage {
-                VStack(spacing: 14) {
-                    Image(systemName: "camera.fill")
-                        .font(.largeTitle)
-                        .foregroundStyle(SmartCartTheme.coral)
-                    Text("Camera unavailable")
-                        .font(.title3.bold())
-                    Text(unavailableMessage)
-                        .font(.subheadline)
-                        .multilineTextAlignment(.center)
-                    Button("Return to import options") { dismiss() }
-                        .buttonStyle(PrimaryButtonStyle())
-                }
-                .foregroundStyle(SmartCartTheme.navy)
-                .padding(24)
-                .background(SmartCartTheme.canvas)
-                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                .padding(28)
-            }
+        init(parent: CameraPicker) {
+            self.parent = parent
         }
-        .onReceive(bridge.capturedImage) { image in
-            onImage(image, assessment)
-            dismiss()
+
+        func imagePickerController(
+            _ picker: UIImagePickerController,
+            didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
+        ) {
+            if let image = info[.originalImage] as? UIImage {
+                parent.onImage(image)
+            }
+            parent.dismiss()
         }
-        .statusBarHidden()
-    }
-}
 
-@MainActor
-private final class IngredientCameraBridge: ObservableObject {
-    fileprivate weak var controller: IngredientCameraViewController?
-    let capturedImage = PassthroughSubject<UIImage, Never>()
-
-    func capture() {
-        controller?.capturePhoto()
-    }
-}
-
-private struct IngredientCameraPreview: UIViewControllerRepresentable {
-    let bridge: IngredientCameraBridge
-    let onAssessment: (IngredientCaptureQualityAssessment) -> Void
-    let onUnavailable: (String) -> Void
-
-    func makeUIViewController(context: Context) -> IngredientCameraViewController {
-        let controller = IngredientCameraViewController()
-        controller.onAssessment = onAssessment
-        controller.onImage = { bridge.capturedImage.send($0) }
-        controller.onUnavailable = onUnavailable
-        bridge.controller = controller
-        return controller
-    }
-
-    func updateUIViewController(
-        _ uiViewController: IngredientCameraViewController,
-        context: Context
-    ) {
-        uiViewController.onAssessment = onAssessment
-        uiViewController.onImage = { bridge.capturedImage.send($0) }
-        uiViewController.onUnavailable = onUnavailable
-        bridge.controller = uiViewController
-    }
-}
-
-private final class IngredientCameraViewController: UIViewController {
-    var onAssessment: ((IngredientCaptureQualityAssessment) -> Void)?
-    var onImage: ((UIImage) -> Void)?
-    var onUnavailable: ((String) -> Void)?
-
-    private let session = AVCaptureSession()
-    private let sessionQueue = DispatchQueue(label: "smartcart.ingredient-camera.session")
-    private let analysisQueue = DispatchQueue(label: "smartcart.ingredient-camera.analysis")
-    private let photoOutput = AVCapturePhotoOutput()
-    private let videoOutput = AVCaptureVideoDataOutput()
-    private var previewLayer: AVCaptureVideoPreviewLayer?
-    private var lastAnalysisTime = Date.distantPast
-    private var pendingAssessmentState: IngredientCaptureQualityState?
-    private var pendingAssessmentCount = 0
-    private var publishedAssessmentState: IngredientCaptureQualityState?
-    private var isConfigured = false
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        view.backgroundColor = .black
-        configureForCurrentAuthorization()
-    }
-
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        previewLayer?.frame = view.bounds
-    }
-
-    override func viewWillDisappear(_ animated: Bool) {
-        super.viewWillDisappear(animated)
-        sessionQueue.async { [session] in
-            if session.isRunning {
-                session.stopRunning()
-            }
-        }
-    }
-
-    func capturePhoto() {
-        guard isConfigured, session.isRunning else { return }
-        let settings = AVCapturePhotoSettings()
-        settings.photoQualityPrioritization = .quality
-        photoOutput.capturePhoto(with: settings, delegate: self)
-    }
-
-    private func configureForCurrentAuthorization() {
-        switch AVCaptureDevice.authorizationStatus(for: .video) {
-        case .authorized:
-            configureSession()
-        case .notDetermined:
-            AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
-                guard let self else { return }
-                if granted {
-                    self.configureSession()
-                } else {
-                    DispatchQueue.main.async {
-                        self.onUnavailable?(
-                            "Allow camera access in Settings, or choose a saved photo or paste the ingredient list."
-                        )
-                    }
-                }
-            }
-        case .denied, .restricted:
-            onUnavailable?(
-                "Allow camera access in Settings, or choose a saved photo or paste the ingredient list."
-            )
-        @unknown default:
-            onUnavailable?("Choose a saved photo or paste the ingredient list.")
-        }
-    }
-
-    private func configureSession() {
-        sessionQueue.async { [weak self] in
-            guard let self, !self.isConfigured else { return }
-            self.session.beginConfiguration()
-            self.session.sessionPreset = .photo
-            defer { self.session.commitConfiguration() }
-
-            guard let device = AVCaptureDevice.default(
-                .builtInWideAngleCamera,
-                for: .video,
-                position: .back
-            ),
-            let input = try? AVCaptureDeviceInput(device: device),
-            self.session.canAddInput(input)
-            else {
-                DispatchQueue.main.async {
-                    self.onUnavailable?("SmartCart could not start the back camera.")
-                }
-                return
-            }
-            self.session.addInput(input)
-
-            guard self.session.canAddOutput(self.photoOutput),
-                  self.session.canAddOutput(self.videoOutput)
-            else {
-                DispatchQueue.main.async {
-                    self.onUnavailable?("SmartCart could not start ingredient-list scanning.")
-                }
-                return
-            }
-
-            self.session.addOutput(self.photoOutput)
-            self.videoOutput.alwaysDiscardsLateVideoFrames = true
-            self.videoOutput.videoSettings = [
-                kCVPixelBufferPixelFormatTypeKey as String:
-                    kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
-            ]
-            self.videoOutput.setSampleBufferDelegate(self, queue: self.analysisQueue)
-            self.session.addOutput(self.videoOutput)
-            self.isConfigured = true
-
-            DispatchQueue.main.async {
-                let layer = AVCaptureVideoPreviewLayer(session: self.session)
-                layer.videoGravity = .resizeAspectFill
-                layer.frame = self.view.bounds
-                self.view.layer.insertSublayer(layer, at: 0)
-                self.previewLayer = layer
-            }
-            self.session.startRunning()
-        }
-    }
-}
-
-extension IngredientCameraViewController:
-    AVCaptureVideoDataOutputSampleBufferDelegate,
-    AVCapturePhotoCaptureDelegate
-{
-    func captureOutput(
-        _ output: AVCaptureOutput,
-        didOutput sampleBuffer: CMSampleBuffer,
-        from connection: AVCaptureConnection
-    ) {
-        let now = Date()
-        guard now.timeIntervalSince(lastAnalysisTime) >= 0.55,
-              let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer)
-        else { return }
-        lastAnalysisTime = now
-
-        let request = VNRecognizeTextRequest()
-        request.recognitionLevel = .fast
-        request.usesLanguageCorrection = false
-        request.minimumTextHeight = 0.008
-
-        do {
-            try VNImageRequestHandler(
-                cvPixelBuffer: pixelBuffer,
-                orientation: .right
-            ).perform([request])
-            let samples: [IngredientCaptureTextSample] = (request.results ?? []).compactMap {
-                observation -> IngredientCaptureTextSample? in
-                guard let candidate = observation.topCandidates(1).first else { return nil }
-                return IngredientCaptureTextSample(
-                    boundingBox: OCRNormalizedBoundingBox(
-                        x: observation.boundingBox.minX,
-                        y: observation.boundingBox.minY,
-                        width: observation.boundingBox.width,
-                        height: observation.boundingBox.height
-                    ),
-                    confidence: Double(candidate.confidence)
-                )
-            }
-            let assessment = IngredientCaptureQualityEvaluator.evaluate(
-                samples: samples,
-                metrics: IngredientCaptureLuminanceMetrics.from(pixelBuffer: pixelBuffer)
-            )
-            if pendingAssessmentState == assessment.state {
-                pendingAssessmentCount += 1
-            } else {
-                pendingAssessmentState = assessment.state
-                pendingAssessmentCount = 1
-            }
-            guard pendingAssessmentCount >= 2 || publishedAssessmentState == assessment.state else {
-                return
-            }
-            publishedAssessmentState = assessment.state
-            DispatchQueue.main.async { [weak self] in
-                self?.onAssessment?(assessment)
-            }
-        } catch {
-            return
-        }
-    }
-
-    func photoOutput(
-        _ output: AVCapturePhotoOutput,
-        didFinishProcessingPhoto photo: AVCapturePhoto,
-        error: Error?
-    ) {
-        guard error == nil,
-              let data = photo.fileDataRepresentation(),
-              let image = UIImage(data: data)
-        else {
-            DispatchQueue.main.async { [weak self] in
-                self?.onUnavailable?("SmartCart could not save that photo. Try again.")
-            }
-            return
-        }
-        DispatchQueue.main.async { [weak self] in
-            self?.onImage?(image)
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            parent.dismiss()
         }
     }
 }
