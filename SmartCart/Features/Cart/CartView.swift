@@ -37,12 +37,8 @@ struct RecipeReadyView: View {
             }
             .scrollIndicators(.hidden)
             .scrollDismissesKeyboard(.interactively)
-            .onAppear(perform: expandAttentionRows)
-            .onChange(of: attentionIngredientIDs) { _, _ in
-                expandAttentionRows()
-            }
         }
-        .smartCartBackground()
+        .smartCartWorkflowBackground()
         .navigationTitle("Recipe Review")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
@@ -123,7 +119,7 @@ struct RecipeReadyView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(18)
                     }
-                    .smartCartBackground()
+                    .smartCartWorkflowBackground()
                     .navigationTitle("Source Text")
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
@@ -352,6 +348,7 @@ struct RecipeReadyView: View {
                 ForEach(appModel.activeRecipe.ingredients) { ingredient in
                     RecipeReadyIngredientRow(
                         ingredient: ingredient,
+                        isBlocking: blockingIngredientIDs.contains(ingredient.id),
                         isExpanded: expansionBinding(for: ingredient.id),
                         onUpdate: { updatedIngredient in
                             self.appModel.updateIngredient(
@@ -746,10 +743,6 @@ struct RecipeReadyView: View {
         )
     }
 
-    private func expandAttentionRows() {
-        expandedIngredientIDs.formUnion(attentionIngredientIDs)
-    }
-
     private func confirmIngredientDeletion() {
         guard let deletion = pendingIngredientDeletion else { return }
         pendingIngredientDeletion = nil
@@ -941,6 +934,7 @@ private struct RecipeReadyIngredientRow: View {
     @Environment(AppModel.self) private var appModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let ingredient: Ingredient
+    let isBlocking: Bool
     @Binding var isExpanded: Bool
     let onUpdate: (Ingredient) -> Void
     let onDelete: () -> Void
@@ -968,40 +962,46 @@ private struct RecipeReadyIngredientRow: View {
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .padding(13)
+        .padding(.horizontal, 12)
+        .padding(.vertical, isExpanded ? 13 : 9)
         .background(ingredient.includeInList ? SmartCartTheme.paper : SmartCartTheme.canvas.opacity(0.72))
         .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 17, style: .continuous)
-                .stroke(needsAttention ? SmartCartTheme.amber.opacity(0.72) : SmartCartTheme.border, lineWidth: needsAttention ? 1.5 : 1)
+                .stroke(
+                    isBlocking ? SmartCartTheme.coral.opacity(0.78) : SmartCartTheme.border,
+                    lineWidth: isBlocking ? 1.5 : 1
+                )
         }
         .opacity(ingredient.includeInList ? 1 : 0.68)
     }
 
     private var compactSummary: some View {
-        HStack(spacing: 11) {
+        HStack(spacing: 9) {
             Image(systemName: ingredient.category.symbol)
                 .font(.subheadline.bold())
                 .foregroundStyle(ingredient.includeInList ? SmartCartTheme.green : SmartCartTheme.secondaryInk)
-                .frame(width: 40, height: 40)
+                .frame(width: 34, height: 34)
                 .background(ingredient.includeInList ? SmartCartTheme.herbLight : SmartCartTheme.canvas)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(ingredient.preferredProductName ?? ingredient.name)
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(SmartCartTheme.navy)
-                    .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 5) {
+                    Text(ingredient.name)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(SmartCartTheme.navy)
+                        .lineLimit(2)
+                    if ingredient.preferredProductName != nil {
+                        Image(systemName: "heart.fill")
+                            .font(.caption2)
+                            .foregroundStyle(SmartCartTheme.green)
+                            .accessibilityHidden(true)
+                    }
+                }
                 Text(compactDetail)
                     .font(.caption)
                     .foregroundStyle(SmartCartTheme.secondaryInk)
-                    .fixedSize(horizontal: false, vertical: true)
-                if ingredient.preferredProductName != nil {
-                    Label("Pantry favorite for \(ingredient.name)", systemImage: "heart.fill")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(SmartCartTheme.green)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                    .lineLimit(2)
             }
 
             Spacer(minLength: 6)
@@ -1214,13 +1214,12 @@ private struct RecipeReadyIngredientRow: View {
         onUpdate(updatedIngredient)
     }
 
-    private var needsAttention: Bool {
-        ingredient.quantityReviewRequired == true || ingredient.confidence != .high
-    }
-
     private var compactDetail: String {
         var parts = [appModel.scaledQuantityText(for: ingredient)]
         if !ingredient.preparation.isEmpty { parts.append(ingredient.preparation) }
+        if let preferredProductName = ingredient.preferredProductName {
+            parts.append("Prefers \(preferredProductName)")
+        }
         if !ingredient.includeInList { parts.append("Excluded") }
         return parts.joined(separator: " · ")
     }

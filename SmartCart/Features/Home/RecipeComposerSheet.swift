@@ -1494,7 +1494,8 @@ enum RecipeVisionReader {
                         confidence: Double(candidate.confidence),
                         pageIndex: pageIndex,
                         bulletMarker: RecipeOCRPolicy.leadingBulletMarker(in: candidate.string),
-                        alternateCandidates: alternatives
+                        alternateCandidates: alternatives,
+                        originalOrder: observationIndex
                     )
                 ]
             }
@@ -1521,7 +1522,8 @@ enum RecipeVisionReader {
                     confidence: Double(candidate.confidence),
                     pageIndex: pageIndex,
                     bulletMarker: RecipeOCRPolicy.leadingBulletMarker(in: fragment),
-                    alternateCandidates: fragmentAlternatives
+                    alternateCandidates: fragmentAlternatives,
+                    originalOrder: observationIndex
                 )
             }
         }
@@ -1550,7 +1552,8 @@ enum RecipeVisionReader {
                         text: $0.text,
                         confidence: $0.confidence
                     )
-                }
+                },
+                originalOrder: observationIndex
             )
         }
     }

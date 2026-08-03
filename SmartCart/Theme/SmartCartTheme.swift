@@ -400,6 +400,16 @@ extension View {
         }
     }
 
+    /// A quieter version of the shared background for dense correction and
+    /// review screens. Home and completion surfaces keep the stronger photo.
+    func smartCartWorkflowBackground() -> some View {
+        background {
+            SmartCartFoodBackground()
+                .overlay(SmartCartTheme.canvas.opacity(0.90))
+                .ignoresSafeArea()
+        }
+    }
+
     func smartCartCard(padding: CGFloat = 18) -> some View {
         self
             .padding(padding)

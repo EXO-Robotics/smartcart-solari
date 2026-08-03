@@ -975,6 +975,198 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(result.ingredientSourceLines.allSatisfy { $0.boundingBox.isUsable })
     }
 
+    func testOCRCandidateReconstructionScoresSafeAdjacentContinuations() {
+        let observations = [
+            OCRTextObservation(
+                text: "Ingredients",
+                boundingBox: .init(x: 0.07, y: 0.90, width: 0.22, height: 0.05),
+                confidence: 0.98,
+                originalOrder: 0
+            ),
+            OCRTextObservation(
+                observationID: "lemongrass",
+                text: "½ stalk lemongrass, coarsely",
+                boundingBox: .init(x: 0.08, y: 0.80, width: 0.43, height: 0.045),
+                confidence: 0.93,
+                originalOrder: 1
+            ),
+            OCRTextObservation(
+                observationID: "chopped",
+                text: "chopped",
+                boundingBox: .init(x: 0.08, y: 0.745, width: 0.14, height: 0.043),
+                confidence: 0.91,
+                originalOrder: 2
+            ),
+            OCRTextObservation(
+                observationID: "coconut-prefix",
+                text: "¼ cup shredded or flaked",
+                boundingBox: .init(x: 0.08, y: 0.66, width: 0.38, height: 0.045),
+                confidence: 0.92,
+                originalOrder: 3
+            ),
+            OCRTextObservation(
+                observationID: "coconut-noun",
+                text: "coconut",
+                boundingBox: .init(x: 0.08, y: 0.605, width: 0.14, height: 0.043),
+                confidence: 0.91,
+                originalOrder: 4
+            ),
+            OCRTextObservation(
+                observationID: "lime",
+                text: "1 lime",
+                boundingBox: .init(x: 0.08, y: 0.52, width: 0.14, height: 0.045),
+                confidence: 0.96,
+                originalOrder: 5
+            )
+        ]
+
+        let result = OCRLayoutReconstructor.reconstruct(observations)
+
+        XCTAssertEqual(
+            result.ingredientLines,
+            ["½ stalk lemongrass, coarsely chopped", "¼ cup shredded or flaked coconut", "1 lime"]
+        )
+        XCTAssertEqual(result.ingredientSourceLines[0].sourceObservationIDs, ["lemongrass", "chopped"])
+        XCTAssertEqual(result.ingredientSourceLines[1].sourceObservationIDs, ["coconut-prefix", "coconut-noun"])
+        XCTAssertTrue(result.ingredientSourceLines[0].continuationAttached)
+        XCTAssertTrue(result.ingredientSourceLines[1].continuationAttached)
+    }
+
+    func testOCRUnresolvedPreparationFragmentNeverBecomesShoppingItem() {
+        let observations = [
+            OCRTextObservation(
+                text: "Ingredients",
+                boundingBox: .init(x: 0.07, y: 0.90, width: 0.22, height: 0.05),
+                confidence: 0.98
+            ),
+            OCRTextObservation(
+                observationID: "rum",
+                text: "1½ cups rum",
+                boundingBox: .init(x: 0.08, y: 0.80, width: 0.25, height: 0.045),
+                confidence: 0.95
+            ),
+            OCRTextObservation(
+                observationID: "orphan",
+                text: "Preferably",
+                boundingBox: .init(x: 0.55, y: 0.66, width: 0.18, height: 0.043),
+                confidence: 0.90
+            )
+        ]
+
+        let reconstruction = OCRLayoutReconstructor.reconstruct(observations)
+        let recipe = RecipeParser.parse(
+            title: "Rum",
+            text: reconstruction.reconstructedText,
+            source: .photo,
+            sourceLines: reconstruction.ingredientSourceLines
+        )
+
+        XCTAssertEqual(recipe.ingredients.map(\.name), ["Rum"])
+        XCTAssertFalse(reconstruction.ingredientLines.contains { $0.localizedCaseInsensitiveContains("preferably") })
+    }
+
+    func testStructuralHeadingDoesNotLeakIntoRetailerSearch() throws {
+        let observations = [
+            OCRTextObservation(
+                text: "For The Thai Infused Rum",
+                boundingBox: .init(x: 0.08, y: 0.82, width: 0.46, height: 0.055),
+                confidence: 0.96
+            ),
+            OCRTextObservation(
+                text: "1½ cups rum, preferably dark",
+                boundingBox: .init(x: 0.08, y: 0.72, width: 0.43, height: 0.045),
+                confidence: 0.95
+            ),
+            OCRTextObservation(
+                text: "1 lime",
+                boundingBox: .init(x: 0.08, y: 0.64, width: 0.16, height: 0.045),
+                confidence: 0.96
+            )
+        ]
+
+        let reconstruction = OCRLayoutReconstructor.reconstruct(observations)
+        let recipe = RecipeParser.parse(
+            title: "Thai drink",
+            text: reconstruction.reconstructedText,
+            source: .photo,
+            sourceLines: reconstruction.ingredientSourceLines
+        )
+        let rum = try recipe.ingredients.firstUnwrapped()
+        let query = try XCTUnwrap(
+            RetailerSearchQueryBuilder.validatedQuery(
+                for: rum,
+                preferences: ShoppingPreferences()
+            )
+        )
+
+        XCTAssertEqual(recipe.ingredients.map(\.name), ["Rum", "Lime"])
+        XCTAssertEqual(query.lowercased(), "dark rum")
+        XCTAssertFalse(query.localizedCaseInsensitiveContains("preferably"))
+        XCTAssertFalse(reconstruction.ingredientLines.contains {
+            $0.localizedCaseInsensitiveContains("For The Thai Infused Rum")
+        })
+    }
+
+    func testWeakOCRCanSelectSupportedIngredientAlternativeWithoutLosingSource() throws {
+        let sourceLine = OCRSourceLine(
+            text: "1 Hime",
+            pageIndex: 0,
+            boundingBox: .init(x: 0.08, y: 0.72, width: 0.18, height: 0.045),
+            confidence: 0.50,
+            alternateCandidates: [.init(text: "1 lime", confidence: 0.49)],
+            sourceObservationIDs: ["weak-lime"]
+        )
+        let recipe = RecipeParser.parse(
+            title: "Weak OCR",
+            text: sourceLine.text,
+            source: .photo,
+            sourceLines: [sourceLine]
+        )
+        let ingredient = try recipe.ingredients.firstUnwrapped()
+
+        XCTAssertEqual(ingredient.name, "Lime")
+        XCTAssertEqual(ingredient.rawText, "1 Hime")
+        XCTAssertEqual(ingredient.sourceEvidence?.rawText, "1 Hime")
+        XCTAssertTrue(ingredient.sourceEvidence?.alternateSourceTexts?.contains("1 lime") == true)
+        XCTAssertTrue(ingredient.sourceEvidence?.reviewReasons?.contains("ocr_alternative_selected") == true)
+        XCTAssertEqual(ingredient.confidence, .review)
+    }
+
+    func testRankedParserSupportsNameFirstMeasuredIngredient() throws {
+        let recipe = RecipeParser.parse(
+            title: "Name first",
+            text: "Fresh ginger — 2 teaspoons, grated"
+        )
+        let ginger = try recipe.ingredients.firstUnwrapped()
+
+        XCTAssertEqual(ginger.name, "Fresh Ginger")
+        XCTAssertEqual(ginger.quantity, 2, accuracy: 0.001)
+        XCTAssertEqual(ginger.unit, "tsp")
+        XCTAssertEqual(ginger.preparation, "grated")
+    }
+
+    func testRetailerQueryRejectsHeadingsFragmentsAndUnresolvedParseConflicts() {
+        let heading = Ingredient(name: "For The Thai Infused Rum")
+        let fragment = Ingredient(name: "Preferably")
+        var conflict = Ingredient(name: "Rum")
+        conflict.sourceEvidence = IngredientSourceEvidence(
+            rawText: "rum hime",
+            pageIndex: 0,
+            boundingBox: nil,
+            extractionStrategy: .visionOCR,
+            ocrConfidence: 0.45,
+            layoutConfidence: 0.8,
+            parserConfidence: 0.5,
+            normalizationConfidence: 0.5,
+            alternateQuantityCandidates: [],
+            reviewReasons: ["unresolved_parse_conflict"]
+        )
+
+        XCTAssertNil(RetailerSearchQueryBuilder.validatedQuery(for: heading, preferences: .init()))
+        XCTAssertNil(RetailerSearchQueryBuilder.validatedQuery(for: fragment, preferences: .init()))
+        XCTAssertNil(RetailerSearchQueryBuilder.validatedQuery(for: conflict, preferences: .init()))
+    }
+
     func testCrossRegionBananaPeanutButterOCRContaminationRegression() throws {
         let fixtureURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -3128,7 +3320,7 @@ final class SmartCartTests: XCTestCase {
     }
 
     @MainActor
-    func testFinalGuidedItemContinuesDirectlyToSelectedRetailerCart() throws {
+    func testFinalGuidedItemContinuesDirectlyToItsRetailerCart() throws {
         let model = AppModel(
             stateStore: InMemorySmartCartStateStore(),
             commerceDefaults: isolatedCommerceDefaults(),
@@ -3145,8 +3337,40 @@ final class SmartCartTests: XCTestCase {
 
         XCTAssertEqual(
             model.retailerGuideContinuation,
-            .cart(ShoppingRetailer.walmart.configuration.cartURL)
+            .cart(.walmart)
         )
+    }
+
+    @MainActor
+    func testMixedRetailerTripExposesBothCartsAndFinishesAtFinalItemRetailer() throws {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedCommerceDefaults(),
+            seedDemoShoppingState: true
+        )
+        var walmartItem = try model.shoppingItems.firstUnwrapped()
+        walmartItem.product.retailerID = ShoppingRetailer.walmart.rawValue
+        var targetItem = try XCTUnwrap(model.shoppingItems.dropFirst().first)
+        targetItem.product = DemoTargetCatalogService.searchFallback(
+            for: targetItem.ingredient,
+            storeID: "target-online",
+            preferences: model.preferences
+        )
+        model.shoppingItems = [walmartItem, targetItem]
+
+        XCTAssertEqual(model.shoppingTripRetailers, [.walmart, .target])
+
+        model.completeRetailerSetup()
+        XCTAssertTrue(model.startOrResumeRetailerShoppingSession())
+        let sessionID = try XCTUnwrap(model.activeShoppingSessionID)
+        while !model.retailerGuideIsComplete {
+            let itemID = try XCTUnwrap(model.currentGuidedItem?.id)
+            XCTAssertTrue(model.recordRetailerOutcome(.visited, for: itemID, sessionID: sessionID))
+        }
+
+        XCTAssertEqual(model.retailerGuideContinuation, .cart(.target))
+        XCTAssertEqual(model.retailerCartURL(for: .walmart).path, "/cart")
+        XCTAssertEqual(model.retailerCartURL(for: .target).path, "/cart")
     }
 
     @MainActor
@@ -5133,7 +5357,7 @@ final class SmartCartTests: XCTestCase {
         )
     }
 
-    func testRetailerTripPlacesMoreBelowPauseAndComparisonBelowNext() throws {
+    func testRetailerTripKeepsItemSummaryLegibleAboveTwoActionRows() throws {
         let repositoryRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -5145,16 +5369,17 @@ final class SmartCartTests: XCTestCase {
         )
 
         XCTAssertTrue(tripSource.contains("private var checkRetailerButton: some View"))
-        XCTAssertTrue(tripSource.contains("Label(\"Check \\(retailer.configuration.displayName)\""))
+        XCTAssertTrue(tripSource.contains("Label(\"Search \\(retailer.configuration.displayName)\""))
         XCTAssertTrue(tripSource.contains("checkedComparisonURL == nil ? comparisonSearchURL : nil"))
         XCTAssertTrue(tripSource.contains("url: displayedURL"))
         XCTAssertTrue(tripSource.contains("retailer-trip-check-other-retailer"))
+        XCTAssertTrue(tripSource.contains("ingredientName: ingredientName(for: itemID)"))
         XCTAssertTrue(tripSource.contains("amountNeeded: amountNeeded(for: itemID)"))
-        XCTAssertTrue(tripSource.contains("Text(\"Amount needed: \\(amountNeeded)\")"))
+        XCTAssertTrue(tripSource.contains("Text(\"Need \\(amountNeeded)\")"))
         XCTAssertTrue(tripSource.contains("amount needed \\(amountNeeded)"))
         XCTAssertTrue(tripSource.contains("retailer-trip-amount-needed"))
-        XCTAssertTrue(tripSource.contains("VStack(spacing: 6) {\n                        pauseButton\n                        moreMenu"))
-        XCTAssertTrue(tripSource.contains("VStack(spacing: 6) {\n                        nextButton\n                        checkRetailerButton"))
+        XCTAssertTrue(tripSource.contains("HStack(spacing: 8) {\n                pauseButton\n                nextButton"))
+        XCTAssertTrue(tripSource.contains("HStack(spacing: 8) {\n                moreMenu\n                checkRetailerButton"))
         XCTAssertFalse(tripSource.contains("retailerOwnershipLabel"))
         XCTAssertFalse(tripSource.contains("Shopping stays with"))
         XCTAssertFalse(tripSource.contains(".frame(minWidth: 72, minHeight: 48)"))
@@ -5165,10 +5390,10 @@ final class SmartCartTests: XCTestCase {
         )
         let moreMenuSource = tripSource[moreStart..<displayedURLStart]
         XCTAssertTrue(moreMenuSource.contains(".font(.caption.bold())"))
-        XCTAssertTrue(moreMenuSource.contains(".frame(width: compactSecondaryActionWidth)"))
+        XCTAssertTrue(moreMenuSource.contains(".frame(maxWidth: .infinity)"))
         XCTAssertTrue(moreMenuSource.contains(".frame(minHeight: 38)"))
         XCTAssertTrue(moreMenuSource.contains(".frame(minHeight: 44)"))
-        XCTAssertTrue(tripSource.contains("dynamicTypeSize.isAccessibilitySize ? nil : 128"))
+        XCTAssertFalse(tripSource.contains("dynamicTypeSize.isAccessibilitySize ? nil : 128"))
     }
 
     func testHomeUsesActionFirstLayoutAndRecipeImportersAutoPresentMediaTools() throws {

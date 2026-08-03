@@ -27,6 +27,8 @@ struct OCRTextObservation: Codable, Equatable, Hashable, Sendable {
     var pageIndex: Int
     var bulletMarker: String?
     var alternateCandidates: [OCRTextAlternative]?
+    /// Stable order from the upstream OCR request before any geometric sorting.
+    var originalOrder: Int?
 
     init(
         observationID: String? = nil,
@@ -35,7 +37,8 @@ struct OCRTextObservation: Codable, Equatable, Hashable, Sendable {
         confidence: Double,
         pageIndex: Int = 0,
         bulletMarker: String? = nil,
-        alternateCandidates: [OCRTextAlternative]? = nil
+        alternateCandidates: [OCRTextAlternative]? = nil,
+        originalOrder: Int? = nil
     ) {
         self.observationID = observationID
         self.text = text
@@ -44,6 +47,7 @@ struct OCRTextObservation: Codable, Equatable, Hashable, Sendable {
         self.pageIndex = pageIndex
         self.bulletMarker = bulletMarker
         self.alternateCandidates = alternateCandidates
+        self.originalOrder = originalOrder
     }
 }
 
@@ -390,18 +394,26 @@ struct OCRLayoutReconstructor {
 
         for (columnIndex, column) in columns.enumerated() {
             let physicalLines = makePhysicalLines(from: column, columnIndex: columnIndex)
-            let logicalLines = mergeBulletContinuations(in: physicalLines)
+            let logicalLines = reconstructCandidateGroups(in: physicalLines)
             let columnHasIngredientEvidence = column.contains(where: Self.isIngredientStart)
             var reachedInstructions = false
 
-            for line in logicalLines {
+            for (lineIndex, line) in logicalLines.enumerated() {
                 let rendered = line.renderedText
+                let nextLine = logicalLines.indices.contains(lineIndex + 1)
+                    ? logicalLines[lineIndex + 1]
+                    : nil
+                let role = Self.groupRole(for: line, followedBy: nextLine)
                 if reachedInstructions {
                     ignoredInstructionLines.append(rendered)
-                } else if Self.isIngredientHeading(line.text) {
+                } else if role == .ingredientHeading || role == .sectionHeading {
                     continue
-                } else if Self.isInstructionLine(line.text) {
+                } else if role == .instructionOrProse {
                     reachedInstructions = true
+                    ignoredInstructionLines.append(rendered)
+                } else if role == .continuation || role == .noise {
+                    // Keep unresolved source fragments out of the shopping stream.
+                    // The raw observation remains available in source evidence.
                     ignoredInstructionLines.append(rendered)
                 } else if ingredientHeading != nil,
                           hasIngredientEvidence,
@@ -578,19 +590,16 @@ struct OCRLayoutReconstructor {
         .filter { !$0.text.isEmpty }
     }
 
-    private func mergeBulletContinuations(in lines: [PhysicalLine]) -> [LogicalLine] {
+    /// Builds and scores the two safe candidates for each adjacent pair: keep
+    /// discrete lines or attach the second as a continuation. The merge wins
+    /// only with strong geometry plus grammatical incompleteness. This makes
+    /// cross-ingredient merges more expensive than an uncertain split.
+    private func reconstructCandidateGroups(in lines: [PhysicalLine]) -> [LogicalLine] {
         var result: [LogicalLine] = []
 
         for line in lines {
             if let previous = result.last,
-               previous.bulletMarker != nil,
-               line.bulletMarker == nil,
-               !Self.hasLeadingQuantity(line.text),
-               line.columnIndex == previous.columnIndex,
-               Self.isSafeContinuation(line, of: previous),
-               line.maxY <= previous.minY + max(0.008, previous.averageHeight * 0.30),
-               previous.minY - line.maxY <= max(0.065, previous.averageHeight * 2.2),
-               !Self.isInstructionLine(line.text) {
+               Self.continuationScore(line, after: previous) >= 6 {
                 let mergedText = Self.collapseWhitespace(previous.text + " " + line.text)
                 var alternatives = previous.alternateCandidates.map {
                     OCRTextAlternative(
@@ -649,6 +658,118 @@ struct OCRLayoutReconstructor {
         }
 
         return result
+    }
+
+    private static func continuationScore(
+        _ line: PhysicalLine,
+        after previous: LogicalLine
+    ) -> Int {
+        guard line.bulletMarker == nil,
+              !hasLeadingQuantity(line.text),
+              line.columnIndex == previous.columnIndex,
+              line.maxY <= previous.minY + max(0.008, previous.averageHeight * 0.30),
+              previous.minY - line.maxY <= max(0.065, previous.averageHeight * 2.2),
+              !isInstructionLine(line.text),
+              !isInstructionLine(previous.text)
+        else { return .min }
+
+        let strictAnchor = isSafeContinuation(line, of: previous)
+        let relaxedAnchor = isRelaxedContinuation(line, of: previous)
+        guard strictAnchor || relaxedAnchor else { return .min }
+
+        let previousIncomplete = appearsGrammaticallyIncomplete(previous.text)
+        let fragment = looksLikeContinuationFragment(line.text)
+        // A non-bulleted complete ingredient never absorbs a following row.
+        guard previous.bulletMarker != nil || previousIncomplete else { return .min }
+
+        var score = strictAnchor ? 3 : 2
+        if previous.bulletMarker != nil { score += 2 }
+        if previousIncomplete { score += 3 }
+        if fragment { score += 3 }
+        if line.text.first?.isLowercase == true { score += 1 }
+        if line.text.split(whereSeparator: \Character.isWhitespace).count <= 4 { score += 1 }
+        if independentlyLooksLikeIngredient(line.text) { score -= 6 }
+        return score
+    }
+
+    private static func isRelaxedContinuation(
+        _ line: PhysicalLine,
+        of previous: LogicalLine
+    ) -> Bool {
+        let startDelta = abs(line.minX - previous.anchorMinX)
+        let overlap = min(previous.anchorMaxX, line.maxX)
+            - max(previous.anchorMinX, line.minX)
+        return startDelta <= max(0.035, previous.averageHeight)
+            && overlap >= max(0.01, min(line.maxX - line.minX, previous.anchorMaxX - previous.anchorMinX) * 0.20)
+    }
+
+    private static func appearsGrammaticallyIncomplete(_ text: String) -> Bool {
+        let value = headingKey(text)
+        if text.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix(",") { return true }
+        return value.range(
+            of: #"(?:\b(?:and|or|with)|\b(?:coarsely|finely|roughly|freshly|shredded|flaked|grated|chopped|minced|diced|sliced))$"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
+    }
+
+    private static func looksLikeContinuationFragment(_ text: String) -> Bool {
+        let value = headingKey(text)
+        return value.range(
+            of: #"^(?:(?:or\s+)?(?:chopped|flaked|grated|shredded|diced|minced|sliced)|divided|optional|preferably|to taste|for (?:serving|garnish|topping))\b"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
+    }
+
+    private static func independentlyLooksLikeIngredient(_ text: String) -> Bool {
+        hasLeadingQuantity(text)
+            || extractBullet(from: text, explicit: nil).marker != nil
+    }
+
+    private enum GroupRole {
+        case ingredient
+        case continuation
+        case ingredientHeading
+        case sectionHeading
+        case instructionOrProse
+        case noise
+        case ambiguous
+    }
+
+    private static func groupRole(
+        for line: LogicalLine,
+        followedBy nextLine: LogicalLine?
+    ) -> GroupRole {
+        let text = line.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return .noise }
+        if isIngredientHeading(text) { return .ingredientHeading }
+        if isInstructionLine(text) { return .instructionOrProse }
+        if looksLikeStructuralSectionHeading(text, followedBy: nextLine?.text) {
+            return .sectionHeading
+        }
+        if looksLikeContinuationFragment(text) && !line.continuationAttached {
+            return .continuation
+        }
+        if hasLeadingQuantity(text) || line.bulletMarker != nil { return .ingredient }
+        if text.hasSuffix(".") && text.split(whereSeparator: \Character.isWhitespace).count > 6 {
+            return .instructionOrProse
+        }
+        return .ambiguous
+    }
+
+    private static func looksLikeStructuralSectionHeading(
+        _ text: String,
+        followedBy nextText: String?
+    ) -> Bool {
+        guard let nextText,
+              hasLeadingQuantity(nextText) || extractBullet(from: nextText, explicit: nil).marker != nil,
+              !hasLeadingQuantity(text),
+              text.split(whereSeparator: \Character.isWhitespace).count <= 8
+        else { return false }
+        let key = headingKey(text)
+        guard key.hasPrefix("for the ") || key.hasPrefix("for ") else { return false }
+        let words = text.split(whereSeparator: \Character.isWhitespace)
+        let titleLikeCount = words.filter { $0.first?.isUppercase == true }.count
+        return titleLikeCount >= max(2, words.count / 2)
     }
 
     private static func belongsOnSameRow(

@@ -203,6 +203,11 @@ actor RetailerMatchingBatchService {
             let outcome: IngredientMatchingOutcome
             if demand.isExplicitlyExcluded {
                 outcome = .explicitlyExcluded
+            } else if RetailerSearchQueryBuilder.validatedQuery(
+                for: demand.request.ingredient,
+                preferences: demand.preferences
+            ) == nil {
+                outcome = .failed(.fallbackUnavailable)
             } else if let groupIndex = groupIndexByInput[inputIndex],
                       let fetch = fetchesByGroupIndex[groupIndex] {
                 outcome = engine.rankCandidates(
@@ -265,7 +270,12 @@ actor RetailerMatchingBatchService {
         var groupIndexByInput = Array<Int?>(repeating: nil, count: demands.count)
 
         for (inputIndex, demand) in demands.enumerated() {
-            guard !demand.isExplicitlyExcluded else { continue }
+            guard !demand.isExplicitlyExcluded,
+                  RetailerSearchQueryBuilder.validatedQuery(
+                    for: demand.request.ingredient,
+                    preferences: demand.preferences
+                  ) != nil
+            else { continue }
 
             let key = RetailerCandidateFetchKey(
                 request: demand.request,

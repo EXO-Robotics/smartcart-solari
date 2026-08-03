@@ -197,6 +197,8 @@ struct RecipeSourceObservation: Hashable, Codable {
     var boundingBox: NormalizedSourceRect
     var confidence: Double
     var alternatives: [RecipeSourceTextAlternative]
+    /// Stable order supplied by Vision before reconstruction sorts by geometry.
+    var originalOrder: Int? = nil
 }
 
 /// The immutable source snapshot for a photo recipe. Raw Vision output is retained
@@ -1215,7 +1217,7 @@ enum GuidedItemStatus: String, Hashable, Codable {
 
 enum RetailerGuideContinuation: Equatable {
     case nextItem(UUID)
-    case cart(URL)
+    case cart(ShoppingRetailer)
 }
 
 struct ShoppingListItem: Identifiable, Hashable, Codable {

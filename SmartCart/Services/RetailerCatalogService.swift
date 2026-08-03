@@ -79,6 +79,18 @@ enum RetailerServiceError: LocalizedError, Equatable {
 
 enum RetailerSearchQueryBuilder {
     static func query(for ingredient: Ingredient, preferences: ShoppingPreferences) -> String {
+        validatedQuery(for: ingredient, preferences: preferences) ?? ""
+    }
+
+    /// Retailer normalization is deliberately independent from the review
+    /// presentation. A readable source line is not necessarily a safe search.
+    static func validatedQuery(
+        for ingredient: Ingredient,
+        preferences: ShoppingPreferences
+    ) -> String? {
+        guard let canonicalIngredient = canonicalIngredientTerm(for: ingredient) else {
+            return nil
+        }
         var terms: [String] = []
         if preferences.organicPolicy == .only {
             terms.append("organic")
@@ -89,9 +101,73 @@ enum RetailerSearchQueryBuilder {
            !preferredProductName.isEmpty {
             terms.append(preferredProductName)
         }
-        terms.append(ingredient.name)
-        return terms.joined(separator: " ")
+        terms.append(canonicalIngredient)
+        let query = terms
+            .joined(separator: " ")
+            .split(whereSeparator: \Character.isWhitespace)
+            .joined(separator: " ")
+        return query.isEmpty ? nil : query
     }
+
+    static func canonicalIngredientTerm(for ingredient: Ingredient) -> String? {
+        if ingredient.sourceEvidence?.reviewReasons?.contains("unresolved_parse_conflict") == true {
+            return nil
+        }
+        var value = ingredient.name
+            .replacingOccurrences(
+                of: #"\b(?:optional|if desired|as desired|to taste|for serving|for garnish|for topping)\b.*$"#,
+                with: "",
+                options: [.regularExpression, .caseInsensitive]
+            )
+            .replacingOccurrences(
+                of: #"\bpreferably\b.*$"#,
+                with: "",
+                options: [.regularExpression, .caseInsensitive]
+            )
+            .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(.punctuationCharacters))
+
+        let headingKey = value.lowercased()
+            .split(whereSeparator: \Character.isWhitespace)
+            .joined(separator: " ")
+        guard !headingKey.hasPrefix("for the "),
+              !headingKey.hasPrefix("for "),
+              !isContinuationOnly(headingKey)
+        else { return nil }
+
+        if let preparation = ingredient.preparation.range(
+            of: #"(?i)\bpreferably\s+([a-z][a-z -]{1,30})"#,
+            options: .regularExpression
+        ) {
+            let descriptor = ingredient.preparation[preparation]
+                .replacingOccurrences(of: "preferably", with: "", options: .caseInsensitive)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !descriptor.isEmpty,
+               value.range(of: descriptor, options: .caseInsensitive) == nil {
+                value = "\(descriptor) \(value)"
+            }
+        }
+
+        let meaningfulTokens = value.lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { token in
+                token.count > 1 && !retailerNonNounWords.contains(token)
+            }
+        guard !meaningfulTokens.isEmpty else { return nil }
+        return value
+    }
+
+    private static func isContinuationOnly(_ value: String) -> Bool {
+        value.range(
+            of: #"^(?:(?:or )?(?:chopped|flaked|grated|shredded|diced|minced|sliced)|divided|optional|preferably|to taste|for (?:serving|garnish|topping))$"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
+    }
+
+    private static let retailerNonNounWords: Set<String> = [
+        "and", "as", "at", "chopped", "coarsely", "diced", "divided", "finely",
+        "flaked", "for", "freshly", "grated", "minced", "optional", "or",
+        "preferably", "roughly", "serving", "shredded", "sliced", "taste", "the", "to"
+    ]
 }
 
 private struct SeededRetailerGuideDefinition {
@@ -202,6 +278,12 @@ struct RetailerGuideEngine {
         for request: RetailerProductSearchRequest,
         preferences: ShoppingPreferences
     ) -> IngredientMatchingOutcome {
+        guard RetailerSearchQueryBuilder.validatedQuery(
+            for: request.ingredient,
+            preferences: preferences
+        ) != nil else {
+            return .failed(.fallbackUnavailable)
+        }
         switch fetch {
         case .failed(let reason):
             return .failed(reason)
@@ -245,6 +327,10 @@ struct RetailerGuideEngine {
         for request: RetailerProductSearchRequest,
         preferences: ShoppingPreferences
     ) async -> [RankedRetailerProduct] {
+        guard RetailerSearchQueryBuilder.validatedQuery(
+            for: request.ingredient,
+            preferences: preferences
+        ) != nil else { return [] }
         guard let retailer = ShoppingRetailer(rawValue: request.retailerID),
               let adapter = adapters[retailer]
         else { return [] }

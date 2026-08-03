@@ -68,6 +68,7 @@ struct RetailerSafariHandoffView: View {
                     comparisonSearchURL: comparisonSearchURL(for: itemID),
                     position: appModel.guidedIndex + 1,
                     total: appModel.shoppingItems.count,
+                    ingredientName: ingredientName(for: itemID),
                     productIdentity: productIdentity(for: itemID),
                     amountNeeded: amountNeeded(for: itemID),
                     replacementCandidates: safeReplacementCandidates,
@@ -92,10 +93,10 @@ struct RetailerSafariHandoffView: View {
                 .id(destination.id)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
-            case .retailer(let url):
+            case .retailer(let retailer, let url):
                 RetailerSafariSheet(
                     url: url,
-                    configuration: appModel.retailerConfiguration
+                    configuration: retailer.configuration
                 )
                     .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
@@ -117,6 +118,10 @@ struct RetailerSafariHandoffView: View {
             return "Current product"
         }
         return "\(item.ingredient.name), \(item.product.brand) \(item.product.name)"
+    }
+
+    private func ingredientName(for itemID: UUID) -> String {
+        appModel.shoppingItems.first(where: { $0.id == itemID })?.ingredient.name ?? "Current item"
     }
 
     private func amountNeeded(for itemID: UUID) -> String {
@@ -206,7 +211,7 @@ struct RetailerSafariHandoffView: View {
 
             Button {
                 appModel.recordRetailerSetupStarted()
-                sheetDestination = .retailer(appModel.retailerSetupURL())
+                sheetDestination = .retailer(appModel.selectedRetailer, appModel.retailerSetupURL())
             } label: {
                 HStack {
                     Text("Open \(retailerName) sign in")
@@ -500,35 +505,46 @@ struct RetailerSafariHandoffView: View {
                 summaryMetric("Skipped", value: appModel.retailerSkippedCount, symbol: "forward.fill")
             }
 
-            HStack {
-            Text("Representative plan · not live")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(SmartCartTheme.secondaryInk)
-                Spacer()
-                Text(appModel.estimatedTotal, format: .currency(code: "USD"))
-                    .font(.title3.bold())
-                    .foregroundStyle(SmartCartTheme.navy)
+            if appModel.retailerAddedCount > 0 {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack {
+                        Text("Estimated reference total")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(SmartCartTheme.navy)
+                        Spacer()
+                        Text(appModel.estimatedTotal, format: .currency(code: "USD"))
+                            .font(.headline.bold())
+                            .foregroundStyle(SmartCartTheme.navy)
+                    }
+                    Text("Based on representative prices, not your retailer carts")
+                        .font(.caption)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
+                }
+                .padding(14)
+                .background(SmartCartTheme.canvasRaise)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
-            .padding(14)
-            .background(SmartCartTheme.canvasRaise)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
-            Button {
-                sheetDestination = .retailer(appModel.retailerCartURL())
-            } label: {
-                HStack {
-                    Text("Open \(appModel.retailerConfiguration.cartName)")
-                    Spacer()
-                    Image(systemName: "arrow.up.right")
+            VStack(spacing: 10) {
+                ForEach(appModel.shoppingTripRetailers) { retailer in
+                    Button {
+                        sheetDestination = .retailer(retailer, appModel.retailerCartURL(for: retailer))
+                    } label: {
+                        HStack {
+                            Text("Open \(retailer.configuration.cartName)")
+                            Spacer()
+                            Image(systemName: "arrow.up.right")
+                        }
+                    }
+                    .buttonStyle(BlueButtonStyle())
+                    .accessibilityIdentifier("retailer-open-\(retailer.rawValue)-cart")
                 }
             }
-            .buttonStyle(BlueButtonStyle())
-            .accessibilityIdentifier("retailer-open-in-safari")
 
             InfoBanner(
                 symbol: "info.circle.fill",
-                title: "Finish at \(retailerName)",
-                message: "\(retailerName) confirms your location, live inventory, quantities, substitutions, final prices, cart contents, fulfillment, payment, and checkout.",
+                title: completionRetailerTitle,
+                message: "Each retailer confirms your location, live inventory, quantities, substitutions, final prices, cart contents, fulfillment, payment, and checkout.",
                 color: appModel.selectedRetailer == .walmart ? SmartCartTheme.walmartBlue : .red
             )
 
@@ -580,6 +596,14 @@ struct RetailerSafariHandoffView: View {
         dynamicTypeSize.isAccessibilitySize
             ? [GridItem(.flexible())]
             : [GridItem(.flexible()), GridItem(.flexible())]
+    }
+
+    private var completionRetailerTitle: String {
+        let names = appModel.shoppingTripRetailers.map { $0.configuration.displayName }
+        if names.count == 1, let name = names.first {
+            return "Finish at \(name)"
+        }
+        return "Finish each retailer cart"
     }
 
     private func archivePantryUpdateReminder() {
@@ -674,12 +698,12 @@ struct RetailerSafariHandoffView: View {
     ) {
         guard appModel.recordRetailerOutcome(outcome, for: itemID, sessionID: sessionID) else { return }
         switch appModel.retailerGuideContinuation {
-        case .cart(let cartURL):
+        case .cart(let retailer):
             releasePrewarming()
             productDismissalIsExplicit = true
             presentedProductSessionID = nil
             presentedProductItemID = nil
-            sheetDestination = .retailer(cartURL)
+            sheetDestination = .retailer(retailer, appModel.retailerCartURL(for: retailer))
         case .nextItem(let nextItemID):
             guard let nextItem = appModel.shoppingItems.first(where: { $0.id == nextItemID }) else { return }
             // Retain the token for the page we are about to open. Its successful
@@ -777,13 +801,13 @@ struct RetailerSafariHandoffView: View {
 
 private enum RetailerGuideSheetDestination: Identifiable {
     case product(UUID, UUID, URL, UUID)
-    case retailer(URL)
+    case retailer(ShoppingRetailer, URL)
 
     var id: String {
         switch self {
         case .product(let sessionID, let itemID, _, let presentationID):
             "product-\(sessionID.uuidString)-\(itemID.uuidString)-\(presentationID.uuidString)"
-        case .retailer(let url): "retailer-\(url.absoluteString)"
+        case .retailer(let retailer, let url): "retailer-\(retailer.rawValue)-\(url.absoluteString)"
         }
     }
 }
@@ -830,6 +854,7 @@ private struct RetailerTripSafariSheet: View {
     let comparisonSearchURL: URL
     let position: Int
     let total: Int
+    let ingredientName: String
     let productIdentity: String
     let amountNeeded: String
     let replacementCandidates: [RetailerProductRecord]
@@ -884,33 +909,14 @@ private struct RetailerTripSafariSheet: View {
 
     private var tripBar: some View {
         VStack(spacing: 6) {
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(spacing: 6) {
-                    tripPositionLabel
-                    pauseButton
-                        .frame(maxWidth: .infinity)
-                    moreMenu
-                        .frame(maxWidth: .infinity)
-                    nextButton
-                        .frame(maxWidth: .infinity)
-                    checkRetailerButton
-                        .frame(maxWidth: .infinity)
-                }
-            } else {
-                HStack(alignment: .top, spacing: 8) {
-                    VStack(spacing: 6) {
-                        pauseButton
-                        moreMenu
-                    }
-                    Spacer(minLength: 4)
-                    tripPositionLabel
-                        .padding(.top, 12)
-                    Spacer(minLength: 4)
-                    VStack(spacing: 6) {
-                        nextButton
-                        checkRetailerButton
-                    }
-                }
+            tripPositionLabel
+            HStack(spacing: 8) {
+                pauseButton
+                nextButton
+            }
+            HStack(spacing: 8) {
+                moreMenu
+                checkRetailerButton
             }
         }
         .foregroundStyle(SmartCartTheme.green)
@@ -920,11 +926,15 @@ private struct RetailerTripSafariSheet: View {
     }
 
     private var tripPositionLabel: some View {
-        VStack(spacing: 2) {
+        VStack(spacing: 1) {
             Text("Item \(position) of \(total)")
-                .font(.subheadline.bold())
-            Text("Amount needed: \(amountNeeded)")
-                .font(.caption2.weight(.semibold))
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(SmartCartTheme.secondaryInk)
+            Text(ingredientName)
+                .font(.headline.bold())
+                .lineLimit(2)
+            Text("Need \(amountNeeded)")
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(SmartCartTheme.secondaryInk)
                 .accessibilityIdentifier("retailer-trip-amount-needed")
         }
@@ -948,7 +958,7 @@ private struct RetailerTripSafariSheet: View {
                 .minimumScaleFactor(0.8)
                 .foregroundStyle(SmartCartTheme.green)
                 .padding(.horizontal, 12)
-                .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil)
+                .frame(maxWidth: .infinity)
                 .frame(minWidth: 44, minHeight: 44)
                 .background(SmartCartTheme.herbLight)
                 .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
@@ -978,7 +988,7 @@ private struct RetailerTripSafariSheet: View {
                         : SmartCartTheme.mutedInk
                 )
                 .padding(.horizontal, 14)
-                .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil)
+                .frame(maxWidth: .infinity)
                 .frame(minWidth: 44, minHeight: 44)
                 .background(
                     loadState.canRecordVisited
@@ -1019,13 +1029,13 @@ private struct RetailerTripSafariSheet: View {
             loadState = .loading
             loadAttempt += 1
         } label: {
-            Label("Check \(retailer.configuration.displayName)", systemImage: "magnifyingglass")
+            Label("Search \(retailer.configuration.displayName)", systemImage: "magnifyingglass")
                 .font(.caption.bold())
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
                 .foregroundStyle(SmartCartTheme.onAccent)
                 .padding(.horizontal, 10)
-                .frame(width: compactSecondaryActionWidth)
+                .frame(maxWidth: .infinity)
                 .frame(minHeight: 38)
                 .background(SmartCartTheme.green)
                 .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
@@ -1072,7 +1082,7 @@ private struct RetailerTripSafariSheet: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
                 .padding(.horizontal, 10)
-                .frame(width: compactSecondaryActionWidth)
+                .frame(maxWidth: .infinity)
                 .frame(minHeight: 38)
                 .background(SmartCartTheme.herbLight)
                 .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
@@ -1084,10 +1094,6 @@ private struct RetailerTripSafariSheet: View {
         .frame(minHeight: 44)
         .accessibilityIdentifier("retailer-trip-more")
         .accessibilityLabel("More actions")
-    }
-
-    private var compactSecondaryActionWidth: CGFloat? {
-        dynamicTypeSize.isAccessibilitySize ? nil : 128
     }
 
     private var displayedURL: URL {

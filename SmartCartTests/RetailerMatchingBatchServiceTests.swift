@@ -223,6 +223,31 @@ final class RetailerMatchingBatchServiceTests: XCTestCase {
         )
     }
 
+    func testInvalidIngredientQueryNeverStartsRetailerFetch() async throws {
+        let recorder = CatalogFetchRecorder()
+        let adapter = RecordingGuideAdapter(
+            recorder: recorder,
+            products: { request in
+                [Self.product(id: "must-not-fetch", request: request)]
+            }
+        )
+        let engine = RetailerGuideEngine(adapters: [.walmart: adapter])
+        let service = RetailerMatchingBatchService()
+        let generation = RetailerMatchingGeneration(id: uuid(12))
+
+        let result = try await service.match(
+            [Self.demand(name: "For The Thai Infused Rum", quantity: 1)],
+            using: engine,
+            generation: generation
+        )
+        let items = try result.acceptedItems(for: generation)
+        let snapshot = await recorder.snapshot()
+
+        XCTAssertEqual(snapshot.startedCount, 0)
+        XCTAssertEqual(result.uniqueFetchGroupCount, 0)
+        XCTAssertEqual(items.first?.resolution.resolution, .unresolved(.fallbackUnavailable))
+    }
+
     func testMalformedCandidateBecomesInvalidCandidateTerminalResolution() async throws {
         let recorder = CatalogFetchRecorder()
         let adapter = RecordingGuideAdapter(

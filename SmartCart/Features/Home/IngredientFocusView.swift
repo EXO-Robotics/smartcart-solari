@@ -21,6 +21,7 @@ struct IngredientFocusView: View {
     @State private var panStart: CGSize?
     @State private var selectionDragStart: OCRFocusRegion?
     @State private var resizeDragStart: OCRFocusRegion?
+    @State private var autoFrameRequestID = UUID()
 
     init(
         images: [UIImage],
@@ -35,10 +36,13 @@ struct IngredientFocusView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
+            ZStack(alignment: .bottom) {
                 if let image = currentImage {
                     imageViewer(image)
-                    guidance
+                    VStack(spacing: 0) {
+                        guidance
+                        actionBar
+                    }
                 } else {
                     ContentUnavailableView(
                         "Photo unavailable",
@@ -64,9 +68,6 @@ struct IngredientFocusView: View {
                         .accessibilityIdentifier("ingredient-focus-reset")
                 }
             }
-            .safeAreaInset(edge: .bottom) {
-                actionBar
-            }
         }
         .task {
             let suggestions = await OCRFocusRegionSuggester.suggestRegions(in: images)
@@ -76,6 +77,9 @@ struct IngredientFocusView: View {
                 if !manuallyEditedPages.contains(index) {
                     regions[index] = suggestions[index]
                 }
+            }
+            if !manuallyEditedPages.contains(currentPage) {
+                autoFrameRequestID = UUID()
             }
         }
     }
@@ -126,6 +130,10 @@ struct IngredientFocusView: View {
             .accessibilityHint("Use the Zoom In and Zoom Out actions when gestures are unavailable")
             .accessibilityAction(named: Text("Zoom In")) { adjustZoom(by: 0.5) }
             .accessibilityAction(named: Text("Zoom Out")) { adjustZoom(by: -0.5) }
+            .task(id: autoFrameRequestID) {
+                await Task.yield()
+                frameCurrentRegion(baseRect: baseRect, viewport: viewport)
+            }
         }
         .frame(maxHeight: .infinity)
     }
@@ -161,7 +169,8 @@ struct IngredientFocusView: View {
         }
         .foregroundStyle(.white)
         .padding(.horizontal, 18)
-        .padding(.top, 10)
+        .padding(.vertical, 8)
+        .background(Color.black.opacity(0.56))
     }
 
     private var actionBar: some View {
@@ -189,7 +198,7 @@ struct IngredientFocusView: View {
         .padding(.horizontal, 18)
         .padding(.top, 10)
         .padding(.bottom, 8)
-        .background(.ultraThinMaterial)
+        .background(.regularMaterial)
     }
 
     private func selectionOverlay(_ rect: CGRect, imageRect: CGRect) -> some View {
@@ -348,10 +357,9 @@ struct IngredientFocusView: View {
     }
 
     private func resetCurrentPage() {
-        zoom = 1
-        panOffset = .zero
         guard suggestedRegions.indices.contains(currentPage) else { return }
         setCurrentRegion(suggestedRegions[currentPage], markEdited: true)
+        autoFrameRequestID = UUID()
     }
 
     private func setCurrentRegion(
@@ -396,6 +404,40 @@ struct IngredientFocusView: View {
         panOffset = .zero
         magnificationStart = nil
         panStart = nil
+        autoFrameRequestID = UUID()
+    }
+
+    private func frameCurrentRegion(baseRect: CGRect, viewport: CGSize) {
+        let region = currentRegion.normalized()
+        guard baseRect.width > 0, baseRect.height > 0,
+              region.width > 0, region.height > 0 else { return }
+
+        let availableHeight = max(140, viewport.height - 160)
+        let horizontalScale = (viewport.width * 0.90) / (baseRect.width * region.width)
+        let verticalScale = (availableHeight * 0.88) / (baseRect.height * region.height)
+        let targetZoom = min(4, max(1, min(horizontalScale, verticalScale)))
+        let scaledImageRect = CGRect(
+            x: (viewport.width - (baseRect.width * targetZoom)) / 2,
+            y: (viewport.height - (baseRect.height * targetZoom)) / 2,
+            width: baseRect.width * targetZoom,
+            height: baseRect.height * targetZoom
+        )
+        let regionCenter = CGPoint(
+            x: scaledImageRect.minX + (scaledImageRect.width * CGFloat(region.x + region.width / 2)),
+            y: scaledImageRect.minY + (scaledImageRect.height * CGFloat(region.y + region.height / 2))
+        )
+        let targetCenter = CGPoint(x: viewport.width / 2, y: availableHeight / 2)
+
+        zoom = targetZoom
+        panOffset = clampedPan(
+            CGSize(
+                width: targetCenter.x - regionCenter.x,
+                height: targetCenter.y - regionCenter.y
+            ),
+            baseRect: baseRect,
+            viewport: viewport,
+            scale: targetZoom
+        )
     }
 
     private func complete(_ result: IngredientFocusResult?) {

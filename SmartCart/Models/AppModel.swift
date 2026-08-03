@@ -967,10 +967,26 @@ final class AppModel {
 
     var retailerGuideContinuation: RetailerGuideContinuation? {
         if retailerGuideIsComplete {
-            return .cart(retailerCartURL())
+            let finalRetailer = shoppingItems.indices.contains(guidedIndex)
+                ? ShoppingRetailer(rawValue: shoppingItems[guidedIndex].product.retailerID)
+                : nil
+            return .cart(finalRetailer ?? selectedRetailer)
         }
         guard let nextItem = currentGuidedItem, nextItem.status == .waiting else { return nil }
         return .nextItem(nextItem.id)
+    }
+
+    /// Retailers that own at least one product in the current frozen trip.
+    /// Preserve shopping order while presenting each retailer only once.
+    var shoppingTripRetailers: [ShoppingRetailer] {
+        let represented = shoppingItems.reduce(into: [ShoppingRetailer]()) { result, item in
+            guard let retailer = ShoppingRetailer(rawValue: item.product.retailerID),
+                  retailer.configuration.isAvailable,
+                  !result.contains(retailer)
+            else { return }
+            result.append(retailer)
+        }
+        return represented.isEmpty ? [selectedRetailer] : represented
     }
 
     var retailerSetupIsComplete: Bool {
@@ -3796,6 +3812,10 @@ final class AppModel {
         retailerConfiguration.cartURL
     }
 
+    func retailerCartURL(for retailer: ShoppingRetailer) -> URL {
+        retailer.configuration.cartURL
+    }
+
     func shoppingSession(id: UUID) -> ShoppingSession? {
         shoppingSessions.first { $0.id == id }
     }
@@ -6272,11 +6292,20 @@ enum RecipeParser {
         #if DEBUG
         var authoritativeAcceptedLineOrdinals: [Int] = []
         #endif
-        for (lineOrdinal, line) in lines.prefix(120).enumerated() {
+        let boundedLines = Array(lines.prefix(120))
+        for (lineOrdinal, line) in boundedLines.enumerated() {
+            let nextLine = boundedLines.indices.contains(lineOrdinal + 1)
+                ? boundedLines[lineOrdinal + 1]
+                : nil
             if isInstructionHeading(line) { break }
             if isIngredientHeading(line) {
                 isInsideIngredientSection = true
                 sectionName = nil
+                continue
+            }
+            if isStructuralSectionHeading(line, followedBy: nextLine) {
+                sectionName = line.trimmingCharacters(in: CharacterSet(charactersIn: ":- "))
+                isInsideIngredientSection = true
                 continue
             }
             if isSectionHeading(line) {
@@ -6286,7 +6315,9 @@ enum RecipeParser {
             }
 
             let candidate = sanitizedIngredientCandidate(from: line)
-            let ingredientLine = candidate.ingredientText
+            let candidateText = candidate.ingredientText
+            let ingredientLine = canonicalQuantityFirstText(from: candidateText)
+                ?? candidate.ingredientText
             guard !ingredientLine.isEmpty else { continue }
 
             let exactSourceIndex = remainingSourceLines.firstIndex(where: {
@@ -6310,11 +6341,18 @@ enum RecipeParser {
             ),
                   ingredients.count < 60
             else { continue }
-            var ingredient = parseIngredient(ingredientLine, source: source)
+            let matchedSourceLine = sourceIndex.map { remainingSourceLines[$0] }
+            let resolution = rankedIngredient(
+                from: candidateText,
+                sourceLine: matchedSourceLine,
+                source: source
+            )
+            var ingredient = resolution.ingredient
             if let sourceIndex {
                 let sourceLine = remainingSourceLines.remove(at: sourceIndex)
                 apply(sourceLine: sourceLine, to: &ingredient, source: source)
             }
+            apply(resolution: resolution, to: &ingredient)
             apply(candidate: candidate, to: &ingredient)
             ingredient.sectionName = sectionName
             ingredients.append(ingredient)
@@ -6533,7 +6571,7 @@ enum RecipeParser {
         // purchasable. Keep this deliberately narrow; broader contextual
         // ingredient filtering is handled separately.
         if text.range(
-            of: #"^\s*[-•*☐✓]?\s*for\s+topping[.!]?\s*$"#,
+            of: #"^\s*[-•*☐✓]?\s*(?:(?:or\s+)?(?:chopped|flaked|grated|shredded|diced|minced|sliced)|divided|optional|preferably|to\s+taste|for\s+(?:serving|garnish|topping))[.!]?\s*$"#,
             options: [.regularExpression, .caseInsensitive]
         ) != nil {
             return SanitizedIngredientCandidate(
@@ -6676,6 +6714,25 @@ enum RecipeParser {
               ) == nil
         else { return false }
         return true
+    }
+
+    private static func isStructuralSectionHeading(
+        _ line: String,
+        followedBy nextLine: String?
+    ) -> Bool {
+        guard let nextLine,
+              line.split(whereSeparator: \Character.isWhitespace).count <= 8,
+              line.range(
+                of: #"^\s*for\s+(?:the\s+)?\S+"#,
+                options: [.regularExpression, .caseInsensitive]
+              ) != nil,
+              nextLine.range(
+                of: #"^\s*[-•*☐✓]?\s*(?:\d|[¼½¾⅓⅔⅛⅜⅝⅞⅙⅚]|one\b|two\b|three\b|half\b|quarter\b)"#,
+                options: [.regularExpression, .caseInsensitive]
+              ) != nil
+        else { return false }
+        let words = line.split(whereSeparator: \Character.isWhitespace)
+        return words.filter { $0.first?.isUppercase == true }.count >= max(2, words.count / 2)
     }
 
     private static func isLikelyInstruction(_ line: String) -> Bool {
@@ -6839,7 +6896,7 @@ enum RecipeParser {
         let commaParts = remaining.split(separator: ",", omittingEmptySubsequences: true).map {
             $0.trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        let preparationPattern = #"(?i)\b(optional|if desired|as desired|as needed|divided|softened|melted|sifted|packed|room temperature|at room temperature|chopped|roughly chopped|finely chopped|minced|drained|rinsed|cubed|diced|peeled|seeded|zested|juiced|crushed|grated|shredded|plus more[^,]*|for serving|for garnish|for topping|to taste)\b"#
+        let preparationPattern = #"(?i)\b(optional|if desired|as desired|as needed|divided|softened|melted|sifted|packed|room temperature|at room temperature|chopped|roughly chopped|finely chopped|minced|drained|rinsed|cubed|diced|peeled|seeded|zested|juiced|crushed|grated|shredded|preferably(?:\s+[^,]+)?|plus more[^,]*|for serving|for garnish|for topping|to taste)\b"#
         var nameParts: [String] = []
         var commaPreparationParts: [String] = []
         for (index, part) in commaParts.enumerated() {
@@ -6956,6 +7013,162 @@ enum RecipeParser {
             ),
             quantityReviewRequired: malformedQuantity
         )
+    }
+
+    private struct RankedIngredientResolution {
+        var ingredient: Ingredient
+        var selectedText: String
+        var selectedOCRAlternative: Bool
+        var unresolvedConflict: Bool
+    }
+
+    /// Generates several structured interpretations, then uses one deterministic
+    /// score. OCR alternatives are eligible to replace the primary text only
+    /// when the primary recognition confidence is weak.
+    private static func rankedIngredient(
+        from primaryText: String,
+        sourceLine: OCRSourceLine?,
+        source: RecipeSource
+    ) -> RankedIngredientResolution {
+        var texts = [primaryText]
+        var ocrAlternativeKeys = Set<String>()
+        if let nameFirst = canonicalQuantityFirstText(from: primaryText) {
+            texts.append(nameFirst)
+        }
+        if let sourceLine, sourceLine.confidence < 0.72 {
+            for alternative in sourceLine.alternateCandidates.prefix(3) {
+                texts.append(alternative.text)
+                ocrAlternativeKeys.insert(alternative.text.lowercased())
+                if let nameFirst = canonicalQuantityFirstText(from: alternative.text) {
+                    texts.append(nameFirst)
+                    ocrAlternativeKeys.insert(nameFirst.lowercased())
+                }
+            }
+        }
+
+        var seen = Set<String>()
+        let candidates = texts.compactMap { text -> (String, Ingredient, Double)? in
+            let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalized.isEmpty,
+                  seen.insert(normalized.lowercased()).inserted
+            else { return nil }
+            let parsed = parseIngredient(normalized, source: source)
+            return (normalized, parsed, ingredientCandidateScore(parsed, sourceText: normalized))
+        }.sorted { lhs, rhs in
+            if abs(lhs.2 - rhs.2) > 0.001 { return lhs.2 > rhs.2 }
+            return lhs.0.caseInsensitiveCompare(primaryText) == .orderedSame
+        }
+
+        let best = candidates.first
+            ?? (primaryText, parseIngredient(primaryText, source: source), 0)
+        let runnerUpScore = candidates.dropFirst().first?.2 ?? -.infinity
+        let selectedAlternative = ocrAlternativeKeys.contains(best.0.lowercased())
+        let conflict = candidates.count > 1
+            && abs(best.2 - runnerUpScore) < 1.25
+            && candidates.dropFirst().first.map {
+                $0.1.name.caseInsensitiveCompare(best.1.name) != .orderedSame
+                    || abs($0.1.quantity - best.1.quantity) > 0.0001
+                    || $0.1.unit != best.1.unit
+            } == true
+
+        var ingredient = best.1
+        if selectedAlternative || conflict {
+            ingredient.confidence = .review
+        }
+        // Keep the primary OCR string as the editable source while allowing the
+        // selected structured fields to benefit from a supported alternative.
+        ingredient.rawText = primaryText
+        return RankedIngredientResolution(
+            ingredient: ingredient,
+            selectedText: best.0,
+            selectedOCRAlternative: selectedAlternative,
+            unresolvedConflict: conflict
+        )
+    }
+
+    private static func ingredientCandidateScore(
+        _ ingredient: Ingredient,
+        sourceText: String
+    ) -> Double {
+        var score = (ingredient.sourceEvidence?.parserConfidence ?? 0) * 4
+        if !ingredient.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { score += 3 }
+        if !ingredient.unit.isEmpty { score += 1.5 }
+        if sourceText.range(
+            of: #"^\s*(?:\d|[¼½¾⅓⅔⅛⅜⅝⅞⅙⅚]|one\b|two\b|three\b|half\b|quarter\b)"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil { score += 2 }
+        if containsRecognizableIngredientNoun(ingredient.name) { score += 2.5 }
+        if isStandalonePreparationFragment(ingredient.name) { score -= 8 }
+        if ingredient.name.range(
+            of: #"^for\s+(?:the\s+)?"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil { score -= 7 }
+        if sourceText.hasSuffix(".") && sourceText.split(whereSeparator: \Character.isWhitespace).count > 7 {
+            score -= 3
+        }
+        return score
+    }
+
+    private static func containsRecognizableIngredientNoun(_ text: String) -> Bool {
+        let nouns: Set<String> = [
+            "apple", "avocado", "banana", "basil", "bean", "beef", "berry", "bread",
+            "broccoli", "broth", "butter", "carrot", "cheese", "chicken", "chocolate",
+            "cilantro", "coconut", "coffee", "corn", "cream", "egg", "flour", "garlic",
+            "ginger", "honey", "lemon", "lime", "milk", "oil", "onion", "parsley",
+            "pasta", "pepper", "potato", "rice", "rum", "salt", "sauce", "stock",
+            "sugar", "tomato", "tortilla", "vinegar", "water", "yogurt"
+        ]
+        return text.lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .contains { token in
+                let singular = token.hasSuffix("s") ? String(token.dropLast()) : token
+                return nouns.contains(singular)
+            }
+    }
+
+    private static func isStandalonePreparationFragment(_ text: String) -> Bool {
+        text.range(
+            of: #"^\s*(?:(?:or\s+)?(?:chopped|flaked|grated|shredded|diced|minced|sliced)|divided|optional|preferably|to\s+taste|for\s+(?:serving|garnish|topping))\s*$"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
+    }
+
+    private static func canonicalQuantityFirstText(from text: String) -> String? {
+        let pattern = #"^\s*(.+?)\s*[—–]\s*((?:\d+(?:[./]\d+)?|\d+\s+\d+/\d+|[¼½¾⅓⅔⅛⅜⅝⅞⅙⅚]|one|two|three|half|quarter)\s+(?:cups?|tbsp|tablespoons?|tsp|teaspoons?|oz|ounces?|lbs?|pounds?|g|grams?|kg|ml|liters?|cloves?|cans?|jars?|packages?|pinches?|bunches?))(?:\s*,\s*(.+))?\s*$"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+              let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+              let nameRange = Range(match.range(at: 1), in: text),
+              let measurementRange = Range(match.range(at: 2), in: text)
+        else { return nil }
+        let name = text[nameRange].trimmingCharacters(in: .whitespacesAndNewlines)
+        let measurement = text[measurementRange].trimmingCharacters(in: .whitespacesAndNewlines)
+        let preparation: String? = match.range(at: 3).location == NSNotFound
+            ? nil
+            : Range(match.range(at: 3), in: text).map {
+                text[$0].trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        return [measurement, name].joined(separator: " ")
+            + (preparation?.isEmpty == false ? ", \(preparation!)" : "")
+    }
+
+    private static func apply(
+        resolution: RankedIngredientResolution,
+        to ingredient: inout Ingredient
+    ) {
+        guard resolution.selectedOCRAlternative || resolution.unresolvedConflict,
+              var evidence = ingredient.sourceEvidence
+        else { return }
+        var reasons = evidence.reviewReasons ?? []
+        if resolution.selectedOCRAlternative,
+           !reasons.contains("ocr_alternative_selected") {
+            reasons.append("ocr_alternative_selected")
+        }
+        if resolution.unresolvedConflict,
+           !reasons.contains("unresolved_parse_conflict") {
+            reasons.append("unresolved_parse_conflict")
+        }
+        evidence.reviewReasons = reasons
+        ingredient.sourceEvidence = evidence
     }
 
     private static func apply(
