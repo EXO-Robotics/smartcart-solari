@@ -162,16 +162,19 @@ describe('RecipePageExtractor', () => {
 });
 
 describe('RecipePageFetcher', () => {
+  const publicLookup = async () => [{ address: '93.184.216.34', family: 4 }];
+  const makeFetcher = (options = {}) => new RecipePageFetcher({ lookupImpl: publicLookup, ...options });
+
   test('rejects non-HTTPS URLs before making a request', async () => {
     let called = false;
-    const fetcher = new RecipePageFetcher({ fetchImpl: async () => { called = true; } });
+    const fetcher = makeFetcher({ fetchImpl: async () => { called = true; } });
     await assert.rejects(fetcher.fetch('http://recipes.example/cake'), { code: 'recipe_page_https_required' });
     assert.equal(called, false);
   });
 
   test('follows relative HTTPS redirects, sends an identifiable user agent, and decodes Windows-1252', async () => {
     const requests = [];
-    const fetcher = new RecipePageFetcher({
+    const fetcher = makeFetcher({
       fetchImpl: async (url, options) => {
         requests.push({ url: url.href, options });
         if (requests.length === 1) {
@@ -192,14 +195,14 @@ describe('RecipePageFetcher', () => {
   });
 
   test('rejects redirects that downgrade to HTTP', async () => {
-    const fetcher = new RecipePageFetcher({
+    const fetcher = makeFetcher({
       fetchImpl: async () => new Response(null, { status: 302, headers: { location: 'http://recipes.example/final' } })
     });
     await assert.rejects(fetcher.fetch('https://recipes.example/start'), { code: 'unsafe_recipe_page_redirect' });
   });
 
   test('returns a precise typed failure for upstream 403', async () => {
-    const fetcher = new RecipePageFetcher({ fetchImpl: async () => new Response('Forbidden', { status: 403 }) });
+    const fetcher = makeFetcher({ fetchImpl: async () => new Response('Forbidden', { status: 403 }) });
     await assert.rejects(
       fetcher.fetch('https://recipes.example/private'),
       (error) => error.code === 'recipe_page_access_denied'
@@ -209,7 +212,7 @@ describe('RecipePageFetcher', () => {
   });
 
   test('returns a precise typed timeout failure', async () => {
-    const fetcher = new RecipePageFetcher({
+    const fetcher = makeFetcher({
       timeoutMs: 5,
       fetchImpl: async (_url, { signal }) => new Promise((_resolve, reject) => {
         signal.addEventListener('abort', () => {
@@ -226,16 +229,79 @@ describe('RecipePageFetcher', () => {
   });
 
   test('enforces MIME and streamed body-size limits', async () => {
-    const wrongMime = new RecipePageFetcher({
+    const wrongMime = makeFetcher({
       fetchImpl: async () => new Response('{}', { headers: { 'content-type': 'application/json' } })
     });
     await assert.rejects(wrongMime.fetch('https://recipes.example/data'), { code: 'unsupported_recipe_page_mime' });
 
-    const oversized = new RecipePageFetcher({
+    const oversized = makeFetcher({
       maxBytes: 4,
       fetchImpl: async () => new Response('12345', { headers: { 'content-type': 'text/html' } })
     });
     await assert.rejects(oversized.fetch('https://recipes.example/large'), { code: 'recipe_page_too_large' });
+  });
+
+  test('rejects private, loopback, local-hostname, and mixed DNS targets before fetching', async () => {
+    let requestCount = 0;
+    const fetchImpl = async () => {
+      requestCount += 1;
+      return new Response('<h1>Unexpected</h1>', { headers: { 'content-type': 'text/html' } });
+    };
+
+    await assert.rejects(
+      makeFetcher({ fetchImpl }).fetch('https://127.0.0.1/recipe'),
+      { code: 'recipe_page_private_address' }
+    );
+    await assert.rejects(
+      makeFetcher({ fetchImpl }).fetch('https://kitchen.local/recipe'),
+      { code: 'recipe_page_private_address' }
+    );
+    await assert.rejects(
+      makeFetcher({
+        fetchImpl,
+        lookupImpl: async () => [{ address: '10.0.0.8', family: 4 }]
+      }).fetch('https://recipes.example/private'),
+      { code: 'recipe_page_private_address' }
+    );
+    await assert.rejects(
+      makeFetcher({
+        fetchImpl,
+        lookupImpl: async () => [
+          { address: '93.184.216.34', family: 4 },
+          { address: '169.254.169.254', family: 4 }
+        ]
+      }).fetch('https://recipes.example/mixed'),
+      { code: 'recipe_page_private_address' }
+    );
+    assert.equal(requestCount, 0);
+  });
+
+  test('revalidates and pins every redirect target to prevent DNS rebinding', async () => {
+    const lookups = [];
+    const requests = [];
+    const fetcher = makeFetcher({
+      lookupImpl: async (hostname) => {
+        lookups.push(hostname);
+        if (hostname === 'recipes.example') return [{ address: '93.184.216.34', family: 4 }];
+        return [{ address: '10.0.0.9', family: 4 }];
+      },
+      fetchImpl: async (url, options) => {
+        requests.push({ url: url.href, pinned: options.smartcartPinnedAddress });
+        return new Response(null, {
+          status: 302,
+          headers: { location: 'https://redirected.example/private' }
+        });
+      }
+    });
+
+    await assert.rejects(fetcher.fetch('https://recipes.example/start'), {
+      code: 'unsafe_recipe_page_redirect'
+    });
+    assert.deepEqual(lookups, ['recipes.example', 'redirected.example']);
+    assert.deepEqual(requests, [{
+      url: 'https://recipes.example/start',
+      pinned: { address: '93.184.216.34', family: 4 }
+    }]);
   });
 });
 

@@ -9,6 +9,21 @@ final class WeeklyMealRepositoryTests: XCTestCase {
         XCTAssertThrowsError(try LocalCalendarDate(iso8601: "2026-02-30"))
     }
 
+    func testCollectionCurrentnessUsesExclusiveLocalDateBoundary() throws {
+        let collection = try Fixture.make().collection
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let activeDate = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 7, day: 26, hour: 12))
+        )
+        let expiredDate = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 7, day: 27))
+        )
+
+        XCTAssertTrue(collection.contains(activeDate, calendar: calendar))
+        XCTAssertFalse(collection.contains(expiredDate, calendar: calendar))
+    }
+
     func testValidatorAcceptsExactlyEightBalancedMeals() throws {
         let fixture = try Fixture.make()
         XCTAssertTrue(
@@ -173,6 +188,7 @@ final class WeeklyMealRepositoryTests: XCTestCase {
 
         XCTAssertEqual(store.source, .bundledFallback)
         XCTAssertEqual(store.collection?.meals.count, 8)
+        XCTAssertFalse(store.isCurrentCollection)
         XCTAssertNil(store.lastRefreshError)
     }
 

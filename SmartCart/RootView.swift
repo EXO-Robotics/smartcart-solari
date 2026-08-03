@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(AppModel.self) private var appModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("smartcart.hasSeenJourneyIntro") private var hasSeenJourneyIntro = false
     @State private var showIntro = false
     @Namespace private var workspaceTransition
@@ -61,8 +62,15 @@ struct RootView: View {
                     .zIndex(10)
             }
         }
-        .animation(.spring(response: 0.4, dampingFraction: 0.84), value: appModel.toastMessage)
+        .animation(
+            reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.84),
+            value: appModel.toastMessage
+        )
         .sensoryFeedback(.success, trigger: appModel.completionFeedbackCount)
+        .onChange(of: appModel.toastMessage) { _, message in
+            guard let message else { return }
+            AccessibilityNotification.Announcement(message).post()
+        }
         .sheet(item: $appModel.presentedSheet, onDismiss: {
             appModel.recipeImporterDidDismiss()
         }) { destination in
@@ -121,6 +129,9 @@ struct RootView: View {
 /// One-time trust-first orientation shown only before a shopper has created
 /// meaningful app state. The environment override remains available for QA.
 struct IntroJourneyView: View {
+    @Environment(AppModel.self) private var appModel
+    @State private var retailerSignInDestination: ShoppingRetailer?
+
     let onFinish: () -> Void
 
     var body: some View {
@@ -131,6 +142,8 @@ struct IntroJourneyView: View {
                 Button("Skip", action: onFinish)
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(SmartCartTheme.secondaryInk)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .padding(.horizontal, 22)
             .padding(.top, 18)
@@ -180,6 +193,7 @@ struct IntroJourneyView: View {
                     .smartCartCard()
                     .smartCartShadow()
 
+                    retailerSignInSetup
                     ingredientPhotoGuidance
                 }
                 .padding(.horizontal, 22)
@@ -200,6 +214,94 @@ struct IntroJourneyView: View {
         }
         .smartCartBackground()
         .interactiveDismissDisabled()
+        .sheet(item: $retailerSignInDestination) { retailer in
+            RetailerSafariSheet(
+                url: appModel.retailerSetupURL(for: retailer),
+                configuration: retailer.configuration
+            )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+        }
+    }
+
+    private var retailerSignInSetup: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Label("Set up retailer sign-in", systemImage: "person.crop.circle.badge.checkmark")
+                .font(.headline)
+                .foregroundStyle(SmartCartTheme.navy)
+
+            Text("Optional: sign in now so your retailer session is ready when SmartCart opens each product and your cart.")
+                .font(.subheadline)
+                .foregroundStyle(SmartCartTheme.secondaryInk)
+                .fixedSize(horizontal: false, vertical: true)
+
+            ForEach([ShoppingRetailer.walmart, .target]) { retailer in
+                retailerSignInRow(retailer)
+            }
+
+            Text("Credentials and checkout stay entirely with the retailer. SmartCart stores only your setup confirmation.")
+                .font(.caption)
+                .foregroundStyle(SmartCartTheme.secondaryInk)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .smartCartCard()
+        .smartCartShadow()
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("intro-retailer-sign-in-setup")
+    }
+
+    private func retailerSignInRow(_ retailer: ShoppingRetailer) -> some View {
+        let isComplete = appModel.retailerSetupIsComplete(for: retailer)
+        return VStack(alignment: .leading, spacing: 9) {
+            HStack {
+                Text(retailer.configuration.displayName)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(SmartCartTheme.navy)
+                Spacer()
+                Label(
+                    isComplete ? "Setup saved" : "Not set up",
+                    systemImage: isComplete ? "checkmark.circle.fill" : "circle"
+                )
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(isComplete ? SmartCartTheme.green : SmartCartTheme.secondaryInk)
+            }
+
+            if !isComplete {
+                ViewThatFits {
+                    HStack(spacing: 9) {
+                        retailerSetupButtons(retailer)
+                    }
+                    VStack(spacing: 9) {
+                        retailerSetupButtons(retailer)
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .background(SmartCartTheme.canvasRaise)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    @ViewBuilder
+    private func retailerSetupButtons(_ retailer: ShoppingRetailer) -> some View {
+        Button {
+            appModel.recordRetailerSetupStarted(for: retailer)
+            retailerSignInDestination = retailer
+        } label: {
+            Label("Open sign in", systemImage: "safari.fill")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(SecondaryButtonStyle())
+        .accessibilityLabel("Open \(retailer.configuration.displayName) sign in")
+
+        Button {
+            appModel.completeRetailerSetup(for: retailer)
+        } label: {
+            Label("I’m signed in", systemImage: "checkmark.circle.fill")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(PrimaryButtonStyle())
+        .accessibilityLabel("Confirm \(retailer.configuration.displayName) sign in")
     }
 
     private var ingredientPhotoGuidance: some View {

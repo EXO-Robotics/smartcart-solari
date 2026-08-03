@@ -3,6 +3,30 @@ import XCTest
 @testable import SmartCart
 
 final class SmartCartShareInboxTests: XCTestCase {
+    func testReleaseShareExtensionDoesNotAdvertiseUnavailableRecipeURLImport() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let releaseURL = repositoryRoot.appendingPathComponent(
+            "SmartCartShareExtension/Info-Release.plist"
+        )
+        let data = try Data(contentsOf: releaseURL)
+        let plist = try XCTUnwrap(
+            PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+        )
+        let extensionDictionary = try XCTUnwrap(plist["NSExtension"] as? [String: Any])
+        let attributes = try XCTUnwrap(
+            extensionDictionary["NSExtensionAttributes"] as? [String: Any]
+        )
+        let activation = try XCTUnwrap(
+            attributes["NSExtensionActivationRule"] as? [String: Any]
+        )
+
+        XCTAssertNil(activation["NSExtensionActivationSupportsWebURLWithMaxCount"])
+        XCTAssertEqual(activation["NSExtensionActivationSupportsText"] as? Bool, true)
+        XCTAssertEqual(activation["NSExtensionActivationSupportsImageWithMaxCount"] as? Int, 8)
+    }
+
     func testMixedAttachmentPolicyIsDeterministicAndCapabilityIndependent() {
         XCTAssertEqual(
             SmartCartShareInbox.preferredAttachment(

@@ -145,7 +145,7 @@ extension SeededRetailerGuideService {
         RetailerHandoff(
             retailerID: retailerID,
             mode: .guidedProducts,
-            url: retailer.configuration.listURL,
+            url: retailer.configuration.cartURL,
             title: Self.guideDefinition.handoffTitle,
             disclosure: Self.guideDefinition.handoffDisclosure
         )
@@ -293,8 +293,8 @@ struct DemoWalmartCatalogService: SeededRetailerGuideService {
         fallback: { ingredient, storeID, preferences in
             searchFallback(for: ingredient, storeID: storeID, preferences: preferences)
         },
-        handoffTitle: "Open Walmart Wishlist",
-        handoffDisclosure: "SmartCart saved this shopping plan and can open each exact product or labeled search. It did not transfer a cart, link an account, modify a Wishlist, schedule fulfillment, or submit payment."
+        handoffTitle: "Open Walmart Cart",
+        handoffDisclosure: "SmartCart can guide each exact product or labeled search, then open Walmart’s cart. It does not add products, link an account, schedule fulfillment, or submit payment."
     )
 
     static func seededProducts(
@@ -337,8 +337,8 @@ struct DemoTargetCatalogService: SeededRetailerGuideService {
         fallback: { ingredient, storeID, preferences in
             searchFallback(for: ingredient, storeID: storeID, preferences: preferences)
         },
-        handoffTitle: "Open Target Shopping List",
-        handoffDisclosure: "SmartCart saved this shopping plan and can open each exact product or labeled search. It did not transfer a cart, link an account, edit a Target list, schedule Drive Up, or submit payment."
+        handoffTitle: "Open Target Cart",
+        handoffDisclosure: "SmartCart can guide each exact product or labeled search, then open Target’s cart. It does not add products, link an account, schedule Drive Up, or submit payment."
     )
 
     static func seededProducts(

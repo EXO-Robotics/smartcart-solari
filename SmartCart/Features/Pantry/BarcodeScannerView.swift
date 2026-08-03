@@ -62,6 +62,10 @@ struct BarcodeScannerSheet: View {
         .onDisappear {
             resolutionTask?.cancel()
         }
+        .onChange(of: resolution) { _, result in
+            guard let announcement = accessibilityAnnouncement(for: result) else { return }
+            AccessibilityNotification.Announcement(announcement).post()
+        }
     }
 
     private var scannerContent: some View {
@@ -545,13 +549,28 @@ struct BarcodeScannerSheet: View {
         }
     }
 
+    private func accessibilityAnnouncement(for result: BarcodeResolutionResult?) -> String? {
+        switch result {
+        case .resolved(let resolved):
+            return "Product found: \(resolved.product.name)"
+        case .notFound:
+            return "Product not found. Name this product to save it for future scans."
+        case .unavailable(_, let failure):
+            return "Product lookup unavailable. \(unavailableMessage(failure))"
+        case .invalid(let unresolved):
+            return "Barcode could not be used. \(validationMessage(unresolved.reason))"
+        case nil:
+            return nil
+        }
+    }
+
     private func resolutionSubtitle(for resolved: ResolvedBarcodeProduct) -> String {
         let sourceText: String
         switch resolved.source {
         case .localUserEditedCache:
             sourceText = "This barcode uses your saved pantry name."
         case .bundledFixture:
-            sourceText = "Bundled SmartCart demo result — confirm or edit before adding."
+            sourceText = "Bundled SmartCart catalog result — confirm or edit before adding."
         case .adapter:
             let catalogName = resolved.product.catalogSource == "open_food_facts"
                 ? "Open Food Facts"

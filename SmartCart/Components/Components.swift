@@ -365,11 +365,14 @@ struct ToastView: View {
                 .stroke(SmartCartTheme.borderStrong, lineWidth: 1)
         }
         .shadow(color: Color.black.opacity(0.45), radius: 16, y: 8)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isStaticText)
     }
 }
 
 private struct DomainUndoOverlayModifier: ViewModifier {
     @Environment(AppModel.self) private var appModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isApplying = false
 
     func body(content: Content) -> some View {
@@ -412,7 +415,10 @@ private struct DomainUndoOverlayModifier: ViewModifier {
                 .accessibilityIdentifier("domain-undo-banner")
             }
         }
-        .animation(.spring(response: 0.35, dampingFraction: 0.86), value: appModel.domainUndoAction)
+        .animation(
+            reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.86),
+            value: appModel.domainUndoAction
+        )
     }
 }
 

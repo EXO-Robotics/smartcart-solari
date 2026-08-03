@@ -6,7 +6,7 @@
   "collection": {
     "id": "weekly.week-01",
     "contentSchemaVersion": 1,
-    "title": "This Week's Meals",
+    "title": "Weekly Meals",
     "weekStartDate": "2026-07-20",
     "weekEndDateExclusive": "2026-07-27",
     "entries": [

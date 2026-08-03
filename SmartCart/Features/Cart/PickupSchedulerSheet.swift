@@ -941,6 +941,7 @@ private enum PantrySheetDestination: Identifiable {
 /// One saved pantry item with the name and amount editable directly in the
 /// row — no separate editor sheet for the common corrections.
 private struct PantryInlineRow: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let item: PantryInventoryItem
     let onUpdate: (PantryInventoryItem) -> Void
     let onDelete: () -> Void
@@ -1038,7 +1039,10 @@ private struct PantryInlineRow: View {
         .onChange(of: item.packageCount) { _, newValue in
             if !quantityFocused { quantityText = newValue.formatted() }
         }
-        .animation(.spring(response: 0.28, dampingFraction: 0.85), value: item.packageCount)
+        .animation(
+            reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.85),
+            value: item.packageCount
+        )
     }
 
     private func commitName() {
@@ -1076,6 +1080,7 @@ private struct PantryInlineRow: View {
                 .frame(width: 28, height: 28)
                 .background(SmartCartTheme.herbLight)
                 .clipShape(Circle())
+                .frame(width: 44, height: 44)
         }
         .buttonStyle(PressableButtonStyle())
         .accessibilityLabel(symbol == "plus" ? "Increase \(item.name) amount" : "Decrease \(item.name) amount")
@@ -1233,6 +1238,10 @@ struct StoreDashboardView: View {
         .task {
             zipEntry = appModel.zipCode
             await appModel.refreshStoresForSelectedRetailer()
+        }
+        .onChange(of: appModel.storeLookupMessage) { _, message in
+            guard let message else { return }
+            AccessibilityNotification.Announcement(message).post()
         }
         .sheet(isPresented: $showRetailerSafari) {
             RetailerSafariSheet(

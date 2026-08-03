@@ -36,7 +36,7 @@ struct WeeklyMealsCollectionView: View {
             .padding(20)
         }
         .smartCartBackground()
-        .navigationTitle("This Week’s Meals")
+        .navigationTitle(weeklyMealsStore.isCurrentCollection ? "This Week’s Meals" : "Weekly Meals")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             guard !recordedView, let collectionID else { return }

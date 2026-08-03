@@ -768,7 +768,7 @@ struct RecipeReadyView: View {
         let issueID = issues[issueCursor % issues.count]
         issueCursor = (issueCursor + 1) % issues.count
         expandedIngredientIDs.insert(issueID)
-        withAnimation(.easeInOut) {
+        withAnimation(reduceMotion ? nil : .easeInOut) {
             proxy.scrollTo(issueID, anchor: .center)
         }
         DispatchQueue.main.async {
@@ -939,6 +939,7 @@ private struct RecipeReadySummaryRow: View {
 
 private struct RecipeReadyIngredientRow: View {
     @Environment(AppModel.self) private var appModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let ingredient: Ingredient
     @Binding var isExpanded: Bool
     let onUpdate: (Ingredient) -> Void
@@ -948,7 +949,7 @@ private struct RecipeReadyIngredientRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Button {
-                withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                withAnimation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.86)) {
                     isExpanded.toggle()
                 }
             } label: {
@@ -1152,7 +1153,11 @@ private struct RecipeReadyIngredientRow: View {
         DisclosureGroup(isExpanded: $showSourceEvidence) {
             VStack(alignment: .leading, spacing: 6) {
                 if let cropData = evidence.sourceCropJPEGData,
-                   let crop = UIImage(data: cropData) {
+                   let crop = RecipeImagePreprocessor.cachedDownsampledImage(
+                       from: cropData,
+                       cacheKey: "\(ingredient.id.uuidString)-\(cropData.count)-\(cropData.hashValue)",
+                       maximumPixelDimension: 1_200
+                   ) {
                     Image(uiImage: crop)
                         .resizable()
                         .scaledToFit()

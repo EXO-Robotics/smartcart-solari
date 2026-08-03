@@ -124,7 +124,7 @@ struct WeeklyMealMagnifyingCarousel: View {
                     direction: -1
                 )
             } else {
-                Color.clear.frame(width: 42, height: 42)
+                Color.clear.frame(width: 44, height: 44)
             }
 
             Spacer(minLength: 0)
@@ -136,7 +136,7 @@ struct WeeklyMealMagnifyingCarousel: View {
                     direction: 1
                 )
             } else {
-                Color.clear.frame(width: 42, height: 42)
+                Color.clear.frame(width: 44, height: 44)
             }
         }
         .padding(.horizontal, 10)
@@ -149,7 +149,7 @@ struct WeeklyMealMagnifyingCarousel: View {
             Image(systemName: systemName)
                 .font(.system(size: 17, weight: .bold))
                 .foregroundStyle(.white)
-                .frame(width: 42, height: 42)
+                .frame(width: 44, height: 44)
                 .background(.black.opacity(0.46), in: Circle())
                 .overlay {
                     Circle()

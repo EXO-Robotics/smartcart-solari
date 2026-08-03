@@ -67,7 +67,7 @@ struct WeeklyMealsSection: View {
     private var heading: some View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(alignment: .firstTextBaseline) {
-                Text("This Week’s Meals")
+                Text(weeklyMealsStore.isCurrentCollection ? "This Week’s Meals" : "Weekly Meals")
                     .font(.system(.title2, design: .rounded, weight: .bold))
                     .foregroundStyle(SmartCartTheme.ink)
                 Spacer(minLength: 10)
@@ -77,7 +77,11 @@ struct WeeklyMealsSection: View {
                     .accessibilityIdentifier("weekly-meals-see-all")
             }
 
-            Text("Two breakfasts, two lunches, two dinners, and two snacks—ready to add to your shopping trip.")
+            Text(
+                weeklyMealsStore.isCurrentCollection
+                    ? "Two breakfasts, two lunches, two dinners, and two snacks—ready to add to your shopping trip."
+                    : "Eight curated meals—ready to add to your shopping trip."
+            )
                 .font(.subheadline)
                 .foregroundStyle(SmartCartTheme.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)

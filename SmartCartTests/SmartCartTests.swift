@@ -4,6 +4,19 @@ import XCTest
 @testable import SmartCart
 
 final class SmartCartTests: XCTestCase {
+    func testBuildIdentityUsesBundleMetadataWithoutHardCodedVersionDrift() {
+        let info: [String: Any] = [
+            "CFBundleShortVersionString": "1.2.3",
+            "CFBundleVersion": "45"
+        ]
+
+        XCTAssertEqual(SmartCartBuildInfo.displayVersion(bundleInfo: info), "Version 1.2.3 (45)")
+        XCTAssertEqual(
+            SmartCartBuildInfo.userAgent(component: "barcode-identity", bundleInfo: info),
+            "SmartCart-iOS/1.2.3 barcode-identity"
+        )
+    }
+
     func testRecipeParserHandlesFractionsUnitsAndOptionalItems() {
         let recipe = RecipeParser.parse(
             title: "Test Pasta",
@@ -322,7 +335,7 @@ final class SmartCartTests: XCTestCase {
                 XCTAssertEqual(product.dataSource, .demoSeed)
                 XCTAssertEqual(product.exactURL.path, "/ip/\(product.retailerProductID)")
                 XCTAssertNotNil(product.observedPrice)
-                XCTAssertTrue(product.priceDisclosure.localizedCaseInsensitiveContains("demo"))
+                XCTAssertTrue(product.priceDisclosure.localizedCaseInsensitiveContains("representative"))
                 XCTAssertTrue(product.priceDisclosure.localizedCaseInsensitiveContains("not live"))
             } else {
                 XCTAssertEqual(product.linkKind, .searchResults)
@@ -582,7 +595,25 @@ final class SmartCartTests: XCTestCase {
 
         let handoff = try await service.createHandoff(manifest: manifest)
         XCTAssertEqual(handoff.mode, .guidedProducts)
-        XCTAssertTrue(handoff.disclosure.contains("did not transfer a cart"))
+        XCTAssertEqual(handoff.url, ShoppingRetailer.walmart.configuration.cartURL)
+        XCTAssertEqual(handoff.title, "Open Walmart Cart")
+        XCTAssertTrue(handoff.disclosure.contains("does not add products"))
+    }
+
+    func testSupportedRetailersExposeOfficialAccountAndCartDestinations() {
+        let walmart = ShoppingRetailer.walmart.configuration
+        XCTAssertEqual(walmart.accountURL.host, "www.walmart.com")
+        XCTAssertEqual(walmart.accountURL.path, "/account/login")
+        XCTAssertEqual(walmart.cartURL.host, "www.walmart.com")
+        XCTAssertEqual(walmart.cartURL.path, "/cart")
+        XCTAssertEqual(walmart.cartName, "Walmart cart")
+
+        let target = ShoppingRetailer.target.configuration
+        XCTAssertEqual(target.accountURL.host, "www.target.com")
+        XCTAssertEqual(target.accountURL.path, "/account")
+        XCTAssertEqual(target.cartURL.host, "www.target.com")
+        XCTAssertEqual(target.cartURL.path, "/cart")
+        XCTAssertEqual(target.cartName, "Target cart")
     }
 
     func testUnsupportedPriceRefreshThrowsCapabilityError() async throws {
@@ -639,8 +670,9 @@ final class SmartCartTests: XCTestCase {
         let handoff = try await service.createHandoff(manifest: manifest)
         XCTAssertEqual(handoff.retailerID, "target")
         XCTAssertEqual(handoff.mode, .guidedProducts)
-        XCTAssertEqual(handoff.url, URL(string: "https://www.target.com/lists"))
-        XCTAssertTrue(handoff.disclosure.contains("did not transfer a cart"))
+        XCTAssertEqual(handoff.url, URL(string: "https://www.target.com/cart"))
+        XCTAssertEqual(handoff.title, "Open Target Cart")
+        XCTAssertTrue(handoff.disclosure.contains("does not add products"))
     }
 
     func testTargetSearchFallbackEncodesPreferencesWithoutInventingClaims() {
@@ -3067,6 +3099,53 @@ final class SmartCartTests: XCTestCase {
         XCTAssertEqual(
             Set(defaults.stringArray(forKey: "smartcart.commerce.retailerSetupCompleted") ?? []),
             ["target", "walmart"]
+        )
+    }
+
+    @MainActor
+    func testIntroductionCanConfirmBothRetailersWithoutChangingSelection() {
+        let defaults = isolatedCommerceDefaults()
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: defaults
+        )
+        XCTAssertEqual(model.selectedRetailer, .walmart)
+        XCTAssertFalse(model.retailerSetupIsComplete(for: .walmart))
+        XCTAssertFalse(model.retailerSetupIsComplete(for: .target))
+
+        model.completeRetailerSetup(for: .target)
+        XCTAssertEqual(model.selectedRetailer, .walmart)
+        XCTAssertFalse(model.retailerSetupIsComplete(for: .walmart))
+        XCTAssertTrue(model.retailerSetupIsComplete(for: .target))
+
+        model.completeRetailerSetup(for: .walmart)
+        XCTAssertTrue(model.retailerSetupIsComplete(for: .walmart))
+        XCTAssertTrue(model.retailerSetupIsComplete(for: .target))
+        XCTAssertEqual(
+            Set(defaults.stringArray(forKey: "smartcart.commerce.retailerSetupCompleted") ?? []),
+            ["target", "walmart"]
+        )
+    }
+
+    @MainActor
+    func testFinalGuidedItemContinuesDirectlyToSelectedRetailerCart() throws {
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedCommerceDefaults(),
+            seedDemoShoppingState: true
+        )
+        model.completeRetailerSetup()
+        XCTAssertTrue(model.startOrResumeRetailerShoppingSession())
+        let sessionID = try XCTUnwrap(model.activeShoppingSessionID)
+
+        while !model.retailerGuideIsComplete {
+            let itemID = try XCTUnwrap(model.currentGuidedItem?.id)
+            XCTAssertTrue(model.recordRetailerOutcome(.visited, for: itemID, sessionID: sessionID))
+        }
+
+        XCTAssertEqual(
+            model.retailerGuideContinuation,
+            .cart(ShoppingRetailer.walmart.configuration.cartURL)
         )
     }
 

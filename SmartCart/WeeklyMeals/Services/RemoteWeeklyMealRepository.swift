@@ -412,6 +412,7 @@ final class WeeklyMealsStore {
     private(set) var collection: ResolvedWeeklyMealCollection?
     private(set) var displayModels: [WeeklyMealDisplayModel] = []
     private(set) var source: WeeklyMealsContentSource = .bundledFallback
+    private(set) var isCurrentCollection = false
     private(set) var isRefreshing = false
     private(set) var lastRefreshError: WeeklyMealsRemoteError?
 
@@ -524,6 +525,7 @@ final class WeeklyMealsStore {
     ) {
         self.collection = collection
         displayModels = collection.map { WeeklyMealDisplayModelFactory.makeModels(from: $0) } ?? []
+        isCurrentCollection = collection?.collection.contains(clock.now, calendar: calendar) ?? false
         self.source = source
     }
 }

@@ -13,7 +13,7 @@ import {
 test('default Open Food Facts user agent identifies the public EXO-Robotics contact page', () => {
   assert.equal(
     loadConfig({}).openFoodFactsUserAgent,
-    'SmartCartBeta/0.4 (https://github.com/EXO-Robotics)'
+    'SmartCartBackend/0.1.0 (https://github.com/EXO-Robotics)'
   );
 });
 

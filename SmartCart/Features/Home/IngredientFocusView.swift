@@ -122,6 +122,10 @@ struct IngredientFocusView: View {
             .contentShape(Rectangle())
             .simultaneousGesture(magnificationGesture(baseRect: baseRect, viewport: viewport))
             .accessibilityIdentifier("ingredient-focus-image-viewer")
+            .accessibilityLabel("Ingredient photo")
+            .accessibilityHint("Use the Zoom In and Zoom Out actions when gestures are unavailable")
+            .accessibilityAction(named: Text("Zoom In")) { adjustZoom(by: 0.5) }
+            .accessibilityAction(named: Text("Zoom Out")) { adjustZoom(by: -0.5) }
         }
         .frame(maxHeight: .infinity)
     }
@@ -151,7 +155,7 @@ struct IngredientFocusView: View {
                 .accessibilityIdentifier("ingredient-focus-page-indicator")
             }
 
-            Text("Pinch to zoom · Drag or resize the box")
+            Text("Pinch to zoom · Drag or resize the box · VoiceOver actions available")
                 .font(.caption)
                 .foregroundStyle(.white.opacity(0.72))
         }
@@ -198,7 +202,15 @@ struct IngredientFocusView: View {
                 .contentShape(Rectangle())
                 .gesture(moveSelectionGesture(imageRect: imageRect))
                 .accessibilityLabel("Ingredient focus selection")
-                .accessibilityHint("Drag to reposition the ingredient focus area")
+                .accessibilityHint("Use the available actions to move or resize the ingredient focus area")
+                .accessibilityAction(named: Text("Move Left")) { moveSelection(x: -0.03, y: 0) }
+                .accessibilityAction(named: Text("Move Right")) { moveSelection(x: 0.03, y: 0) }
+                .accessibilityAction(named: Text("Move Up")) { moveSelection(x: 0, y: -0.03) }
+                .accessibilityAction(named: Text("Move Down")) { moveSelection(x: 0, y: 0.03) }
+                .accessibilityAction(named: Text("Make Wider")) { resizeSelection(width: 0.06, height: 0) }
+                .accessibilityAction(named: Text("Make Narrower")) { resizeSelection(width: -0.06, height: 0) }
+                .accessibilityAction(named: Text("Make Taller")) { resizeSelection(width: 0, height: 0.06) }
+                .accessibilityAction(named: Text("Make Shorter")) { resizeSelection(width: 0, height: -0.06) }
 
             Text("Ingredients")
                 .font(.caption2.weight(.bold))
@@ -229,8 +241,7 @@ struct IngredientFocusView: View {
             .contentShape(Rectangle())
             .position(handle.position(in: selectionRect))
             .gesture(resizeGesture(handle, imageRect: imageRect))
-            .accessibilityLabel(handle.accessibilityLabel)
-            .accessibilityHint("Drag to resize the ingredient focus area")
+            .accessibilityHidden(true)
     }
 
     private func dimmingMask(imageRect: CGRect, selectionRect: CGRect) -> some View {
@@ -350,6 +361,33 @@ struct IngredientFocusView: View {
         guard regions.indices.contains(currentPage) else { return }
         regions[currentPage] = region.normalized()
         if markEdited { manuallyEditedPages.insert(currentPage) }
+    }
+
+    private func moveSelection(x: Double, y: Double) {
+        setCurrentRegion(currentRegion.movedBy(x: x, y: y), markEdited: true)
+    }
+
+    private func resizeSelection(width: Double, height: Double) {
+        let minimum = 0.08
+        let source = currentRegion.normalized()
+        let targetWidth = min(1, max(minimum, source.width + width))
+        let targetHeight = min(1, max(minimum, source.height + height))
+        let centerX = source.x + (source.width / 2)
+        let centerY = source.y + (source.height / 2)
+        setCurrentRegion(
+            OCRFocusRegion(
+                x: centerX - (targetWidth / 2),
+                y: centerY - (targetHeight / 2),
+                width: targetWidth,
+                height: targetHeight
+            ),
+            markEdited: true
+        )
+    }
+
+    private func adjustZoom(by delta: CGFloat) {
+        zoom = min(5, max(1, zoom + delta))
+        if zoom == 1 { panOffset = .zero }
     }
 
     private func changePage(by delta: Int) {

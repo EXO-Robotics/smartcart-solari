@@ -101,7 +101,7 @@ enum ProductDataSource: String, Codable, CaseIterable, Hashable {
 
     var label: String {
         switch self {
-        case .demoSeed: "Seeded demo record"
+        case .demoSeed: "Representative catalog record"
         case .manualVerification: "Manually verified"
         case .retailerAPI: "Retailer catalog"
         case .partnerFeed: "Partner catalog"
@@ -286,6 +286,28 @@ enum ShoppingRetailer: String, CaseIterable, Identifiable, Codable, Hashable {
     case kroger
 
     var id: String { rawValue }
+
+    var accountURL: URL {
+        switch self {
+        case .walmart:
+            URL(string: "https://www.walmart.com/account/login")!
+        case .target:
+            URL(string: "https://www.target.com/account")!
+        case .kroger:
+            URL(string: "https://www.kroger.com/account/login")!
+        }
+    }
+
+    var cartURL: URL {
+        switch self {
+        case .walmart:
+            URL(string: "https://www.walmart.com/cart")!
+        case .target:
+            URL(string: "https://www.target.com/cart")!
+        case .kroger:
+            URL(string: "https://www.kroger.com/cart")!
+        }
+    }
 
     var configuration: RetailerGuideConfiguration {
         switch self {
@@ -594,6 +616,9 @@ struct RetailerGuideConfiguration: Identifiable, Hashable {
 
     var id: ShoppingRetailer { retailer }
     var isAvailable: Bool { availability == .available }
+    var accountURL: URL { retailer.accountURL }
+    var cartURL: URL { retailer.cartURL }
+    var cartName: String { "\(displayName) cart" }
 }
 
 enum ShoppingRoutePreference: String, CaseIterable, Identifiable, Codable, Hashable {
@@ -923,7 +948,7 @@ struct RetailerProductRecord: Codable, Identifiable, Hashable {
     var priceDisclosure: String {
         switch dataSource {
         case .demoSeed:
-            "Demo price · observed \(observedAt.formatted(date: .abbreviated, time: .omitted)) · not live"
+            "Representative price · observed \(observedAt.formatted(date: .abbreviated, time: .omitted)) · not live"
         case .manualVerification:
             "Last-known price · observed \(observedAt.formatted(date: .abbreviated, time: .omitted)) · not live"
         case .retailerAPI, .partnerFeed:

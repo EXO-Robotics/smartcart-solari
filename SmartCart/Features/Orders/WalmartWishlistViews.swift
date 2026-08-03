@@ -200,8 +200,8 @@ struct RetailerSafariHandoffView: View {
 
             VStack(alignment: .leading, spacing: 14) {
                 setupStep("1", "Open \(retailerName) and sign in.")
-                setupStep("2", "Create or choose \(appModel.retailerConfiguration.savedListName).")
-                setupStep("3", "Return here. SmartCart can remember your confirmation on this device.")
+                setupStep("2", "Return here. SmartCart can remember your confirmation on this device.")
+                setupStep("3", "Add products to your cart as SmartCart guides you. The final item opens the cart.")
             }
 
             Button {
@@ -209,7 +209,7 @@ struct RetailerSafariHandoffView: View {
                 sheetDestination = .retailer(appModel.retailerSetupURL())
             } label: {
                 HStack {
-                    Text("Open \(retailerName) setup")
+                    Text("Open \(retailerName) sign in")
                     Spacer()
                     Image(systemName: "arrow.up.right")
                 }
@@ -224,7 +224,7 @@ struct RetailerSafariHandoffView: View {
                     beginTripAndOpenCurrentProduct()
                 }
             } label: {
-                Label("I’m signed in and my list is ready", systemImage: "checkmark.circle.fill")
+                Label("I’m signed in", systemImage: "checkmark.circle.fill")
             }
             .buttonStyle(PrimaryButtonStyle())
             .accessibilityIdentifier("retailer-setup-complete")
@@ -501,7 +501,7 @@ struct RetailerSafariHandoffView: View {
             }
 
             HStack {
-                Text("Original seeded plan · not live")
+            Text("Representative plan · not live")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(SmartCartTheme.secondaryInk)
                 Spacer()
@@ -514,10 +514,10 @@ struct RetailerSafariHandoffView: View {
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
             Button {
-                sheetDestination = .retailer(appModel.retailerListsURL())
+                sheetDestination = .retailer(appModel.retailerCartURL())
             } label: {
                 HStack {
-                    Text("Open \(appModel.retailerConfiguration.savedListName)")
+                    Text("Open \(appModel.retailerConfiguration.cartName)")
                     Spacer()
                     Image(systemName: "arrow.up.right")
                 }
@@ -528,7 +528,7 @@ struct RetailerSafariHandoffView: View {
             InfoBanner(
                 symbol: "info.circle.fill",
                 title: "Finish at \(retailerName)",
-                message: "\(retailerName) confirms your location, live inventory, quantities, substitutions, final prices, list or cart actions, fulfillment, payment, and checkout.",
+                message: "\(retailerName) confirms your location, live inventory, quantities, substitutions, final prices, cart contents, fulfillment, payment, and checkout.",
                 color: appModel.selectedRetailer == .walmart ? SmartCartTheme.walmartBlue : .red
             )
 
@@ -673,20 +673,26 @@ struct RetailerSafariHandoffView: View {
         sessionID: UUID
     ) {
         guard appModel.recordRetailerOutcome(outcome, for: itemID, sessionID: sessionID) else { return }
-        if appModel.retailerGuideIsComplete {
+        switch appModel.retailerGuideContinuation {
+        case .cart(let cartURL):
+            releasePrewarming()
             productDismissalIsExplicit = true
-            sheetDestination = nil
+            presentedProductSessionID = nil
+            presentedProductItemID = nil
+            sheetDestination = .retailer(cartURL)
+        case .nextItem(let nextItemID):
+            guard let nextItem = appModel.shoppingItems.first(where: { $0.id == nextItemID }) else { return }
+            // Retain the token for the page we are about to open. Its successful
+            // initial load refreshes prewarming for the following waiting item.
+            openProduct(
+                nextItem,
+                sessionID: sessionID,
+                refreshPrewarming: false,
+                isExplicitTransition: true
+            )
+        case nil:
             return
         }
-        guard let nextItem = appModel.currentGuidedItem, nextItem.status == .waiting else { return }
-        // Retain the token for the page we are about to open. Its successful
-        // initial load refreshes prewarming for the following waiting item.
-        openProduct(
-            nextItem,
-            sessionID: sessionID,
-            refreshPrewarming: false,
-            isExplicitTransition: true
-        )
     }
 
     private func replaceCurrentProduct(candidateID: UUID, itemID: UUID, sessionID: UUID) {
@@ -959,7 +965,10 @@ private struct RetailerTripSafariSheet: View {
 
     private var nextButton: some View {
         Button(action: onNext) {
-            Label("Next Item", systemImage: "arrow.right.circle.fill")
+            Label(
+                position == total ? "Go to Cart" : "Next Item",
+                systemImage: position == total ? "cart.fill" : "arrow.right.circle.fill"
+            )
                 .font(.subheadline.bold())
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -990,7 +999,11 @@ private struct RetailerTripSafariSheet: View {
                 )
         }
         .buttonStyle(PressableButtonStyle())
-        .accessibilityHint("Records only that you advanced after viewing this page. No list, cart, order, or purchase result is inferred.")
+        .accessibilityHint(
+            position == total
+                ? "Records only that you advanced after viewing this page, then opens the retailer cart. No purchase is inferred."
+                : "Records only that you advanced after viewing this page. No cart, order, or purchase result is inferred."
+        )
         .accessibilityValue(loadState.accessibilityDescription)
         .accessibilityIdentifier("retailer-trip-next")
         .disabled(!loadState.canRecordVisited)

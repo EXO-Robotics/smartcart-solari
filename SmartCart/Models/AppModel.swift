@@ -504,7 +504,7 @@ final class AppModel {
         featureFlags = initialFeatureFlags
         storeStrategy = initialStoreStrategy
         fulfillmentMode = initialFulfillment
-        zipCode = restoredState?.zipCode ?? "90210"
+        zipCode = restoredState?.zipCode ?? ""
         pickupDay = restoredState?.pickupDay ?? "Today"
         pickupTime = restoredState?.pickupTime ?? "4:30–5:30 PM"
         guidedIndex = restoredState?.guidedIndex ?? 0
@@ -965,9 +965,21 @@ final class AppModel {
         !shoppingItems.isEmpty && shoppingItems.allSatisfy { $0.status.isCompleted }
     }
 
+    var retailerGuideContinuation: RetailerGuideContinuation? {
+        if retailerGuideIsComplete {
+            return .cart(retailerCartURL())
+        }
+        guard let nextItem = currentGuidedItem, nextItem.status == .waiting else { return nil }
+        return .nextItem(nextItem.id)
+    }
+
     var retailerSetupIsComplete: Bool {
-        retailerSetupCompletedIDs.contains(selectedRetailer.rawValue) ||
-            (selectedRetailer == .walmart && walmartWishlistReference != nil)
+        retailerSetupIsComplete(for: selectedRetailer)
+    }
+
+    func retailerSetupIsComplete(for retailer: ShoppingRetailer) -> Bool {
+        retailerSetupCompletedIDs.contains(retailer.rawValue) ||
+            (retailer == .walmart && walmartWishlistReference != nil)
     }
 
     var retailerSessionIsInProgress: Bool {
@@ -1656,7 +1668,7 @@ final class AppModel {
             )
             draft.updatedAt = .now
         } else {
-            showToast("Meal Prep supports up to five recipes in this beta")
+            showToast("Meal Prep supports up to five recipes")
             return
         }
         guard updateMealPrepDraftAndPlan(draft) else { return }
@@ -1719,7 +1731,7 @@ final class AppModel {
             changedMessage = "Meal Prep servings updated"
         } else {
             guard draft.selections.count < MealPrepDraft.selectionLimit else {
-                showToast("Meal Prep supports up to five recipes in this beta")
+                showToast("Meal Prep supports up to five recipes")
                 return false
             }
             draft.selections.append(
@@ -2821,9 +2833,7 @@ final class AppModel {
             showToast("Products could not be saved. Try matching again.")
             return false
         }
-        withAnimation(.easeOut(duration: 0.35)) {
-            matchProgress = 1
-        }
+        matchProgress = 1
         if unresolvedIngredientResolutions.isEmpty {
             matchStage = "\(matchedItemCount) exact products · \(searchFallbackCount) searches"
         } else {
@@ -3470,9 +3480,13 @@ final class AppModel {
     }
 
     func completeRetailerSetup() {
-        retailerSetupCompletedIDs.insert(selectedRetailer.rawValue)
-        track(.retailerSetupCompleted, properties: ["retailer": selectedRetailer.rawValue])
-        showToast("\(retailerConfiguration.displayName) setup saved")
+        completeRetailerSetup(for: selectedRetailer)
+    }
+
+    func completeRetailerSetup(for retailer: ShoppingRetailer) {
+        retailerSetupCompletedIDs.insert(retailer.rawValue)
+        track(.retailerSetupCompleted, properties: ["retailer": retailer.rawValue])
+        showToast("\(retailer.configuration.displayName) sign-in setup saved")
     }
 
     func resetRetailerSetup() {
@@ -3620,7 +3634,11 @@ final class AppModel {
     }
 
     func retailerSetupURL() -> URL {
-        retailerConfiguration.listURL
+        retailerConfiguration.accountURL
+    }
+
+    func retailerSetupURL(for retailer: ShoppingRetailer) -> URL {
+        retailer.configuration.accountURL
     }
 
     func recordWalmartSetupStarted() {
@@ -3628,8 +3646,12 @@ final class AppModel {
     }
 
     func recordRetailerSetupStarted() {
-        track(.retailerSetupStarted, properties: ["retailer": selectedRetailer.rawValue])
-        if selectedRetailer == .walmart {
+        recordRetailerSetupStarted(for: selectedRetailer)
+    }
+
+    func recordRetailerSetupStarted(for retailer: ShoppingRetailer) {
+        track(.retailerSetupStarted, properties: ["retailer": retailer.rawValue])
+        if retailer == .walmart {
             recordWalmartSetupStarted()
         }
     }
@@ -3768,6 +3790,10 @@ final class AppModel {
 
     func retailerListsURL() -> URL {
         retailerConfiguration.listURL
+    }
+
+    func retailerCartURL() -> URL {
+        retailerConfiguration.cartURL
     }
 
     func shoppingSession(id: UUID) -> ShoppingSession? {

@@ -543,6 +543,7 @@ struct SmartCartBackendBarcodeAdapter: BarcodeProductAdapter, @unchecked Sendabl
 
     private let session: URLSession
     private let configuration: Result<BarcodeBackendConfiguration, BarcodeBackendConfigurationError>
+    private let userAgent: String
 
     init(
         session: URLSession = .shared,
@@ -552,6 +553,10 @@ struct SmartCartBackendBarcodeAdapter: BarcodeProductAdapter, @unchecked Sendabl
         buildMode: BarcodeBackendBuildMode = .current
     ) {
         self.session = session
+        userAgent = SmartCartBuildInfo.userAgent(
+            component: "barcode-identity",
+            bundleInfo: bundleInfo
+        )
         configuration = BarcodeBackendConfiguration.resolve(
             explicitURL: baseURL,
             environment: environment,
@@ -579,7 +584,7 @@ struct SmartCartBackendBarcodeAdapter: BarcodeProductAdapter, @unchecked Sendabl
         request.httpMethod = "GET"
         request.timeoutInterval = 6
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("SmartCart-iOS/0.4 barcode-identity", forHTTPHeaderField: "User-Agent")
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
 
         let startedAt = Date()
         Self.logger.info(

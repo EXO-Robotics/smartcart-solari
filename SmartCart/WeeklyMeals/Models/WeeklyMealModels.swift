@@ -263,6 +263,11 @@ struct WeeklyMealCollection: Codable, Identifiable, Hashable, Sendable {
     let weekEndDateExclusive: LocalCalendarDate
     let entries: [WeeklyMealEntry]
     let promotionalMessage: String?
+
+    func contains(_ date: Date, calendar: Calendar) -> Bool {
+        let localDate = LocalCalendarDate(date, calendar: calendar)
+        return weekStartDate <= localDate && localDate < weekEndDateExclusive
+    }
 }
 
 struct WeeklyMealRecipesResource: Codable, Hashable, Sendable {

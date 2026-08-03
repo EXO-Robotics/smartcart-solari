@@ -1,7 +1,7 @@
 import Foundation
 
 enum RetailConnectorState: String, Codable, Hashable {
-    case demoReady = "Demo ready"
+    case demoReady = "Preview ready"
     case credentialsRequired = "Credentials required"
     case researchOnly = "Research only"
 }
@@ -147,10 +147,18 @@ protocol InstacartHandoffServicing: Sendable {
 actor InstacartHandoffClient: InstacartHandoffServicing {
     private let session: URLSession
     private let baseURL: URL?
+    private let userAgent: String
     private var cachedResponses: [Data: InstacartHandoffResponse] = [:]
 
-    init(session: URLSession = .shared) {
+    init(
+        session: URLSession = .shared,
+        bundleInfo: [String: Any] = Bundle.main.infoDictionary ?? [:]
+    ) {
         self.session = session
+        userAgent = SmartCartBuildInfo.userAgent(
+            component: "instacart-handoff",
+            bundleInfo: bundleInfo
+        )
         #if DEBUG
         let environment = ProcessInfo.processInfo.environment
         if let configured = environment["SMARTCART_COMMERCE_BACKEND_URL"] ?? environment["SMARTCART_RECIPE_BACKEND_URL"],
@@ -245,7 +253,7 @@ actor InstacartHandoffClient: InstacartHandoffServicing {
         request.httpMethod = "POST"
         request.timeoutInterval = 18
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("SmartCart-iOS/0.4 instacart-handoff", forHTTPHeaderField: "User-Agent")
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         if let bearerToken {
             request.setValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
         }

@@ -356,6 +356,10 @@ struct RecipeComposerSheet: View {
             guard !photoItems.isEmpty else { return }
             beginPhotoLoad(photoItems)
         }
+        .onChange(of: errorMessage) { _, message in
+            guard let message else { return }
+            AccessibilityNotification.Announcement("Import needs attention. \(message)").post()
+        }
         .onDisappear {
             recognitionTask?.cancel()
         }
@@ -561,7 +565,7 @@ struct RecipeComposerSheet: View {
             do {
                 let imageData = try appModel.sharedImportImageData(for: envelope.id)
                 let images = try imageData.map { data -> UIImage in
-                    guard let image = UIImage(data: data) else {
+                    guard let image = RecipeImagePreprocessor.downsampledImage(from: data) else {
                         throw RecipeVisionError.unreadableImage
                     }
                     return image
@@ -879,14 +883,15 @@ struct RecipeComposerSheet: View {
     private func presentImagesForFocus(_ images: [UIImage]) {
         recognitionTask?.cancel()
         let imageSetID = UUID()
-        selectedImages = images
+        let preparedImages = images.map(RecipeImagePreprocessor.resizedForOCR)
+        selectedImages = preparedImages
         selectedImageSetID = imageSetID
         recognizedImageSetID = nil
         recipeText = ""
         title = "Imported Recipe"
         clearVisionResult()
         errorMessage = nil
-        focusSession = IngredientFocusSession(id: imageSetID, images: images)
+        focusSession = IngredientFocusSession(id: imageSetID, images: preparedImages)
     }
 
     private func beginRecognition(
@@ -969,7 +974,7 @@ struct RecipeComposerSheet: View {
             for item in items {
                 try Task.checkCancellation()
                 guard let data = try await item.loadTransferable(type: Data.self),
-                      let image = UIImage(data: data)
+                      let image = RecipeImagePreprocessor.downsampledImage(from: data)
                 else {
                     throw RecipeVisionError.unreadableImage
                 }
@@ -1663,19 +1668,44 @@ enum RecipeOCRPolicy {
 enum RecipeImagePreprocessor {
     private static let maximumOCRPixelDimension: CGFloat = 2_600
     private static let renderingContext = CIContext(options: [.cacheIntermediates: true])
+    private static let thumbnailCache: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 48
+        cache.totalCostLimit = 32 * 1_024 * 1_024
+        return cache
+    }()
 
-    static func downsampledImage(from data: Data) -> UIImage? {
+    static func downsampledImage(
+        from data: Data,
+        maximumPixelDimension: CGFloat = 2_600
+    ) -> UIImage? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: Int(maximumOCRPixelDimension),
+            kCGImageSourceThumbnailMaxPixelSize: Int(maximumPixelDimension),
             kCGImageSourceShouldCacheImmediately: true
         ]
         guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
             return nil
         }
         return UIImage(cgImage: image, scale: 1, orientation: .up)
+    }
+
+    static func cachedDownsampledImage(
+        from data: Data,
+        cacheKey: String,
+        maximumPixelDimension: CGFloat
+    ) -> UIImage? {
+        let key = "\(cacheKey)-\(Int(maximumPixelDimension))" as NSString
+        if let cached = thumbnailCache.object(forKey: key) { return cached }
+        guard let image = downsampledImage(
+            from: data,
+            maximumPixelDimension: maximumPixelDimension
+        ) else { return nil }
+        let cost = image.cgImage.map { $0.bytesPerRow * $0.height } ?? data.count
+        thumbnailCache.setObject(image, forKey: key, cost: cost)
+        return image
     }
 
     static func resizedForOCR(_ image: UIImage) -> UIImage {

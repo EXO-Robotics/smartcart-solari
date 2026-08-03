@@ -1,6 +1,37 @@
 import Foundation
 import SwiftUI
 
+enum SmartCartBuildInfo {
+    static func version(
+        bundleInfo: [String: Any] = Bundle.main.infoDictionary ?? [:]
+    ) -> String {
+        let value = (bundleInfo["CFBundleShortVersionString"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return value.isEmpty ? "0.0.0" : value
+    }
+
+    static func build(
+        bundleInfo: [String: Any] = Bundle.main.infoDictionary ?? [:]
+    ) -> String {
+        let value = (bundleInfo["CFBundleVersion"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return value.isEmpty ? "0" : value
+    }
+
+    static func displayVersion(
+        bundleInfo: [String: Any] = Bundle.main.infoDictionary ?? [:]
+    ) -> String {
+        "Version \(version(bundleInfo: bundleInfo)) (\(build(bundleInfo: bundleInfo)))"
+    }
+
+    static func userAgent(
+        component: String,
+        bundleInfo: [String: Any] = Bundle.main.infoDictionary ?? [:]
+    ) -> String {
+        "SmartCart-iOS/\(version(bundleInfo: bundleInfo)) \(component)"
+    }
+}
+
 enum AppTab: String, CaseIterable, Identifiable, Codable, Hashable {
     case home
     case lists
@@ -1180,6 +1211,11 @@ enum GuidedItemStatus: String, Hashable, Codable {
     case skipped
 
     var isCompleted: Bool { self != .waiting }
+}
+
+enum RetailerGuideContinuation: Equatable {
+    case nextItem(UUID)
+    case cart(URL)
 }
 
 struct ShoppingListItem: Identifiable, Hashable, Codable {

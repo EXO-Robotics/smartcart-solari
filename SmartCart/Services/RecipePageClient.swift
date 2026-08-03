@@ -233,6 +233,7 @@ enum RecipeLinkImporter {
 struct RecipePageBackendClient {
     private let session: URLSession
     private let configuration: Result<RecipePageBackendConfiguration, RecipePageBackendConfigurationError>
+    private let userAgent: String
 
     init(
         session: URLSession = .shared,
@@ -242,6 +243,10 @@ struct RecipePageBackendClient {
         buildMode: RecipePageBackendBuildMode = .current
     ) {
         self.session = session
+        userAgent = SmartCartBuildInfo.userAgent(
+            component: "recipe-import",
+            bundleInfo: bundleInfo
+        )
         configuration = RecipePageBackendConfiguration.resolve(
             explicitURL: baseURL,
             environment: environment,
@@ -303,7 +308,7 @@ struct RecipePageBackendClient {
         request.httpMethod = "POST"
         request.timeoutInterval = 14
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("SmartCart-iOS/0.4 recipe-import", forHTTPHeaderField: "User-Agent")
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         if let bearerToken {
             request.setValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
         }

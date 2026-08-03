@@ -5,7 +5,11 @@ final class SmartCartShareViewController: UIViewController {
     private enum Copy {
         static let addAction = "Add to SmartCart"
         static let retryAction = "Try Again"
+        #if DEBUG
         static let unsupportedOnly = "SmartCart can’t import this item. Share a public link, recipe text, or an image."
+        #else
+        static let unsupportedOnly = "SmartCart can’t import this item. Share recipe text or an image."
+        #endif
         static let partialImport = "Some items couldn’t be added."
     }
 
@@ -288,7 +292,11 @@ final class SmartCartShareViewController: UIViewController {
             let imageType = provider.registeredTypeIdentifiers.first(where: {
                 UTType($0)?.conforms(to: .image) == true
             })
+            #if DEBUG
             let hasURL = provider.hasItemConformingToTypeIdentifier(UTType.url.identifier)
+            #else
+            let hasURL = false
+            #endif
             let hasPlainText = provider.hasItemConformingToTypeIdentifier(
                 UTType.plainText.identifier
             )

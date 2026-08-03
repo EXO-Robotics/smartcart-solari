@@ -11,10 +11,12 @@ struct AccountView: View {
                 retailerAndLocationCard
                 appearanceCard
                 preferenceCard
+                #if DEBUG
                 testerModeCard
                 if appModel.featureFlags.internalTesterModeEnabled {
                     testerDashboard
                 }
+                #endif
                 if let issue = appModel.persistenceIssue {
                     InfoBanner(
                         symbol: "externaldrive.badge.exclamationmark",
@@ -109,6 +111,9 @@ struct AccountView: View {
     }
 
     private var retailerProfileSummary: String {
+        guard appModel.resolvedStorePostalCode != nil else {
+            return "Choose a store near your ZIP code"
+        }
         if appModel.selectedRetailer == .walmart {
             return "\(appModel.retailerConfiguration.displayName) · \(appModel.primaryStore.name)"
         }
@@ -125,7 +130,7 @@ struct AccountView: View {
                 Text("SmartCart shopper")
                     .font(.title2.bold())
                     .foregroundStyle(SmartCartTheme.navy)
-                Text("Local prototype profile")
+                Text("Your shopping profile")
                     .font(.subheadline)
                     .foregroundStyle(SmartCartTheme.secondaryInk)
                 StatusPill(title: "Private on device", symbol: "lock.fill")
@@ -144,6 +149,7 @@ struct AccountView: View {
         }
     }
 
+    #if DEBUG
     private var testerModeCard: some View {
         VStack(alignment: .leading, spacing: 14) {
             Toggle(
@@ -230,6 +236,7 @@ struct AccountView: View {
         .background(SmartCartTheme.canvas)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
+    #endif
 
     private var privacyCard: some View {
         VStack(alignment: .leading, spacing: 13) {
@@ -258,10 +265,10 @@ struct AccountView: View {
             SmartCartLogo(compact: true)
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
-                Text("SmartCart Beta 2")
+                Text("SmartCart")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(SmartCartTheme.navy)
-                Text("Beta 2 foundation · local state schema 1")
+                Text(SmartCartBuildInfo.displayVersion())
                     .font(.caption2)
                     .foregroundStyle(SmartCartTheme.secondaryInk)
             }
