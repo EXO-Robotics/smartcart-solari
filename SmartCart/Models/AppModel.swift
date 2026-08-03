@@ -686,12 +686,37 @@ final class AppModel {
         return activeRecipe.ingredients.filter { $0.includeInList && $0.quantityReviewRequired == true }.count
     }
 
+    var recipeReadyIngredientAssessments: [UUID: IngredientIssueAssessment] {
+        Dictionary(
+            uniqueKeysWithValues: activeRecipe.ingredients.map {
+                ($0.id, IngredientIssueEvaluator.assess($0))
+            }
+        )
+    }
+
+    var recipeReadyBlockingIngredientIDs: [UUID] {
+        activeRecipe.ingredients.compactMap { ingredient in
+            recipeReadyIngredientAssessments[ingredient.id]?.hasBlockingIssues == true
+                ? ingredient.id
+                : nil
+        }
+    }
+
+    var recipeReadyReviewIngredientIDs: [UUID] {
+        activeRecipe.ingredients.compactMap { ingredient in
+            recipeReadyIngredientAssessments[ingredient.id]?.severity == .review
+                ? ingredient.id
+                : nil
+        }
+    }
+
     var ingredientsToBuy: [Ingredient] {
         if let plan = currentShoppingMealPrepSnapshot {
             return plan.lines.compactMap(mealPrepIngredient)
         }
-        return activeRecipe.ingredients.filter {
-            quantityToBuy(for: $0) > 0
+        return activeRecipe.ingredients.filter { ingredient in
+            guard ingredient.includeInList else { return false }
+            return ingredient.quantity == 0 || quantityToBuy(for: ingredient) > 0
         }
     }
 
@@ -702,7 +727,7 @@ final class AppModel {
             }.count
         }
         return activeRecipe.ingredients.filter {
-            $0.includeInList && quantityToBuy(for: $0) == 0
+            $0.includeInList && $0.quantity > 0 && quantityToBuy(for: $0) == 0
         }.count
     }
 
@@ -731,8 +756,9 @@ final class AppModel {
         if ingredientsToBuy.isEmpty {
             issues.append("Add at least one ingredient to the shopping list.")
         }
-        if unresolvedQuantityReviewCount > 0 {
-            issues.append("Confirm \(unresolvedQuantityReviewCount) uncertain quantity value(s).")
+        let ingredientBlockingCount = recipeReadyBlockingIngredientIDs.count
+        if ingredientBlockingCount > 0 {
+            issues.append("Resolve \(ingredientBlockingCount) ingredient issue(s).")
         }
         if unresolvedAlternativeCount > 0 {
             issues.append("Choose one option for \(unresolvedAlternativeCount) unresolved alternative ingredient(s).")
@@ -748,7 +774,7 @@ final class AppModel {
         let filters = instacartHealthFilters
         let items = ingredientsToBuy.map { ingredient in
             let quantity = isMealPrepShopping ? ingredient.quantity : quantityToBuy(for: ingredient)
-            let quantityText = Ingredient.quantityText(quantity, unit: ingredient.unit)
+            let quantityText = ingredient.requestedQuantityText(numericQuantity: quantity)
             let preparation = ingredient.preparation.trimmingCharacters(in: .whitespacesAndNewlines)
             let displayName = preparation.isEmpty ? ingredient.name : "\(ingredient.name), \(preparation)"
             return InstacartManifestLineItem(
@@ -759,7 +785,7 @@ final class AppModel {
                 unit: ingredient.unit,
                 healthFilters: filters,
                 exactUPC: nil,
-                quantityConfirmed: ingredient.quantityReviewRequired != true,
+                quantityConfirmed: !IngredientIssueEvaluator.assess(ingredient).hasBlockingIssues,
                 unresolvedAlternative: ingredient.alternativeGroup != nil && ingredient.name.range(
                     of: #"\s+or\s+"#,
                     options: [.regularExpression, .caseInsensitive]
@@ -2120,7 +2146,10 @@ final class AppModel {
     }
 
     func scaledQuantityText(for ingredient: Ingredient) -> String {
-        KitchenQuantityFormatter.text(
+        if ingredient.quantity == 0 {
+            return ingredient.displayQuantity
+        }
+        return KitchenQuantityFormatter.text(
             quantity: scaledQuantity(for: ingredient),
             unit: ingredient.unit
         )
@@ -2134,7 +2163,10 @@ final class AppModel {
     }
 
     func quantityToBuyText(for ingredient: Ingredient) -> String {
-        KitchenQuantityFormatter.text(
+        if ingredient.quantity == 0 {
+            return ingredient.displayQuantity
+        }
+        return KitchenQuantityFormatter.text(
             quantity: quantityToBuy(for: ingredient),
             unit: ingredient.unit
         )
@@ -2171,7 +2203,15 @@ final class AppModel {
         guard updatedIngredient.id == id,
               let index = activeRecipe.ingredients.firstIndex(where: { $0.id == id })
         else { return false }
-        activeRecipe.ingredients[index] = updatedIngredient
+        let previous = activeRecipe.ingredients[index]
+        let reconciled = IngredientIssueEvaluator.resolveCorrectedStructure(
+            previous: previous,
+            updated: updatedIngredient
+        )
+        activeRecipe.ingredients[index] = reconciled
+        synchronizeActiveRecipeRecord()
+        refreshPantrySuggestions()
+        invalidateShoppingPlan()
         return true
     }
 
@@ -2324,15 +2364,16 @@ final class AppModel {
                 for: ingredient,
                 requiredQuantity: ingredient.quantity * multiplier
             )
-            guard requestedQuantity > 0 else { return nil }
+            guard ingredient.quantity == 0 || requestedQuantity > 0 else { return nil }
 
             var refreshed = existing
             refreshed.ingredient = ingredient
-            refreshed.requestedQuantity = Ingredient.quantityText(
-                requestedQuantity,
-                unit: ingredient.unit
+            refreshed.requestedQuantity = ingredient.requestedQuantityText(
+                numericQuantity: requestedQuantity
             )
-            refreshed.requestedAmount = requestedQuantity
+            refreshed.requestedAmount = ingredient.requestedAmount(
+                numericQuantity: requestedQuantity
+            )
             refreshed.purchaseQuantity = PackageMath.packageCount(
                 product: refreshed.product,
                 requestedQuantity: requestedQuantity,
@@ -2487,7 +2528,12 @@ final class AppModel {
         if isMealPrepShopping {
             return currentShoppingMealPrepSnapshot?.unresolvedReviewCount ?? 0
         }
-        return unresolvedQuantityReviewCount + unresolvedAlternativeCount
+        return recipeReadyBlockingIngredientIDs.count
+    }
+
+    var recipeReadyReviewSuggestionCount: Int {
+        guard !isMealPrepShopping else { return 0 }
+        return recipeReadyReviewIngredientIDs.count
     }
 
     var recipeReadyPantrySuggestionCount: Int {
@@ -2558,6 +2604,10 @@ final class AppModel {
         invalidateShoppingPlan()
         selectedTab = .home
         return true
+    }
+
+    private func shoppingItemsHaveBlockingIngredientIssues(_ items: [ShoppingListItem]) -> Bool {
+        IngredientIssueEvaluator.hasBlockingIssues(in: items.map(\.ingredient))
     }
 
     private func synchronizeActiveRecipeRecord() {
@@ -2729,6 +2779,11 @@ final class AppModel {
 
     @discardableResult
     func startMatching(force: Bool = false) async -> Bool {
+        guard recipeReadyCanStartShopping,
+              !shoppingItemsHaveBlockingIngredientIssues(shoppingItems) else {
+            showToast(recipeReadyDisabledExplanation ?? "Resolve ingredient issues before shopping.")
+            return false
+        }
         prepareRetailerSafariWorkflow()
         let operationToken = operationObserver.start(
             .productMatching,
@@ -3057,6 +3112,11 @@ final class AppModel {
     /// instead of being silently excluded.
     @discardableResult
     func finalizeShoppingPlanForRetailerQueue() -> Bool {
+        guard recipeReadyCanStartShopping,
+              !shoppingItemsHaveBlockingIngredientIssues(shoppingItems) else {
+            showToast(recipeReadyDisabledExplanation ?? "Resolve ingredient issues before shopping.")
+            return false
+        }
         guard unresolvedIngredientResolutions.isEmpty else {
             let count = unresolvedIngredientResolutions.count
             showToast("SmartCart could not prepare \(count) ingredient\(count == 1 ? "" : "s"). Try again.")
@@ -3079,6 +3139,11 @@ final class AppModel {
 
     @discardableResult
     func continueToShoppingTrip() -> Bool {
+        guard recipeReadyCanStartShopping,
+              !shoppingItemsHaveBlockingIngredientIssues(shoppingItems) else {
+            showToast(recipeReadyDisabledExplanation ?? "Resolve ingredient issues before shopping.")
+            return false
+        }
         guard preparedShoppingPlanCanContinue else { return false }
         selectedTab = .home
         if homePath.last != .shoppingTrip {
@@ -3365,6 +3430,11 @@ final class AppModel {
     }
 
     func beginGuidedShopping() {
+        guard recipeReadyCanStartShopping,
+              !shoppingItemsHaveBlockingIngredientIssues(shoppingItems) else {
+            showToast(recipeReadyDisabledExplanation ?? "Resolve ingredient issues before shopping.")
+            return
+        }
         continueTo(.shoppingTrip)
     }
 
@@ -3377,6 +3447,11 @@ final class AppModel {
         guard !shoppingItems.isEmpty,
               retailerSetupIsComplete else {
             showToast("Complete retailer setup before starting")
+            return false
+        }
+        guard recipeReadyCanStartShopping,
+              !shoppingItemsHaveBlockingIngredientIssues(shoppingItems) else {
+            showToast(recipeReadyDisabledExplanation ?? "Resolve ingredient issues before shopping.")
             return false
         }
         guard !retailerGuideIsComplete, !activeShoppingSessionIsImmutable else {
@@ -3515,6 +3590,11 @@ final class AppModel {
         guard persistenceReady,
               let session = shoppingSession(id: sessionID),
               !session.items.isEmpty else { return false }
+        if session.isReusable,
+           shoppingItemsHaveBlockingIngredientIssues(session.items) {
+            showToast("Resolve ingredient issues before resuming this shopping trip.")
+            return false
+        }
         let retailer = session.retailerID.flatMap(ShoppingRetailer.init(rawValue:)) ??
             session.items.first.flatMap { ShoppingRetailer(rawValue: $0.product.retailerID) } ?? .walmart
 
@@ -5546,11 +5626,12 @@ final class AppModel {
                let reusableResolution = reusableResolutionByIngredientID[ingredient.id],
                reusableResolution.resolution.product != nil {
                 reused.ingredient = ingredient
-                reused.requestedQuantity = Ingredient.quantityText(
-                    requestedQuantity,
-                    unit: ingredient.unit
+                reused.requestedQuantity = ingredient.requestedQuantityText(
+                    numericQuantity: requestedQuantity
                 )
-                reused.requestedAmount = requestedQuantity
+                reused.requestedAmount = ingredient.requestedAmount(
+                    numericQuantity: requestedQuantity
+                )
                 reused.purchaseQuantity = PackageMath.packageCount(
                     product: reused.product,
                     requestedQuantity: requestedQuantity,
@@ -5623,11 +5704,12 @@ final class AppModel {
                 itemsByIngredientIndex[pending.ingredientIndex] = ShoppingListItem(
                     id: pending.ingredient.id,
                     ingredient: pending.ingredient,
-                    requestedQuantity: Ingredient.quantityText(
-                        pending.requestedQuantity,
-                        unit: pending.ingredient.unit
+                    requestedQuantity: pending.ingredient.requestedQuantityText(
+                        numericQuantity: pending.requestedQuantity
                     ),
-                    requestedAmount: pending.requestedQuantity,
+                    requestedAmount: pending.ingredient.requestedAmount(
+                        numericQuantity: pending.requestedQuantity
+                    ),
                     purchaseQuantity: PackageMath.packageCount(
                         product: selectedProduct,
                         requestedQuantity: pending.requestedQuantity,
@@ -5884,6 +5966,7 @@ final class AppModel {
                 ingredient.id.uuidString.lowercased(),
                 ingredient.name,
                 ingredient.unit,
+                ingredient.semanticQuantity ?? "",
                 ingredient.preparation,
                 ingredient.includeInList ? "included" : "excluded",
                 ingredient.category.rawValue,
@@ -5993,11 +6076,12 @@ final class AppModel {
             return ShoppingListItem(
                 id: ingredient.id,
                 ingredient: ingredient,
-                requestedQuantity: Ingredient.quantityText(
-                    requestedQuantity,
-                    unit: ingredient.unit
+                requestedQuantity: ingredient.requestedQuantityText(
+                    numericQuantity: requestedQuantity
                 ),
-                requestedAmount: requestedQuantity,
+                requestedAmount: ingredient.requestedAmount(
+                    numericQuantity: requestedQuantity
+                ),
                 purchaseQuantity: PackageMath.packageCount(
                     product: selected.product,
                     requestedQuantity: requestedQuantity,
@@ -6818,7 +6902,10 @@ enum RecipeParser {
         let tokens = cleaned.split(separator: " ").map(String.init)
         let leadingQuantity = parseLeadingQuantity(tokens)
         let consumed = leadingQuantity?.consumedTokenCount ?? 0
-        var quantity = leadingQuantity?.upperBound ?? 1
+        var quantity = leadingQuantity?.upperBound ?? 0
+        let semanticQuantity = leadingQuantity == nil
+            ? recognizedSemanticQuantity(in: cleaned)
+            : nil
         let quantityLowerBound = leadingQuantity.flatMap { parsed in
             parsed.lowerBound < parsed.upperBound ? parsed.lowerBound : nil
         }
@@ -6896,7 +6983,7 @@ enum RecipeParser {
         let commaParts = remaining.split(separator: ",", omittingEmptySubsequences: true).map {
             $0.trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        let preparationPattern = #"(?i)\b(optional|if desired|as desired|as needed|divided|softened|melted|sifted|packed|room temperature|at room temperature|chopped|roughly chopped|finely chopped|minced|drained|rinsed|cubed|diced|peeled|seeded|zested|juiced|crushed|grated|shredded|preferably(?:\s+[^,]+)?|plus more[^,]*|for serving|for garnish|for topping|to taste)\b"#
+        let preparationPattern = #"(?i)\b(optional|if desired|as desired|as needed|divided|softened|melted|sifted|packed|room temperature|at room temperature|chopped|roughly chopped|finely chopped|coarsely chopped|minced|finely minced|drained|rinsed|cubed|diced|finely diced|peeled|seeded|zested|juiced|crushed|grated|finely grated|freshly grated|shredded|finely shredded|preferably(?:\s+[^,]+)?|plus more[^,]*|for serving|for garnish|for topping|for frying|to taste)\b"#
         var nameParts: [String] = []
         var commaPreparationParts: [String] = []
         for (index, part) in commaParts.enumerated() {
@@ -6925,16 +7012,28 @@ enum RecipeParser {
         let isPackagedProduct = packageMeasurement != nil
             || ["can", "cans", "jar", "jars", "bag", "bags", "pkg"].contains(unit)
         let inlinePreparationPattern = isPackagedProduct
-            ? #"(?i)\b(optional|if desired|as desired|as needed|divided|plus more[^,]*|for serving|for garnish|for topping|to taste)\b"#
+            ? #"(?i)\b(optional|if desired|as desired|as needed|divided|plus more[^,]*|for serving|for garnish|for topping|for frying|to taste)\b"#
             : preparationPattern
-        let inlinePreparation = matches(pattern: inlinePreparationPattern, in: rawName, capture: 0)
-        let name = rawName
+        let leadingPreparationPattern = #"(?i)^\s*((?:(?:finely|freshly|coarsely|roughly)\s+)?(?:grated|shredded|chopped|minced|diced|sliced))\s+"#
+        let leadingPreparation = isPackagedProduct
+            ? []
+            : matches(pattern: leadingPreparationPattern, in: rawName, capture: 1)
+        let nameSource = leadingPreparation.isEmpty
+            ? rawName
+            : rawName.replacingOccurrences(
+                of: leadingPreparationPattern,
+                with: "",
+                options: .regularExpression
+            )
+        let inlinePreparation = matches(pattern: inlinePreparationPattern, in: nameSource, capture: 0)
+        let name = nameSource
             .replacingOccurrences(of: #"\([^)]*\)"#, with: "", options: .regularExpression)
             .replacingOccurrences(of: inlinePreparationPattern, with: "", options: .regularExpression)
             .replacingOccurrences(of: #"^of\s+"#, with: "", options: [.regularExpression, .caseInsensitive])
             .trimmingCharacters(in: CharacterSet(charactersIn: " ,.-"))
-        let preparation = (commaPreparationParts + inlinePreparation)
+        let preparation = (leadingPreparation + commaPreparationParts + inlinePreparation)
             .filter { !$0.isEmpty }
+            .filter { Ingredient.normalizedSemanticQuantity($0) == nil }
             .joined(separator: ", ")
             .replacingOccurrences(of: "optional", with: "", options: .caseInsensitive)
             .trimmingCharacters(in: CharacterSet(charactersIn: " ,.-"))
@@ -6954,13 +7053,47 @@ enum RecipeParser {
             of: #"(?<!\d)[?/]|\d\s*/\s*[^\d\s]"#,
             options: .regularExpression
         ) != nil
+        let invalidFractionGlyph = line.range(
+            of: #"^\s*[-•*☐✓]?\s*[%?](?=\s*(?:cups?|tbsp|tablespoons?|tsp|teaspoons?|oz|ounces?|lbs?|pounds?|grams?|kg|ml|liters?)\b)"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
         let suspiciousOCRQuantity = cleaned.range(
             of: #"^(?:[Il]/\d|\d+[OIl]\b|[Il]\s+(?:cups?|tbsp|tsp|oz|lbs?|grams?|ml)\b)"#,
             options: [.regularExpression, .caseInsensitive]
         ) != nil
-        let malformedQuantity = malformedFraction
-            || suspiciousOCRQuantity
-            || compoundMeasurementNeedsReview
+        let measurementTokenInName = normalizedName.range(
+            of: #"^(?:[%?](?=\s|$)|\d|[¼½¾⅓⅔⅛⅜⅝⅞⅙⅚]|(?:cups?|tbsp|tablespoons?|tsp|teaspoons?|oz|ounces?|lbs?|pounds?|grams?|kg|ml|liters?)\b)"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
+        let sourceContainsExpectedUnit = line.range(
+            of: #"\b(cups?|tbsp|tablespoons?|tsp|teaspoons?|oz|ounces?|lbs?|pounds?|grams?|kg|ml|liters?)\b"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
+        let sourceStartsWithMeasurement = line.range(
+            of: #"^\s*[-•*☐✓]?\s*(?:\d|[¼½¾⅓⅔⅛⅜⅝⅞⅙⅚]|[%?])"#,
+            options: .regularExpression
+        ) != nil
+        var blockingReasons: [String] = []
+        if malformedFraction || suspiciousOCRQuantity || invalidFractionGlyph {
+            blockingReasons.append("invalid_fraction_glyph")
+        }
+        if measurementTokenInName {
+            blockingReasons.append("measurement_token_in_name")
+        }
+        if sourceContainsExpectedUnit, unit.isEmpty {
+            blockingReasons.append("missing_expected_unit")
+        }
+        if sourceStartsWithMeasurement, !foundQuantity {
+            blockingReasons.append("contradictory_parsed_fields")
+        }
+        if normalizedName.isEmpty {
+            blockingReasons.append("missing_ingredient_name")
+        }
+        if compoundMeasurementNeedsReview {
+            blockingReasons.append("malformed_measurement_structure")
+        }
+        blockingReasons = Array(Set(blockingReasons)).sorted()
+        let malformedQuantity = !blockingReasons.isEmpty
         let strategy: IngredientExtractionStrategy = switch source {
         case .photo: .visionOCR
         case .link, .pinterest: .structuredData
@@ -6972,7 +7105,7 @@ enum RecipeParser {
             parserConfidence = 0.42
         } else if isApproximate || quantityLowerBound != nil {
             parserConfidence = 0.84
-        } else if foundQuantity {
+        } else if foundQuantity || semanticQuantity != nil || quantity == 0 {
             parserConfidence = 0.94
         } else {
             parserConfidence = 0.66
@@ -6985,11 +7118,12 @@ enum RecipeParser {
             rawText: line,
             name: normalizedName.capitalized,
             quantity: quantity,
+            semanticQuantity: semanticQuantity,
             quantityLowerBound: quantityLowerBound,
             unit: unit,
             preparation: preparation,
             category: category,
-            confidence: foundQuantity && !normalizedName.isEmpty && !malformedQuantity && !isApproximate && quantityLowerBound == nil
+            confidence: !normalizedName.isEmpty && !malformedQuantity && !isApproximate && quantityLowerBound == nil
                 ? .high
                 : .review,
             includeInList: !isOptional,
@@ -7009,7 +7143,8 @@ enum RecipeParser {
                 normalizationConfidence: normalizedName.isEmpty ? 0.35 : 0.92,
                 alternateQuantityCandidates: malformedQuantity
                     ? []
-                    : [quantityLowerBound, quantity].compactMap { $0 }
+                    : [quantityLowerBound, quantity > 0 ? quantity : nil].compactMap { $0 },
+                reviewReasons: blockingReasons.isEmpty ? nil : blockingReasons
             ),
             quantityReviewRequired: malformedQuantity
         )
@@ -7032,10 +7167,14 @@ enum RecipeParser {
     ) -> RankedIngredientResolution {
         var texts = [primaryText]
         var ocrAlternativeKeys = Set<String>()
+        let primaryIngredient = parseIngredient(primaryText, source: source)
         if let nameFirst = canonicalQuantityFirstText(from: primaryText) {
             texts.append(nameFirst)
         }
-        if let sourceLine, sourceLine.confidence < 0.72 {
+        let primaryHasBlockingStructure = IngredientIssueEvaluator
+            .assess(primaryIngredient)
+            .hasBlockingIssues
+        if let sourceLine, sourceLine.confidence < 0.72 || primaryHasBlockingStructure {
             for alternative in sourceLine.alternateCandidates.prefix(3) {
                 texts.append(alternative.text)
                 ocrAlternativeKeys.insert(alternative.text.lowercased())
@@ -7068,6 +7207,7 @@ enum RecipeParser {
             && candidates.dropFirst().first.map {
                 $0.1.name.caseInsensitiveCompare(best.1.name) != .orderedSame
                     || abs($0.1.quantity - best.1.quantity) > 0.0001
+                    || $0.1.semanticQuantity != best.1.semanticQuantity
                     || $0.1.unit != best.1.unit
             } == true
 
@@ -7091,6 +7231,9 @@ enum RecipeParser {
         sourceText: String
     ) -> Double {
         var score = (ingredient.sourceEvidence?.parserConfidence ?? 0) * 4
+        let assessment = IngredientIssueEvaluator.assess(ingredient)
+        if assessment.hasBlockingIssues { score -= 18 }
+        score -= Double(assessment.reviewSuggestions.count) * 1.5
         if !ingredient.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { score += 3 }
         if !ingredient.unit.isEmpty { score += 1.5 }
         if sourceText.range(
@@ -7202,17 +7345,20 @@ enum RecipeParser {
             ? nil
             : credibleAlternatives.map(\.text)
 
-        var quantityCandidates = [ingredient.quantity]
+        var quantityCandidates = ingredient.quantity > 0 ? [ingredient.quantity] : []
         var quantityOrUnitDiffers = false
         var parsedMeaningDiffers = false
         for alternative in credibleAlternatives {
             guard isLikelyIngredient(alternative.text) else { continue }
             let parsed = parseIngredient(alternative.text, source: source)
             guard (parsed.sourceEvidence?.parserConfidence ?? 0) >= 0.8 else { continue }
-            if !quantityCandidates.contains(where: { abs($0 - parsed.quantity) < 0.0001 }) {
+            if parsed.quantity > 0,
+               !quantityCandidates.contains(where: { abs($0 - parsed.quantity) < 0.0001 }) {
                 quantityCandidates.append(parsed.quantity)
             }
-            if abs(parsed.quantity - ingredient.quantity) >= 0.0001 || parsed.unit != ingredient.unit {
+            if abs(parsed.quantity - ingredient.quantity) >= 0.0001
+                || parsed.semanticQuantity != ingredient.semanticQuantity
+                || parsed.unit != ingredient.unit {
                 quantityOrUnitDiffers = true
             }
             if parsed.name.caseInsensitiveCompare(ingredient.name) != .orderedSame {
@@ -7481,6 +7627,14 @@ enum RecipeParser {
             "half": 0.5, "quarter": 0.25
         ]
         return parseFraction(cleaned) ?? Double(cleaned) ?? numberWords[cleaned.lowercased()]
+    }
+
+    private static func recognizedSemanticQuantity(in text: String) -> String? {
+        guard let match = text.range(
+            of: #"\b(as needed|to taste|for frying)\b"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) else { return nil }
+        return Ingredient.normalizedSemanticQuantity(String(text[match]))
     }
 
     private static func parseFraction(_ value: String) -> Double? {

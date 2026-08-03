@@ -277,6 +277,11 @@ struct Ingredient: Identifiable, Hashable, Codable {
     var rawText: String
     var name: String
     var quantity: Double
+    /// Qualitative recipe amount supplied by the source when no numeric
+    /// quantity exists (for example, "to taste" or "as needed"). A zero
+    /// numeric quantity plus this field is intentional and must never be
+    /// rewritten to an invented `1`.
+    var semanticQuantity: String?
     /// Lower end of an explicit recipe range. `quantity` remains the upper
     /// end so package math stays conservative (for example, 2–3 lemons buys
     /// for 3), while review UI can preserve what the recipe actually said.
@@ -308,6 +313,7 @@ struct Ingredient: Identifiable, Hashable, Codable {
         rawText: String = "",
         name: String,
         quantity: Double = 1,
+        semanticQuantity: String? = nil,
         quantityLowerBound: Double? = nil,
         unit: String = "",
         preparation: String = "",
@@ -332,6 +338,7 @@ struct Ingredient: Identifiable, Hashable, Codable {
         self.rawText = rawText.isEmpty ? "\(quantity) \(unit) \(name)" : rawText
         self.name = name
         self.quantity = quantity
+        self.semanticQuantity = semanticQuantity
         self.quantityLowerBound = quantityLowerBound
         self.unit = unit
         self.preparation = preparation
@@ -354,6 +361,12 @@ struct Ingredient: Identifiable, Hashable, Codable {
     }
 
     var displayQuantity: String {
+        if let semanticQuantity = Self.normalizedSemanticQuantity(semanticQuantity) {
+            return semanticQuantity
+        }
+        if quantity == 0, unit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return ""
+        }
         if let quantityLowerBound,
            quantityLowerBound >= 0,
            quantityLowerBound < quantity {
@@ -362,6 +375,84 @@ struct Ingredient: Identifiable, Hashable, Codable {
             return "\(lower)–\(upper)"
         }
         return Self.quantityText(quantity, unit: unit)
+    }
+
+    var quantityInputText: String {
+        if let semanticQuantity = Self.normalizedSemanticQuantity(semanticQuantity) {
+            return semanticQuantity
+        }
+        guard quantity != 0 else { return "" }
+        return Self.quantityText(quantity, unit: "")
+    }
+
+    func requestedQuantityText(numericQuantity: Double) -> String {
+        quantity == 0 ? displayQuantity : Self.quantityText(numericQuantity, unit: unit)
+    }
+
+    func requestedAmount(numericQuantity: Double) -> Double? {
+        quantity == 0 ? nil : numericQuantity
+    }
+
+    mutating func setQuantityInput(_ input: String) {
+        let value = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else {
+            quantity = 0
+            quantityLowerBound = nil
+            semanticQuantity = nil
+            return
+        }
+        if let semantic = Self.normalizedSemanticQuantity(value) {
+            quantity = 0
+            quantityLowerBound = nil
+            semanticQuantity = semantic
+            return
+        }
+        if let numeric = Self.numericQuantityInput(value), numeric >= 0 {
+            quantity = numeric
+            quantityLowerBound = nil
+            semanticQuantity = nil
+            return
+        }
+        quantity = 0
+        quantityLowerBound = nil
+        semanticQuantity = value.lowercased()
+    }
+
+    static func normalizedSemanticQuantity(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let normalized = value.lowercased()
+            .split(whereSeparator: \Character.isWhitespace)
+            .joined(separator: " ")
+        return ["as needed", "to taste", "for frying"].contains(normalized)
+            ? normalized
+            : nil
+    }
+
+    private static func numericQuantityInput(_ value: String) -> Double? {
+        let fractionMap: [Character: String] = [
+            "¼": "1/4", "½": "1/2", "¾": "3/4", "⅓": "1/3", "⅔": "2/3",
+            "⅛": "1/8", "⅜": "3/8", "⅝": "5/8", "⅞": "7/8"
+        ]
+        var expanded = ""
+        for character in value {
+            if let fraction = fractionMap[character] {
+                if expanded.last?.isNumber == true { expanded.append(" ") }
+                expanded.append(fraction)
+            } else {
+                expanded.append(character)
+            }
+        }
+        let parts = expanded.split(whereSeparator: \Character.isWhitespace).map(String.init)
+        guard !parts.isEmpty else { return nil }
+        func fraction(_ token: String) -> Double? {
+            let values = token.split(separator: "/").compactMap { Double($0) }
+            guard values.count == 2, values[1] != 0 else { return nil }
+            return values[0] / values[1]
+        }
+        if parts.count == 2, let whole = Double(parts[0]), let remainder = fraction(parts[1]) {
+            return whole + remainder
+        }
+        return fraction(parts[0]) ?? Double(parts[0])
     }
 
     static func quantityText(_ quantity: Double, unit: String) -> String {
@@ -374,6 +465,212 @@ struct Ingredient: Identifiable, Hashable, Codable {
             value = String(format: "%.1f", quantity)
         }
         return unit.isEmpty ? value : "\(value) \(unit)"
+    }
+}
+
+enum IngredientIssueSeverity: Int, Hashable {
+    case ready
+    case review
+    case blocking
+}
+
+struct IngredientIssue: Identifiable, Hashable {
+    let code: String
+    let severity: IngredientIssueSeverity
+    let message: String
+
+    var id: String { code }
+}
+
+struct IngredientIssueAssessment: Hashable {
+    var issues: [IngredientIssue]
+
+    var blockingIssues: [IngredientIssue] { issues.filter { $0.severity == .blocking } }
+    var reviewSuggestions: [IngredientIssue] { issues.filter { $0.severity == .review } }
+    var hasBlockingIssues: Bool { !blockingIssues.isEmpty }
+    var severity: IngredientIssueSeverity {
+        if hasBlockingIssues { return .blocking }
+        if !reviewSuggestions.isEmpty { return .review }
+        return .ready
+    }
+}
+
+/// The single interpretation of ingredient readiness used by Recipe Review,
+/// retailer matching, navigation guards, and restored shopping sessions.
+enum IngredientIssueEvaluator {
+    static let blockingEvidenceReasons: Set<String> = [
+        "contradictory_parsed_fields",
+        "invalid_fraction_glyph",
+        "malformed_measurement_structure",
+        "measurement_token_in_name",
+        "missing_expected_unit",
+        "missing_ingredient_name",
+        "unresolved_parse_conflict"
+    ]
+
+    static func assess(_ ingredient: Ingredient) -> IngredientIssueAssessment {
+        guard ingredient.includeInList else { return IngredientIssueAssessment(issues: []) }
+        var issues: [IngredientIssue] = []
+        var seen = Set<String>()
+        func append(_ code: String, _ severity: IngredientIssueSeverity, _ message: String) {
+            guard seen.insert(code).inserted else { return }
+            issues.append(IngredientIssue(code: code, severity: severity, message: message))
+        }
+
+        let name = ingredient.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if name.isEmpty {
+            append("missing_ingredient_name", .blocking, "Enter an ingredient name.")
+        }
+        if name.range(
+            of: #"^(?:[%?](?=\s|$)|\d|[¼½¾⅓⅔⅛⅜⅝⅞⅙⅚]|(?:cups?|tbsp|tablespoons?|tsp|teaspoons?|oz|ounces?|lbs?|pounds?|grams?|kg|ml|liters?)\b)"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil {
+            append(
+                "measurement_token_in_name",
+                .blocking,
+                "Move the measurement out of the ingredient name."
+            )
+        }
+        if isPreparationOnly(name) || isHeadingLike(name) {
+            append("invalid_ingredient_identity", .blocking, "Enter a purchasable ingredient name.")
+        }
+        if ingredient.alternativeGroup != nil,
+           name.range(
+               of: #"\s+or\s+"#,
+               options: [.regularExpression, .caseInsensitive]
+           ) != nil {
+            append("unresolved_alternative", .blocking, "Choose one ingredient option.")
+        }
+        if !ingredient.quantity.isFinite || ingredient.quantity < 0 {
+            append("invalid_numeric_quantity", .blocking, "Enter a valid quantity.")
+        }
+        if ingredient.quantity > 0, ingredient.semanticQuantity != nil {
+            append(
+                "contradictory_parsed_fields",
+                .blocking,
+                "Use either a numeric or a qualitative quantity, not both."
+            )
+        }
+        if let semantic = ingredient.semanticQuantity,
+           Ingredient.normalizedSemanticQuantity(semantic) == nil {
+            append(
+                "unsupported_semantic_quantity",
+                .blocking,
+                "Use a number, leave quantity blank, or use as needed, to taste, or for frying."
+            )
+        }
+
+        let evidenceReasons = ingredient.sourceEvidence?.reviewReasons ?? []
+        for reason in evidenceReasons where blockingEvidenceReasons.contains(reason) {
+            append(reason, .blocking, blockingMessage(for: reason))
+        }
+        if ingredient.quantityReviewRequired == true {
+            append("quantity_confirmation_required", .blocking, "Confirm the quantity before shopping.")
+        }
+
+        if !issues.contains(where: { $0.severity == .blocking }) {
+            if evidenceReasons.contains("ocr_alternative_selected") {
+                append("ocr_alternative_selected", .review, "OCR used a supported alternative; compare it with the source.")
+            }
+            if evidenceReasons.contains("instruction_suffix_removed") {
+                append("instruction_suffix_removed", .review, "Cooking text was removed from this row.")
+            }
+            if let confidence = ingredient.sourceEvidence?.ocrConfidence, confidence < 0.72 {
+                append("low_ocr_confidence", .review, "OCR confidence is low; compare this row with the source.")
+            } else if ingredient.confidence == .review,
+                      evidenceReasons.isEmpty,
+                      ingredient.sourceEvidence?.parserConfidence ?? 1 < 0.8 {
+                append("low_parser_confidence", .review, "The ingredient parse may need a quick check.")
+            } else if ingredient.confidence == .unknown {
+                append("unknown_ingredient", .review, "SmartCart could not confidently identify this ingredient.")
+            }
+        }
+
+        return IngredientIssueAssessment(issues: issues)
+    }
+
+    static func hasBlockingIssues(in ingredients: [Ingredient]) -> Bool {
+        ingredients.contains { assess($0).hasBlockingIssues }
+    }
+
+    static func resolveCorrectedStructure(
+        previous: Ingredient,
+        updated: Ingredient
+    ) -> Ingredient {
+        let fieldsChanged = previous.name != updated.name
+            || previous.quantity != updated.quantity
+            || previous.semanticQuantity != updated.semanticQuantity
+            || previous.unit != updated.unit
+            || previous.preparation != updated.preparation
+        guard fieldsChanged else { return updated }
+
+        var result = updated
+        if structurallyValidFields(result) {
+            result.quantityReviewRequired = false
+            if var evidence = result.sourceEvidence {
+                evidence.reviewReasons = evidence.reviewReasons?.filter {
+                    !blockingEvidenceReasons.contains($0)
+                }
+                result.sourceEvidence = evidence
+            }
+            if assess(result).severity == .ready {
+                result.confidence = .high
+            }
+        }
+        return result
+    }
+
+    static func confirmCurrentStructure(_ ingredient: Ingredient) -> Ingredient {
+        var result = ingredient
+        guard structurallyValidFields(result) else { return result }
+        result.quantityReviewRequired = false
+        if var evidence = result.sourceEvidence {
+            evidence.reviewReasons = evidence.reviewReasons?.filter {
+                !blockingEvidenceReasons.contains($0)
+            }
+            result.sourceEvidence = evidence
+        }
+        return result
+    }
+
+    private static func structurallyValidFields(_ ingredient: Ingredient) -> Bool {
+        var probe = ingredient
+        probe.quantityReviewRequired = false
+        if var evidence = probe.sourceEvidence {
+            evidence.reviewReasons = evidence.reviewReasons?.filter {
+                !blockingEvidenceReasons.contains($0)
+            }
+            probe.sourceEvidence = evidence
+        }
+        return !assess(probe).hasBlockingIssues
+    }
+
+    private static func isPreparationOnly(_ value: String) -> Bool {
+        value.range(
+            of: #"^(?:(?:or )?(?:(?:finely|freshly|coarsely|roughly)\s+)?(?:chopped|flaked|grated|shredded|diced|minced|sliced)|divided|optional|preferably|to taste|as needed|for frying|for (?:serving|garnish|topping))$"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
+    }
+
+    private static func isHeadingLike(_ value: String) -> Bool {
+        value.range(
+            of: #"^for\s+(?:the\s+)?"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil || value.range(
+            of: #"^(?:ingredients?|directions?|instructions?|method|shopping list|new ingredient)\s*:?$"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
+    }
+
+    private static func blockingMessage(for reason: String) -> String {
+        switch reason {
+        case "invalid_fraction_glyph": "The source fraction could not be read safely."
+        case "measurement_token_in_name": "Move the measurement out of the ingredient name."
+        case "missing_expected_unit": "Confirm the missing measurement unit."
+        case "missing_ingredient_name": "Enter an ingredient name."
+        case "unresolved_parse_conflict": "Choose the correct interpretation from the source."
+        default: "Correct the quantity, unit, and ingredient fields before shopping."
+        }
     }
 }
 

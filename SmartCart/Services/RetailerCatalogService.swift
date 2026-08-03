@@ -110,7 +110,7 @@ enum RetailerSearchQueryBuilder {
     }
 
     static func canonicalIngredientTerm(for ingredient: Ingredient) -> String? {
-        if ingredient.sourceEvidence?.reviewReasons?.contains("unresolved_parse_conflict") == true {
+        if IngredientIssueEvaluator.assess(ingredient).hasBlockingIssues {
             return nil
         }
         var value = ingredient.name

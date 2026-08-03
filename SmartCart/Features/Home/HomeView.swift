@@ -443,6 +443,9 @@ struct HomeView: View {
         Label(shoppingTripsTitle, systemImage: "cart.badge.clock")
             .font(.subheadline.weight(.bold))
             .foregroundStyle(homeInk)
+            .lineLimit(1)
+            .minimumScaleFactor(0.78)
+            .layoutPriority(1)
     }
 
     private var shoppingTripsHandleSummary: some View {

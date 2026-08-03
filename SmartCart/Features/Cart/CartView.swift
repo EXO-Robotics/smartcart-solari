@@ -348,7 +348,8 @@ struct RecipeReadyView: View {
                 ForEach(appModel.activeRecipe.ingredients) { ingredient in
                     RecipeReadyIngredientRow(
                         ingredient: ingredient,
-                        isBlocking: blockingIngredientIDs.contains(ingredient.id),
+                        assessment: appModel.recipeReadyIngredientAssessments[ingredient.id]
+                            ?? IngredientIssueAssessment(issues: []),
                         isExpanded: expansionBinding(for: ingredient.id),
                         onUpdate: { updatedIngredient in
                             self.appModel.updateIngredient(
@@ -395,23 +396,34 @@ struct RecipeReadyView: View {
     @ViewBuilder
     private func issueControl(proxy: ScrollViewProxy) -> some View {
         if !blockingIngredientIDs.isEmpty {
-            Button {
-                focusNextIssue(proxy: proxy)
-            } label: {
-                Label(
-                    "\(blockingIngredientIDs.count) need attention",
-                    systemImage: "exclamationmark.triangle.fill"
-                )
-                .font(.caption.weight(.bold))
-                .foregroundStyle(SmartCartTheme.coral)
-                .padding(.horizontal, 11)
-                .frame(minHeight: 44)
-                .background(SmartCartTheme.coral.opacity(0.09))
-                .clipShape(Capsule())
+            VStack(alignment: .trailing, spacing: 3) {
+                Button {
+                    focusNextIssue(proxy: proxy)
+                } label: {
+                    Label(
+                        "\(blockingIngredientIDs.count) blocking",
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(SmartCartTheme.coral)
+                    .padding(.horizontal, 11)
+                    .frame(minHeight: 44)
+                    .background(SmartCartTheme.coral.opacity(0.09))
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(PressableButtonStyle())
+                .accessibilityIdentifier("recipe-ready-review-issues")
+                .accessibilityHint("Moves to the next ingredient that must be resolved")
+
+                if !attentionIngredientIDs.isEmpty {
+                    Label(
+                        "\(attentionIngredientIDs.count) review suggestion\(attentionIngredientIDs.count == 1 ? "" : "s")",
+                        systemImage: "info.circle.fill"
+                    )
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(SmartCartTheme.amber)
+                }
             }
-            .buttonStyle(PressableButtonStyle())
-            .accessibilityIdentifier("recipe-ready-review-issues")
-            .accessibilityHint("Moves to the next ingredient that must be resolved")
         } else if attentionIngredientIDs.count > 0 {
             Label("\(attentionIngredientIDs.count) review suggested", systemImage: "info.circle.fill")
                 .font(.caption.weight(.bold))
@@ -697,13 +709,7 @@ struct RecipeReadyView: View {
     }
 
     private var attentionIngredientIDs: [UUID] {
-        appModel.activeRecipe.ingredients.compactMap { ingredient in
-            guard ingredient.includeInList,
-                  ingredient.confidence != .high
-                    || ingredient.quantityReviewRequired == true
-                    || hasUnresolvedAlternative(ingredient) else { return nil }
-            return ingredient.id
-        }
+        appModel.recipeReadyReviewIngredientIDs
     }
 
     private var mealPrepParticipatingLines: [CombinedIngredientLine] {
@@ -716,18 +722,7 @@ struct RecipeReadyView: View {
     }
 
     private var blockingIngredientIDs: [UUID] {
-        appModel.activeRecipe.ingredients.compactMap { ingredient in
-            guard ingredient.includeInList,
-                  ingredient.quantityReviewRequired == true || hasUnresolvedAlternative(ingredient) else { return nil }
-            return ingredient.id
-        }
-    }
-
-    private func hasUnresolvedAlternative(_ ingredient: Ingredient) -> Bool {
-        ingredient.alternativeGroup != nil && ingredient.name.range(
-            of: #"\s+or\s+"#,
-            options: [.regularExpression, .caseInsensitive]
-        ) != nil
+        appModel.recipeReadyBlockingIngredientIDs
     }
 
     private func expansionBinding(for ingredientID: UUID) -> Binding<Bool> {
@@ -934,14 +929,14 @@ private struct RecipeReadyIngredientRow: View {
     @Environment(AppModel.self) private var appModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let ingredient: Ingredient
-    let isBlocking: Bool
+    let assessment: IngredientIssueAssessment
     @Binding var isExpanded: Bool
     let onUpdate: (Ingredient) -> Void
     let onDelete: () -> Void
     @State private var showSourceEvidence = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 9) {
             Button {
                 withAnimation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.86)) {
                     isExpanded.toggle()
@@ -963,17 +958,23 @@ private struct RecipeReadyIngredientRow: View {
             }
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, isExpanded ? 13 : 9)
+        .padding(.vertical, isExpanded ? 10 : 9)
         .background(ingredient.includeInList ? SmartCartTheme.paper : SmartCartTheme.canvas.opacity(0.72))
         .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 17, style: .continuous)
                 .stroke(
-                    isBlocking ? SmartCartTheme.coral.opacity(0.78) : SmartCartTheme.border,
-                    lineWidth: isBlocking ? 1.5 : 1
+                    assessment.hasBlockingIssues ? SmartCartTheme.coral.opacity(0.82) : SmartCartTheme.border,
+                    lineWidth: assessment.hasBlockingIssues ? 1.5 : 1
                 )
         }
         .opacity(ingredient.includeInList ? 1 : 0.68)
+        .onAppear {
+            if assessment.hasBlockingIssues { showSourceEvidence = true }
+        }
+        .onChange(of: assessment.hasBlockingIssues) { _, blocking in
+            if blocking { showSourceEvidence = true }
+        }
     }
 
     private var compactSummary: some View {
@@ -1006,13 +1007,13 @@ private struct RecipeReadyIngredientRow: View {
 
             Spacer(minLength: 6)
 
-            if ingredient.quantityReviewRequired == true {
+            if assessment.severity == .blocking {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(SmartCartTheme.coral)
                     .accessibilityHidden(true)
-            } else if ingredient.confidence != .high {
-                Image(systemName: ingredient.confidence.symbol)
-                    .foregroundStyle(ingredient.confidence.color)
+            } else if assessment.severity == .review {
+                Image(systemName: "info.circle.fill")
+                    .foregroundStyle(SmartCartTheme.amber)
                     .accessibilityHidden(true)
             }
 
@@ -1024,7 +1025,7 @@ private struct RecipeReadyIngredientRow: View {
     }
 
     private var editor: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
             Toggle(
                 "Include in this shopping trip",
                 isOn: binding(for: \.includeInList)
@@ -1044,12 +1045,14 @@ private struct RecipeReadyIngredientRow: View {
             .font(.caption)
 
             ViewThatFits(in: .horizontal) {
-                HStack(spacing: 10) { correctionMenus }
-                VStack(alignment: .leading, spacing: 10) { correctionMenus }
+                HStack(spacing: 8) { correctionMenus }
+                VStack(alignment: .leading, spacing: 8) { correctionMenus }
             }
 
-            if ingredient.quantityReviewRequired == true {
-                quantityResolution
+            if assessment.hasBlockingIssues {
+                blockingResolution
+            } else if !assessment.reviewSuggestions.isEmpty {
+                reviewSuggestion
             }
 
             if let evidence = ingredient.sourceEvidence {
@@ -1070,12 +1073,8 @@ private struct RecipeReadyIngredientRow: View {
     }
 
     @ViewBuilder private var measurementFields: some View {
-        TextField(
-            "Quantity",
-            value: binding(for: \.quantity),
-            format: .number.precision(.fractionLength(0...2))
-        )
-            .keyboardType(.decimalPad)
+        TextField("Quantity or as needed", text: quantityInputBinding)
+            .keyboardType(.numbersAndPunctuation)
             .smartField()
         TextField("Unit", text: binding(for: \.unit))
             .textInputAutocapitalization(.never)
@@ -1112,12 +1111,19 @@ private struct RecipeReadyIngredientRow: View {
         }
     }
 
-    private var quantityResolution: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            Label("Quantity is uncertain. Confirm it before shopping.", systemImage: "exclamationmark.triangle.fill")
+    private var blockingResolution: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Label("Correct this ingredient before shopping.", systemImage: "exclamationmark.triangle.fill")
                 .font(.caption.weight(.bold))
                 .foregroundStyle(SmartCartTheme.coral)
                 .fixedSize(horizontal: false, vertical: true)
+
+            ForEach(assessment.blockingIssues) { issue in
+                Text(issue.message)
+                    .font(.caption2)
+                    .foregroundStyle(SmartCartTheme.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             if let candidates = ingredient.sourceEvidence?.alternateQuantityCandidates,
                candidates.count > 1 {
@@ -1126,7 +1132,8 @@ private struct RecipeReadyIngredientRow: View {
                         Button(Ingredient.quantityText(candidate, unit: ingredient.unit)) {
                             updateIngredient {
                                 $0.quantity = candidate
-                                $0.quantityReviewRequired = false
+                                $0.semanticQuantity = nil
+                                $0 = IngredientIssueEvaluator.confirmCurrentStructure($0)
                             }
                         }
                     }
@@ -1135,9 +1142,9 @@ private struct RecipeReadyIngredientRow: View {
                         .frame(minHeight: 44)
                 }
                 .buttonStyle(.bordered)
-            } else {
-                Button("Confirm \(ingredient.displayQuantity)") {
-                    updateIngredient { $0.quantityReviewRequired = false }
+            } else if canConfirmCurrentStructure {
+                Button("Use current corrected fields") {
+                    updateIngredient { $0 = IngredientIssueEvaluator.confirmCurrentStructure($0) }
                 }
                 .buttonStyle(.bordered)
                 .frame(minHeight: 44)
@@ -1147,6 +1154,22 @@ private struct RecipeReadyIngredientRow: View {
         .background(SmartCartTheme.coral.opacity(0.07))
         .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
         .accessibilityIdentifier("recipe-ready-quantity-review-\(ingredient.id.uuidString)")
+    }
+
+    private var reviewSuggestion: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(assessment.reviewSuggestions) { issue in
+                Label(issue.message, systemImage: "info.circle.fill")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(SmartCartTheme.amber)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var canConfirmCurrentStructure: Bool {
+        let confirmed = IngredientIssueEvaluator.confirmCurrentStructure(ingredient)
+        return !IngredientIssueEvaluator.assess(confirmed).hasBlockingIssues
     }
 
     private func sourceEvidence(_ evidence: IngredientSourceEvidence) -> some View {
@@ -1190,11 +1213,23 @@ private struct RecipeReadyIngredientRow: View {
             }
             .padding(.top, 7)
         } label: {
-            Label("Source evidence", systemImage: "doc.text.magnifyingglass")
+            Label(
+                assessment.hasBlockingIssues ? "Source evidence · check original" : "Source evidence",
+                systemImage: "doc.text.magnifyingglass"
+            )
                 .font(.caption.weight(.bold))
-                .foregroundStyle(SmartCartTheme.walmartBlue)
+                .foregroundStyle(assessment.hasBlockingIssues ? SmartCartTheme.coral : SmartCartTheme.walmartBlue)
                 .frame(minHeight: 44)
         }
+    }
+
+    private var quantityInputBinding: Binding<String> {
+        Binding(
+            get: { ingredient.quantityInputText },
+            set: { value in
+                updateIngredient { $0.setQuantityInput(value) }
+            }
+        )
     }
 
     private func binding<Value>(
@@ -1215,7 +1250,7 @@ private struct RecipeReadyIngredientRow: View {
     }
 
     private var compactDetail: String {
-        var parts = [appModel.scaledQuantityText(for: ingredient)]
+        var parts = [appModel.scaledQuantityText(for: ingredient)].filter { !$0.isEmpty }
         if !ingredient.preparation.isEmpty { parts.append(ingredient.preparation) }
         if let preferredProductName = ingredient.preferredProductName {
             parts.append("Prefers \(preferredProductName)")
@@ -1229,8 +1264,8 @@ private struct RecipeReadyIngredientRow: View {
         if let preferredProductName = ingredient.preferredProductName {
             value += ", preferred product \(preferredProductName)"
         }
-        if ingredient.quantityReviewRequired == true { value += ", quantity must be confirmed" }
-        else if ingredient.confidence != .high { value += ", \(ingredient.confidence.label)" }
+        if assessment.hasBlockingIssues { value += ", must be corrected before shopping" }
+        else if assessment.severity == .review { value += ", review suggested" }
         return value
     }
 }

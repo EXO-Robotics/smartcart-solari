@@ -123,7 +123,11 @@ final class SmartCartTests: XCTestCase {
 
         XCTAssertEqual(recipe.ingredients.map(\.name), ["Cooking Spray", "Hot Sauce", "Eggs"])
         XCTAssertTrue(recipe.ingredients.allSatisfy { !$0.name.localizedCaseInsensitiveContains("add") })
-        XCTAssertTrue(recipe.ingredients.allSatisfy { $0.confidence == .review })
+        XCTAssertEqual(recipe.ingredients.map(\.quantity), [0, 0, 0])
+        XCTAssertEqual(recipe.ingredients.map(\.semanticQuantity), [nil, "to taste", "as needed"])
+        XCTAssertTrue(recipe.ingredients.allSatisfy {
+            IngredientIssueEvaluator.assess($0).severity == .ready
+        })
     }
 
     func testImportReportSurfacesDroppedCandidatesAndRequiredConfirmation() {
@@ -1107,6 +1111,305 @@ final class SmartCartTests: XCTestCase {
         })
     }
 
+    func testMalformedMeasurementBlocksShoppingAndNeverBuildsRetailerQuery() throws {
+        let sourceLine = OCRSourceLine(
+            text: "% Cup All Purpose Flour",
+            pageIndex: 0,
+            boundingBox: .init(x: 0.08, y: 0.72, width: 0.42, height: 0.045),
+            confidence: 0.91,
+            alternateCandidates: [],
+            sourceObservationIDs: ["malformed-flour"]
+        )
+        let recipe = RecipeParser.parse(
+            title: "Malformed flour",
+            text: sourceLine.text,
+            source: .photo,
+            sourceLines: [sourceLine]
+        )
+        let ingredient = try recipe.ingredients.firstUnwrapped()
+        let assessment = IngredientIssueEvaluator.assess(ingredient)
+
+        XCTAssertEqual(ingredient.rawText, "% Cup All Purpose Flour")
+        XCTAssertEqual(ingredient.sourceEvidence?.rawText, "% Cup All Purpose Flour")
+        XCTAssertEqual(ingredient.quantity, 0, accuracy: 0.001)
+        XCTAssertTrue(assessment.hasBlockingIssues)
+        XCTAssertTrue(assessment.blockingIssues.contains {
+            ["invalid_fraction_glyph", "measurement_token_in_name", "missing_expected_unit"]
+                .contains($0.code)
+        })
+        XCTAssertNil(RetailerSearchQueryBuilder.validatedQuery(for: ingredient, preferences: .init()))
+    }
+
+    func testMalformedPrimaryCanRecoverConservativeFractionFromVisionAlternative() throws {
+        let sourceLine = OCRSourceLine(
+            text: "% Cup All Purpose Flour",
+            pageIndex: 0,
+            boundingBox: .init(x: 0.08, y: 0.72, width: 0.42, height: 0.045),
+            confidence: 0.91,
+            alternateCandidates: [.init(text: "½ Cup All Purpose Flour", confidence: 0.88)],
+            sourceObservationIDs: ["recoverable-flour"]
+        )
+        let recipe = RecipeParser.parse(
+            title: "Recovered flour",
+            text: sourceLine.text,
+            source: .photo,
+            sourceLines: [sourceLine]
+        )
+        let ingredient = try recipe.ingredients.firstUnwrapped()
+        let query = try XCTUnwrap(
+            RetailerSearchQueryBuilder.validatedQuery(for: ingredient, preferences: .init())
+        )
+
+        XCTAssertEqual(ingredient.name, "All Purpose Flour")
+        XCTAssertEqual(ingredient.quantity, 0.5, accuracy: 0.001)
+        XCTAssertEqual(ingredient.unit.lowercased(), "cup")
+        XCTAssertEqual(ingredient.rawText, "% Cup All Purpose Flour")
+        XCTAssertEqual(ingredient.sourceEvidence?.rawText, "% Cup All Purpose Flour")
+        XCTAssertTrue(ingredient.sourceEvidence?.alternateSourceTexts?.contains("½ Cup All Purpose Flour") == true)
+        XCTAssertTrue(ingredient.sourceEvidence?.reviewReasons?.contains("ocr_alternative_selected") == true)
+        XCTAssertEqual(IngredientIssueEvaluator.assess(ingredient).severity, .review)
+        XCTAssertEqual(query.lowercased(), "all purpose flour")
+    }
+
+    func testChickenSourceRowsStaySeparatedAndModifierMovesToPreparation() throws {
+        let sourceLines = [
+            OCRSourceLine(
+                text: "3 cups chicken stock",
+                pageIndex: 0,
+                boundingBox: .init(x: 0.08, y: 0.80, width: 0.32, height: 0.045),
+                confidence: 0.96,
+                alternateCandidates: [],
+                sourceObservationIDs: ["chicken-stock"]
+            ),
+            OCRSourceLine(
+                text: "1 cup finely grated Parmesan cheese",
+                pageIndex: 0,
+                boundingBox: .init(x: 0.08, y: 0.72, width: 0.52, height: 0.045),
+                confidence: 0.95,
+                alternateCandidates: [],
+                sourceObservationIDs: ["parmesan"]
+            ),
+            OCRSourceLine(
+                text: "Salt to taste",
+                pageIndex: 0,
+                boundingBox: .init(x: 0.08, y: 0.64, width: 0.24, height: 0.045),
+                confidence: 0.96,
+                alternateCandidates: [],
+                sourceObservationIDs: ["salt"]
+            )
+        ]
+        let recipe = RecipeParser.parse(
+            title: "Chicken dinner",
+            text: sourceLines.map(\.text).joined(separator: "\n"),
+            source: .photo,
+            sourceLines: sourceLines
+        )
+
+        XCTAssertEqual(recipe.ingredients.count, 3)
+        XCTAssertEqual(recipe.ingredients.map(\.name), ["Chicken Stock", "Parmesan Cheese", "Salt"])
+        let parmesan = try recipe.ingredients.first(where: { $0.name == "Parmesan Cheese" }).firstUnwrapped()
+        XCTAssertEqual(parmesan.preparation.lowercased(), "finely grated")
+        let salt = try recipe.ingredients.first(where: { $0.name == "Salt" }).firstUnwrapped()
+        XCTAssertEqual(salt.quantity, 0, accuracy: 0.001)
+        XCTAssertEqual(salt.semanticQuantity, "to taste")
+        XCTAssertTrue(recipe.ingredients.allSatisfy {
+            IngredientIssueEvaluator.assess($0).severity == .ready
+        })
+        XCTAssertEqual(
+            recipe.ingredients.compactMap {
+                RetailerSearchQueryBuilder.validatedQuery(for: $0, preferences: .init())
+            }.count,
+            3
+        )
+    }
+
+    func testNonnumericAndBlankQuantitiesNeverInventOne() throws {
+        let recipe = RecipeParser.parse(
+            title: "Qualitative quantities",
+            text: """
+            Ingredients
+            Salt to taste
+            Neutral oil for frying
+            Water as needed
+            Cooking spray
+            """
+        )
+
+        XCTAssertEqual(recipe.ingredients.map(\.quantity), [0, 0, 0, 0])
+        XCTAssertEqual(
+            recipe.ingredients.map(\.semanticQuantity),
+            ["to taste", "for frying", "as needed", nil]
+        )
+        XCTAssertEqual(recipe.ingredients.map(\.displayQuantity), ["to taste", "for frying", "as needed", ""])
+        XCTAssertTrue(recipe.ingredients.allSatisfy {
+            IngredientIssueEvaluator.assess($0).severity == .ready
+        })
+    }
+
+    @MainActor
+    func testAuthoritativeIngredientIssueStatePersistsCorrectionAcrossRelaunch() throws {
+        let store = InMemorySmartCartStateStore()
+        let sourceLine = OCRSourceLine(
+            text: "% Cup All Purpose Flour",
+            pageIndex: 0,
+            boundingBox: .init(x: 0.08, y: 0.72, width: 0.42, height: 0.045),
+            confidence: 0.91,
+            alternateCandidates: [],
+            sourceObservationIDs: ["state-flour"]
+        )
+        let recipe = RecipeParser.parse(
+            title: "State gate",
+            text: sourceLine.text,
+            source: .photo,
+            sourceLines: [sourceLine]
+        )
+        let model = AppModel(stateStore: store)
+        XCTAssertTrue(model.beginRecipe(recipe))
+        let ingredient = try model.activeRecipe.ingredients.firstUnwrapped()
+
+        XCTAssertEqual(model.recipeReadyBlockingIssueCount, 1)
+        XCTAssertFalse(model.recipeReadyCanStartShopping)
+        XCTAssertFalse(model.beginShoppingFromRecipeReady())
+        model.homePath = [.recipeReady]
+        XCTAssertEqual(model.recipeReadyBlockingIngredientIDs, [ingredient.id])
+
+        var corrected = ingredient
+        corrected.name = "All Purpose Flour"
+        corrected.setQuantityInput("1/2")
+        corrected.unit = "cup"
+        XCTAssertTrue(model.updateIngredient(id: ingredient.id, with: corrected))
+        XCTAssertEqual(model.recipeReadyBlockingIssueCount, 0)
+        XCTAssertTrue(model.recipeReadyCanStartShopping)
+        model.persistNow()
+
+        let restored = AppModel(stateStore: store)
+        XCTAssertEqual(restored.recipeReadyBlockingIssueCount, 0)
+        XCTAssertTrue(restored.recipeReadyCanStartShopping)
+        XCTAssertEqual(restored.activeRecipe.ingredients.first?.quantity, 0.5)
+        XCTAssertEqual(restored.activeRecipe.ingredients.first?.unit, "cup")
+    }
+
+    @MainActor
+    func testBlockingAndReviewCountsStaySeparateAndGuardEveryShoppingEntry() async throws {
+        var blocking = Ingredient(
+            rawText: "% Cup All Purpose Flour",
+            name: "% Cup All Purpose Flour",
+            quantity: 0,
+            unit: "",
+            confidence: .review,
+            sourceEvidence: IngredientSourceEvidence(
+                rawText: "% Cup All Purpose Flour",
+                pageIndex: 0,
+                boundingBox: nil,
+                extractionStrategy: .visionOCR,
+                ocrConfidence: 0.91,
+                layoutConfidence: 0.9,
+                parserConfidence: 0.4,
+                normalizationConfidence: 0.4,
+                alternateQuantityCandidates: [],
+                reviewReasons: ["invalid_fraction_glyph", "measurement_token_in_name"]
+            ),
+            quantityReviewRequired: true
+        )
+        blocking.includeInList = true
+        let review = Ingredient(
+            rawText: "1 lime",
+            name: "Lime",
+            quantity: 1,
+            confidence: .review,
+            sourceEvidence: IngredientSourceEvidence(
+                rawText: "1 Hime",
+                pageIndex: 0,
+                boundingBox: nil,
+                extractionStrategy: .visionOCR,
+                ocrConfidence: 0.5,
+                layoutConfidence: 0.9,
+                parserConfidence: 0.95,
+                normalizationConfidence: 0.92,
+                alternateQuantityCandidates: [1],
+                reviewReasons: ["ocr_alternative_selected"]
+            )
+        )
+        let recipe = Recipe(
+            title: "Separated issue state",
+            source: .photo,
+            sourceDetail: "Focused regression",
+            heroSymbol: "fork.knife",
+            servings: 1,
+            prepMinutes: 1,
+            cookMinutes: 0,
+            ingredients: [blocking, review]
+        )
+        let model = AppModel(
+            stateStore: InMemorySmartCartStateStore(),
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        XCTAssertTrue(model.beginRecipe(recipe))
+
+        XCTAssertEqual(model.recipeReadyBlockingIssueCount, 1)
+        XCTAssertEqual(model.recipeReadyReviewSuggestionCount, 1)
+        XCTAssertEqual(model.recipeReadyIngredientAssessments[blocking.id]?.severity, .blocking)
+        XCTAssertEqual(model.recipeReadyIngredientAssessments[review.id]?.severity, .review)
+        XCTAssertFalse(model.beginShoppingFromRecipeReady())
+        let matchingStarted = await model.startMatching()
+        XCTAssertFalse(matchingStarted)
+        XCTAssertFalse(model.finalizeShoppingPlanForRetailerQueue())
+        XCTAssertFalse(model.continueToShoppingTrip())
+        model.beginGuidedShopping()
+        XCTAssertFalse(model.homePath.contains(.shoppingTrip))
+    }
+
+    @MainActor
+    func testRestoredPausedTripCannotBypassBlockingIngredientIssue() throws {
+        let store = InMemorySmartCartStateStore()
+        let model = AppModel(
+            stateStore: store,
+            commerceDefaults: isolatedCommerceDefaults(),
+            seedDemoShoppingState: true
+        )
+        var item = try model.shoppingItems.firstUnwrapped()
+        item.ingredient = Ingredient(
+            rawText: "% Cup All Purpose Flour",
+            name: "% Cup All Purpose Flour",
+            quantity: 1,
+            unit: "",
+            sourceEvidence: IngredientSourceEvidence(
+                rawText: "% Cup All Purpose Flour",
+                pageIndex: 0,
+                boundingBox: nil,
+                extractionStrategy: .visionOCR,
+                ocrConfidence: 0.91,
+                layoutConfidence: 0.9,
+                parserConfidence: 0.4,
+                normalizationConfidence: 0.4,
+                alternateQuantityCandidates: [],
+                reviewReasons: ["invalid_fraction_glyph", "measurement_token_in_name"]
+            ),
+            quantityReviewRequired: true
+        )
+        item.requestedQuantity = "1"
+        item.requestedAmount = 1
+        let session = ShoppingSession(
+            recipeID: model.activeRecipe.id,
+            recipeTitle: model.activeRecipe.title,
+            storeID: "walmart",
+            retailerID: ShoppingRetailer.walmart.rawValue,
+            items: [item]
+        )
+        model.shoppingSessions.append(session)
+        model.activeShoppingSessionID = nil
+        model.persistNow()
+
+        let restored = AppModel(
+            stateStore: store,
+            commerceDefaults: isolatedCommerceDefaults()
+        )
+        XCTAssertFalse(restored.openShoppingSession(session.id))
+        XCTAssertFalse(restored.performHomeTripAction(.resume(sessionID: session.id)))
+        XCTAssertNotEqual(restored.homePath, [.shoppingTrip])
+        XCTAssertTrue(restored.shoppingSessions.contains(where: { $0.id == session.id }))
+    }
+
     func testWeakOCRCanSelectSupportedIngredientAlternativeWithoutLosingSource() throws {
         let sourceLine = OCRSourceLine(
             text: "1 Hime",
@@ -1148,6 +1451,8 @@ final class SmartCartTests: XCTestCase {
     func testRetailerQueryRejectsHeadingsFragmentsAndUnresolvedParseConflicts() {
         let heading = Ingredient(name: "For The Thai Infused Rum")
         let fragment = Ingredient(name: "Preferably")
+        let modifierFragment = Ingredient(name: "Finely grated")
+        let placeholder = Ingredient(name: "New ingredient")
         var conflict = Ingredient(name: "Rum")
         conflict.sourceEvidence = IngredientSourceEvidence(
             rawText: "rum hime",
@@ -1164,6 +1469,8 @@ final class SmartCartTests: XCTestCase {
 
         XCTAssertNil(RetailerSearchQueryBuilder.validatedQuery(for: heading, preferences: .init()))
         XCTAssertNil(RetailerSearchQueryBuilder.validatedQuery(for: fragment, preferences: .init()))
+        XCTAssertNil(RetailerSearchQueryBuilder.validatedQuery(for: modifierFragment, preferences: .init()))
+        XCTAssertNil(RetailerSearchQueryBuilder.validatedQuery(for: placeholder, preferences: .init()))
         XCTAssertNil(RetailerSearchQueryBuilder.validatedQuery(for: conflict, preferences: .init()))
     }
 
@@ -1202,9 +1509,9 @@ final class SmartCartTests: XCTestCase {
         )
         XCTAssertEqual(recipe.ingredients.map(\.name), ["Flaky Sea Salt"])
         let salt = try recipe.ingredients.firstUnwrapped()
-        XCTAssertEqual(salt.quantity, 1, accuracy: 0.001)
+        XCTAssertEqual(salt.quantity, 0, accuracy: 0.001)
         XCTAssertEqual(salt.preparation, "for topping")
-        XCTAssertEqual(salt.confidence, .review)
+        XCTAssertEqual(salt.confidence, .high)
     }
 
     func testOCRPhysicalRowsRequireHorizontalContinuity() {
@@ -3216,7 +3523,7 @@ final class SmartCartTests: XCTestCase {
 
         XCTAssertEqual(model.unresolvedQuantityReviewCount, 1)
         XCTAssertEqual(model.unresolvedAlternativeCount, 1)
-        XCTAssertTrue(model.commerceBlockingIssues.contains { $0.contains("uncertain quantity") })
+        XCTAssertTrue(model.commerceBlockingIssues.contains { $0.contains("ingredient issue") })
         XCTAssertTrue(model.commerceBlockingIssues.contains { $0.contains("unresolved alternative") })
     }
 
@@ -5378,8 +5685,12 @@ final class SmartCartTests: XCTestCase {
         XCTAssertTrue(tripSource.contains("Text(\"Need \\(amountNeeded)\")"))
         XCTAssertTrue(tripSource.contains("amount needed \\(amountNeeded)"))
         XCTAssertTrue(tripSource.contains("retailer-trip-amount-needed"))
-        XCTAssertTrue(tripSource.contains("HStack(spacing: 8) {\n                pauseButton\n                nextButton"))
-        XCTAssertTrue(tripSource.contains("HStack(spacing: 8) {\n                moreMenu\n                checkRetailerButton"))
+        XCTAssertGreaterThanOrEqual(
+            tripSource.components(separatedBy: "ViewThatFits(in: .horizontal)").count - 1,
+            2
+        )
+        XCTAssertTrue(tripSource.contains("pauseButton\n                    nextButton"))
+        XCTAssertTrue(tripSource.contains("moreMenu\n                    checkRetailerButton"))
         XCTAssertFalse(tripSource.contains("retailerOwnershipLabel"))
         XCTAssertFalse(tripSource.contains("Shopping stays with"))
         XCTAssertFalse(tripSource.contains(".frame(minWidth: 72, minHeight: 48)"))

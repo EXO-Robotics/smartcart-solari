@@ -910,13 +910,25 @@ private struct RetailerTripSafariSheet: View {
     private var tripBar: some View {
         VStack(spacing: 6) {
             tripPositionLabel
-            HStack(spacing: 8) {
-                pauseButton
-                nextButton
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    pauseButton
+                    nextButton
+                }
+                VStack(spacing: 6) {
+                    pauseButton
+                    nextButton
+                }
             }
-            HStack(spacing: 8) {
-                moreMenu
-                checkRetailerButton
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    moreMenu
+                    checkRetailerButton
+                }
+                VStack(spacing: 6) {
+                    moreMenu
+                    checkRetailerButton
+                }
             }
         }
         .foregroundStyle(SmartCartTheme.green)
@@ -954,8 +966,9 @@ private struct RetailerTripSafariSheet: View {
         Button(action: onPause) {
             Label("Pause", systemImage: "pause.fill")
                 .font(.subheadline.bold())
-                .lineLimit(1)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
                 .minimumScaleFactor(0.8)
+                .fixedSize(horizontal: false, vertical: true)
                 .foregroundStyle(SmartCartTheme.green)
                 .padding(.horizontal, 12)
                 .frame(maxWidth: .infinity)
@@ -980,8 +993,9 @@ private struct RetailerTripSafariSheet: View {
                 systemImage: position == total ? "cart.fill" : "arrow.right.circle.fill"
             )
                 .font(.subheadline.bold())
-                .lineLimit(1)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
                 .minimumScaleFactor(0.8)
+                .fixedSize(horizontal: false, vertical: true)
                 .foregroundStyle(
                     loadState.canRecordVisited
                         ? SmartCartTheme.onAccent
@@ -1031,8 +1045,9 @@ private struct RetailerTripSafariSheet: View {
         } label: {
             Label("Search \(retailer.configuration.displayName)", systemImage: "magnifyingglass")
                 .font(.caption.bold())
-                .lineLimit(1)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
                 .minimumScaleFactor(0.8)
+                .fixedSize(horizontal: false, vertical: true)
                 .foregroundStyle(SmartCartTheme.onAccent)
                 .padding(.horizontal, 10)
                 .frame(maxWidth: .infinity)
@@ -1079,8 +1094,9 @@ private struct RetailerTripSafariSheet: View {
         } label: {
             Label("More", systemImage: "ellipsis.circle")
                 .font(.caption.bold())
-                .lineLimit(1)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
                 .minimumScaleFactor(0.8)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 10)
                 .frame(maxWidth: .infinity)
                 .frame(minHeight: 38)
