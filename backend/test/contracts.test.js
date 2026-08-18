@@ -15,7 +15,7 @@ async function readJson(file) {
 
 test('all authoritative v1 schemas compile', async () => {
   const validator = await createContractValidator({ contractsRoot });
-  assert.equal(validator.schemaIds.length, 14);
+  assert.equal(validator.schemaIds.length, 19);
   assert.equal(new Set(validator.schemaIds).size, validator.schemaIds.length);
 });
 

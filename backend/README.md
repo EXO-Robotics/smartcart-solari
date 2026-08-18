@@ -35,10 +35,11 @@ Tests use only `node:test`, saved HTML, injected fetch doubles, and an ephemeral
 
 ## Beta public deployment surface
 
-The Vercel project rooted at this `backend` directory deliberately deploys only one small
-function plus reviewed static Weekly Meals JSON. `vercel.json` exposes `GET`/`HEAD /health`,
-`GET /v1/barcodes/{gtin}`, and files under `/weekly-meals`; it returns 404 for every other route
-and method. The function reuses `BarcodeCatalogService`; it does not
+The Vercel project rooted at this `backend` directory deploys isolated barcode, Trip Intelligence,
+and stateless MCP functions plus reviewed static Weekly Meals JSON. `vercel.json` exposes
+`GET`/`HEAD /health`, `GET /v1/barcodes/{gtin}`, `POST /v1/intelligence/nutrition/recipes/estimate`,
+`POST /mcp`, and files under `/weekly-meals`; it returns 404 for every other route and method.
+The barcode function reuses `BarcodeCatalogService`; it does not
 import or deploy the mock account, session, OAuth, manifest, analytics, recipe-page, affiliate,
 or Instacart application routes.
 
@@ -61,6 +62,8 @@ Local/demo JSON responses include `meta.dataMode: "local-demo"`, and every JSON 
 | --- | --- | --- |
 | `GET` | `/health` | Health and local/demo capability disclosure |
 | `GET` | `/v1/barcodes/{gtin}` | Resolve food identity without price or availability claims |
+| `POST` | `/v1/intelligence/nutrition/recipes/estimate` | Validate a v1 recipe contract and estimate nutrition using server-side USDA evidence |
+| `POST` | `/mcp` | Stateless Streamable HTTP MCP endpoint exposing four SmartCart intelligence tools |
 | `POST` | `/v1/demo/accounts` | Create an in-memory mock account |
 | `POST` | `/v1/demo/sessions` | Issue an expiring in-memory bearer token |
 | `GET` | `/v1/demo/account` | Read the authenticated mock account |

@@ -1,0 +1,19 @@
+{
+  "catalogVersion": "ingredient-identities-v1",
+  "records": [
+    {
+      "identityKey": "smartcart-food:parmesan-cheese",
+      "canonicalName": "Parmesan cheese",
+      "aliases": [
+        "parmesan",
+        "parmesan cheese"
+      ],
+      "retailerQuery": "Parmesan cheese",
+      "foodDataCentral": {
+        "fdcId": 171247,
+        "description": "Cheese, parmesan, grated",
+        "dataType": "SR Legacy"
+      }
+    }
+  ]
+}

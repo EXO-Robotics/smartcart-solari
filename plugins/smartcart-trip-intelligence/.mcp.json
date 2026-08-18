@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "smartcart-trip-intelligence": {
+      "command": "node",
+      "args": ["../../backend/src/mcp/stdio.js"],
+      "cwd": ".",
+      "env_vars": ["USDA_FDC_API_KEY", "USDA_FDC_BASE_URL", "USDA_FDC_TIMEOUT_MS"]
+    }
+  }
+}

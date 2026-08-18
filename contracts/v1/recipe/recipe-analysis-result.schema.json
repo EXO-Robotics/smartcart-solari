@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.smartcart.app/v1/recipe/recipe-analysis-result.schema.json",
+  "title": "Recipe text analysis result envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "resolverVersion", "requestId", "data"],
+  "properties": {
+    "schemaVersion": {
+      "$ref": "https://schemas.smartcart.app/v1/common/contract-fields.schema.json#/$defs/schemaVersion"
+    },
+    "resolverVersion": {
+      "$ref": "https://schemas.smartcart.app/v1/common/contract-fields.schema.json#/$defs/resolverVersion"
+    },
+    "requestId": {
+      "$ref": "https://schemas.smartcart.app/v1/common/contract-fields.schema.json#/$defs/requestId"
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["recipeId", "title", "servings", "ingredients", "evidence", "issues"],
+      "properties": {
+        "recipeId": {
+          "$ref": "https://schemas.smartcart.app/v1/common/contract-fields.schema.json#/$defs/entityId"
+        },
+        "title": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "servings": { "type": "number", "exclusiveMinimum": 0 },
+        "ingredients": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "$ref": "https://schemas.smartcart.app/v1/ingredient/ingredient-input.schema.json"
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "https://schemas.smartcart.app/v1/common/resolution-evidence.schema.json"
+          }
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "$ref": "https://schemas.smartcart.app/v1/common/resolution-issue.schema.json"
+          }
+        }
+      }
+    }
+  }
+}

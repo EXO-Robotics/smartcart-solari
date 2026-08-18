@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.smartcart.app/v1/shopping/grocery-trip-result.schema.json",
+  "title": "Stateless grocery trip planning result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "resolverVersion", "requestId", "data"],
+  "properties": {
+    "schemaVersion": {
+      "$ref": "https://schemas.smartcart.app/v1/common/contract-fields.schema.json#/$defs/schemaVersion"
+    },
+    "resolverVersion": {
+      "$ref": "https://schemas.smartcart.app/v1/common/contract-fields.schema.json#/$defs/resolverVersion"
+    },
+    "requestId": {
+      "$ref": "https://schemas.smartcart.app/v1/common/contract-fields.schema.json#/$defs/requestId"
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tripId",
+        "itemsToShop",
+        "pantrySatisfiedItems",
+        "unresolvedItems",
+        "costs",
+        "issues"
+      ],
+      "properties": {
+        "tripId": {
+          "$ref": "https://schemas.smartcart.app/v1/common/contract-fields.schema.json#/$defs/entityId"
+        },
+        "itemsToShop": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/plannedItem" }
+        },
+        "pantrySatisfiedItems": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/plannedItem" }
+        },
+        "unresolvedItems": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/unresolvedItem" }
+        },
+        "costs": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "currencyCode",
+            "recipeConsumptionCost",
+            "estimatedCheckoutCost",
+            "surplusValue",
+            "reason"
+          ],
+          "properties": {
+            "status": { "const": "requiresRetailerEvidence" },
+            "currencyCode": { "type": "null" },
+            "recipeConsumptionCost": { "type": "null" },
+            "estimatedCheckoutCost": { "type": "null" },
+            "surplusValue": { "type": "null" },
+            "reason": { "type": "string", "minLength": 1, "maxLength": 500 }
+          }
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "$ref": "https://schemas.smartcart.app/v1/common/resolution-issue.schema.json"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "requirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["recipeId", "ingredientId", "sourceText", "quantity"],
+      "properties": {
+        "recipeId": {
+          "$ref": "https://schemas.smartcart.app/v1/common/contract-fields.schema.json#/$defs/entityId"
+        },
+        "ingredientId": {
+          "$ref": "https://schemas.smartcart.app/v1/common/contract-fields.schema.json#/$defs/entityId"
+        },
+        "sourceText": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "quantity": {
+          "$ref": "https://schemas.smartcart.app/v1/ingredient/ingredient-input.schema.json#/properties/quantity"
+        }
+      }
+    },
+    "plannedItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identityKey", "canonicalName", "retailerQuery", "requirements"],
+      "properties": {
+        "identityKey": { "type": "string", "pattern": "^smartcart-food:[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "canonicalName": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "retailerQuery": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "requirements": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/requirement" }
+        }
+      }
+    },
+    "unresolvedItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["recipeId", "ingredientId", "sourceText", "issues"],
+      "properties": {
+        "recipeId": {
+          "$ref": "https://schemas.smartcart.app/v1/common/contract-fields.schema.json#/$defs/entityId"
+        },
+        "ingredientId": {
+          "$ref": "https://schemas.smartcart.app/v1/common/contract-fields.schema.json#/$defs/entityId"
+        },
+        "sourceText": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "issues": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "https://schemas.smartcart.app/v1/common/resolution-issue.schema.json"
+          }
+        }
+      }
+    }
+  }
+}

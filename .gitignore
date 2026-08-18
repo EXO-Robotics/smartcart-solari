@@ -10,3 +10,4 @@ SmartCart-Simulator.png
 !.env.example
 backend/.env
 backend/node_modules/
+.vercel

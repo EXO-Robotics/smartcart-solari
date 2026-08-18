@@ -31,6 +31,13 @@ function divideEstimate(estimate, divisor) {
   };
 }
 
+function addNutritionPairs(pairs) {
+  return {
+    energyKilocalories: addEstimates(pairs.map((pair) => pair.energyKilocalories)),
+    proteinGrams: addEstimates(pairs.map((pair) => pair.proteinGrams))
+  };
+}
+
 function aggregateNutrition(resolutions) {
   const complete = resolutions.every((resolution) => resolution.nutrition !== null);
   if (!complete || resolutions.length === 0) return null;
@@ -126,6 +133,47 @@ export class TripIntelligenceService {
           sourceVersion: this.resolverVersion,
           sourceRecordId: null,
           description: `Included ingredient estimates summed and divided by ${recipe.servings} servings.`
+        }],
+        issues
+      }
+    };
+  }
+
+  async estimateMealPrepNutrition(mealPlan) {
+    if (!Array.isArray(mealPlan.recipes) || mealPlan.recipes.length === 0) {
+      throw new TypeError('Meal Prep requires at least one recipe');
+    }
+    const estimates = await Promise.all(
+      mealPlan.recipes.map(async (recipe) => (await this.estimateRecipeNutrition(recipe)).data)
+    );
+    const completeTotals = estimates.every((estimate) => estimate.totals !== null);
+    const totals = completeTotals
+      ? addNutritionPairs(estimates.map((estimate) => estimate.totals))
+      : null;
+    const issues = estimates.flatMap((estimate) => estimate.issues);
+    if (totals === null) {
+      issues.push({
+        code: 'meal_prep_nutrition_incomplete',
+        severity: 'review',
+        message: 'At least one recipe has unresolved nutrition.',
+        field: 'totals',
+        evidenceIds: []
+      });
+    }
+    return {
+      resolverVersion: this.resolverVersion,
+      data: {
+        mealPlanId: mealPlan.mealPlanId,
+        recipeEstimates: estimates,
+        totals,
+        confidence: weakestConfidence(estimates.map((estimate) => estimate.confidence)),
+        evidence: [{
+          evidenceId: `calculation-${mealPlan.mealPlanId}`,
+          kind: 'calculation',
+          sourceName: 'TripIntelligenceService',
+          sourceVersion: this.resolverVersion,
+          sourceRecordId: null,
+          description: `${estimates.length} frozen recipe estimates were aggregated without changing their serving scales.`
         }],
         issues
       }

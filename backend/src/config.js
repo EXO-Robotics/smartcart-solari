@@ -35,6 +35,9 @@ export function loadConfig(overrides = {}) {
     barcodePositiveCacheTtlMs: integer('BARCODE_POSITIVE_CACHE_TTL_SECONDS', 86_400, { max: 31_536_000 }) * 1_000,
     barcodeNegativeCacheTtlMs: integer('BARCODE_NEGATIVE_CACHE_TTL_SECONDS', 900, { max: 86_400 }) * 1_000,
     barcodeProviderRateLimit: integer('BARCODE_PROVIDER_RATE_LIMIT_PER_MINUTE', 12, { max: 15 }),
+    usdaFoodDataApiKey: process.env.USDA_FDC_API_KEY || undefined,
+    usdaFoodDataBaseUrl: process.env.USDA_FDC_BASE_URL ?? 'https://api.nal.usda.gov/fdc/v1',
+    usdaFoodDataTimeoutMs: integer('USDA_FDC_TIMEOUT_MS', 8_000, { max: 30_000 }),
     instacartApiKey: process.env.INSTACART_API_KEY || undefined,
     instacartApiBaseUrl: process.env.INSTACART_API_BASE_URL ?? (
       env === 'production' ? 'https://connect.instacart.com' : 'https://connect.dev.instacart.tools'

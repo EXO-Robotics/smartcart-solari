@@ -91,3 +91,17 @@ test('ingredients excluded from the recipe are not included in nutrition totals'
   assert.equal(result.data.confidence, 'unresolved');
   assert.equal(result.data.issues[0].code, 'recipe_nutrition_incomplete');
 });
+
+test('Meal Prep aggregates frozen recipe estimates without changing recipe servings', async () => {
+  const request = await readJson('recipe-request.json');
+  const service = await fixtureService();
+  const result = await service.estimateMealPrepNutrition({
+    mealPlanId: '10000000-0000-4000-8000-000000000901',
+    recipes: [request.data, { ...request.data, recipeId: '10000000-0000-4000-8000-000000000902' }]
+  });
+
+  assert.equal(result.data.recipeEstimates.length, 2);
+  assert.equal(result.data.recipeEstimates[0].servings, 4);
+  assert.equal(result.data.totals.energyKilocalories.preferred, 756);
+  assert.equal(result.data.totals.proteinGrams.preferred, 66.6);
+});

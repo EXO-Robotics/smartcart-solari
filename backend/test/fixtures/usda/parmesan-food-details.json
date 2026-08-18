@@ -1,0 +1,35 @@
+{
+  "fdcId": 171247,
+  "description": "Cheese, parmesan, grated",
+  "dataType": "SR Legacy",
+  "foodPortions": [
+    {
+      "gramWeight": 28.35,
+      "amount": 1,
+      "measureUnit": { "name": "undetermined" },
+      "modifier": "oz"
+    },
+    {
+      "gramWeight": 100,
+      "amount": 1,
+      "measureUnit": { "name": "undetermined" },
+      "modifier": "cup"
+    },
+    {
+      "gramWeight": 5,
+      "amount": 1,
+      "measureUnit": { "name": "undetermined" },
+      "modifier": "tbsp"
+    }
+  ],
+  "foodNutrients": [
+    {
+      "nutrient": { "id": 1008, "name": "Energy", "unitName": "kcal" },
+      "amount": 420
+    },
+    {
+      "nutrient": { "id": 1003, "name": "Protein", "unitName": "g" },
+      "amount": 28.42
+    }
+  ]
+}

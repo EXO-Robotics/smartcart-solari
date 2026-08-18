@@ -10,11 +10,14 @@
   "scripts": {
     "start": "node src/server.js",
     "test": "node --test",
-    "test:trip-intelligence": "node --test test/contracts.test.js test/trip-intelligence-service.test.js",
+    "test:trip-intelligence": "node --test test/contracts.test.js test/trip-intelligence-service.test.js test/food-data-central.test.js test/public-trip-intelligence-api.test.js test/recipe-text-analyzer.test.js test/mcp-server.test.js test/public-mcp-api.test.js",
+    "mcp:stdio": "node src/mcp/stdio.js",
     "validate:weekly-meals": "node scripts/validate-weekly-meals.mjs"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0",
     "ajv": "8.20.0",
-    "ajv-formats": "3.0.1"
+    "ajv-formats": "3.0.1",
+    "zod": "4.4.3"
   }
 }

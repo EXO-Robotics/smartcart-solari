@@ -4,6 +4,12 @@
   "functions": {
     "api/index.js": {
       "maxDuration": 35
+    },
+    "api/intelligence.js": {
+      "maxDuration": 35
+    },
+    "api/mcp.js": {
+      "maxDuration": 35
     }
   },
   "routes": [
@@ -19,6 +25,16 @@
       "src": "/v1/barcodes/(?<gtin>\\d{8,14})",
       "methods": ["GET"],
       "dest": "/api/index.js?route=barcode&gtin=$gtin"
+    },
+    {
+      "src": "/v1/intelligence/nutrition/recipes/estimate",
+      "methods": ["POST"],
+      "dest": "/api/intelligence.js?route=recipe-nutrition"
+    },
+    {
+      "src": "/mcp",
+      "methods": ["POST"],
+      "dest": "/api/mcp.js?route=mcp"
     },
     {
       "src": "/.*",
