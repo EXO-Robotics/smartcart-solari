@@ -24,8 +24,63 @@ tags:
   - name: Affiliate links
   - name: Recipe pages
   - name: Barcode identity
+  - name: Trip Intelligence
   - name: Instacart handoffs
 paths:
+  /v1/intelligence/nutrition/recipes/estimate:
+    post:
+      tags: [Trip Intelligence]
+      summary: Estimate reviewed recipe nutrition from portable v1 contracts
+      description: |
+        Validates the authoritative recipe-nutrition request contract, resolves ingredient identity
+        and mass conservatively, and uses server-side USDA FoodData Central evidence for energy and
+        protein. Pantry shopping intent does not change recipe nutrition. Missing or semantic quantities
+        remain unresolved and never become quantity one.
+      operationId: estimateRecipeNutrition
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../contracts/v1/nutrition/recipe-nutrition-request.schema.json'
+      responses:
+        '200':
+          description: Contract-valid nutrition estimate with evidence, confidence, and issues.
+          content:
+            application/json:
+              schema:
+                $ref: '../contracts/v1/nutrition/recipe-nutrition-estimate.schema.json'
+        '400':
+          description: Invalid SmartCart transport contract.
+          content:
+            application/json:
+              schema:
+                $ref: '../contracts/v1/intelligence-error.schema.json'
+        '415':
+          description: Request is not JSON.
+          content:
+            application/json:
+              schema:
+                $ref: '../contracts/v1/intelligence-error.schema.json'
+        '429':
+          description: USDA provider rate limited the server.
+          content:
+            application/json:
+              schema:
+                $ref: '../contracts/v1/intelligence-error.schema.json'
+        '503':
+          description: Trip Intelligence or USDA provider is unavailable or not configured.
+          content:
+            application/json:
+              schema:
+                $ref: '../contracts/v1/intelligence-error.schema.json'
+        '504':
+          description: USDA evidence request timed out.
+          content:
+            application/json:
+              schema:
+                $ref: '../contracts/v1/intelligence-error.schema.json'
   /v1/barcodes/{gtin}:
     get:
       tags: [Barcode identity]
