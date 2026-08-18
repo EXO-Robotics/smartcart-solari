@@ -93,7 +93,7 @@ Salt to taste`
         recipe_text: '1 cup Parmesan cheese'
       }
     });
-    assert(!estimate.isError, 'estimate_recipe returned an MCP error');
+    assert(!estimate.isError, `estimate_recipe returned an MCP error: ${JSON.stringify(estimate.structuredContent ?? estimate.content)}`);
     const nutrition = estimate.structuredContent?.nutrition?.data;
     assert(nutrition?.totals?.energyKilocalories?.preferred === 420, 'USDA energy estimate did not match the selected official record');
     assert(nutrition?.totals?.proteinGrams?.preferred === 28.42, 'USDA protein estimate did not match the selected official record');
@@ -108,7 +108,7 @@ Salt to taste`
         ]
       }
     });
-    assert(!mealPlan.isError, 'prepare_meal_plan returned an MCP error');
+    assert(!mealPlan.isError, `prepare_meal_plan returned an MCP error: ${JSON.stringify(mealPlan.structuredContent ?? mealPlan.content)}`);
     const mealPlanNutrition = mealPlan.structuredContent?.nutrition?.data;
     assert(mealPlanNutrition?.recipeEstimates?.length === 2, 'Meal Prep did not preserve both recipe estimates');
     assert(mealPlanNutrition?.recipeEstimates?.[0]?.servings === 4, 'First recipe serving scale changed');
