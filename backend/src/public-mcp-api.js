@@ -1,9 +1,10 @@
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { loadConfig } from './config.js';
 import { HttpError, readJson } from './lib/http.js';
+import { FixedWindowRateLimiter } from './lib/rate-limiter.js';
 import { createSmartCartMcpServer } from './mcp/server.js';
 
-function jsonRpcError(response, status, message) {
+function jsonRpcError(response, status, message, headers = {}) {
   const body = JSON.stringify({
     jsonrpc: '2.0',
     error: { code: -32000, message },
@@ -13,7 +14,8 @@ function jsonRpcError(response, status, message) {
     'content-type': 'application/json; charset=utf-8',
     'content-length': Buffer.byteLength(body),
     'cache-control': 'no-store',
-    'x-content-type-options': 'nosniff'
+    'x-content-type-options': 'nosniff',
+    ...headers
   });
   response.end(body);
 }
@@ -21,6 +23,11 @@ function jsonRpcError(response, status, message) {
 export function createPublicMcpApi(options = {}) {
   const config = loadConfig(options.config);
   const createServer = options.createServer ?? (() => createSmartCartMcpServer(options));
+  const limiter = options.limiter ?? new FixedWindowRateLimiter({
+    limit: config.mcpRateLimitPerMinute,
+    windowMs: 60_000,
+    now: options.now ?? Date.now
+  });
 
   async function handler(request, response) {
     const url = new URL(request.url ?? '/', 'https://smartcart.invalid');
@@ -31,6 +38,22 @@ export function createPublicMcpApi(options = {}) {
       );
     if (!routed || request.method !== 'POST') {
       jsonRpcError(response, 405, 'Method not allowed. Use POST /mcp.');
+      return;
+    }
+
+    const rate = limiter.consume('mcp');
+    const rateHeaders = {
+      'x-rate-limit-limit': String(rate.limit),
+      'x-rate-limit-remaining': String(rate.remaining),
+      'x-rate-limit-reset': String(Math.ceil(rate.resetAt / 1_000))
+    };
+    if (!rate.allowed) {
+      jsonRpcError(
+        response,
+        429,
+        'SmartCart MCP request limit exceeded.',
+        { ...rateHeaders, 'retry-after': String(rate.retryAfterSeconds) }
+      );
       return;
     }
 
@@ -53,6 +76,9 @@ export function createPublicMcpApi(options = {}) {
     });
     try {
       await server.connect(transport);
+      response.setHeader('x-rate-limit-limit', rateHeaders['x-rate-limit-limit']);
+      response.setHeader('x-rate-limit-remaining', rateHeaders['x-rate-limit-remaining']);
+      response.setHeader('x-rate-limit-reset', rateHeaders['x-rate-limit-reset']);
       await transport.handleRequest(request, response, body);
     } catch {
       if (!response.headersSent) jsonRpcError(response, 500, 'Internal MCP error.');

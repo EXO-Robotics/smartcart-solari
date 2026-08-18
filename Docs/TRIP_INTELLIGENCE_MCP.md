@@ -49,10 +49,15 @@ Set the USDA FoodData Central key only in the server environment:
 USDA_FDC_API_KEY=<data.gov key>
 USDA_FDC_BASE_URL=https://api.nal.usda.gov/fdc/v1
 USDA_FDC_TIMEOUT_MS=8000
+TRIP_INTELLIGENCE_RATE_LIMIT_PER_MINUTE=30
+MCP_RATE_LIMIT_PER_MINUTE=60
 ```
 
 Never add the key to iOS configuration, plugin arguments, source control, fixtures, logs, or tool
 results. `DEMO_KEY` is suitable only for the bounded live development verifier, not production.
+The two process-local admission limits protect warm server instances and provider quota; production
+should additionally enforce an equivalent Vercel Firewall rate rule because serverless instances do
+not share in-memory counters.
 
 ## Verification
 

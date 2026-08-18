@@ -7,10 +7,11 @@ import test from 'node:test';
 import { createSmartCartMcpServer } from '../src/mcp/server.js';
 import { createPublicMcpApi } from '../src/public-mcp-api.js';
 
-async function listen(pluginService) {
+async function listen(pluginService, options = {}) {
   const { handler } = createPublicMcpApi({
     createServer: () => createSmartCartMcpServer({ pluginService }),
-    config: { host: '127.0.0.1', port: 0 }
+    config: { host: '127.0.0.1', port: 0, ...(options.config ?? {}) },
+    limiter: options.limiter
   });
   const httpServer = createServer(handler);
   httpServer.listen(0, '127.0.0.1');
@@ -59,5 +60,39 @@ test('MCP endpoint rejects non-POST methods', async () => {
     assert.equal(payload.error.message, 'Method not allowed. Use POST /mcp.');
   } finally {
     await service.close();
+  }
+});
+
+test('MCP endpoint emits JSON-RPC 429 before starting a tool server', async () => {
+  let servers = 0;
+  const { handler } = createPublicMcpApi({
+    createServer() { servers += 1; return createSmartCartMcpServer({ pluginService: {} }); },
+    limiter: {
+      consume() {
+        return { allowed: false, limit: 1, remaining: 0, resetAt: 60_000, retryAfterSeconds: 60 };
+      }
+    },
+    config: { host: '127.0.0.1', port: 0 }
+  });
+  const httpServer = createServer(handler);
+  httpServer.listen(0, '127.0.0.1');
+  await once(httpServer, 'listening');
+  const address = httpServer.address();
+  try {
+    const response = await fetch(`http://127.0.0.1:${address.port}/mcp`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}'
+    });
+    assert.equal(response.status, 429);
+    assert.equal(response.headers.get('retry-after'), '60');
+    assert.equal(response.headers.get('x-rate-limit-remaining'), '0');
+    const payload = await response.json();
+    assert.equal(payload.jsonrpc, '2.0');
+    assert.equal(payload.error.message, 'SmartCart MCP request limit exceeded.');
+    assert.equal(servers, 0);
+  } finally {
+    httpServer.close();
+    await once(httpServer, 'close');
   }
 });

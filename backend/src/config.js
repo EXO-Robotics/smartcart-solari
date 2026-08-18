@@ -38,6 +38,8 @@ export function loadConfig(overrides = {}) {
     usdaFoodDataApiKey: process.env.USDA_FDC_API_KEY || undefined,
     usdaFoodDataBaseUrl: process.env.USDA_FDC_BASE_URL ?? 'https://api.nal.usda.gov/fdc/v1',
     usdaFoodDataTimeoutMs: integer('USDA_FDC_TIMEOUT_MS', 8_000, { max: 30_000 }),
+    tripIntelligenceRateLimitPerMinute: integer('TRIP_INTELLIGENCE_RATE_LIMIT_PER_MINUTE', 30, { max: 1_000 }),
+    mcpRateLimitPerMinute: integer('MCP_RATE_LIMIT_PER_MINUTE', 60, { max: 1_000 }),
     instacartApiKey: process.env.INSTACART_API_KEY || undefined,
     instacartApiBaseUrl: process.env.INSTACART_API_BASE_URL ?? (
       env === 'production' ? 'https://connect.instacart.com' : 'https://connect.dev.instacart.tools'

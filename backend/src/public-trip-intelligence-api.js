@@ -3,6 +3,7 @@ import { ContractValidationError, createContractValidator } from './contracts/co
 import { loadConfig } from './config.js';
 import { HttpError, readJson } from './lib/http.js';
 import { createLogger } from './lib/logger.js';
+import { FixedWindowRateLimiter } from './lib/rate-limiter.js';
 import { createTripIntelligenceService } from './trip-intelligence/create-trip-intelligence-service.js';
 import { FoodDataCentralError } from './trip-intelligence/food-data-central-client.js';
 
@@ -28,7 +29,7 @@ function routeForRequest(url) {
   return null;
 }
 
-function sendJson(response, status, payload, { requestID } = {}) {
+function sendJson(response, status, payload, { requestID, headers = {} } = {}) {
   const body = JSON.stringify(payload);
   response.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
@@ -38,7 +39,8 @@ function sendJson(response, status, payload, { requestID } = {}) {
     'x-frame-options': 'DENY',
     'referrer-policy': 'no-referrer',
     'x-smartcart-data-mode': 'trip-intelligence-v1',
-    ...(requestID ? { 'x-request-id': requestID } : {})
+    ...(requestID ? { 'x-request-id': requestID } : {}),
+    ...headers
   });
   response.end(body);
 }
@@ -67,6 +69,11 @@ export function createPublicTripIntelligenceApi(options = {}) {
     ? Promise.resolve(options.validator)
     : createContractValidator();
   let service = options.tripIntelligenceService ?? null;
+  const limiter = options.limiter ?? new FixedWindowRateLimiter({
+    limit: config.tripIntelligenceRateLimitPerMinute,
+    windowMs: 60_000,
+    now: options.now ?? Date.now
+  });
 
   function resolvedService() {
     if (service === null) {
@@ -95,6 +102,30 @@ export function createPublicTripIntelligenceApi(options = {}) {
         return;
       }
 
+      const rate = limiter.consume('trip-intelligence');
+      const rateHeaders = {
+        'x-rate-limit-limit': String(rate.limit),
+        'x-rate-limit-remaining': String(rate.remaining),
+        'x-rate-limit-reset': String(Math.ceil(rate.resetAt / 1_000))
+      };
+      if (!rate.allowed) {
+        sendJson(response, 429, {
+          schemaVersion: '1.0',
+          resolverVersion: 'trip-intelligence-api-v1',
+          requestId: requestID,
+          error: {
+            code: 'rate_limited',
+            message: 'Trip Intelligence request limit exceeded.',
+            retryable: true,
+            issues: []
+          }
+        }, {
+          requestID,
+          headers: { ...rateHeaders, 'retry-after': String(rate.retryAfterSeconds) }
+        });
+        return;
+      }
+
       const payload = await readJson(request, config.maxBodyBytes);
       const validator = await validatorPromise;
       validator.assert(requestSchemaId, payload);
@@ -106,7 +137,7 @@ export function createPublicTripIntelligenceApi(options = {}) {
         data: result.data
       };
       validator.assert(responseSchemaId, responsePayload);
-      sendJson(response, 200, responsePayload, { requestID });
+      sendJson(response, 200, responsePayload, { requestID, headers: rateHeaders });
     } catch (error) {
       const isContractError = error instanceof ContractValidationError;
       const isHttpError = error instanceof HttpError;

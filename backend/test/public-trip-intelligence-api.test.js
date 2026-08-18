@@ -15,13 +15,14 @@ async function fixture(name) {
   ));
 }
 
-async function listen(tripIntelligenceService) {
+async function listen(tripIntelligenceService, options = {}) {
   const validator = await createContractValidator();
   const { handler } = createPublicTripIntelligenceApi({
     logger: silentLogger,
     validator,
     tripIntelligenceService,
-    config: { host: '127.0.0.1', port: 0 }
+    config: { host: '127.0.0.1', port: 0, ...(options.config ?? {}) },
+    limiter: options.limiter
   });
   const server = createServer(handler);
   server.listen(0, '127.0.0.1');
@@ -79,6 +80,35 @@ test('invalid and unknown requests fail closed without invoking intelligence', a
     const unknown = await fetch(`${service.baseURL}/v1/intelligence/anything`, { method: 'POST' });
     assert.equal(unknown.status, 404);
     assert.equal((await unknown.json()).error.code, 'route_not_found');
+    assert.equal(calls, 0);
+  } finally {
+    await service.close();
+  }
+});
+
+test('public Trip Intelligence rejects over-limit requests before provider access', async () => {
+  let calls = 0;
+  const service = await listen({
+    async estimateRecipeNutrition() { calls += 1; throw new Error('must not run'); }
+  }, {
+    limiter: {
+      consume() {
+        return { allowed: false, limit: 1, remaining: 0, resetAt: 60_000, retryAfterSeconds: 60 };
+      }
+    }
+  });
+  try {
+    const response = await fetch(`${service.baseURL}/v1/intelligence/nutrition/recipes/estimate`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}'
+    });
+    assert.equal(response.status, 429);
+    assert.equal(response.headers.get('retry-after'), '60');
+    assert.equal(response.headers.get('x-rate-limit-remaining'), '0');
+    const payload = await response.json();
+    assert.equal(payload.error.code, 'rate_limited');
+    assert.equal(payload.error.retryable, true);
     assert.equal(calls, 0);
   } finally {
     await service.close();
