@@ -83,6 +83,7 @@ Salt to taste`
   assert(trip.structuredContent?.trip?.data?.costs?.estimatedCheckoutCost === null, 'Checkout cost must remain unavailable without retailer evidence');
 
   let liveNutrition = 'skipped-no-usda-key';
+  let liveMealPlan = 'skipped-no-usda-key';
   if (process.env.USDA_FDC_API_KEY) {
     const estimate = await client.callTool({
       name: 'estimate_recipe',
@@ -97,6 +98,24 @@ Salt to taste`
     assert(nutrition?.totals?.energyKilocalories?.preferred === 420, 'USDA energy estimate did not match the selected official record');
     assert(nutrition?.totals?.proteinGrams?.preferred === 28.42, 'USDA protein estimate did not match the selected official record');
     liveNutrition = 'passed';
+
+    const mealPlan = await client.callTool({
+      name: 'prepare_meal_plan',
+      arguments: {
+        recipes: [
+          { title: 'Parmesan A', servings: 4, recipe_text: '1 cup Parmesan cheese' },
+          { title: 'Parmesan B', servings: 2, recipe_text: '1 cup Parmesan cheese' }
+        ]
+      }
+    });
+    assert(!mealPlan.isError, 'prepare_meal_plan returned an MCP error');
+    const mealPlanNutrition = mealPlan.structuredContent?.nutrition?.data;
+    assert(mealPlanNutrition?.recipeEstimates?.length === 2, 'Meal Prep did not preserve both recipe estimates');
+    assert(mealPlanNutrition?.recipeEstimates?.[0]?.servings === 4, 'First recipe serving scale changed');
+    assert(mealPlanNutrition?.recipeEstimates?.[1]?.servings === 2, 'Second recipe serving scale changed');
+    assert(mealPlanNutrition?.totals?.energyKilocalories?.preferred === 840, 'Meal Prep energy aggregation was incorrect');
+    assert(mealPlanNutrition?.totals?.proteinGrams?.preferred === 56.84, 'Meal Prep protein aggregation was incorrect');
+    liveMealPlan = 'passed';
   }
 
   process.stdout.write(`${JSON.stringify({
@@ -106,7 +125,8 @@ Salt to taste`
     tools: toolNames,
     analyzeRecipe: 'passed',
     planGroceryTrip: 'passed',
-    liveUsdaNutrition: liveNutrition
+    liveUsdaNutrition: liveNutrition,
+    liveMealPlan
   }, null, 2)}\n`);
 } catch (error) {
   if (stderr.length > 0) process.stderr.write(stderr.join(''));
