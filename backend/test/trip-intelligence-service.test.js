@@ -1,0 +1,93 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import test from 'node:test';
+import { fileURLToPath } from 'node:url';
+import { contractEnvelope } from '../src/contracts/envelope.js';
+import { createContractValidator } from '../src/contracts/contract-validator.js';
+import { TripIntelligenceService } from '../src/trip-intelligence/trip-intelligence-service.js';
+
+const testDirectory = path.dirname(fileURLToPath(import.meta.url));
+const contractsRoot = path.resolve(testDirectory, '../../contracts');
+const fixtureRoot = path.join(contractsRoot, 'fixtures/v1/chicken-parmesan');
+
+async function readJson(name) {
+  return JSON.parse(await readFile(path.join(fixtureRoot, name), 'utf8'));
+}
+
+async function fixtureService() {
+  const identity = await readJson('identity-output.json');
+  const mass = await readJson('mass-output.json');
+  const nutrition = await readJson('nutrition-output.json');
+
+  return new TripIntelligenceService({
+    resolverVersion: 'fixture-nutrition-v1',
+    identityResolver: {
+      async resolve(ingredient) {
+        assert.equal(ingredient.ingredientId, identity.data.ingredientId);
+        return structuredClone(identity.data);
+      }
+    },
+    massEstimator: {
+      async estimate({ ingredient, identity: resolvedIdentity }) {
+        assert.equal(ingredient.ingredientId, mass.data.ingredientId);
+        assert.equal(resolvedIdentity.identityKey, identity.data.identityKey);
+        return structuredClone(mass.data);
+      }
+    },
+    nutritionResolver: {
+      async resolve({ ingredient, identity: resolvedIdentity, mass: resolvedMass }) {
+        assert.equal(ingredient.ingredientId, nutrition.data.ingredientId);
+        assert.equal(resolvedIdentity.identityKey, nutrition.data.identityKey);
+        assert.deepEqual(resolvedMass.massGrams, nutrition.data.massGrams);
+        return structuredClone(nutrition.data);
+      }
+    }
+  });
+}
+
+test('Trip Intelligence reproduces the recipe golden contract', async () => {
+  const validator = await createContractValidator({ contractsRoot });
+  const request = await readJson('recipe-request.json');
+  const expected = await readJson('recipe-nutrition-output.json');
+  validator.assert(
+    'https://schemas.smartcart.app/v1/nutrition/recipe-nutrition-request.schema.json',
+    request
+  );
+
+  const service = await fixtureService();
+  const result = await service.estimateRecipeNutrition(request.data);
+  const response = contractEnvelope({ requestId: request.requestId, ...result });
+
+  validator.assert(
+    'https://schemas.smartcart.app/v1/nutrition/recipe-nutrition-estimate.schema.json',
+    response
+  );
+  assert.deepEqual(response, expected);
+});
+
+test('shopping inclusion does not change recipe nutrition', async () => {
+  const request = await readJson('recipe-request.json');
+  request.data.ingredients[0].includeInTrip = false;
+
+  const service = await fixtureService();
+  const result = await service.estimateRecipeNutrition(request.data);
+
+  assert.equal(result.data.ingredientResolutions.length, 1);
+  assert.equal(result.data.totals.energyKilocalories.preferred, 378);
+  assert.equal(result.data.perServing.energyKilocalories.preferred, 94.5);
+});
+
+test('ingredients excluded from the recipe are not included in nutrition totals', async () => {
+  const request = await readJson('recipe-request.json');
+  request.data.ingredients[0].includedInRecipe = false;
+
+  const service = await fixtureService();
+  const result = await service.estimateRecipeNutrition(request.data);
+
+  assert.equal(result.data.ingredientResolutions.length, 0);
+  assert.equal(result.data.totals, null);
+  assert.equal(result.data.perServing, null);
+  assert.equal(result.data.confidence, 'unresolved');
+  assert.equal(result.data.issues[0].code, 'recipe_nutrition_incomplete');
+});

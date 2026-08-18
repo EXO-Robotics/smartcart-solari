@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.smartcart.app/v1/ingredient/ingredient-identity.schema.json",
+  "title": "Ingredient identity resolution envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "resolverVersion", "requestId", "data"],
+  "properties": {
+    "schemaVersion": {
+      "$ref": "https://schemas.smartcart.app/v1/common/contract-fields.schema.json#/$defs/schemaVersion"
+    },
+    "resolverVersion": {
+      "$ref": "https://schemas.smartcart.app/v1/common/contract-fields.schema.json#/$defs/resolverVersion"
+    },
+    "requestId": {
+      "$ref": "https://schemas.smartcart.app/v1/common/contract-fields.schema.json#/$defs/requestId"
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ingredientId",
+        "identityKey",
+        "canonicalName",
+        "modifiers",
+        "confidence",
+        "safeForRetailerQuery",
+        "evidence",
+        "issues"
+      ],
+      "properties": {
+        "ingredientId": {
+          "$ref": "https://schemas.smartcart.app/v1/common/contract-fields.schema.json#/$defs/entityId"
+        },
+        "identityKey": {
+          "type": ["string", "null"],
+          "pattern": "^smartcart-food:[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "canonicalName": { "type": ["string", "null"], "maxLength": 300 },
+        "modifiers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["form", "variety", "criticalAttributes", "unclassified"],
+          "properties": {
+            "form": { "type": ["string", "null"], "maxLength": 100 },
+            "variety": { "type": ["string", "null"], "maxLength": 100 },
+            "criticalAttributes": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1, "maxLength": 100 },
+              "uniqueItems": true
+            },
+            "unclassified": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1, "maxLength": 100 },
+              "uniqueItems": true
+            }
+          }
+        },
+        "confidence": {
+          "$ref": "https://schemas.smartcart.app/v1/common/resolution-confidence.schema.json"
+        },
+        "safeForRetailerQuery": { "type": "boolean" },
+        "retailerQuery": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "https://schemas.smartcart.app/v1/common/resolution-evidence.schema.json"
+          }
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "$ref": "https://schemas.smartcart.app/v1/common/resolution-issue.schema.json"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "safeForRetailerQuery": { "const": true } },
+            "required": ["safeForRetailerQuery"]
+          },
+          "then": {
+            "required": ["retailerQuery"],
+            "properties": {
+              "identityKey": { "type": "string" },
+              "canonicalName": { "type": "string", "minLength": 1 },
+              "retailerQuery": { "type": "string", "minLength": 1, "maxLength": 300 }
+            }
+          },
+          "else": {
+            "not": { "required": ["retailerQuery"] }
+          }
+        }
+      ]
+    }
+  }
+}

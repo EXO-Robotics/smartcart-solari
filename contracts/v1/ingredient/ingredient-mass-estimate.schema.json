@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.smartcart.app/v1/ingredient/ingredient-mass-estimate.schema.json",
+  "title": "Ingredient mass estimate envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "resolverVersion", "requestId", "data"],
+  "properties": {
+    "schemaVersion": {
+      "$ref": "https://schemas.smartcart.app/v1/common/contract-fields.schema.json#/$defs/schemaVersion"
+    },
+    "resolverVersion": {
+      "$ref": "https://schemas.smartcart.app/v1/common/contract-fields.schema.json#/$defs/resolverVersion"
+    },
+    "requestId": {
+      "$ref": "https://schemas.smartcart.app/v1/common/contract-fields.schema.json#/$defs/requestId"
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ingredientId",
+        "sourceQuantity",
+        "massGrams",
+        "confidence",
+        "evidence",
+        "issues"
+      ],
+      "properties": {
+        "ingredientId": {
+          "$ref": "https://schemas.smartcart.app/v1/common/contract-fields.schema.json#/$defs/entityId"
+        },
+        "sourceQuantity": {
+          "oneOf": [
+            {
+              "$ref": "https://schemas.smartcart.app/v1/common/canonical-quantity.schema.json"
+            },
+            { "type": "null" }
+          ]
+        },
+        "massGrams": {
+          "oneOf": [
+            {
+              "$ref": "https://schemas.smartcart.app/v1/common/numeric-estimate.schema.json"
+            },
+            { "type": "null" }
+          ]
+        },
+        "confidence": {
+          "$ref": "https://schemas.smartcart.app/v1/common/resolution-confidence.schema.json"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "https://schemas.smartcart.app/v1/common/resolution-evidence.schema.json"
+          }
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "$ref": "https://schemas.smartcart.app/v1/common/resolution-issue.schema.json"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "schemaVersion": "1.0",
+  "resolverVersion": "fixture-nutrition-v1",
+  "requestId": "20000000-0000-4000-8000-000000000001",
+  "data": {
+    "recipeId": "10000000-0000-4000-8000-000000000001",
+    "servings": 4,
+    "ingredientResolutions": [
+      {
+        "ingredientId": "10000000-0000-4000-8000-000000000101",
+        "identityKey": "smartcart-food:parmesan-cheese",
+        "massGrams": {
+          "preferred": 90,
+          "minimum": 80,
+          "maximum": 100
+        },
+        "nutrition": {
+          "energyKilocalories": {
+            "preferred": 378,
+            "minimum": 336,
+            "maximum": 420
+          },
+          "proteinGrams": {
+            "preferred": 33.3,
+            "minimum": 29.6,
+            "maximum": 37
+          }
+        },
+        "confidence": "moderate",
+        "evidence": [
+          {
+            "evidenceId": "nutrition-parmesan-1",
+            "kind": "curatedData",
+            "sourceName": "Synthetic golden nutrition catalog",
+            "sourceVersion": "fixture-v1",
+            "sourceRecordId": "nutrition:parmesan-grated",
+            "description": "Deterministic test nutrient values; not a production or USDA claim."
+          }
+        ],
+        "issues": []
+      }
+    ],
+    "totals": {
+      "energyKilocalories": {
+        "preferred": 378,
+        "minimum": 336,
+        "maximum": 420
+      },
+      "proteinGrams": {
+        "preferred": 33.3,
+        "minimum": 29.6,
+        "maximum": 37
+      }
+    },
+    "perServing": {
+      "energyKilocalories": {
+        "preferred": 94.5,
+        "minimum": 84,
+        "maximum": 105
+      },
+      "proteinGrams": {
+        "preferred": 8.325,
+        "minimum": 7.4,
+        "maximum": 9.25
+      }
+    },
+    "confidence": "moderate",
+    "evidence": [
+      {
+        "evidenceId": "calculation-10000000-0000-4000-8000-000000000001",
+        "kind": "calculation",
+        "sourceName": "TripIntelligenceService",
+        "sourceVersion": "fixture-nutrition-v1",
+        "sourceRecordId": null,
+        "description": "Included ingredient estimates summed and divided by 4 servings."
+      }
+    ],
+    "issues": []
+  }
+}

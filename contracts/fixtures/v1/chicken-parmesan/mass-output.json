@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "1.0",
+  "resolverVersion": "fixture-mass-v1",
+  "requestId": "20000000-0000-4000-8000-000000000001",
+  "data": {
+    "ingredientId": "10000000-0000-4000-8000-000000000101",
+    "sourceQuantity": {
+      "value": 236.588,
+      "dimension": "volume",
+      "unit": "ml",
+      "certainty": "exact"
+    },
+    "massGrams": {
+      "preferred": 90,
+      "minimum": 80,
+      "maximum": 100
+    },
+    "confidence": "moderate",
+    "evidence": [
+      {
+        "evidenceId": "mass-parmesan-1",
+        "kind": "densityCatalog",
+        "sourceName": "Synthetic golden density catalog",
+        "sourceVersion": "fixture-v1",
+        "sourceRecordId": "density:parmesan-grated",
+        "description": "Deterministic test density range; not production nutrition evidence."
+      }
+    ],
+    "issues": [
+      {
+        "code": "density_estimated",
+        "severity": "informational",
+        "message": "Mass is estimated from a density range.",
+        "field": "massGrams",
+        "evidenceIds": ["mass-parmesan-1"]
+      }
+    ]
+  }
+}

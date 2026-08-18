@@ -61,6 +61,10 @@
 		A8B000000000000000000001 /* RecipeLinkCapabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8B000000000000000000001 /* RecipeLinkCapabilityTests.swift */; };
 		A9B000000000000000000001 /* LocalOperationRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9B000000000000000000001 /* LocalOperationRecorder.swift */; };
 		A9B000000000000000000002 /* LocalOperationRecorderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9B000000000000000000002 /* LocalOperationRecorderTests.swift */; };
+		A3F100000000000000000001 /* TripIntelligenceContracts.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3F100000000000000000001 /* TripIntelligenceContracts.swift */; };
+		A3F100000000000000000002 /* TripIntelligenceModelAdapters.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3F100000000000000000002 /* TripIntelligenceModelAdapters.swift */; };
+		A3F100000000000000000003 /* TripIntelligenceClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3F100000000000000000003 /* TripIntelligenceClient.swift */; };
+		A3F100000000000000000004 /* TripIntelligenceContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3F100000000000000000004 /* TripIntelligenceContractTests.swift */; };
 		A70000000000000000000001 /* WeeklyMealModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B70000000000000000000001 /* WeeklyMealModels.swift */; };
 		A70000000000000000000002 /* BundledWeeklyMealRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = B70000000000000000000002 /* BundledWeeklyMealRepository.swift */; };
 		A70000000000000000000003 /* WeeklyMealCostEstimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B70000000000000000000003 /* WeeklyMealCostEstimator.swift */; };
@@ -164,6 +168,10 @@
 		B10000000000000000000023 /* ExactProductIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExactProductIdentity.swift; sourceTree = "<group>"; };
 		B10000000000000000000027 /* ProductPurchaseGroupingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductPurchaseGroupingService.swift; sourceTree = "<group>"; };
 		B10000000000000000000028 /* SmartCartPersistenceCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartCartPersistenceCoordinator.swift; sourceTree = "<group>"; };
+		B3F100000000000000000001 /* TripIntelligenceContracts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripIntelligence/TripIntelligenceContracts.swift; sourceTree = "<group>"; };
+		B3F100000000000000000002 /* TripIntelligenceModelAdapters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripIntelligence/TripIntelligenceModelAdapters.swift; sourceTree = "<group>"; };
+		B3F100000000000000000003 /* TripIntelligenceClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripIntelligence/TripIntelligenceClient.swift; sourceTree = "<group>"; };
+		B3F100000000000000000004 /* TripIntelligenceContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripIntelligence/TripIntelligenceContractTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000001 /* SmartCartTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartCartTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000002 /* SmartCartTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SmartCartTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B20000000000000000000003 /* MealPrepAggregationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealPrepAggregationTests.swift; sourceTree = "<group>"; };
@@ -356,6 +364,9 @@
 		D1000000000000000000000B /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				B3F100000000000000000001 /* TripIntelligenceContracts.swift */,
+				B3F100000000000000000002 /* TripIntelligenceModelAdapters.swift */,
+				B3F100000000000000000003 /* TripIntelligenceClient.swift */,
 				B1000000000000000000000E /* Persistence.swift */,
 				B1000000000000000000000F /* RetailerCatalogService.swift */,
 				B10000000000000000000011 /* RetailConnectorRegistry.swift */,
@@ -428,6 +439,7 @@
 		D20000000000000000000001 /* SmartCartTests */ = {
 			isa = PBXGroup;
 			children = (
+				B3F100000000000000000004 /* TripIntelligenceContractTests.swift */,
 				B20000000000000000000001 /* SmartCartTests.swift */,
 				B20000000000000000000003 /* MealPrepAggregationTests.swift */,
 				B20000000000000000000004 /* ReleaseBlockerMigrationTests.swift */,
@@ -627,6 +639,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A3F100000000000000000001 /* TripIntelligenceContracts.swift in Sources */,
+				A3F100000000000000000002 /* TripIntelligenceModelAdapters.swift in Sources */,
+				A3F100000000000000000003 /* TripIntelligenceClient.swift in Sources */,
 				A10000000000000000000001 /* SmartCartApp.swift in Sources */,
 				A10000000000000000000002 /* Models.swift in Sources */,
 				A10000000000000000000003 /* AppModel.swift in Sources */,
@@ -684,6 +699,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A3F100000000000000000004 /* TripIntelligenceContractTests.swift in Sources */,
 				A20000000000000000000001 /* SmartCartTests.swift in Sources */,
 				A20000000000000000000002 /* MealPrepAggregationTests.swift in Sources */,
 				A20000000000000000000003 /* ReleaseBlockerMigrationTests.swift in Sources */,

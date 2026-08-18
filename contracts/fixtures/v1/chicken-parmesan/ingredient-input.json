@@ -1,0 +1,25 @@
+{
+  "ingredientId": "10000000-0000-4000-8000-000000000101",
+  "sourceText": "1 cup finely grated Parmesan cheese",
+  "name": "Parmesan cheese",
+  "preparation": "finely grated",
+  "quantity": {
+    "kind": "numeric",
+    "value": 1,
+    "minimumValue": null,
+    "unit": "cup"
+  },
+  "includedInRecipe": true,
+  "includeInTrip": true,
+  "brandPreference": null,
+  "evidence": [
+    {
+      "evidenceId": "source-parmesan-1",
+      "kind": "sourceText",
+      "sourceName": "Golden fixture source",
+      "sourceVersion": "fixture-v1",
+      "sourceRecordId": null,
+      "description": "Original reviewed ingredient text retained verbatim."
+    }
+  ]
+}

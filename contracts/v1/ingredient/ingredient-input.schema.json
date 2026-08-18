@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.smartcart.app/v1/ingredient/ingredient-input.schema.json",
+  "title": "Reviewed ingredient input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "ingredientId",
+    "sourceText",
+    "name",
+    "preparation",
+    "quantity",
+    "includedInRecipe",
+    "includeInTrip",
+    "evidence"
+  ],
+  "properties": {
+    "ingredientId": {
+      "$ref": "https://schemas.smartcart.app/v1/common/contract-fields.schema.json#/$defs/entityId"
+    },
+    "sourceText": { "type": "string", "minLength": 1, "maxLength": 2000 },
+    "name": { "type": "string", "minLength": 1, "maxLength": 300 },
+    "preparation": { "type": "string", "maxLength": 300 },
+    "quantity": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "value", "unit"],
+          "properties": {
+            "kind": { "const": "numeric" },
+            "value": { "type": "number", "exclusiveMinimum": 0 },
+            "minimumValue": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+            "unit": { "type": "string", "maxLength": 100 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "text"],
+          "properties": {
+            "kind": { "const": "semantic" },
+            "text": {
+              "type": "string",
+              "enum": ["as needed", "to taste", "for frying"]
+            }
+          }
+        },
+        { "type": "null" }
+      ]
+    },
+    "includedInRecipe": { "type": "boolean" },
+    "includeInTrip": {
+      "type": "boolean",
+      "description": "Shopping intent only. Pantry ownership may change this without changing nutrition."
+    },
+    "brandPreference": { "type": ["string", "null"], "maxLength": 300 },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "$ref": "https://schemas.smartcart.app/v1/common/resolution-evidence.schema.json"
+      },
+      "minItems": 1
+    }
+  }
+}

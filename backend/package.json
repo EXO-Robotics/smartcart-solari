@@ -10,6 +10,11 @@
   "scripts": {
     "start": "node src/server.js",
     "test": "node --test",
+    "test:trip-intelligence": "node --test test/contracts.test.js test/trip-intelligence-service.test.js",
     "validate:weekly-meals": "node scripts/validate-weekly-meals.mjs"
+  },
+  "dependencies": {
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1"
   }
 }

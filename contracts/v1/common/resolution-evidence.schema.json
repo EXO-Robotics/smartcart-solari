@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.smartcart.app/v1/common/resolution-evidence.schema.json",
+  "title": "Resolution evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["evidenceId", "kind", "sourceName", "description"],
+  "properties": {
+    "evidenceId": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "userProvided",
+        "sourceText",
+        "curatedData",
+        "densityCatalog",
+        "usdaFoodData",
+        "calculation",
+        "retailerCatalog"
+      ]
+    },
+    "sourceName": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "sourceVersion": { "type": ["string", "null"], "maxLength": 100 },
+    "sourceRecordId": { "type": ["string", "null"], "maxLength": 200 },
+    "description": { "type": "string", "minLength": 1, "maxLength": 1000 }
+  }
+}

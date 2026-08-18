@@ -9,3 +9,4 @@ SmartCart-Simulator.png
 .env.*
 !.env.example
 backend/.env
+backend/node_modules/

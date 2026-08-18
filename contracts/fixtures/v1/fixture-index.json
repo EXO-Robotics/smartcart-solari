@@ -1,0 +1,30 @@
+[
+  {
+    "path": "chicken-parmesan/ingredient-input.json",
+    "schemaId": "https://schemas.smartcart.app/v1/ingredient/ingredient-input.schema.json"
+  },
+  {
+    "path": "chicken-parmesan/identity-output.json",
+    "schemaId": "https://schemas.smartcart.app/v1/ingredient/ingredient-identity.schema.json"
+  },
+  {
+    "path": "chicken-parmesan/mass-output.json",
+    "schemaId": "https://schemas.smartcart.app/v1/ingredient/ingredient-mass-estimate.schema.json"
+  },
+  {
+    "path": "chicken-parmesan/nutrition-output.json",
+    "schemaId": "https://schemas.smartcart.app/v1/nutrition/nutrition-resolution.schema.json"
+  },
+  {
+    "path": "chicken-parmesan/recipe-request.json",
+    "schemaId": "https://schemas.smartcart.app/v1/nutrition/recipe-nutrition-request.schema.json"
+  },
+  {
+    "path": "chicken-parmesan/recipe-nutrition-output.json",
+    "schemaId": "https://schemas.smartcart.app/v1/nutrition/recipe-nutrition-estimate.schema.json"
+  },
+  {
+    "path": "semantic-quantity/ingredient-input.json",
+    "schemaId": "https://schemas.smartcart.app/v1/ingredient/ingredient-input.schema.json"
+  }
+]

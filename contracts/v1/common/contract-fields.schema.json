@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.smartcart.app/v1/common/contract-fields.schema.json",
+  "title": "SmartCart contract fields",
+  "$defs": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "resolverVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+    },
+    "requestId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "entityId": {
+      "type": "string",
+      "format": "uuid"
+    }
+  }
+}

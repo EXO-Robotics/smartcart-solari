@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.smartcart.app/v1/common/numeric-estimate.schema.json",
+  "title": "Numeric estimate",
+  "type": "object",
+  "smartcartOrderedEstimate": true,
+  "additionalProperties": false,
+  "required": ["preferred", "minimum", "maximum"],
+  "properties": {
+    "preferred": { "type": "number" },
+    "minimum": { "type": "number" },
+    "maximum": { "type": "number" }
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.smartcart.app/v1/common/canonical-quantity.schema.json",
+  "title": "Canonical quantity",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["value", "dimension", "unit", "certainty"],
+  "properties": {
+    "value": { "type": "number", "minimum": 0 },
+    "dimension": {
+      "type": "string",
+      "enum": ["mass", "volume", "count", "package"]
+    },
+    "unit": {
+      "type": "string",
+      "enum": ["g", "ml", "count", "package"]
+    },
+    "certainty": {
+      "type": "string",
+      "enum": ["exact", "estimated", "unknown"]
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "dimension": { "const": "mass" } } },
+      "then": { "properties": { "unit": { "const": "g" } } }
+    },
+    {
+      "if": { "properties": { "dimension": { "const": "volume" } } },
+      "then": { "properties": { "unit": { "const": "ml" } } }
+    },
+    {
+      "if": { "properties": { "dimension": { "const": "count" } } },
+      "then": { "properties": { "unit": { "const": "count" } } }
+    },
+    {
+      "if": { "properties": { "dimension": { "const": "package" } } },
+      "then": { "properties": { "unit": { "const": "package" } } }
+    }
+  ]
+}

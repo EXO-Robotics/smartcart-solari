@@ -1,0 +1,23 @@
+{
+  "ingredientId": "10000000-0000-4000-8000-000000000201",
+  "sourceText": "Olive oil, as needed",
+  "name": "Olive oil",
+  "preparation": "",
+  "quantity": {
+    "kind": "semantic",
+    "text": "as needed"
+  },
+  "includedInRecipe": true,
+  "includeInTrip": true,
+  "brandPreference": null,
+  "evidence": [
+    {
+      "evidenceId": "source-oil-1",
+      "kind": "sourceText",
+      "sourceName": "Golden fixture source",
+      "sourceVersion": "fixture-v1",
+      "sourceRecordId": null,
+      "description": "The source contains no numeric amount and must not become quantity one."
+    }
+  ]
+}

@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.smartcart.app/v1/nutrition/recipe-nutrition-estimate.schema.json",
+  "title": "Recipe nutrition estimate envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "resolverVersion", "requestId", "data"],
+  "properties": {
+    "schemaVersion": {
+      "$ref": "https://schemas.smartcart.app/v1/common/contract-fields.schema.json#/$defs/schemaVersion"
+    },
+    "resolverVersion": {
+      "$ref": "https://schemas.smartcart.app/v1/common/contract-fields.schema.json#/$defs/resolverVersion"
+    },
+    "requestId": {
+      "$ref": "https://schemas.smartcart.app/v1/common/contract-fields.schema.json#/$defs/requestId"
+    },
+    "data": {
+      "$ref": "#/$defs/recipeData"
+    }
+  },
+  "$defs": {
+    "nutritionPair": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["energyKilocalories", "proteinGrams"],
+          "properties": {
+            "energyKilocalories": {
+              "$ref": "https://schemas.smartcart.app/v1/common/numeric-estimate.schema.json"
+            },
+            "proteinGrams": {
+              "$ref": "https://schemas.smartcart.app/v1/common/numeric-estimate.schema.json"
+            }
+          }
+        },
+        { "type": "null" }
+      ]
+    },
+    "recipeData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipeId",
+        "servings",
+        "ingredientResolutions",
+        "totals",
+        "perServing",
+        "confidence",
+        "evidence",
+        "issues"
+      ],
+      "properties": {
+        "recipeId": {
+          "$ref": "https://schemas.smartcart.app/v1/common/contract-fields.schema.json#/$defs/entityId"
+        },
+        "servings": { "type": "number", "exclusiveMinimum": 0 },
+        "ingredientResolutions": {
+          "type": "array",
+          "items": {
+            "$ref": "https://schemas.smartcart.app/v1/nutrition/nutrition-resolution.schema.json#/$defs/resolutionData"
+          }
+        },
+        "totals": {
+          "$ref": "#/$defs/nutritionPair"
+        },
+        "perServing": {
+          "$ref": "#/$defs/nutritionPair"
+        },
+        "confidence": {
+          "$ref": "https://schemas.smartcart.app/v1/common/resolution-confidence.schema.json"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "https://schemas.smartcart.app/v1/common/resolution-evidence.schema.json"
+          }
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "$ref": "https://schemas.smartcart.app/v1/common/resolution-issue.schema.json"
+          }
+        }
+      }
+    }
+  }
+}
