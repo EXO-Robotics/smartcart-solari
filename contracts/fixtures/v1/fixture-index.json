@@ -24,6 +24,10 @@
     "schemaId": "https://schemas.smartcart.app/v1/nutrition/recipe-nutrition-estimate.schema.json"
   },
   {
+    "path": "chicken-parmesan/meal-prep-nutrition-output.json",
+    "schemaId": "https://schemas.smartcart.app/v1/nutrition/meal-prep-nutrition-estimate.schema.json"
+  },
+  {
     "path": "semantic-quantity/ingredient-input.json",
     "schemaId": "https://schemas.smartcart.app/v1/ingredient/ingredient-input.schema.json"
   }

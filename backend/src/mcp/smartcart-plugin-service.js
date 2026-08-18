@@ -14,7 +14,8 @@ export class SmartCartPluginService {
     this.analyzer = options.analyzer ?? new RecipeTextAnalyzer();
     const identityResolver = options.identityResolver ?? new CuratedIngredientIdentityResolver();
     this.tripIntelligence = options.tripIntelligence ?? null;
-    this.createTripIntelligence = options.createTripIntelligence ?? (() => createTripIntelligenceService());
+    this.createTripIntelligence = options.createTripIntelligence
+      ?? (() => createTripIntelligenceService({ config: options.config }));
     this.groceryTripPlanner = options.groceryTripPlanner ?? new GroceryTripPlanner({ identityResolver });
   }
 

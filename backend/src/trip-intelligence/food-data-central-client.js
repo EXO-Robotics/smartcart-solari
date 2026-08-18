@@ -1,5 +1,9 @@
+import { TtlCache } from '../lib/ttl-cache.js';
+
 const DEFAULT_BASE_URL = 'https://api.nal.usda.gov/fdc/v1';
 const MAX_RESPONSE_BYTES = 1_048_576;
+const DEFAULT_CACHE_TTL_MS = 86_400_000;
+const DEFAULT_CACHE_MAX_ENTRIES = 512;
 
 export class FoodDataCentralError extends Error {
   constructor(code, message, { status = null, retryable = false } = {}) {
@@ -105,12 +109,50 @@ async function readJson(response) {
 }
 
 export class FoodDataCentralClient {
-  constructor({ apiKey, fetchImpl = globalThis.fetch, baseUrl = DEFAULT_BASE_URL, timeoutMs = 8_000 }) {
+  constructor({
+    apiKey,
+    fetchImpl = globalThis.fetch,
+    baseUrl = DEFAULT_BASE_URL,
+    timeoutMs = 8_000,
+    cacheTtlMs = DEFAULT_CACHE_TTL_MS,
+    cacheMaxEntries = DEFAULT_CACHE_MAX_ENTRIES,
+    cache = new TtlCache({ defaultTtlMs: cacheTtlMs })
+  }) {
     this.apiKey = requireApiKey(apiKey);
     if (typeof fetchImpl !== 'function') throw new TypeError('fetchImpl is required');
+    if (!Number.isFinite(cacheTtlMs) || cacheTtlMs <= 0) {
+      throw new TypeError('cacheTtlMs must be positive');
+    }
+    if (!Number.isSafeInteger(cacheMaxEntries) || cacheMaxEntries <= 0) {
+      throw new TypeError('cacheMaxEntries must be a positive integer');
+    }
     this.fetchImpl = fetchImpl;
     this.baseUrl = baseUrl.replace(/\/+$/u, '');
     this.timeoutMs = timeoutMs;
+    this.cache = cache;
+    this.cacheTtlMs = cacheTtlMs;
+    this.cacheMaxEntries = cacheMaxEntries;
+    this.inFlight = new Map();
+  }
+
+  async cached(key, load) {
+    const cached = this.cache.get(key);
+    if (cached !== undefined) return structuredClone(cached);
+
+    let pending = this.inFlight.get(key);
+    if (pending === undefined) {
+      pending = load();
+      this.inFlight.set(key, pending);
+    }
+    try {
+      const value = await pending;
+      if (this.cache.size < this.cacheMaxEntries) {
+        this.cache.set(key, structuredClone(value), this.cacheTtlMs);
+      }
+      return structuredClone(value);
+    } finally {
+      if (this.inFlight.get(key) === pending) this.inFlight.delete(key);
+    }
   }
 
   async request(path, options = {}) {
@@ -143,22 +185,28 @@ export class FoodDataCentralClient {
 
   async searchFoods(query, { pageSize = 5 } = {}) {
     if (typeof query !== 'string' || query.trim().length === 0) return [];
-    const payload = await this.request('foods/search', {
-      method: 'POST',
-      body: JSON.stringify({
-        query: query.trim(),
-        dataType: ['Foundation', 'SR Legacy'],
-        pageSize: Math.max(1, Math.min(10, pageSize))
-      })
+    const normalizedQuery = query.trim();
+    const boundedPageSize = Math.max(1, Math.min(10, pageSize));
+    return this.cached(`search:${normalizedQuery.toLocaleLowerCase('en-US')}:${boundedPageSize}`, async () => {
+      const payload = await this.request('foods/search', {
+        method: 'POST',
+        body: JSON.stringify({
+          query: normalizedQuery,
+          dataType: ['Foundation', 'SR Legacy'],
+          pageSize: boundedPageSize
+        })
+      });
+      if (!Array.isArray(payload.foods)) {
+        throw new FoodDataCentralError('usda_response_invalid', 'USDA search results were invalid.');
+      }
+      return payload.foods.map(normalizedFood);
     });
-    if (!Array.isArray(payload.foods)) {
-      throw new FoodDataCentralError('usda_response_invalid', 'USDA search results were invalid.');
-    }
-    return payload.foods.map(normalizedFood);
   }
 
   async foodDetails(fdcId) {
     if (!Number.isSafeInteger(fdcId) || fdcId <= 0) throw new TypeError('fdcId must be positive');
-    return normalizedFood(await this.request(`food/${fdcId}`));
+    return this.cached(`food:${fdcId}`, async () => (
+      normalizedFood(await this.request(`food/${fdcId}`))
+    ));
   }
 }

@@ -1,0 +1,129 @@
+{
+  "schemaVersion": "1.0",
+  "resolverVersion": "fixture-nutrition-v1",
+  "requestId": "20000000-0000-4000-8000-000000000002",
+  "data": {
+    "mealPlanId": "10000000-0000-4000-8000-000000000903",
+    "recipeEstimates": [
+      {
+        "recipeId": "10000000-0000-4000-8000-000000000001",
+        "servings": 4,
+        "ingredientResolutions": [
+          {
+            "ingredientId": "10000000-0000-4000-8000-000000000101",
+            "identityKey": "smartcart-food:parmesan-cheese",
+            "massGrams": { "preferred": 90, "minimum": 80, "maximum": 100 },
+            "nutrition": {
+              "energyKilocalories": { "preferred": 378, "minimum": 336, "maximum": 420 },
+              "proteinGrams": { "preferred": 33.3, "minimum": 29.6, "maximum": 37 }
+            },
+            "confidence": "moderate",
+            "evidence": [
+              {
+                "evidenceId": "nutrition-parmesan-1",
+                "kind": "curatedData",
+                "sourceName": "Synthetic golden nutrition catalog",
+                "sourceVersion": "fixture-v1",
+                "sourceRecordId": "nutrition:parmesan-grated",
+                "description": "Deterministic test nutrient values; not a production or USDA claim."
+              }
+            ],
+            "issues": []
+          }
+        ],
+        "totals": {
+          "energyKilocalories": { "preferred": 378, "minimum": 336, "maximum": 420 },
+          "proteinGrams": { "preferred": 33.3, "minimum": 29.6, "maximum": 37 }
+        },
+        "perServing": {
+          "energyKilocalories": { "preferred": 94.5, "minimum": 84, "maximum": 105 },
+          "proteinGrams": { "preferred": 8.325, "minimum": 7.4, "maximum": 9.25 }
+        },
+        "confidence": "moderate",
+        "evidence": [
+          {
+            "evidenceId": "calculation-10000000-0000-4000-8000-000000000001",
+            "kind": "calculation",
+            "sourceName": "TripIntelligenceService",
+            "sourceVersion": "fixture-nutrition-v1",
+            "sourceRecordId": null,
+            "description": "Included ingredient estimates summed and divided by 4 servings."
+          }
+        ],
+        "issues": []
+      },
+      {
+        "recipeId": "10000000-0000-4000-8000-000000000904",
+        "servings": 2,
+        "ingredientResolutions": [
+          {
+            "ingredientId": "10000000-0000-4000-8000-000000000101",
+            "identityKey": "smartcart-food:parmesan-cheese",
+            "massGrams": { "preferred": 90, "minimum": 80, "maximum": 100 },
+            "nutrition": {
+              "energyKilocalories": { "preferred": 378, "minimum": 336, "maximum": 420 },
+              "proteinGrams": { "preferred": 33.3, "minimum": 29.6, "maximum": 37 }
+            },
+            "confidence": "moderate",
+            "evidence": [
+              {
+                "evidenceId": "nutrition-parmesan-1",
+                "kind": "curatedData",
+                "sourceName": "Synthetic golden nutrition catalog",
+                "sourceVersion": "fixture-v1",
+                "sourceRecordId": "nutrition:parmesan-grated",
+                "description": "Deterministic test nutrient values; not a production or USDA claim."
+              }
+            ],
+            "issues": []
+          }
+        ],
+        "totals": {
+          "energyKilocalories": { "preferred": 378, "minimum": 336, "maximum": 420 },
+          "proteinGrams": { "preferred": 33.3, "minimum": 29.6, "maximum": 37 }
+        },
+        "perServing": {
+          "energyKilocalories": { "preferred": 189, "minimum": 168, "maximum": 210 },
+          "proteinGrams": { "preferred": 16.65, "minimum": 14.8, "maximum": 18.5 }
+        },
+        "confidence": "moderate",
+        "evidence": [
+          {
+            "evidenceId": "calculation-10000000-0000-4000-8000-000000000904",
+            "kind": "calculation",
+            "sourceName": "TripIntelligenceService",
+            "sourceVersion": "fixture-nutrition-v1",
+            "sourceRecordId": null,
+            "description": "Included ingredient estimates summed and divided by 2 servings."
+          }
+        ],
+        "issues": []
+      }
+    ],
+    "totals": {
+      "energyKilocalories": { "preferred": 756, "minimum": 672, "maximum": 840 },
+      "proteinGrams": { "preferred": 66.6, "minimum": 59.2, "maximum": 74 }
+    },
+    "totalServings": 6,
+    "weightedAveragePerServing": {
+      "energyKilocalories": { "preferred": 126, "minimum": 112, "maximum": 140 },
+      "proteinGrams": {
+        "preferred": 11.1,
+        "minimum": 9.866666666666667,
+        "maximum": 12.333333333333334
+      }
+    },
+    "confidence": "moderate",
+    "evidence": [
+      {
+        "evidenceId": "calculation-10000000-0000-4000-8000-000000000903",
+        "kind": "calculation",
+        "sourceName": "TripIntelligenceService",
+        "sourceVersion": "fixture-nutrition-v1",
+        "sourceRecordId": null,
+        "description": "2 frozen recipe estimates and 6 total servings were aggregated without changing their serving scales."
+      }
+    ],
+    "issues": []
+  }
+}

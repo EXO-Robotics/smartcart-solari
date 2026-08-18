@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { ContractValidationError, createContractValidator } from './contracts/contract-validator.js';
 import { loadConfig } from './config.js';
-import { HttpError, readJson } from './lib/http.js';
+import { HttpError, readJson, validatePreparsedJsonBody } from './lib/http.js';
 import { createLogger } from './lib/logger.js';
 import { FixedWindowRateLimiter } from './lib/rate-limiter.js';
 import { createTripIntelligenceService } from './trip-intelligence/create-trip-intelligence-service.js';
@@ -126,7 +126,9 @@ export function createPublicTripIntelligenceApi(options = {}) {
         return;
       }
 
-      const payload = await readJson(request, config.maxBodyBytes);
+      const payload = request.body && typeof request.body === 'object'
+        ? validatePreparsedJsonBody(request, request.body, config.maxBodyBytes)
+        : await readJson(request, config.maxBodyBytes);
       const validator = await validatorPromise;
       validator.assert(requestSchemaId, payload);
       const result = await resolvedService().estimateRecipeNutrition(payload.data);

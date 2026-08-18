@@ -3,6 +3,7 @@ import { loadConfig } from './config.js';
 import { HttpError, readJson, validatePreparsedJsonBody } from './lib/http.js';
 import { FixedWindowRateLimiter } from './lib/rate-limiter.js';
 import { createSmartCartMcpServer } from './mcp/server.js';
+import { SmartCartPluginService } from './mcp/smartcart-plugin-service.js';
 
 function jsonRpcError(response, status, message, headers = {}) {
   const body = JSON.stringify({
@@ -22,7 +23,10 @@ function jsonRpcError(response, status, message, headers = {}) {
 
 export function createPublicMcpApi(options = {}) {
   const config = loadConfig(options.config);
-  const createServer = options.createServer ?? (() => createSmartCartMcpServer(options));
+  const createServer = options.createServer ?? (() => {
+    const pluginService = options.pluginService ?? new SmartCartPluginService({ ...options, config });
+    return () => createSmartCartMcpServer({ ...options, pluginService });
+  })();
   const limiter = options.limiter ?? new FixedWindowRateLimiter({
     limit: config.mcpRateLimitPerMinute,
     windowMs: 60_000,

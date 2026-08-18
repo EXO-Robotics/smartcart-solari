@@ -292,6 +292,8 @@ struct MealPrepNutritionEstimateDTO: Codable, Equatable, Sendable {
     let mealPlanId: UUID
     let recipeEstimates: [RecipeNutritionEstimateDTO]
     let totals: NutritionValuesDTO?
+    let totalServings: Decimal
+    let weightedAveragePerServing: NutritionValuesDTO?
     let confidence: ResolutionConfidenceDTO
     let evidence: [ResolutionEvidenceDTO]
     let issues: [ResolutionIssueDTO]

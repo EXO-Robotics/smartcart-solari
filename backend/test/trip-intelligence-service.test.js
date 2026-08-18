@@ -104,4 +104,36 @@ test('Meal Prep aggregates frozen recipe estimates without changing recipe servi
   assert.equal(result.data.recipeEstimates[0].servings, 4);
   assert.equal(result.data.totals.energyKilocalories.preferred, 756);
   assert.equal(result.data.totals.proteinGrams.preferred, 66.6);
+  assert.equal(result.data.totalServings, 8);
+  assert.equal(result.data.weightedAveragePerServing.energyKilocalories.preferred, 94.5);
+  assert.equal(result.data.weightedAveragePerServing.proteinGrams.preferred, 8.325);
+});
+
+test('Meal Prep weighted averages use the sum of frozen recipe servings', async () => {
+  const request = await readJson('recipe-request.json');
+  const expected = await readJson('meal-prep-nutrition-output.json');
+  const validator = await createContractValidator({ contractsRoot });
+  const service = await fixtureService();
+  const result = await service.estimateMealPrepNutrition({
+    mealPlanId: '10000000-0000-4000-8000-000000000903',
+    recipes: [request.data, {
+      ...request.data,
+      recipeId: '10000000-0000-4000-8000-000000000904',
+      servings: 2
+    }]
+  });
+
+  assert.equal(result.data.totalServings, 6);
+  assert.equal(result.data.totals.energyKilocalories.preferred, 756);
+  assert.equal(result.data.weightedAveragePerServing.energyKilocalories.preferred, 126);
+  assert.equal(result.data.weightedAveragePerServing.proteinGrams.preferred, 11.1);
+  assert.equal(result.data.recipeEstimates[0].perServing.energyKilocalories.preferred, 94.5);
+  assert.equal(result.data.recipeEstimates[1].perServing.energyKilocalories.preferred, 189);
+
+  const response = contractEnvelope({ requestId: expected.requestId, ...result });
+  validator.assert(
+    'https://schemas.smartcart.app/v1/nutrition/meal-prep-nutrition-estimate.schema.json',
+    response
+  );
+  assert.deepEqual(response, expected);
 });

@@ -150,6 +150,13 @@ export class TripIntelligenceService {
     const totals = completeTotals
       ? addNutritionPairs(estimates.map((estimate) => estimate.totals))
       : null;
+    const totalServings = estimates.reduce((sum, estimate) => sum + estimate.servings, 0);
+    const weightedAveragePerServing = totals === null
+      ? null
+      : {
+          energyKilocalories: divideEstimate(totals.energyKilocalories, totalServings),
+          proteinGrams: divideEstimate(totals.proteinGrams, totalServings)
+        };
     const issues = estimates.flatMap((estimate) => estimate.issues);
     if (totals === null) {
       issues.push({
@@ -166,6 +173,8 @@ export class TripIntelligenceService {
         mealPlanId: mealPlan.mealPlanId,
         recipeEstimates: estimates,
         totals,
+        totalServings,
+        weightedAveragePerServing,
         confidence: weakestConfidence(estimates.map((estimate) => estimate.confidence)),
         evidence: [{
           evidenceId: `calculation-${mealPlan.mealPlanId}`,
@@ -173,7 +182,7 @@ export class TripIntelligenceService {
           sourceName: 'TripIntelligenceService',
           sourceVersion: this.resolverVersion,
           sourceRecordId: null,
-          description: `${estimates.length} frozen recipe estimates were aggregated without changing their serving scales.`
+          description: `${estimates.length} frozen recipe estimates and ${totalServings} total servings were aggregated without changing their serving scales.`
         }],
         issues
       }

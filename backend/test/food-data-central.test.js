@@ -77,6 +77,58 @@ test('USDA failures never reveal the API key', async () => {
   );
 });
 
+test('USDA details cache coalesces identical requests and isolates cached values', async () => {
+  const details = await json('backend/test/fixtures/usda/parmesan-food-details.json');
+  let fetchCount = 0;
+  let releaseFetch;
+  const fetchGate = new Promise((resolve) => { releaseFetch = resolve; });
+  const client = new FoodDataCentralClient({
+    apiKey: 'cache-test-key',
+    async fetchImpl() {
+      fetchCount += 1;
+      await fetchGate;
+      return mockResponse(details);
+    }
+  });
+
+  const firstRequest = client.foodDetails(171247);
+  const secondRequest = client.foodDetails(171247);
+  releaseFetch();
+  const [first, second] = await Promise.all([firstRequest, secondRequest]);
+
+  assert.equal(fetchCount, 1);
+  first.description = 'mutated by caller';
+  const cached = await client.foodDetails(171247);
+  assert.equal(fetchCount, 1);
+  assert.equal(second.description, 'Cheese, parmesan, grated');
+  assert.equal(cached.description, 'Cheese, parmesan, grated');
+});
+
+test('USDA search cache coalesces normalized queries and never caches failures', async () => {
+  let fetchCount = 0;
+  let shouldFail = true;
+  const client = new FoodDataCentralClient({
+    apiKey: 'cache-test-key',
+    async fetchImpl() {
+      fetchCount += 1;
+      if (shouldFail) return mockResponse({ error: 'temporary' }, { status: 503 });
+      return mockResponse({ foods: [{ fdcId: 171247, description: 'Cheese, parmesan, grated' }] });
+    }
+  });
+
+  await assert.rejects(client.searchFoods(' Parmesan cheese '), FoodDataCentralError);
+  shouldFail = false;
+  const [first, second] = await Promise.all([
+    client.searchFoods('Parmesan cheese'),
+    client.searchFoods('parmesan cheese')
+  ]);
+
+  assert.equal(fetchCount, 2);
+  assert.deepEqual(first, second);
+  await client.searchFoods('PARMESAN CHEESE');
+  assert.equal(fetchCount, 2);
+});
+
 test('official USDA portion and nutrient evidence produces a valid recipe estimate', async () => {
   const validator = await createContractValidator({ contractsRoot: path.join(repoRoot, 'contracts') });
   const request = await json('contracts/fixtures/v1/chicken-parmesan/recipe-request.json');

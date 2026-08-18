@@ -10,7 +10,9 @@ export function createTripIntelligenceService(overrides = {}) {
   const foodDataCentralClient = overrides.foodDataCentralClient ?? new FoodDataCentralClient({
     apiKey: config.usdaFoodDataApiKey,
     baseUrl: config.usdaFoodDataBaseUrl,
-    timeoutMs: config.usdaFoodDataTimeoutMs
+    timeoutMs: config.usdaFoodDataTimeoutMs,
+    cacheTtlMs: config.usdaFoodDataCacheTtlMs,
+    cacheMaxEntries: config.usdaFoodDataCacheMaxEntries
   });
   return new TripIntelligenceService({
     resolverVersion: 'trip-intelligence-nutrition-v1',

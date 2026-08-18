@@ -115,6 +115,42 @@ test('public Trip Intelligence rejects over-limit requests before provider acces
   }
 });
 
+test('public Trip Intelligence rejects an oversized body pre-parsed by Vercel', async () => {
+  let calls = 0;
+  const { handler } = createPublicTripIntelligenceApi({
+    tripIntelligenceService: {
+      async estimateRecipeNutrition() { calls += 1; throw new Error('should not run'); }
+    },
+    config: { host: '127.0.0.1', port: 0, maxBodyBytes: 128 }
+  });
+  const httpServer = createServer(async (request, response) => {
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    request.body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    await handler(request, response);
+  });
+  httpServer.listen(0, '127.0.0.1');
+  await once(httpServer, 'listening');
+  const address = httpServer.address();
+  try {
+    const response = await fetch(
+      `http://127.0.0.1:${address.port}/v1/intelligence/nutrition/recipes/estimate`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ padding: 'x'.repeat(512) })
+      }
+    );
+    assert.equal(response.status, 413);
+    const payload = await response.json();
+    assert.equal(payload.error.code, 'payload_too_large');
+    assert.equal(calls, 0);
+  } finally {
+    httpServer.close();
+    await once(httpServer, 'close');
+  }
+});
+
 test('Vercel exposes only the reviewed barcode and Trip Intelligence surfaces', async () => {
   const config = JSON.parse(await readFile(new URL('../vercel.json', import.meta.url), 'utf8'));
   assert.deepEqual(

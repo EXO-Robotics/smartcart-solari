@@ -22,6 +22,8 @@
         "mealPlanId",
         "recipeEstimates",
         "totals",
+        "totalServings",
+        "weightedAveragePerServing",
         "confidence",
         "evidence",
         "issues"
@@ -38,22 +40,14 @@
           }
         },
         "totals": {
-          "oneOf": [
-            {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["energyKilocalories", "proteinGrams"],
-              "properties": {
-                "energyKilocalories": {
-                  "$ref": "https://schemas.smartcart.app/v1/common/numeric-estimate.schema.json"
-                },
-                "proteinGrams": {
-                  "$ref": "https://schemas.smartcart.app/v1/common/numeric-estimate.schema.json"
-                }
-              }
-            },
-            { "type": "null" }
-          ]
+          "$ref": "https://schemas.smartcart.app/v1/nutrition/recipe-nutrition-estimate.schema.json#/$defs/nutritionPair"
+        },
+        "totalServings": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "weightedAveragePerServing": {
+          "$ref": "https://schemas.smartcart.app/v1/nutrition/recipe-nutrition-estimate.schema.json#/$defs/nutritionPair"
         },
         "confidence": {
           "$ref": "https://schemas.smartcart.app/v1/common/resolution-confidence.schema.json"

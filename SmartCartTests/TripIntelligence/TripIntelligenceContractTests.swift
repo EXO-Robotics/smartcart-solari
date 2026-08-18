@@ -37,6 +37,10 @@ final class TripIntelligenceContractTests: XCTestCase {
             TripIntelligenceEnvelopeDTO<RecipeNutritionEstimateDTO>.self,
             from: fixture("chicken-parmesan/recipe-nutrition-output.json")
         )
+        let mealPrep = try decoder.decode(
+            TripIntelligenceEnvelopeDTO<MealPrepNutritionEstimateDTO>.self,
+            from: fixture("chicken-parmesan/meal-prep-nutrition-output.json")
+        )
 
         XCTAssertEqual(ingredient.name, "Parmesan cheese")
         XCTAssertEqual(ingredient.preparation, "finely grated")
@@ -44,6 +48,11 @@ final class TripIntelligenceContractTests: XCTestCase {
         XCTAssertEqual(mass.data.massGrams?.preferred, 90)
         XCTAssertEqual(nutrition.data.nutrition?.proteinGrams.preferred, 33.3)
         XCTAssertEqual(recipe.data.perServing?.energyKilocalories.preferred, 94.5)
+        XCTAssertEqual(mealPrep.data.totalServings, 6)
+        XCTAssertEqual(
+            mealPrep.data.weightedAveragePerServing?.energyKilocalories.preferred,
+            126
+        )
         XCTAssertEqual(recipe.schemaVersion, TripIntelligenceSchema.version)
     }
 
