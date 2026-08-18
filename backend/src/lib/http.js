@@ -56,6 +56,26 @@ export async function readJson(request, maxBytes) {
   }
 }
 
+export function validatePreparsedJsonBody(request, body, maxBytes) {
+  const contentType = request.headers['content-type'] ?? '';
+  if (!contentType.toLowerCase().startsWith('application/json')) {
+    throw new HttpError(415, 'unsupported_media_type', 'Content-Type must be application/json');
+  }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    throw new HttpError(400, 'invalid_json', 'Body must be a valid JSON object');
+  }
+
+  const declaredBytes = Number(request.headers['content-length']);
+  const normalizedBytes = Buffer.byteLength(JSON.stringify(body));
+  if (
+    (Number.isFinite(declaredBytes) && declaredBytes > maxBytes)
+    || normalizedBytes > maxBytes
+  ) {
+    throw new HttpError(413, 'payload_too_large', 'JSON body is too large');
+  }
+  return body;
+}
+
 export function assertString(value, name, { min = 1, max = 500 } = {}) {
   if (typeof value !== 'string' || value.trim().length < min || value.length > max) {
     throw new HttpError(400, 'validation_error', `${name} must be a string from ${min} to ${max} characters`);

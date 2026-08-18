@@ -96,3 +96,34 @@ test('MCP endpoint emits JSON-RPC 429 before starting a tool server', async () =
     await once(httpServer, 'close');
   }
 });
+
+test('MCP endpoint rejects an oversized body pre-parsed by the Vercel runtime', async () => {
+  let servers = 0;
+  const { handler } = createPublicMcpApi({
+    createServer() { servers += 1; return createSmartCartMcpServer({ pluginService: {} }); },
+    config: { host: '127.0.0.1', port: 0, maxBodyBytes: 128 }
+  });
+  const httpServer = createServer(async (request, response) => {
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    request.body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    await handler(request, response);
+  });
+  httpServer.listen(0, '127.0.0.1');
+  await once(httpServer, 'listening');
+  const address = httpServer.address();
+  try {
+    const response = await fetch(`http://127.0.0.1:${address.port}/mcp`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, padding: 'x'.repeat(512) })
+    });
+    assert.equal(response.status, 413);
+    const payload = await response.json();
+    assert.equal(payload.error.message, 'JSON body is too large');
+    assert.equal(servers, 0);
+  } finally {
+    httpServer.close();
+    await once(httpServer, 'close');
+  }
+});

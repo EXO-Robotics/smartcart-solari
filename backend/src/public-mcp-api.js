@@ -1,6 +1,6 @@
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { loadConfig } from './config.js';
-import { HttpError, readJson } from './lib/http.js';
+import { HttpError, readJson, validatePreparsedJsonBody } from './lib/http.js';
 import { FixedWindowRateLimiter } from './lib/rate-limiter.js';
 import { createSmartCartMcpServer } from './mcp/server.js';
 
@@ -59,7 +59,9 @@ export function createPublicMcpApi(options = {}) {
 
     let body = request.body;
     try {
-      if (!body || typeof body !== 'object') body = await readJson(request, config.maxBodyBytes);
+      body = body && typeof body === 'object'
+        ? validatePreparsedJsonBody(request, body, config.maxBodyBytes)
+        : await readJson(request, config.maxBodyBytes);
     } catch (error) {
       jsonRpcError(
         response,
