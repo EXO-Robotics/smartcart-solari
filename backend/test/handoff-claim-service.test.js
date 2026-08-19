@@ -279,14 +279,9 @@ test('AASA associates only the /t Universal Link and Vercel serves it directly a
     false
   );
 
-  const directFunctionBlock = vercel.routes.find((candidate) => (
-    candidate.src === '/api/(mcp(?:\\.js)?|handoff(?:\\.js)?)'
-  ));
-  assert.deepEqual(directFunctionBlock, {
-    src: '/api/(mcp(?:\\.js)?|handoff(?:\\.js)?)',
-    status: 404
-  });
-  assert.ok(vercel.routes.indexOf(directFunctionBlock) < vercel.routes.indexOf(
-    vercel.routes.find((candidate) => candidate.handle === 'filesystem')
-  ));
+  assert.equal(
+    vercel.routes.some((candidate) => candidate.src?.startsWith('/api/')),
+    false,
+    'Vercel function aliases are platform routes and must be covered by the same firewall policy.'
+  );
 });

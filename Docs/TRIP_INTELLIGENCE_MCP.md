@@ -82,8 +82,8 @@ instances and provider quota; production
 should additionally enforce an equivalent Vercel Firewall rate rule because serverless instances do
 not share in-memory counters. Cover canonical `/mcp` and `/v1/handoffs/claim` plus direct function
 aliases `/api/mcp`, `/api/mcp.js`, `/api/handoff`, and `/api/handoff.js`. `vercel.json` returns 404
-for the direct aliases before filesystem routing, but including them in firewall policy preserves
-defense in depth against platform-routing changes.
+for all unrelated routes, but Vercel's underlying function aliases remain reachable and must share
+the same firewall policy as the canonical routes.
 
 ## Verification
 

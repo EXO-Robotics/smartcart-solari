@@ -40,9 +40,9 @@ MCP and bounded-use native handoff functions plus reviewed static Weekly Meals J
 `GET`/`HEAD /health`, `GET /v1/barcodes/{gtin}`, `POST /v1/intelligence/nutrition/recipes/estimate`,
 `POST /mcp`, `POST /v1/handoffs/claim`, the static `/t` landing page, and files under
 `/weekly-meals`; it returns 404 for every other route and method.
-The direct Vercel function aliases `/api/mcp`, `/api/mcp.js`, `/api/handoff`, and
-`/api/handoff.js` are explicitly blocked at the edge. Production firewall rules should still cover
-those aliases alongside canonical `/mcp` and `/v1/handoffs/claim` as defense in depth.
+Vercel also exposes the underlying function aliases `/api/mcp`, `/api/mcp.js`, `/api/handoff`, and
+`/api/handoff.js`. They enter the same bounded handlers, body limits, and process-local admission
+checks as the canonical routes. Any production firewall policy must cover both route forms.
 The barcode function reuses `BarcodeCatalogService`; it does not
 import or deploy the mock account, session, OAuth, manifest, analytics, recipe-page, affiliate,
 or Instacart application routes.

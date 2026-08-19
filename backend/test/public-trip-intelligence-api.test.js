@@ -168,10 +168,6 @@ test('Vercel exposes only the reviewed barcode, intelligence, MCP, and native ha
         'X-Content-Type-Options': 'nosniff'
       }
     },
-    {
-      src: '/api/(mcp(?:\\.js)?|handoff(?:\\.js)?)',
-      status: 404
-    },
     { handle: 'filesystem' },
     {
       src: '/health',

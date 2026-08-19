@@ -27,10 +27,6 @@
       }
     },
     {
-      "src": "/api/(mcp(?:\\.js)?|handoff(?:\\.js)?)",
-      "status": 404
-    },
-    {
       "handle": "filesystem"
     },
     {
