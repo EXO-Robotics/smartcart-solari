@@ -1,0 +1,17 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": [
+          "WCNJVRP99K.com.blakestudio.smartcart"
+        ],
+        "components": [
+          {
+            "/": "/t",
+            "comment": "Open a bounded SmartCart handoff."
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -42,6 +42,27 @@ export function loadConfig(overrides = {}) {
     usdaFoodDataCacheMaxEntries: integer('USDA_FDC_CACHE_MAX_ENTRIES', 512, { max: 10_000 }),
     tripIntelligenceRateLimitPerMinute: integer('TRIP_INTELLIGENCE_RATE_LIMIT_PER_MINUTE', 30, { max: 1_000 }),
     mcpRateLimitPerMinute: integer('MCP_RATE_LIMIT_PER_MINUTE', 60, { max: 1_000 }),
+    smartCartHandoffBaseUrl: process.env.SMARTCART_HANDOFF_BASE_URL || undefined,
+    smartCartHandoffTtlMs: integer('SMARTCART_HANDOFF_TTL_SECONDS', 600, { min: 60, max: 600 }) * 1_000,
+    smartCartHandoffMaxPayloadBytes: integer('SMARTCART_HANDOFF_MAX_PAYLOAD_BYTES', 131_072, {
+      min: 1_024,
+      max: 262_144
+    }),
+    smartCartHandoffMaxTokenCharacters: integer('SMARTCART_HANDOFF_MAX_TOKEN_CHARACTERS', 24_000, {
+      min: 1_024,
+      max: 24_000
+    }),
+    smartCartHandoffClaimRateLimitPerMinute: integer(
+      'SMARTCART_HANDOFF_CLAIM_RATE_LIMIT_PER_MINUTE',
+      30,
+      { max: 1_000 }
+    ),
+    smartCartHandoffTokenRateLimitPerMinute: integer(
+      'SMARTCART_HANDOFF_TOKEN_RATE_LIMIT_PER_MINUTE',
+      6,
+      { max: 100 }
+    ),
+    smartCartHandoffTokenSecret: process.env.HANDOFF_TOKEN_SECRET || undefined,
     instacartApiKey: process.env.INSTACART_API_KEY || undefined,
     instacartApiBaseUrl: process.env.INSTACART_API_BASE_URL ?? (
       env === 'production' ? 'https://connect.instacart.com' : 'https://connect.dev.instacart.tools'

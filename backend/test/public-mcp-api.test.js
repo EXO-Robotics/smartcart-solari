@@ -36,7 +36,7 @@ test('stateless Streamable HTTP MCP lists and invokes SmartCart tools', async ()
   try {
     await client.connect(new StreamableHTTPClientTransport(service.url));
     const tools = await client.listTools();
-    assert.equal(tools.tools.length, 4);
+    assert.equal(tools.tools.length, 5);
     const result = await client.callTool({
       name: 'analyze_recipe',
       arguments: { recipe_text: '1 lb chicken', title: 'HTTP test', servings: 2 }

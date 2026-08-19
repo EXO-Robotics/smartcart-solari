@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.smartcart.app/v1/handoff/smartcart-handoff-create-result.schema.json",
+  "title": "SmartCart trip handoff creation result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "resolverVersion", "requestId", "data"],
+  "properties": {
+    "schemaVersion": {
+      "$ref": "https://schemas.smartcart.app/v1/common/contract-fields.schema.json#/$defs/schemaVersion"
+    },
+    "resolverVersion": { "const": "smartcart-handoff-v1" },
+    "requestId": {
+      "$ref": "https://schemas.smartcart.app/v1/common/contract-fields.schema.json#/$defs/requestId"
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claimUrl", "expiresAt"],
+      "properties": {
+        "claimUrl": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://[^/?#@]+/t#v1\\.[A-Za-z0-9_-]+$",
+          "$comment": "The runtime-configured HTTPS origin is validated by HandoffClaimService; this contract requires the exact /t fragment handoff shape and excludes query parameters."
+        },
+        "expiresAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

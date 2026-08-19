@@ -1,8 +1,11 @@
 import { createHash } from 'node:crypto';
 import catalog from './data/ingredient-identities-v1.json' with { type: 'json' };
+import {
+  inspectIngredientPreparation,
+  inspectIngredientQueryName
+} from './ingredient-query-safety.js';
 
 const headingPattern = /^(ingredients?|directions?|instructions?|method|preparation|nutrition|notes?)\s*:?$/i;
-const unsafeTokenPattern = /(?:^|\s)(?:%|�|\?{2,})(?:\s|$)/u;
 const credibleNamePattern = /[\p{L}\p{N}]/u;
 
 function normalized(value) {
@@ -78,17 +81,21 @@ export class CuratedIngredientIdentityResolver {
   }
 
   async resolve(ingredient) {
-    const name = ingredient.name.trim();
+    const inspected = inspectIngredientQueryName(ingredient.name);
+    const inspectedPreparation = inspectIngredientPreparation(ingredient.preparation);
+    const name = inspected.canonicalName ?? '';
     if (
-      name.length === 0
+      !inspected.safe
+      || !inspectedPreparation.safe
+      || name.length === 0
       || headingPattern.test(name)
-      || unsafeTokenPattern.test(name)
       || !credibleNamePattern.test(name)
     ) {
       return unresolved(
         ingredient,
-        'ingredient_identity_unsafe',
-        'A credible ingredient name is required before shopping or nutrition lookup.'
+        inspected.code ?? inspectedPreparation.code ?? 'ingredient_identity_unsafe',
+        inspected.message ?? inspectedPreparation.message
+          ?? 'A credible ingredient name is required before shopping or nutrition lookup.'
       );
     }
 
@@ -108,7 +115,7 @@ export class CuratedIngredientIdentityResolver {
       ingredientId: ingredient.ingredientId,
       identityKey,
       canonicalName,
-      modifiers: emptyModifiers(ingredient.preparation),
+      modifiers: emptyModifiers([ingredient.preparation, inspected.preparation].filter(Boolean).join(', ')),
       confidence: record ? 'strong' : 'moderate',
       safeForRetailerQuery: true,
       retailerQuery: record?.retailerQuery ?? canonicalName,

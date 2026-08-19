@@ -25,8 +25,63 @@ tags:
   - name: Recipe pages
   - name: Barcode identity
   - name: Trip Intelligence
+  - name: Native handoff
   - name: Instacart handoffs
 paths:
+  /v1/handoffs/claim:
+    post:
+      tags: [Native handoff]
+      summary: Exchange a bounded-use encrypted bearer for reviewed native recipe data
+      description: |
+        The bearer originates in the fragment of an HTTPS /t link, so it is not sent by the
+        browser or recorded in access-log URLs. The native app submits it in this bounded JSON
+        request. A valid token may be reclaimed until its maximum ten-minute expiry; no remote
+        trip, pantry conclusion, retailer product URL, or price is persisted or returned.
+      operationId: claimSmartCartHandoff
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../contracts/v1/handoff/smartcart-handoff-claim-request.schema.json'
+      responses:
+        '200':
+          description: Contract-valid frozen analyzed recipes for native review.
+          content:
+            application/json:
+              schema:
+                $ref: '../contracts/v1/handoff/smartcart-handoff-payload.schema.json'
+        '400':
+          description: Invalid request contract.
+          content:
+            application/json:
+              schema:
+                $ref: '../contracts/v1/intelligence-error.schema.json'
+        '410':
+          description: Invalid, corrupted, wrong-audience, or expired handoff.
+          content:
+            application/json:
+              schema:
+                $ref: '../contracts/v1/intelligence-error.schema.json'
+        '413':
+          description: Request exceeds the bounded JSON body limit.
+          content:
+            application/json:
+              schema:
+                $ref: '../contracts/v1/intelligence-error.schema.json'
+        '429':
+          description: Client or bearer attempt rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '../contracts/v1/intelligence-error.schema.json'
+        '503':
+          description: Handoff encryption is not configured.
+          content:
+            application/json:
+              schema:
+                $ref: '../contracts/v1/intelligence-error.schema.json'
   /v1/intelligence/nutrition/recipes/estimate:
     post:
       tags: [Trip Intelligence]

@@ -139,11 +139,11 @@ test('Vercel rewrite destination parameters reach the same narrow handler', asyn
   }
 });
 
-test('Vercel barcode entrypoint stays narrow when Trip Intelligence is deployed separately', async () => {
+test('Vercel barcode entrypoint stays narrow when intelligence and handoff are deployed separately', async () => {
   const config = JSON.parse(await readFile(new URL('../vercel.json', import.meta.url), 'utf8'));
   assert.deepEqual(
     Object.keys(config.functions).sort(),
-    ['api/index.js', 'api/intelligence.js', 'api/mcp.js']
+    ['api/handoff.js', 'api/index.js', 'api/intelligence.js', 'api/mcp.js']
   );
   const entrypoint = await readFile(new URL('../api/index.js', import.meta.url), 'utf8');
   assert.match(entrypoint, /createPublicBarcodeApi/);

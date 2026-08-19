@@ -1,7 +1,7 @@
 #include "Base.xcconfig"
 
 // `$()` safely separates the URL slashes from xcconfig's `//` comment syntax.
-// Barcode lookup uses the same verified public service on Simulator and device.
+// Barcode lookup and native ChatGPT handoffs use the verified public service.
 SMARTCART_BARCODE_BACKEND_URL = https:/$()/smartcart-barcode-api-omega.vercel.app
 SMARTCART_RECIPE_BACKEND_URL = http:/$()/localhost:8787
 SMARTCART_WEEKLY_MEALS_BASE_URL = https:/$()/smartcart-barcode-api-omega.vercel.app

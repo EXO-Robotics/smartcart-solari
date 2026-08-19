@@ -23,21 +23,46 @@ async function connectedClient(pluginService) {
   };
 }
 
-test('MCP exposes exactly the four stateless goal-oriented SmartCart tools', async () => {
+test('MCP exposes the four stateless tools and explicit native handoff action', async () => {
   const calls = [];
   const service = {
     analyzeRecipe(input) { calls.push(['analyze', input]); return { data: { ingredients: [] } }; },
     async estimateRecipe(input) { calls.push(['estimate', input]); return { nutrition: null }; },
     async prepareMealPlan(input) { calls.push(['meal', input]); return { nutrition: null }; },
-    async planGroceryTrip(input) { calls.push(['trip', input]); return { readyToShop: true }; }
+    async planGroceryTrip(input) { calls.push(['trip', input]); return { readyToShop: true }; },
+    async createSmartCartHandoff(input) {
+      calls.push(['handoff', input]);
+      return {
+        schemaVersion: '1.0',
+        resolverVersion: 'smartcart-handoff-v1',
+        requestId: '00000000-0000-4000-8000-000000000001',
+        data: {
+          claimUrl: 'https://smartcart.app/t#v1.opaque',
+          expiresAt: '2026-08-19T12:10:00.000Z'
+        }
+      };
+    }
   };
   const connection = await connectedClient(service);
   try {
     const listed = await connection.client.listTools();
     assert.deepEqual(
       listed.tools.map((tool) => tool.name).sort(),
-      ['analyze_recipe', 'estimate_recipe', 'plan_grocery_trip', 'prepare_meal_plan']
+      [
+        'analyze_recipe',
+        'create_smartcart_handoff',
+        'estimate_recipe',
+        'plan_grocery_trip',
+        'prepare_meal_plan'
+      ]
     );
+    const handoffTool = listed.tools.find((tool) => tool.name === 'create_smartcart_handoff');
+    assert.deepEqual(handoffTool.annotations, {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false
+    });
 
     for (const name of ['analyze_recipe', 'estimate_recipe']) {
       const result = await connection.client.callTool({
@@ -60,7 +85,47 @@ test('MCP exposes exactly the four stateless goal-oriented SmartCart tools', asy
       }
     });
     assert.equal(trip.structuredContent.operation, 'plan_grocery_trip');
-    assert.equal(calls.length, 4);
+    const handoff = await connection.client.callTool({
+      name: 'create_smartcart_handoff',
+      arguments: {
+        recipes: [{
+          recipe_text: '1 lb chicken breast',
+          title: 'Chicken',
+          servings: 4,
+          source_type: 'image_transcription'
+        }]
+      }
+    });
+    assert.equal(handoff.structuredContent.operation, 'create_smartcart_handoff');
+    assert.equal(calls.at(-1)[1].recipes[0].sourceType, 'image_transcription');
+    assert.equal(calls.length, 5);
+  } finally {
+    await connection.close();
+  }
+});
+
+test('MCP handoff rejects fractional servings before invoking its service', async () => {
+  let calls = 0;
+  const connection = await connectedClient({
+    async createSmartCartHandoff() {
+      calls += 1;
+      throw new Error('The service must not receive invalid tool input.');
+    }
+  });
+  try {
+    const result = await connection.client.callTool({
+      name: 'create_smartcart_handoff',
+      arguments: {
+        recipes: [{
+          recipe_text: '1 lb chicken breast',
+          title: 'Chicken',
+          servings: 2.5,
+          source_type: 'text'
+        }]
+      }
+    });
+    assert.equal(result.isError, true);
+    assert.equal(calls, 0);
   } finally {
     await connection.close();
   }
@@ -99,4 +164,34 @@ Salt to taste`
     surplusValue: null,
     reason: 'No reviewed retailer prices or package observations were supplied. SmartCart does not invent costs.'
   });
+});
+
+test('handoff tool fails closed without leaking server configuration details', async () => {
+  const identityResolver = new CuratedIngredientIdentityResolver();
+  const plugin = new SmartCartPluginService({
+    analyzer: new RecipeTextAnalyzer(),
+    identityResolver,
+    groceryTripPlanner: new GroceryTripPlanner({ identityResolver }),
+    config: { env: 'production', smartCartHandoffTokenSecret: undefined }
+  });
+  const connection = await connectedClient(plugin);
+  try {
+    const result = await connection.client.callTool({
+      name: 'create_smartcart_handoff',
+      arguments: {
+        recipes: [{
+          recipe_text: '1 cup Parmesan cheese',
+          title: 'Safe recipe',
+          servings: 4,
+          source_type: 'text'
+        }]
+      }
+    });
+    assert.equal(result.isError, true);
+    assert.equal(result.structuredContent.error.code, 'handoff_unavailable');
+    assert.equal(result.structuredContent.error.message, 'SmartCart could not create a handoff. Try again later.');
+    assert.equal(JSON.stringify(result).includes('HANDOFF_TOKEN_SECRET'), false);
+  } finally {
+    await connection.close();
+  }
 });

@@ -15,7 +15,7 @@ async function readJson(file) {
 
 test('all authoritative v1 schemas compile', async () => {
   const validator = await createContractValidator({ contractsRoot });
-  assert.equal(validator.schemaIds.length, 19);
+  assert.equal(validator.schemaIds.length, 22);
   assert.equal(new Set(validator.schemaIds).size, validator.schemaIds.length);
 });
 
@@ -38,6 +38,39 @@ test('numeric estimate ordering is enforced beyond basic JSON shape', async () =
   );
 
   assert.equal(result.valid, false);
+});
+
+test('handoff creation result requires HTTPS /t with a fragment bearer and no query', async () => {
+  const validator = await createContractValidator({ contractsRoot });
+  const schemaId = 'https://schemas.smartcart.app/v1/handoff/smartcart-handoff-create-result.schema.json';
+  const result = {
+    schemaVersion: '1.0',
+    resolverVersion: 'smartcart-handoff-v1',
+    requestId: '30000000-0000-4000-8000-000000000001',
+    data: {
+      claimUrl: 'https://smartcart.example/t#v1.ABC_def-123',
+      expiresAt: '2026-08-19T12:10:00.000Z'
+    }
+  };
+
+  assert.equal(validator.validate(schemaId, result).valid, true);
+  for (const claimUrl of [
+    'http://smartcart.example/t#v1.ABC_def-123',
+    'https://user@smartcart.example/t#v1.ABC_def-123',
+    'https://smartcart.example/other#v1.ABC_def-123',
+    'https://smartcart.example/t?token=v1.ABC_def-123',
+    'https://smartcart.example/t?source=gpt#v1.ABC_def-123',
+    'https://smartcart.example/t',
+    'https://smartcart.example/t#ABC_def-123'
+  ]) {
+    const invalid = structuredClone(result);
+    invalid.data.claimUrl = claimUrl;
+    assert.equal(
+      validator.validate(schemaId, invalid).valid,
+      false,
+      `Expected the handoff contract to reject ${claimUrl}`
+    );
+  }
 });
 
 test('retailer query is emitted only for a safe canonical identity', async () => {

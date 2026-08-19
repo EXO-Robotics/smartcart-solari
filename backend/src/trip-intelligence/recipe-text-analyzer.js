@@ -1,31 +1,28 @@
 import { createHash } from 'node:crypto';
+import { inspectIngredientQueryName } from './ingredient-query-safety.js';
 
 const stopHeading = /^(instructions?|directions?|method|steps?|preparation|nutrition|notes?)\s*:?$/i;
 const ingredientHeading = /^ingredients?\s*:?$/i;
-const unsafeMeasurementPrefix = /^(?:%|�|\?{2,}|(?:cups?|tbsp|tsp|oz|lbs?|grams?|kg|ml|liters?)\b)/iu;
 const instructionStart = /^(?:add|bake|beat|blend|bring|combine|cook|cover|drain|heat|mix|place|preheat|reduce|remove|serve|stir|whisk)\b/iu;
 const units = [
   'fluid ounces?', 'fl oz', 'tablespoons?', 'tbsp', 'teaspoons?', 'tsp',
   'kilograms?', 'kg', 'grams?', 'g', 'pounds?', 'lbs?', 'ounces?', 'oz',
   'milliliters?', 'ml', 'liters?', 'l', 'cups?', 'packages?', 'cans?', 'cloves?',
-  'pieces?', 'slices?', 'large', 'medium', 'small'
+  'pieces?', 'slices?', 'stalks?', 'sticks?', 'bunches?', 'heads?', 'sprigs?',
+  'scoops?', 'pinches?', 'jars?', 'containers?', 'cartons?',
+  'large', 'medium', 'small'
 ];
-const unitPattern = new RegExp(`^(${units.join('|')})\\.?\\b\\s*`, 'iu');
+const unitExpression = units.join('|');
+const unitPattern = new RegExp(`^(${unitExpression})\\.?\\b\\s*`, 'iu');
+const quantityTokenExpression = String.raw`(?:\d+[\/\u2044]\d+|\d+[¼½¾⅓⅔⅛⅜⅝⅞]|[¼½¾⅓⅔⅛⅜⅝⅞]|\d+(?:\.\d+)?)`;
+const compactQuantityUnitPattern = new RegExp(
+  `^(${quantityTokenExpression})\\s*(${unitExpression})\\.?\\b\\s*`,
+  'iu'
+);
 const fractionGlyphs = new Map([
   ['¼', 0.25], ['½', 0.5], ['¾', 0.75], ['⅓', 1 / 3], ['⅔', 2 / 3],
   ['⅛', 0.125], ['⅜', 0.375], ['⅝', 0.625], ['⅞', 0.875]
 ]);
-const prefixPreparations = [
-  ['finely grated', 'finely grated'],
-  ['freshly grated', 'freshly grated'],
-  ['grated', 'grated'],
-  ['finely chopped', 'finely chopped'],
-  ['chopped', 'chopped'],
-  ['diced', 'diced'],
-  ['thinly sliced', 'thinly sliced'],
-  ['sliced', 'sliced'],
-  ['minced', 'minced']
-];
 
 function stableUuid(seed) {
   const bytes = createHash('sha256').update(seed).digest().subarray(0, 16);
@@ -36,23 +33,59 @@ function stableUuid(seed) {
 }
 
 function numericToken(token) {
-  if (fractionGlyphs.has(token)) return fractionGlyphs.get(token);
-  const mixedGlyph = /^(\d+)([¼½¾⅓⅔⅛⅜⅝⅞])$/u.exec(token);
+  const normalizedToken = token.replace(/\u2044/gu, '/');
+  if (fractionGlyphs.has(normalizedToken)) return fractionGlyphs.get(normalizedToken);
+  const mixedGlyph = /^(\d+)([¼½¾⅓⅔⅛⅜⅝⅞])$/u.exec(normalizedToken);
   if (mixedGlyph) return Number(mixedGlyph[1]) + fractionGlyphs.get(mixedGlyph[2]);
-  const fraction = /^(\d+)\/(\d+)$/u.exec(token);
+  const fraction = /^(\d+)\/(\d+)$/u.exec(normalizedToken);
   if (fraction && Number(fraction[2]) !== 0) return Number(fraction[1]) / Number(fraction[2]);
-  return /^\d+(?:\.\d+)?$/u.test(token) ? Number(token) : null;
+  return /^\d+(?:\.\d+)?$/u.test(normalizedToken) ? Number(normalizedToken) : null;
 }
 
 function parseLeadingQuantity(value) {
   let remaining = value.trim();
+  const compactRange = /^(\d+(?:\.\d+)?|\d+[\/\u2044]\d+|[¼½¾⅓⅔⅛⅜⅝⅞])\s*(?:-|–)\s*(\d+(?:\.\d+)?|\d+[\/\u2044]\d+|[¼½¾⅓⅔⅛⅜⅝⅞])\s*/u.exec(remaining);
+  if (compactRange) {
+    const start = numericToken(compactRange[1]);
+    const end = numericToken(compactRange[2]);
+    if (start !== null && end !== null) {
+      remaining = remaining.slice(compactRange[0].length);
+      const unitMatch = unitPattern.exec(remaining);
+      const unit = unitMatch ? unitMatch[1] : '';
+      if (unitMatch) remaining = remaining.slice(unitMatch[0].length);
+      return {
+        quantity: {
+          kind: 'numeric',
+          value: Math.max(start, end),
+          minimumValue: Math.min(start, end),
+          unit
+        },
+        remaining
+      };
+    }
+  }
+  const compactQuantityUnit = compactQuantityUnitPattern.exec(remaining);
+  if (compactQuantityUnit) {
+    const preferred = numericToken(compactQuantityUnit[1]);
+    if (preferred !== null) {
+      return {
+        quantity: {
+          kind: 'numeric',
+          value: preferred,
+          minimumValue: null,
+          unit: compactQuantityUnit[2]
+        },
+        remaining: remaining.slice(compactQuantityUnit[0].length)
+      };
+    }
+  }
   const firstMatch = /^(\S+)\s*/u.exec(remaining);
   if (!firstMatch) return { quantity: null, remaining };
   let preferred = numericToken(firstMatch[1]);
   if (preferred === null) return { quantity: null, remaining };
   remaining = remaining.slice(firstMatch[0].length);
 
-  const mixed = /^(\d+\/\d+|[¼½¾⅓⅔⅛⅜⅝⅞])\s*/u.exec(remaining);
+  const mixed = /^(\d+[\/\u2044]\d+|[¼½¾⅓⅔⅛⅜⅝⅞])\s*/u.exec(remaining);
   if (mixed) {
     const part = numericToken(mixed[1]);
     if (part !== null) {
@@ -62,7 +95,7 @@ function parseLeadingQuantity(value) {
   }
 
   let minimumValue = null;
-  const range = /^(?:-|–|to)\s*(\d+(?:\.\d+)?|\d+\/\d+|[¼½¾⅓⅔⅛⅜⅝⅞])\s*/iu.exec(remaining);
+  const range = /^(?:-|–|to)\s*(\d+(?:\.\d+)?|\d+[\/\u2044]\d+|[¼½¾⅓⅔⅛⅜⅝⅞])\s*/iu.exec(remaining);
   if (range) {
     const end = numericToken(range[1]);
     if (end !== null) {
@@ -95,17 +128,9 @@ function semanticQuantity(value) {
   };
 }
 
-function separatePreparation(value) {
-  const trimmed = value.trim().replace(/[.;]+$/u, '');
-  const comma = /^(.+?),\s*(finely grated|freshly grated|grated|finely chopped|chopped|diced|thinly sliced|sliced|minced)(?:,.*)?$/iu.exec(trimmed);
-  if (comma) return { name: comma[1].trim(), preparation: comma[2].trim() };
-  const lower = trimmed.toLocaleLowerCase('en-US');
-  for (const [prefix, preparation] of prefixPreparations) {
-    if (lower.startsWith(`${prefix} `)) {
-      return { name: trimmed.slice(prefix.length).trim(), preparation };
-    }
-  }
-  return { name: trimmed, preparation: '' };
+function qualitativeLeadingQuantity(value) {
+  const match = /^(?:a\s+)?pinch(?:\s+of)?\s+(.+)$/iu.exec(value.trim());
+  return match ? { remaining: match[1].trim(), quantity: null } : null;
 }
 
 function issue(line, index, code, message, severity = 'review') {
@@ -118,6 +143,30 @@ function issue(line, index, code, message, severity = 'review') {
   };
 }
 
+function normalizedBoundaryText(value) {
+  return value
+    .normalize('NFKC')
+    .trim()
+    .replace(/^[•*\-–—]+\s*/u, '')
+    .replace(/[\s:;.!?]+$/u, '')
+    .replace(/\s+/gu, ' ')
+    .toLocaleLowerCase('en-US');
+}
+
+const contextualSectionWords = new Set([
+  'assembly', 'dough', 'filling', 'garnish', 'glaze', 'marinade', 'optional', 'sauce', 'topping'
+]);
+
+function nextNonemptyLineIsMeasured(lines, index) {
+  for (let cursor = index + 1; cursor < lines.length; cursor += 1) {
+    const candidate = lines[cursor].trim().replace(/^[•*\-–—]+\s*/u, '').trim();
+    if (candidate.length === 0) continue;
+    const parsed = parseLeadingQuantity(candidate);
+    return parsed.quantity?.kind === 'numeric' && parsed.remaining.trim().length > 0;
+  }
+  return false;
+}
+
 export class RecipeTextAnalyzer {
   constructor({ resolverVersion = 'recipe-text-v1' } = {}) {
     this.resolverVersion = resolverVersion;
@@ -128,6 +177,7 @@ export class RecipeTextAnalyzer {
     const evidence = [];
     const issues = [];
     const lines = recipeText.split(/\r?\n/u);
+    const normalizedTitle = normalizedBoundaryText(title);
     let reachedInstructions = false;
 
     for (const [index, sourceLine] of lines.entries()) {
@@ -143,6 +193,29 @@ export class RecipeTextAnalyzer {
         description: sourceLine
       });
       if (ingredientHeading.test(line)) continue;
+      if (normalizedTitle.length > 0 && normalizedBoundaryText(line) === normalizedTitle) {
+        issues.push(issue(
+          sourceLine,
+          index,
+          'ingredient_title_duplicate',
+          'The recipe title cannot become a retailer query.',
+          'blocking'
+        ));
+        continue;
+      }
+      if (
+        contextualSectionWords.has(normalizedBoundaryText(line))
+        && nextNonemptyLineIsMeasured(lines, index)
+      ) {
+        issues.push(issue(
+          sourceLine,
+          index,
+          'ingredient_heading_fragment',
+          'A recipe subsection heading cannot become a retailer query.',
+          'blocking'
+        ));
+        continue;
+      }
       if (stopHeading.test(line)) {
         reachedInstructions = true;
         continue;
@@ -159,22 +232,23 @@ export class RecipeTextAnalyzer {
         line = semantic.remaining;
         quantity = semantic.quantity;
       } else {
-        const parsed = parseLeadingQuantity(line);
+        const parsed = qualitativeLeadingQuantity(line) ?? parseLeadingQuantity(line);
         line = parsed.remaining;
         quantity = parsed.quantity;
       }
 
-      const { name, preparation } = separatePreparation(line);
-      if (name.length === 0 || unsafeMeasurementPrefix.test(name) || !/[\p{L}\p{N}]/u.test(name)) {
+      const queryName = inspectIngredientQueryName(line);
+      if (!queryName.safe) {
         issues.push(issue(
           sourceLine,
           index,
-          'ingredient_structure_unresolved',
-          'This line could not produce a safe ingredient identity.',
+          queryName.code,
+          queryName.message,
           'blocking'
         ));
         continue;
       }
+      const { canonicalName: name, preparation } = queryName;
       ingredients.push({
         ingredientId: stableUuid(`${recipeId}:${index}:${sourceLine}`),
         sourceText: sourceLine,
@@ -195,7 +269,7 @@ export class RecipeTextAnalyzer {
       });
     }
 
-    if (ingredients.length === 0) {
+    if (ingredients.length === 0 && !issues.some((entry) => entry.severity === 'blocking')) {
       issues.push({
         code: 'no_ingredients_detected',
         severity: 'blocking',

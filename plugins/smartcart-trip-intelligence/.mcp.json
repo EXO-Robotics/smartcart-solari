@@ -4,7 +4,13 @@
       "command": "node",
       "args": ["../../backend/src/mcp/stdio.js"],
       "cwd": ".",
-      "env_vars": ["USDA_FDC_API_KEY", "USDA_FDC_BASE_URL", "USDA_FDC_TIMEOUT_MS"]
+      "env_vars": [
+        "USDA_FDC_API_KEY",
+        "USDA_FDC_BASE_URL",
+        "USDA_FDC_TIMEOUT_MS",
+        "HANDOFF_TOKEN_SECRET",
+        "SMARTCART_HANDOFF_BASE_URL"
+      ]
     }
   }
 }

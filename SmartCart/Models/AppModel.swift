@@ -1279,6 +1279,184 @@ final class AppModel {
         return persistAndOpenRecipe(recipe, operationToken: operationToken)
     }
 
+    /// Imports a validated, recipe-only ChatGPT handoff into the same durable
+    /// Recipe Ready boundary used by native imports. Remote pantry conclusions,
+    /// product matches, shopping sessions, and retailer URLs are never accepted.
+    @discardableResult
+    func importSmartCartHandoff(_ handoff: SmartCartHandoffImport) -> Bool {
+        let claimedRecipes = handoff.recipes
+        guard (1...MealPrepDraft.selectionLimit).contains(claimedRecipes.count),
+              Set(claimedRecipes.map(\.id)).count == claimedRecipes.count else {
+            showToast("This SmartCart plan could not be verified")
+            return false
+        }
+        if claimedRecipes.count == 1 {
+            guard let recipe = claimedRecipes.first,
+                  (1...24).contains(recipe.servings) else {
+                showToast("This SmartCart plan could not be verified")
+                return false
+            }
+            if let existingRecipe = recipes.first(where: { $0.id == recipe.id }),
+               isRecipeDurable(existingRecipe.id) {
+                return reopenDurableSmartCartHandoffRecipe(
+                    existingRecipe,
+                    matching: recipe
+                )
+            }
+            return beginRecipe(recipe)
+        }
+        guard claimedRecipes.allSatisfy({ (1...48).contains($0.servings) }) else {
+            showToast("This SmartCart plan could not be verified")
+            return false
+        }
+
+        let expectedRecipeIDs = claimedRecipes.map(\.id)
+        if let existingDraft = mealPrepDraft, existingDraft.id == handoff.claimID {
+            let existingRecipeIDs = existingDraft.selections.map(\.recipeSnapshot.id)
+            let existingServings = existingDraft.selections.map(\.targetServings)
+            guard existingRecipeIDs == expectedRecipeIDs,
+                  existingServings == claimedRecipes.map({ Double($0.servings) }),
+                  mealPrepPlan?.id == existingDraft.id else {
+                showToast("This SmartCart plan conflicts with its saved copy")
+                return false
+            }
+            selectedTab = .home
+            presentedSheet = nil
+            shoppingScope = existingDraft.shoppingScope
+            homePath = [.mealPrepSelection, .recipeReady]
+            return true
+        }
+        guard mealPrepDraft == nil, mealPrepPlan == nil else {
+            showToast("Finish or remove the current Meal Prep before opening this plan")
+            return false
+        }
+
+        var localRecipes = claimedRecipes
+        for index in localRecipes.indices {
+            applyPantrySuggestions(to: &localRecipes[index])
+        }
+        let now = Date()
+        let selections = localRecipes.map { recipe in
+            MealPrepSelection(
+                id: recipe.id,
+                recipe: recipe,
+                targetServings: Double(recipe.servings)
+            )
+        }
+        let draft = MealPrepDraft(
+            id: handoff.claimID,
+            title: "ChatGPT Meal Prep",
+            selections: selections,
+            createdAt: now,
+            updatedAt: now
+        )
+
+        let succeeded = performAtomicMealPrepTransition {
+            for recipe in localRecipes {
+                if let index = recipes.firstIndex(where: { $0.id == recipe.id }) {
+                    recipes[index] = recipe
+                } else {
+                    recipes.insert(recipe, at: 0)
+                }
+                savedRecipeIDs.insert(recipe.id)
+            }
+            activeRecipe = localRecipes[0]
+            desiredServings = localRecipes[0].servings
+            mealPrepDraft = draft
+            mealPrepPlan = try rebuiltMealPrepPlan(
+                draft: draft,
+                preserving: nil,
+                pantryInventory: pantryInventory
+            )
+            shoppingScope = draft.shoppingScope
+            invalidateShoppingPlan()
+        }
+        guard succeeded else {
+            showToast("SmartCart could not save this plan")
+            return false
+        }
+        durableRecipeIDs.formUnion(localRecipes.map(\.id))
+        selectedTab = .home
+        presentedSheet = nil
+        homePath = [.mealPrepSelection, .recipeReady]
+        showToast("Meal Prep imported · \(localRecipes.count) recipes")
+        return true
+    }
+
+    /// Replays open the durable native copy instead of applying remote content
+    /// again. This preserves user corrections, retailer decisions, queue
+    /// progress, and paused-session identity for the same recipe.
+    @discardableResult
+    private func reopenDurableSmartCartHandoffRecipe(
+        _ existingRecipe: Recipe,
+        matching claimedRecipe: Recipe
+    ) -> Bool {
+        let operationToken = operationObserver.start(
+            .recipeImport,
+            importMethod: localOperationImportMethod(for: existingRecipe.source),
+            retailer: nil
+        )
+        guard existingRecipe.source == claimedRecipe.source,
+              existingRecipe.sourceDetail == claimedRecipe.sourceDetail else {
+            operationObserver.finish(
+                operationToken,
+                event: .requiredDecision,
+                failureCategory: .invalidInput
+            )
+            showToast("This SmartCart plan conflicts with its saved copy")
+            return false
+        }
+
+        if activeRecipe.id != existingRecipe.id {
+            guard activeShoppingSessionID == nil,
+                  shoppingItems.isEmpty,
+                  ingredientResolutions.isEmpty,
+                  !isMatching else {
+                operationObserver.finish(
+                    operationToken,
+                    event: .requiredDecision,
+                    failureCategory: .invalidInput
+                )
+                showToast("Finish the current shopping trip before opening this recipe")
+                return false
+            }
+            let succeeded = performAtomicMealPrepTransition {
+                activeRecipe = existingRecipe
+                desiredServings = existingRecipe.servings
+                shoppingScope = .singleRecipe(existingRecipe.id)
+            }
+            guard succeeded else {
+                operationObserver.finish(
+                    operationToken,
+                    event: .failedUnrecoverably,
+                    failureCategory: .persistenceWriteFailed
+                )
+                showToast("SmartCart could not open this saved recipe")
+                return false
+            }
+        } else if let shoppingScope,
+                  shoppingScope != .singleRecipe(existingRecipe.id) {
+            operationObserver.finish(
+                operationToken,
+                event: .requiredDecision,
+                failureCategory: .invalidInput
+            )
+            showToast("Finish the current Meal Prep before opening this recipe")
+            return false
+        }
+
+        completeRecipeOpening(
+            existingRecipe,
+            operationToken: operationToken,
+            event: .recovered
+        )
+        return true
+    }
+
+    func smartCartHandoffDidFail(_ message: String) {
+        showToast(message)
+    }
+
     private func persistAndOpenRecipe(
         _ recipe: Recipe,
         operationToken: LocalOperationToken,
@@ -1944,14 +2122,19 @@ final class AppModel {
 
     private func mealPrepIngredient(_ line: CombinedIngredientLine) -> Ingredient? {
         guard line.participatesInCurrentTrip,
-              line.quantityToBuy > 0,
+              line.quantityToBuy > 0 || line.hasUnspecifiedQuantity,
               let source = line.sources.first else { return nil }
+        let hasUnspecifiedQuantity = line.hasUnspecifiedQuantity && line.quantityToBuy == 0
         return Ingredient(
             id: line.shoppingItemID ?? source.ingredient.id,
-            rawText: Ingredient.quantityText(line.quantityToBuy, unit: line.unit.symbol) + " " + line.name,
+            rawText: hasUnspecifiedQuantity
+                ? source.ingredient.rawText
+                : Ingredient.quantityText(line.quantityToBuy, unit: line.unit.symbol) + " " + line.name,
             name: line.name,
             quantity: line.quantityToBuy,
-            unit: line.unit.symbol == "count" ? "" : line.unit.symbol,
+            semanticQuantity: hasUnspecifiedQuantity ? source.ingredient.semanticQuantity : nil,
+            quantityLowerBound: hasUnspecifiedQuantity ? source.ingredient.quantityLowerBound : nil,
+            unit: hasUnspecifiedQuantity || line.unit.symbol == "count" ? "" : line.unit.symbol,
             preparation: source.ingredient.preparation,
             category: line.category,
             confidence: source.ingredient.confidence,
@@ -1960,7 +2143,8 @@ final class AppModel {
             preferenceNote: source.ingredient.preferenceNote,
             brandNote: source.ingredient.brandNote,
             alternativeGroup: source.ingredient.alternativeGroup,
-            quantityReviewRequired: false,
+            sourceEvidence: source.ingredient.sourceEvidence,
+            quantityReviewRequired: line.mergeReviewReasons.contains(.uncertainQuantity),
             preferredPantryItemID: source.ingredient.preferredPantryItemID,
             preferredProductName: source.ingredient.preferredProductName
         )
@@ -2065,6 +2249,8 @@ final class AppModel {
     private struct MealPrepTransitionBackup {
         var activeRecipe: Recipe
         var recipes: [Recipe]
+        var savedRecipeIDs: Set<UUID>
+        var desiredServings: Int
         var draft: MealPrepDraft?
         var plan: MealPrepPlanSnapshot?
         var scope: ShoppingScope?
@@ -2095,6 +2281,8 @@ final class AppModel {
         let backup = MealPrepTransitionBackup(
             activeRecipe: activeRecipe,
             recipes: recipes,
+            savedRecipeIDs: savedRecipeIDs,
+            desiredServings: desiredServings,
             draft: mealPrepDraft,
             plan: mealPrepPlan,
             scope: shoppingScope,
@@ -2115,6 +2303,8 @@ final class AppModel {
         } catch {
             activeRecipe = backup.activeRecipe
             recipes = backup.recipes
+            savedRecipeIDs = backup.savedRecipeIDs
+            desiredServings = backup.desiredServings
             mealPrepDraft = backup.draft
             mealPrepPlan = backup.plan
             shoppingScope = backup.scope

@@ -7,6 +7,7 @@ struct SmartCartApp: App {
     @State private var appModel = AppModel()
     @State private var appearanceController = SmartCartAppearanceController()
     @State private var weeklyMealsStore = WeeklyMealsStore()
+    @State private var handoffCoordinator = SmartCartHandoffCoordinator()
 
     var body: some Scene {
         WindowGroup {
@@ -44,6 +45,75 @@ struct SmartCartApp: App {
                         appModel.requestLifecyclePersistenceFlush()
                     }
                 }
+                .onOpenURL { url in
+                    handoffCoordinator.handle(url, appModel: appModel)
+                }
+                .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+                    guard let url = activity.webpageURL else { return }
+                    handoffCoordinator.handle(url, appModel: appModel)
+                }
+        }
+    }
+}
+
+@MainActor
+private final class SmartCartHandoffCoordinator {
+    private struct Attempt {
+        let token: String
+        let requestID: UUID
+    }
+
+    private var attempt: Attempt?
+    private var activeTask: Task<Void, Never>?
+
+    func handle(_ url: URL, appModel: AppModel) {
+        switch SmartCartHandoffURLParser.parse(url) {
+        case .notSmartCartHandoff:
+            return
+        case .invalid:
+            appModel.smartCartHandoffDidFail(
+                "This SmartCart link is invalid. Ask ChatGPT to create a new one."
+            )
+        case .valid(let token):
+            beginClaim(token: token, appModel: appModel)
+        }
+    }
+
+    private func beginClaim(token: String, appModel: AppModel) {
+        if activeTask != nil {
+            guard attempt?.token != token else { return }
+            appModel.smartCartHandoffDidFail("SmartCart is already opening another plan")
+            return
+        }
+
+        let requestID: UUID
+        if attempt?.token == token, let existingRequestID = attempt?.requestID {
+            requestID = existingRequestID
+        } else {
+            requestID = UUID()
+            attempt = Attempt(token: token, requestID: requestID)
+        }
+
+        guard case .success(let configuration) = BarcodeBackendConfiguration.resolve() else {
+            appModel.smartCartHandoffDidFail("SmartCart’s plan service is not configured")
+            return
+        }
+        let client = SmartCartHandoffClient(baseURL: configuration.baseURL)
+        activeTask = Task { [weak self] in
+            defer { self?.activeTask = nil }
+            do {
+                let payload = try await client.claim(token: token, requestID: requestID)
+                try Task.checkCancellation()
+                let handoff = try SmartCartHandoffSnapshotFactory.makeImport(from: payload)
+                guard appModel.importSmartCartHandoff(handoff) else { return }
+                self?.attempt = nil
+            } catch is CancellationError {
+                return
+            } catch {
+                let message = (error as? LocalizedError)?.errorDescription
+                    ?? "SmartCart could not open this plan. Try the link again."
+                appModel.smartCartHandoffDidFail(message)
+            }
         }
     }
 }

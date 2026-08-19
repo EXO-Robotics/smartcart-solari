@@ -8,6 +8,13 @@ const recipeInput = {
   servings: z.number().positive().max(10_000).default(4)
 };
 
+const handoffRecipeInput = {
+  recipe_text: z.string().min(1).max(50_000).describe('The exact ingredient-list text. Preserve the source wording and never infer missing text from a photo.'),
+  title: z.string().min(1).max(300).default('Imported Recipe'),
+  servings: z.number().int().positive().max(48).default(4),
+  source_type: z.enum(['text', 'image_transcription']).describe('Use image_transcription whenever any recipe text came from an uploaded image. Its numeric quantities must be confirmed in SmartCart before shopping.')
+};
+
 function toolResult(operation, data) {
   const structuredContent = { schemaVersion: '1.0', operation, ...data };
   return {
@@ -35,9 +42,26 @@ function toolError(operation, error) {
   };
 }
 
+const publicHandoffErrorCodes = new Set([
+  'handoff_limits_exceeded',
+  'handoff_not_safe',
+  'handoff_payload_too_large',
+  'handoff_review_contract_invalid',
+  'handoff_servings_out_of_range',
+  'handoff_token_too_large'
+]);
+
+function handoffToolError(error) {
+  if (publicHandoffErrorCodes.has(error?.code)) return toolError('create_smartcart_handoff', error);
+  const unavailable = new Error('SmartCart could not create a handoff. Try again later.');
+  unavailable.code = 'handoff_unavailable';
+  unavailable.retryable = true;
+  return toolError('create_smartcart_handoff', unavailable);
+}
+
 export function createSmartCartMcpServer(options = {}) {
   const pluginService = options.pluginService ?? new SmartCartPluginService(options);
-  const server = new McpServer({ name: 'smartcart-trip-intelligence', version: '0.1.0' });
+  const server = new McpServer({ name: 'smartcart-trip-intelligence', version: '0.2.0' });
 
   server.registerTool('analyze_recipe', {
     title: 'Analyze recipe',
@@ -96,6 +120,44 @@ export function createSmartCartMcpServer(options = {}) {
       }));
     } catch (error) {
       return toolError('plan_grocery_trip', error);
+    }
+  });
+
+  server.registerTool('create_smartcart_handoff', {
+    title: 'Open grocery plan in SmartCart',
+    description: 'Create a short-lived, bounded-use encrypted link for the native SmartCart app. This returns a link but does not mutate the phone or Safari queue; native import begins only after the user opens it. The server re-analyzes every recipe and refuses unsafe retailer queries. Set source_type to image_transcription for any uploaded-photo transcription so SmartCart requires confirmation of every numeric quantity before Safari shopping.',
+    inputSchema: {
+      recipes: z.array(z.object(handoffRecipeInput)).min(1).max(5)
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false
+    }
+  }, async ({ recipes }) => {
+    try {
+      const maximumServings = recipes.length === 1 ? 24 : 48;
+      if (recipes.some((recipe) => recipe.servings > maximumServings)) {
+        const error = new Error(
+          recipes.length === 1
+            ? 'A single SmartCart recipe supports at most 24 servings.'
+            : 'Each SmartCart Meal Prep recipe supports at most 48 servings.'
+        );
+        error.code = 'handoff_servings_out_of_range';
+        throw error;
+      }
+      return toolResult('create_smartcart_handoff', {
+        handoff: await pluginService.createSmartCartHandoff({
+          recipes: recipes.map(({ recipe_text: recipeText, source_type: sourceType, ...recipe }) => ({
+            ...recipe,
+            recipeText,
+            sourceType
+          }))
+        })
+      });
+    } catch (error) {
+      return handoffToolError(error);
     }
   });
 

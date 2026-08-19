@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.smartcart.app/v1/handoff/smartcart-handoff-claim-request.schema.json",
+  "title": "SmartCart trip handoff claim request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "requestId", "data"],
+  "properties": {
+    "schemaVersion": {
+      "$ref": "https://schemas.smartcart.app/v1/common/contract-fields.schema.json#/$defs/schemaVersion"
+    },
+    "requestId": {
+      "$ref": "https://schemas.smartcart.app/v1/common/contract-fields.schema.json#/$defs/requestId"
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claimToken"],
+      "properties": {
+        "claimToken": {
+          "type": "string",
+          "minLength": 40,
+          "maxLength": 24000,
+          "pattern": "^v1\\.[A-Za-z0-9_-]+$"
+        }
+      }
+    }
+  }
+}

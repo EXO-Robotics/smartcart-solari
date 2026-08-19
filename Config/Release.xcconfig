@@ -1,7 +1,7 @@
 #include "Base.xcconfig"
 
-// Verified public HTTPS barcode-only service. This endpoint exposes only
-// /health and /v1/barcodes/{gtin}; recipe import remains independently gated.
+// Verified public SmartCart service for barcode lookup, Weekly Meals,
+// Trip Intelligence, MCP, and short-lived native handoff claims.
 SMARTCART_BARCODE_BACKEND_URL = https:/$()/smartcart-barcode-api-omega.vercel.app
 SMARTCART_WEEKLY_MEALS_BASE_URL = https:/$()/smartcart-barcode-api-omega.vercel.app
 

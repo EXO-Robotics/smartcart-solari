@@ -1,18 +1,25 @@
 {
   "name": "smartcart-trip-intelligence",
-  "version": "0.1.0",
-  "description": "Stateless SmartCart recipe, nutrition, meal planning, and grocery trip intelligence",
+  "version": "0.2.0",
+  "description": "SmartCart recipe intelligence and reviewed native-app handoff",
   "author": {
     "name": "SmartCart"
   },
   "interface": {
     "displayName": "SmartCart Trip Intelligence",
     "shortDescription": "Analyze recipes and build safe grocery plans.",
-    "longDescription": "SmartCart Trip Intelligence exposes stateless recipe analysis, USDA-backed nutrition estimates, meal-plan aggregation, and conservative grocery-trip planning through MCP.",
+    "longDescription": "SmartCart Trip Intelligence exposes recipe analysis, USDA-backed nutrition estimates, meal-plan aggregation, conservative grocery-trip planning, and a short-lived encrypted native-app handoff through MCP.",
     "developerName": "SmartCart",
     "category": "Productivity",
-    "capabilities": ["MCP tools"],
-    "defaultPrompt": "Use SmartCart to analyze a recipe or prepare a grocery plan."
+    "capabilities": ["MCP tools", "Native app handoff"],
+    "defaultPrompt": [
+      "Turn this recipe into a reviewed SmartCart grocery plan.",
+      "Open these recipe ingredients in SmartCart.",
+      "Estimate this recipe, then prepare it for SmartCart."
+    ],
+    "brandColor": "#30D65C",
+    "composerIcon": "./assets/smartcart-icon.png",
+    "logo": "./assets/smartcart-icon.png"
   },
   "mcpServers": "./.mcp.json"
 }

@@ -151,13 +151,27 @@ test('public Trip Intelligence rejects an oversized body pre-parsed by Vercel', 
   }
 });
 
-test('Vercel exposes only the reviewed barcode and Trip Intelligence surfaces', async () => {
+test('Vercel exposes only the reviewed barcode, intelligence, MCP, and native handoff surfaces', async () => {
   const config = JSON.parse(await readFile(new URL('../vercel.json', import.meta.url), 'utf8'));
   assert.deepEqual(
     Object.keys(config.functions).sort(),
-    ['api/index.js', 'api/intelligence.js', 'api/mcp.js']
+    ['api/handoff.js', 'api/index.js', 'api/intelligence.js', 'api/mcp.js']
   );
   assert.deepEqual(config.routes, [
+    {
+      src: '/\\.well-known/apple-app-site-association',
+      methods: ['GET', 'HEAD'],
+      dest: '/.well-known/apple-app-site-association.json',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'public, max-age=300',
+        'X-Content-Type-Options': 'nosniff'
+      }
+    },
+    {
+      src: '/api/(mcp(?:\\.js)?|handoff(?:\\.js)?)',
+      status: 404
+    },
     { handle: 'filesystem' },
     {
       src: '/health',
@@ -178,6 +192,16 @@ test('Vercel exposes only the reviewed barcode and Trip Intelligence surfaces', 
       src: '/mcp',
       methods: ['POST'],
       dest: '/api/mcp.js?route=mcp'
+    },
+    {
+      src: '/v1/handoffs/claim',
+      methods: ['POST'],
+      dest: '/api/handoff.js?route=claim'
+    },
+    {
+      src: '/t',
+      methods: ['GET', 'HEAD'],
+      dest: '/t/index.html'
     },
     { src: '/.*', status: 404 }
   ]);

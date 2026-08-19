@@ -28,6 +28,8 @@ struct FrozenMealPrepIngredient: Identifiable, Hashable, Codable {
     var rawText: String
     var name: String
     var quantity: Double
+    var semanticQuantity: String?
+    var quantityLowerBound: Double?
     var unit: String
     var preparation: String
     var category: GroceryCategory
@@ -37,6 +39,7 @@ struct FrozenMealPrepIngredient: Identifiable, Hashable, Codable {
     var preferenceNote: String
     var brandNote: String?
     var alternativeGroup: String?
+    var sourceEvidence: IngredientSourceEvidence?
     var quantityReviewRequired: Bool
     var preferredPantryItemID: UUID?
     var preferredProductName: String?
@@ -46,6 +49,8 @@ struct FrozenMealPrepIngredient: Identifiable, Hashable, Codable {
         rawText = ingredient.rawText
         name = ingredient.name
         quantity = ingredient.quantity
+        semanticQuantity = ingredient.semanticQuantity
+        quantityLowerBound = ingredient.quantityLowerBound
         unit = ingredient.unit
         preparation = ingredient.preparation
         category = ingredient.category
@@ -55,6 +60,11 @@ struct FrozenMealPrepIngredient: Identifiable, Hashable, Codable {
         preferenceNote = ingredient.preferenceNote
         brandNote = ingredient.brandNote
         alternativeGroup = ingredient.alternativeGroup
+        var frozenEvidence = ingredient.sourceEvidence
+        // Meal Prep keeps the durable OCR provenance needed for review, but
+        // never duplicates private image bytes in every frozen snapshot.
+        frozenEvidence?.sourceCropJPEGData = nil
+        sourceEvidence = frozenEvidence
         quantityReviewRequired = ingredient.quantityReviewRequired == true
         preferredPantryItemID = ingredient.preferredPantryItemID
         preferredProductName = ingredient.preferredProductName
@@ -233,6 +243,12 @@ struct CombinedIngredientLine: Identifiable, Hashable, Codable {
     var participatesInCurrentTrip: Bool {
         mergeReviewState != .excludedAlternative && mergeReviewState != .deferredAlternative
     }
+    var hasUnspecifiedQuantity: Bool {
+        sources.contains { source in
+            source.ingredient.quantity == 0 &&
+                source.ingredient.unit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
     var needsReview: Bool {
         mergeReviewState == .reviewRequired || mergeReviewState == .alternativeChoice
     }
@@ -266,7 +282,11 @@ struct MealPrepPlanSnapshot: Identifiable, Hashable, Codable {
     var pantryCoveredCount: Int {
         lines.filter { $0.participatesInCurrentTrip && $0.pantryQuantityApplied > 0 }.count
     }
-    var purchaseCount: Int { lines.filter { $0.quantityToBuy > 0 }.count }
+    var purchaseCount: Int {
+        lines.filter {
+            $0.participatesInCurrentTrip && ($0.quantityToBuy > 0 || $0.hasUnspecifiedQuantity)
+        }.count
+    }
     var unresolvedReviewCount: Int { lines.filter(\.needsReview).count }
 }
 

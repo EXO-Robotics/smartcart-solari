@@ -42,6 +42,7 @@ try {
   assert(
     JSON.stringify(toolNames) === JSON.stringify([
       'analyze_recipe',
+      'create_smartcart_handoff',
       'estimate_recipe',
       'plan_grocery_trip',
       'prepare_meal_plan'
@@ -84,6 +85,27 @@ Salt to taste`
 
   let liveNutrition = 'skipped-no-usda-key';
   let liveMealPlan = 'skipped-no-usda-key';
+  let nativeHandoff = 'skipped-no-handoff-secret';
+  if (process.env.HANDOFF_TOKEN_SECRET) {
+    const handoff = await client.callTool({
+      name: 'create_smartcart_handoff',
+      arguments: {
+        recipes: [{
+          title: 'Native handoff verification',
+          servings: 4,
+          source_type: 'text',
+          recipe_text: '1 cup Parmesan cheese\nSalt to taste'
+        }]
+      }
+    });
+    assert(!handoff.isError, `create_smartcart_handoff returned an MCP error: ${JSON.stringify(handoff.structuredContent ?? handoff.content)}`);
+    const claimUrl = new URL(handoff.structuredContent?.handoff?.data?.claimUrl);
+    assert(claimUrl.protocol === 'https:', 'Handoff claim URL must use HTTPS');
+    assert(claimUrl.pathname === '/t', 'Handoff claim URL must use the fixed /t landing path');
+    assert(claimUrl.search === '', 'Handoff bearer must never use the query string');
+    assert(/^#v1\.[A-Za-z0-9_-]+$/u.test(claimUrl.hash), 'Handoff bearer must be confined to the URL fragment');
+    nativeHandoff = 'passed';
+  }
   if (process.env.USDA_FDC_API_KEY) {
     const estimate = await client.callTool({
       name: 'estimate_recipe',
@@ -125,6 +147,7 @@ Salt to taste`
     tools: toolNames,
     analyzeRecipe: 'passed',
     planGroceryTrip: 'passed',
+    nativeHandoff,
     liveUsdaNutrition: liveNutrition,
     liveMealPlan
   }, null, 2)}\n`);
