@@ -26,7 +26,11 @@ async function jsonFiles(directory) {
 }
 
 export async function loadContractSchemas({ contractsRoot = defaultContractsRoot } = {}) {
-  const files = await jsonFiles(path.join(contractsRoot, 'v1'));
+  const versions = (await readdir(contractsRoot, { withFileTypes: true }))
+    .filter((entry) => entry.isDirectory() && /^v\d+$/.test(entry.name))
+    .map((entry) => entry.name)
+    .sort();
+  const files = (await Promise.all(versions.map((version) => jsonFiles(path.join(contractsRoot, version))))).flat();
   const schemas = [];
 
   for (const file of files) {

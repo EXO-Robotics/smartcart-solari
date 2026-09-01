@@ -5,12 +5,19 @@ import { HttpError, readJson, validatePreparsedJsonBody } from '../lib/http.js';
 import { createLogger } from '../lib/logger.js';
 import { FixedWindowRateLimiter } from '../lib/rate-limiter.js';
 import { SOLARI_REQUEST_SCHEMA_ID } from './constants.js';
+import { createSolariBetaApi, isV2Envelope } from './beta-api.js';
 import { SolariResearchError } from './errors.js';
 import { createSolariResearchService } from './research-service.js';
 
 function routeForRequest(url) {
-  if (url.pathname === '/v1/solari/research') return true;
-  return ['/api/solari.js', '/api/solari'].includes(url.pathname) && url.searchParams.get('route') === 'research';
+  if (url.pathname === '/v1/solari/research') return 'research';
+  if (url.pathname === '/v1/solari/access/challenges') return 'challenge';
+  if (url.pathname === '/v1/solari/access/attestations') return 'attestation';
+  if (['/api/solari.js', '/api/solari'].includes(url.pathname)) {
+    const route = url.searchParams.get('route');
+    if (['research', 'challenge', 'attestation'].includes(route)) return route;
+  }
+  return null;
 }
 
 function clientKey(request, trustForwardedFor = false) {
@@ -45,7 +52,7 @@ function send(response, status, payload, requestID, headers = {}) {
     'cache-control': 'no-store',
     'x-content-type-options': 'nosniff',
     'referrer-policy': 'no-referrer',
-    'x-smartcart-data-mode': payload.executionMode ?? (payload.error ? 'solari-error' : 'solari-research-v1'),
+    'x-smartcart-data-mode': payload.executionMode ?? (payload.error ? 'solari-error' : payload.schemaVersion?.includes('app-attest') || payload.schemaVersion?.includes('app-attestation') ? 'solari-app-attest' : 'solari-research-v1'),
     'x-request-id': requestID,
     ...headers
   });
@@ -70,6 +77,17 @@ export function createPublicSolariApi(options = {}) {
     sandboxOptimizer: options.sandboxOptimizer,
     demoHostLookup: options.demoHostLookup
   });
+  const beta = options.betaApi ?? createSolariBetaApi({
+    config,
+    validator: options.validator,
+    now: options.now,
+    store: options.betaStore,
+    verifier: options.appAttestVerifier,
+    researchService: options.betaResearchService,
+    browserProvider: options.browserProvider,
+    sandboxOptimizer: options.sandboxOptimizer,
+    demoHostLookup: options.demoHostLookup
+  });
 
   async function handler(request, response) {
     const traceID = randomUUID();
@@ -82,7 +100,8 @@ export function createPublicSolariApi(options = {}) {
     request.once('close', close);
     try {
       const url = new URL(request.url ?? '/', 'https://smartcart.invalid');
-      if (!routeForRequest(url) || request.method !== 'POST') {
+      const route = routeForRequest(url);
+      if (!route || request.method !== 'POST') {
         send(response, 404, { error: { code: 'route_not_found', message: 'Route does not exist.', retryable: false } }, traceID);
         return;
       }
@@ -98,9 +117,26 @@ export function createPublicSolariApi(options = {}) {
         });
         return;
       }
+      const bodyLimit = route === 'challenge' ? config.solariMaxBodyBytes : config.solariBetaMaxBodyBytes;
       const payload = request.body && typeof request.body === 'object'
-        ? validatePreparsedJsonBody(request, request.body, config.solariMaxBodyBytes)
-        : await readJson(request, config.solariMaxBodyBytes);
+        ? validatePreparsedJsonBody(request, request.body, bodyLimit)
+        : await readJson(request, bodyLimit);
+      if (route === 'challenge') {
+        const result = await beta.challenge(payload);
+        send(response, result.status, result.payload, traceID, { ...rateHeaders, ...result.headers });
+        return;
+      }
+      if (route === 'attestation') {
+        const result = await beta.attestation(payload);
+        send(response, result.status, result.payload, traceID, { ...rateHeaders, ...result.headers });
+        return;
+      }
+      if (isV2Envelope(payload)) {
+        const result = await beta.researchEnvelope(payload, { signal: controller.signal });
+        send(response, result.status, result.payload, traceID, { ...rateHeaders, ...result.headers });
+        return;
+      }
+      validatePreparsedJsonBody(request, payload, config.solariMaxBodyBytes);
       const validator = await validatorPromise;
       validator.assert(SOLARI_REQUEST_SCHEMA_ID, payload);
       if (payload.executionMode === 'live' && !(
@@ -126,7 +162,7 @@ export function createPublicSolariApi(options = {}) {
       send(response, status, {
         error: {
           code: contract ? 'contract_validation_failed' : known ? error.code : 'internal_error',
-          message: contract ? 'The request does not satisfy BasketResearchRequestV1.' : known ? error.message : 'Solari research could not complete the request.',
+          message: contract ? 'The request does not satisfy the required SmartCart contract.' : known ? error.message : 'Solari research could not complete the request.',
           retryable: error instanceof SolariResearchError ? error.retryable : false,
           ...(contract ? { issues: error.errors } : {})
         }
@@ -137,5 +173,5 @@ export function createPublicSolariApi(options = {}) {
     }
   }
 
-  return { handler, config, services: { research: service, limiter } };
+  return { handler, config, services: { research: service, beta, limiter } };
 }

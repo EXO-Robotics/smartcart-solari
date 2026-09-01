@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.smartcart.app/v2/solari/app-attest-challenge-result.schema.json",
+  "title": "SolariAppAttestChallengeResultV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "challengeID", "challenge", "expiresAt"],
+  "properties": {
+    "schemaVersion": { "const": "solari-app-attest-challenge-result-v1" },
+    "challengeID": { "type": "string", "format": "uuid" },
+    "challenge": {
+      "type": "string",
+      "minLength": 43,
+      "maxLength": 43,
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "expiresAt": { "type": "string", "format": "date-time" }
+  }
+}

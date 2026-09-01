@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "basket-decision-v2",
+  "requirementID": "20000000-0000-0000-0000-000000000001",
+  "observationID": "obs-request-identifier-10414680",
+  "packageCount": 1,
+  "requiredQuantity": 1.5,
+  "coveredQuantity": 3,
+  "quantityUnit": "pound",
+  "surplusQuantity": 1.5,
+  "lineTotal": 9.47,
+  "currency": "USD",
+  "proteinGramsPerDollar": null,
+  "substitutionNote": null,
+  "rationale": [
+    "One package covers the reviewed requirement.",
+    "Among admitted candidates with visible prices, this is the lowest observed adequate line total."
+  ],
+  "confidence": "high",
+  "ambiguityReasons": []
+}

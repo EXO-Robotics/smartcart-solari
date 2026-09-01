@@ -1,0 +1,96 @@
+{
+  "schemaVersion": "solari-shopping-research-result-v2",
+  "requestID": "request-identifier",
+  "demoID": "owned-demo-grocer-basket-v2",
+  "retailerID": "smartcart-demo-grocer",
+  "completedAt": "2026-09-01T14:00:30Z",
+  "executionMode": "live",
+  "status": "complete",
+  "observations": [
+    {
+      "schemaVersion": "retailer-observation-v2",
+      "observationID": "obs-request-identifier-10414680",
+      "requirementID": "20000000-0000-0000-0000-000000000001",
+      "retailerProductID": "10414680",
+      "sourceURL": "https://exo-robotics.github.io/smartcart-solari/website/solari-demo/retailer/product/10414680.html",
+      "title": "Demo Chicken Breasts",
+      "packageDescription": "3 pound",
+      "packageQuantity": 3,
+      "packageUnit": "pound",
+      "visiblePrice": 9.47,
+      "currency": "USD",
+      "observedAt": "2026-09-01T14:00:25Z",
+      "confidence": "high",
+      "ambiguityReasons": [],
+      "proteinGramsPerPackage": null,
+      "collectionMethod": "solari-browser-controlled-demo",
+      "location": {
+        "kind": "controlled-demo",
+        "label": "SmartCart Demo Grocer synthetic catalog"
+      },
+      "rawText": "Demo Chicken Breasts; 3 pound synthetic package; visible test price $9.47 USD.",
+      "freshness": {
+        "status": "fresh",
+        "ageSeconds": 5,
+        "maxAgeSeconds": 86400
+      }
+    }
+  ],
+  "decisions": [
+    {
+      "schemaVersion": "basket-decision-v2",
+      "requirementID": "20000000-0000-0000-0000-000000000001",
+      "observationID": "obs-request-identifier-10414680",
+      "packageCount": 1,
+      "requiredQuantity": 1.5,
+      "coveredQuantity": 3,
+      "quantityUnit": "pound",
+      "surplusQuantity": 1.5,
+      "lineTotal": 9.47,
+      "currency": "USD",
+      "proteinGramsPerDollar": null,
+      "substitutionNote": null,
+      "rationale": [
+        "One package covers the reviewed requirement.",
+        "Among admitted candidates with visible prices, this is the lowest observed adequate line total."
+      ],
+      "confidence": "high",
+      "ambiguityReasons": []
+    }
+  ],
+  "basket": {
+    "completeness": "complete",
+    "observedSubtotal": 9.47,
+    "currency": "USD",
+    "pricedLineCount": 1,
+    "missingPriceLineCount": 0,
+    "unmatchedRequirementCount": 0
+  },
+  "optimizer": {
+    "method": "solari-sandbox",
+    "algorithmVersion": "smallest-sufficient-package-v1",
+    "independentlyVerified": true
+  },
+  "provenance": {
+    "browser": "solari-browser",
+    "sandbox": "solari-sandbox",
+    "fixtureReplay": false,
+    "resourceCleanup": {
+      "browser": "enforced-before-response",
+      "sandbox": "enforced-before-response"
+    },
+    "accessBoundary": "apple-app-attest"
+  },
+  "trust": {
+    "priceClaim": "observed-visible-price-not-guaranteed",
+    "accountAccessed": false,
+    "cartModified": false,
+    "checkoutAutomated": false,
+    "userControlsHandoff": true,
+    "limitations": [
+      "Visible synthetic prices are timestamped observations, not guarantees.",
+      "Availability, tax, fees, fulfillment, and checkout totals remain unknown.",
+      "No account, cart, or checkout action was performed."
+    ]
+  }
+}

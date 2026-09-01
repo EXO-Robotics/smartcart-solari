@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.smartcart.app/v2/solari/app-attestation-result.schema.json",
+  "title": "SolariAppAttestationResultV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "keyID", "status"],
+  "properties": {
+    "schemaVersion": { "const": "solari-app-attestation-result-v1" },
+    "keyID": { "$ref": "#/$defs/canonicalStandardBase64KeyID" },
+    "status": { "const": "accepted" }
+  },
+  "$defs": {
+    "canonicalStandardBase64KeyID": {
+      "type": "string",
+      "minLength": 44,
+      "maxLength": 44,
+      "pattern": "^(?:[A-Za-z0-9+/]{4}){10}[A-Za-z0-9+/]{3}=$"
+    }
+  }
+}

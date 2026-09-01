@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "solari-shopping-research-request-v2",
+  "requestID": "request-identifier",
+  "demoID": "owned-demo-grocer-basket-v2",
+  "submittedAt": "2026-09-01T14:00:00Z",
+  "retailerID": "smartcart-demo-grocer",
+  "executionMode": "live",
+  "storeReference": "smartcart-demo-grocer-owned-catalog-v1",
+  "requirements": [
+    {
+      "id": "20000000-0000-0000-0000-000000000001",
+      "ingredientID": "30000000-0000-0000-0000-000000000001",
+      "name": "Chicken breast",
+      "requestedQuantityText": "1.5 lb",
+      "requiredQuantity": 1.5,
+      "unit": "lb",
+      "candidateProductIDs": ["10414680"]
+    }
+  ]
+}

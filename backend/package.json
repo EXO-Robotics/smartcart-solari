@@ -22,8 +22,12 @@
     "@modelcontextprotocol/sdk": "1.30.0",
     "@solarisdk/browser": "0.1.2",
     "@solarisdk/sandbox": "0.1.2",
+    "@upstash/redis": "1.35.6",
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",
+    "asn1js": "3.0.7",
+    "cbor": "10.0.11",
+    "pkijs": "3.3.3",
     "zod": "4.4.3"
   }
 }

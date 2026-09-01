@@ -37,11 +37,11 @@ async function listen(options = {}) {
   return { api, async close() {} };
 }
 
-async function post(api, body, headers = {}) {
+async function post(api, body, headers = {}, url = '/v1/solari/research', method = 'POST') {
   const encoded = Buffer.from(JSON.stringify(body));
   const request = Readable.from([encoded]);
-  request.method = 'POST';
-  request.url = '/v1/solari/research';
+  request.method = method;
+  request.url = url;
   request.headers = { 'content-type': 'application/json', 'content-length': String(encoded.length), ...headers };
   request.socket = { remoteAddress: '127.0.0.1' };
   const response = {
@@ -59,6 +59,23 @@ async function post(api, body, headers = {}) {
     payload: JSON.parse(response.body)
   };
 }
+
+test('public Solari API wires challenge, attestation, and V2 envelope without the V1 operator gate', async () => {
+  const calls=[];
+  const betaApi={
+    async challenge(payload){calls.push(['challenge',payload]);return{status:201,payload:{schemaVersion:'solari-app-attest-challenge-result-v1'}};},
+    async attestation(payload){calls.push(['attestation',payload]);return{status:201,payload:{schemaVersion:'solari-app-attestation-result-v1'}};},
+    async researchEnvelope(payload){calls.push(['research',payload]);return{status:200,payload:{schemaVersion:'solari-shopping-research-result-v2',executionMode:'live'}};}
+  };
+  let v1Calls=0;const server=await listen({betaApi,service:{research:async()=>{v1Calls+=1;}}});
+  const challenge=await post(server.api,{schemaVersion:'solari-app-attest-challenge-request-v1'}, {}, '/v1/solari/access/challenges');
+  assert.equal(challenge.response.status,201);assert.equal(challenge.response.headers.get('x-smartcart-data-mode'),'solari-app-attest');
+  assert.equal((await post(server.api,{schemaVersion:'solari-app-attestation-request-v1'}, {}, '/v1/solari/access/attestations')).response.status,201);
+  const envelope={schemaVersion:'solari-app-attest-research-envelope-v1'};assert.equal((await post(server.api,envelope)).response.status,200);
+  assert.deepEqual(calls.map(([name])=>name),['challenge','attestation','research']);assert.equal(v1Calls,0);
+  assert.equal((await post(server.api,{}, {}, '/v1/solari/access/challenges','GET')).response.status,404);
+  assert.equal((await post(server.api,{}, {}, '/v1/solari/access/unknown')).response.status,404);
+});
 
 test('POST /v1/solari/research returns the bounded fixture replay with explicit trust metadata', async () => {
   const server = await listen();
@@ -99,6 +116,13 @@ test('per-client Solari rate limit is narrowly independent from the general back
     assert.equal(limited.payload.error.code, 'rate_limited');
     assert.ok(Number(limited.response.headers.get('retry-after')) >= 1);
   } finally { await server.close(); }
+});
+
+test('V1 retains its original body limit while the signed V2 envelope has a separate bound', async () => {
+  const original=await fixture(),originalBytes=Buffer.byteLength(JSON.stringify(original));
+  const server=await listen({config:{solariRateLimitPerMinute:5,solariMaxBodyBytes:originalBytes+8,solariBetaMaxBodyBytes:65_536}});
+  const oversized={...original,padding:'x'.repeat(32)};const result=await post(server.api,oversized);
+  assert.equal(result.response.status,413);assert.equal(result.payload.error.code,'payload_too_large');
 });
 
 test('untrusted forwarded addresses cannot bypass the Solari rate limit', async () => {

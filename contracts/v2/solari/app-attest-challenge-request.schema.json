@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.smartcart.app/v2/solari/app-attest-challenge-request.schema.json",
+  "title": "SolariAppAttestChallengeRequestV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "operation", "keyID"],
+  "properties": {
+    "schemaVersion": { "const": "solari-app-attest-challenge-request-v1" },
+    "operation": { "enum": ["attest", "research"] },
+    "keyID": { "$ref": "#/$defs/canonicalStandardBase64KeyID" }
+  },
+  "$defs": {
+    "canonicalStandardBase64KeyID": {
+      "type": "string",
+      "minLength": 44,
+      "maxLength": 44,
+      "pattern": "^(?:[A-Za-z0-9+/]{4}){10}[A-Za-z0-9+/]{3}=$"
+    }
+  }
+}

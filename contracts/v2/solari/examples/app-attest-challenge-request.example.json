@@ -1,0 +1,5 @@
+{
+  "schemaVersion": "solari-app-attest-challenge-request-v1",
+  "operation": "attest",
+  "keyID": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+}

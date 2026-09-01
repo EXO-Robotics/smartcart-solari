@@ -52,3 +52,26 @@ export async function runWithinDeadline(
       .then((value) => finish(resolve, value), (error) => finish(reject, error));
   });
 }
+
+export async function acquireWithinDeadline(
+  operation,
+  dispose,
+  { configuredTimeoutMs, deadlineAt, clock = Date.now, signal, onCancel } = {}
+) {
+  const pending = Promise.resolve().then(operation);
+  try {
+    return await runWithinDeadline(() => pending, { configuredTimeoutMs, deadlineAt, clock, signal });
+  } catch (error) {
+    try { await onCancel?.(); } catch {}
+    let timer;
+    try {
+      const late = await Promise.race([
+        pending,
+        new Promise((_resolve, reject) => { timer = setTimeout(() => reject(error), configuredTimeoutMs); })
+      ]);
+      await dispose(late);
+    } catch {}
+    finally { clearTimeout(timer); }
+    throw error;
+  }
+}

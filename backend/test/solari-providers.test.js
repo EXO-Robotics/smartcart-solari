@@ -258,6 +258,24 @@ test('aborting an in-flight Sandbox command kills the microVM', async () => {
   assert.equal(killed, 1);
 });
 
+test('late Browser and Sandbox creation is destroyed before cancellation returns', async () => {
+  const request = demoRequest(await fixtureRequest());
+  const browserController = new AbortController();let resolveLaunch,launchStarted,lateBrowserClosed=0,clientClosed=0;
+  const launchBegan=new Promise((resolve)=>{launchStarted=resolve;});
+  const browserProvider=new SolariBrowserProvider({apiKey:'server-only-test-key',timeoutMs:100,
+    solariFactory:()=>({launch:async()=>{launchStarted();return new Promise((resolve)=>{resolveLaunch=resolve;});},close:async()=>{clientClosed+=1;}})});
+  const browserWork=browserProvider.observe(request,{deadlineAt:Date.now()+1000,signal:browserController.signal});await launchBegan;browserController.abort();
+  resolveLaunch({close:async()=>{lateBrowserClosed+=1;}});await assert.rejects(()=>browserWork,{code:'solari_request_aborted'});
+  assert.equal(lateBrowserClosed,1);assert.equal(clientClosed,1);
+
+  const sandboxController=new AbortController();let resolveCreate,createStarted,lateKilled=0;
+  const createBegan=new Promise((resolve)=>{createStarted=resolve;});
+  const optimizer=new SolariSandboxOptimizer({apiKey:'server-only-test-key',timeoutMs:100,
+    clientFactory:()=>({create:async()=>{createStarted();return new Promise((resolve)=>{resolveCreate=resolve;});}})});
+  const sandboxWork=optimizer.optimize(request.requirements,[],{deadlineAt:Date.now()+1000,signal:sandboxController.signal});await createBegan;sandboxController.abort();
+  resolveCreate({kill:async()=>{lateKilled+=1;}});await assert.rejects(()=>sandboxWork,{code:'solari_request_aborted'});assert.equal(lateKilled,1);
+});
+
 test('Browser success is withheld unless session and client cleanup are confirmed', async () => {
   const request = demoRequest(await fixtureRequest());
   let currentURL;

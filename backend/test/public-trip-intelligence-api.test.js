@@ -200,6 +200,16 @@ test('Vercel exposes only the reviewed barcode, intelligence, MCP, handoff, and 
       dest: '/api/solari.js?route=research'
     },
     {
+      src: '/v1/solari/access/challenges',
+      methods: ['POST'],
+      dest: '/api/solari.js?route=challenge'
+    },
+    {
+      src: '/v1/solari/access/attestations',
+      methods: ['POST'],
+      dest: '/api/solari.js?route=attestation'
+    },
+    {
       src: '/t',
       methods: ['GET', 'HEAD'],
       dest: '/t/index.html'

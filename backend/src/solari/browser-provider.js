@@ -1,7 +1,7 @@
 import { Solari } from '@solarisdk/browser';
 import { freshness } from './fixture-provider.js';
 import { SolariResearchError } from './errors.js';
-import { runWithinDeadline, timeoutWithinDeadline } from './deadline.js';
+import { acquireWithinDeadline, runWithinDeadline, timeoutWithinDeadline } from './deadline.js';
 
 function normalizeUnit(value) {
   const unit = String(value ?? '').trim().toLowerCase();
@@ -103,15 +103,19 @@ export class SolariBrowserProvider {
     });
     let browser;
     let activePage;
+    let clientClosedEarly = false;
     try {
-      browser = await runWithinDeadline(() => client.launch({
+      browser = await acquireWithinDeadline(() => client.launch({
         stealth: false,
         recording: false,
         captcha: false,
         proxy: 'off',
         retries: 0,
         probe: false
-      }), { configuredTimeoutMs: this.timeoutMs, deadlineAt, clock, signal });
+      }), async (lateBrowser) => { await lateBrowser.close(); }, {
+        configuredTimeoutMs: this.timeoutMs, deadlineAt, clock, signal,
+        onCancel: async () => { await client.close(); clientClosedEarly = true; }
+      });
       const observations = [];
       for (const requirement of request.requirements) {
         for (const candidate of requirement.candidates) {
@@ -204,7 +208,7 @@ export class SolariBrowserProvider {
       }
       return observations;
     } finally {
-      await closeBrowserResources(activePage, browser, client);
+      await closeBrowserResources(activePage, browser, clientClosedEarly ? { close: async () => {} } : client);
     }
   }
 }

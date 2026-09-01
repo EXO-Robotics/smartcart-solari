@@ -5,7 +5,7 @@ import {
   summarizeDecisions
 } from './optimizer.js';
 import { SolariResearchError } from './errors.js';
-import { runWithinDeadline, timeoutWithinDeadline } from './deadline.js';
+import { acquireWithinDeadline, runWithinDeadline, timeoutWithinDeadline } from './deadline.js';
 
 const PYTHON_OPTIMIZER = String.raw`
 import json, math, sys
@@ -69,12 +69,14 @@ export class SolariSandboxOptimizer {
     });
     let sandbox;
     try {
-      sandbox = await runWithinDeadline(() => client.create({
+      sandbox = await acquireWithinDeadline(() => client.create({
         template: 'base',
         timeoutMs: timeoutWithinDeadline(this.timeoutMs, deadlineAt, clock),
         lifecycle: { onTimeout: 'kill', autoResume: false },
         metadata: { purpose: 'smartcart-public-basket-optimization-v1' }
-      }), { configuredTimeoutMs: this.timeoutMs, deadlineAt, clock, signal });
+      }), async (lateSandbox) => { await lateSandbox.kill(); }, {
+        configuredTimeoutMs: this.timeoutMs, deadlineAt, clock, signal
+      });
       const result = await runWithinDeadline(
         () => sandbox.commands.run('python3', {
           args: ['-c', PYTHON_OPTIMIZER, JSON.stringify(publicPayload(requirements, observations))],

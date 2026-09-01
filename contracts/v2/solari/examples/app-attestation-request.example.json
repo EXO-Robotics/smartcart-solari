@@ -1,0 +1,6 @@
+{
+  "schemaVersion": "solari-app-attestation-request-v1",
+  "challengeID": "30000000-0000-0000-0000-000000000001",
+  "keyID": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+  "attestationObject": "oA=="
+}
