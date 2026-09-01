@@ -1,0 +1,725 @@
+{
+  "receiptVersion": "smartcart-solari-v4-qualification-v1",
+  "qualifiedAt": "2026-09-01T19:00:22.129Z",
+  "submission": {
+    "repository": "EXO-Robotics/smartcart-solari",
+    "commit": "2dd4e6f30be8286a3a8f465c92a56427828a60e2"
+  },
+  "workflow": {
+    "runID": "33546912947",
+    "runAttempt": "1"
+  },
+  "execution": {
+    "requestID": "7047b6ad-9a14-4cfb-92c1-4388e7b9efda",
+    "submittedAt": "2026-09-01T19:00:11.417Z",
+    "completedAt": "2026-09-01T19:00:22.078Z",
+    "assuranceScope": "server-side-direct-service-receipt",
+    "accessBoundary": "operator-qualification",
+    "browser": "solari-browser-provider-completed",
+    "sandbox": "solari-sandbox-provider-completed",
+    "resourceCleanup": {
+      "browser": "enforced-before-receipt",
+      "sandbox": "enforced-before-receipt"
+    },
+    "requestSha256": "aa1b72867ed240b7010faec5939d6aa44614561e45844126561cf02ee4980795",
+    "resultSha256": "a106a9615d9f82ff31f30e2f4429d2dfe39688f47dbe1c3ad970993c41eb9f64"
+  },
+  "coverage": {
+    "researchedRequirementCount": 8,
+    "observationCount": 16
+  },
+  "selectedProductIDs": [
+    "dg4-chicken-organic-1-5lb",
+    "dg4-olive-oil-value-17floz",
+    "dg4-penne-value-16oz",
+    "dg4-heavy-cream-value-16floz",
+    "dg4-parmesan-value-6oz",
+    "dg4-garlic-bulb-8ct",
+    "dg4-lemon-each-1ct",
+    "dg4-parsley-bunch-1ct"
+  ],
+  "basket": {
+    "completeness": "complete",
+    "observedSubtotal": 24.2,
+    "currency": "USD",
+    "pricedLineCount": 8,
+    "missingPriceLineCount": 0,
+    "unmatchedRequirementCount": 0
+  },
+  "comparison": {
+    "cheapestAdequateSubtotal": 23.57,
+    "selectedSubtotal": 24.2,
+    "premiumOverCheapest": 0.63,
+    "cheapestAggregateRelativeSurplus": 22.066283,
+    "selectedAggregateRelativeSurplus": 21.065711,
+    "relativeSurplusAvoided": 1.000572,
+    "maxPremiumOverCheapest": 0.75,
+    "currency": "USD"
+  },
+  "optimizer": {
+    "method": "solari-sandbox",
+    "algorithmVersion": "relative-surplus-premium-dp-v1",
+    "objective": "minimize-aggregate-relative-surplus",
+    "authority": "solari-sandbox",
+    "verification": "smartcart-policy-invariants-no-local-global-argmin",
+    "policyInvariantsVerified": true
+  },
+  "evidence": [
+    {
+      "schemaVersion": "retailer-observation-v4",
+      "observationID": "obs-7047b6ad-9a14-4cfb-92c1-4388e7b9efda-dg4-chicken-value-3lb",
+      "requirementID": "71000000-0000-4000-8000-000000000001",
+      "retailerProductID": "dg4-chicken-value-3lb",
+      "sourceURL": "https://exo-robotics.github.io/smartcart-solari/website/solari-demo/retailer-v4/product/dg4-chicken-value-3lb.html",
+      "title": "Demo Chicken Breasts — Value",
+      "packageDescription": "3 lb",
+      "packageQuantity": 1360.77711,
+      "packageUnit": "gram",
+      "visiblePrice": 8.13,
+      "currency": "USD",
+      "observedAt": "2026-09-01T19:00:13.457Z",
+      "confidence": "high",
+      "ambiguityReasons": [],
+      "proteinGramsPerPackage": null,
+      "collectionMethod": "solari-browser-controlled-demo",
+      "location": {
+        "kind": "controlled-demo",
+        "label": "SmartCart Demo Grocer synthetic catalog"
+      },
+      "catalogEra": "current-v4",
+      "syntheticPrice": true,
+      "freshness": {
+        "status": "fresh",
+        "ageSeconds": 8,
+        "maxAgeSeconds": 86400
+      }
+    },
+    {
+      "schemaVersion": "retailer-observation-v4",
+      "observationID": "obs-7047b6ad-9a14-4cfb-92c1-4388e7b9efda-dg4-chicken-organic-1-5lb",
+      "requirementID": "71000000-0000-4000-8000-000000000001",
+      "retailerProductID": "dg4-chicken-organic-1-5lb",
+      "sourceURL": "https://exo-robotics.github.io/smartcart-solari/website/solari-demo/retailer-v4/product/dg4-chicken-organic-1-5lb.html",
+      "title": "Demo Chicken Breasts — Organic",
+      "packageDescription": "1.5 lb",
+      "packageQuantity": 680.388555,
+      "packageUnit": "gram",
+      "visiblePrice": 8.76,
+      "currency": "USD",
+      "observedAt": "2026-09-01T19:00:13.954Z",
+      "confidence": "high",
+      "ambiguityReasons": [],
+      "proteinGramsPerPackage": null,
+      "collectionMethod": "solari-browser-controlled-demo",
+      "location": {
+        "kind": "controlled-demo",
+        "label": "SmartCart Demo Grocer synthetic catalog"
+      },
+      "catalogEra": "current-v4",
+      "syntheticPrice": true,
+      "freshness": {
+        "status": "fresh",
+        "ageSeconds": 8,
+        "maxAgeSeconds": 86400
+      }
+    },
+    {
+      "schemaVersion": "retailer-observation-v4",
+      "observationID": "obs-7047b6ad-9a14-4cfb-92c1-4388e7b9efda-dg4-chicken-free-range-3lb",
+      "requirementID": "71000000-0000-4000-8000-000000000001",
+      "retailerProductID": "dg4-chicken-free-range-3lb",
+      "sourceURL": "https://exo-robotics.github.io/smartcart-solari/website/solari-demo/retailer-v4/product/dg4-chicken-free-range-3lb.html",
+      "title": "Demo Chicken Breasts — Free Range",
+      "packageDescription": "3 lb",
+      "packageQuantity": 1360.77711,
+      "packageUnit": "gram",
+      "visiblePrice": 13.92,
+      "currency": "USD",
+      "observedAt": "2026-09-01T19:00:14.453Z",
+      "confidence": "high",
+      "ambiguityReasons": [],
+      "proteinGramsPerPackage": null,
+      "collectionMethod": "solari-browser-controlled-demo",
+      "location": {
+        "kind": "controlled-demo",
+        "label": "SmartCart Demo Grocer synthetic catalog"
+      },
+      "catalogEra": "current-v4",
+      "syntheticPrice": true,
+      "freshness": {
+        "status": "fresh",
+        "ageSeconds": 7,
+        "maxAgeSeconds": 86400
+      }
+    },
+    {
+      "schemaVersion": "retailer-observation-v4",
+      "observationID": "obs-7047b6ad-9a14-4cfb-92c1-4388e7b9efda-dg4-olive-oil-value-17floz",
+      "requirementID": "71000000-0000-4000-8000-000000000002",
+      "retailerProductID": "dg4-olive-oil-value-17floz",
+      "sourceURL": "https://exo-robotics.github.io/smartcart-solari/website/solari-demo/retailer-v4/product/dg4-olive-oil-value-17floz.html",
+      "title": "Demo Extra Virgin Olive Oil — Value",
+      "packageDescription": "17 fl oz",
+      "packageQuantity": 502.75000256249996,
+      "packageUnit": "milliliter",
+      "visiblePrice": 6.12,
+      "currency": "USD",
+      "observedAt": "2026-09-01T19:00:14.951Z",
+      "confidence": "high",
+      "ambiguityReasons": [],
+      "proteinGramsPerPackage": null,
+      "collectionMethod": "solari-browser-controlled-demo",
+      "location": {
+        "kind": "controlled-demo",
+        "label": "SmartCart Demo Grocer synthetic catalog"
+      },
+      "catalogEra": "current-v4",
+      "syntheticPrice": true,
+      "freshness": {
+        "status": "fresh",
+        "ageSeconds": 7,
+        "maxAgeSeconds": 86400
+      }
+    },
+    {
+      "schemaVersion": "retailer-observation-v4",
+      "observationID": "obs-7047b6ad-9a14-4cfb-92c1-4388e7b9efda-dg4-olive-oil-organic-17floz",
+      "requirementID": "71000000-0000-4000-8000-000000000002",
+      "retailerProductID": "dg4-olive-oil-organic-17floz",
+      "sourceURL": "https://exo-robotics.github.io/smartcart-solari/website/solari-demo/retailer-v4/product/dg4-olive-oil-organic-17floz.html",
+      "title": "Demo Extra Virgin Olive Oil — Organic",
+      "packageDescription": "17 fl oz",
+      "packageQuantity": 502.75000256249996,
+      "packageUnit": "milliliter",
+      "visiblePrice": 7.36,
+      "currency": "USD",
+      "observedAt": "2026-09-01T19:00:15.453Z",
+      "confidence": "high",
+      "ambiguityReasons": [],
+      "proteinGramsPerPackage": null,
+      "collectionMethod": "solari-browser-controlled-demo",
+      "location": {
+        "kind": "controlled-demo",
+        "label": "SmartCart Demo Grocer synthetic catalog"
+      },
+      "catalogEra": "current-v4",
+      "syntheticPrice": true,
+      "freshness": {
+        "status": "fresh",
+        "ageSeconds": 6,
+        "maxAgeSeconds": 86400
+      }
+    },
+    {
+      "schemaVersion": "retailer-observation-v4",
+      "observationID": "obs-7047b6ad-9a14-4cfb-92c1-4388e7b9efda-dg4-olive-oil-smooth-16floz",
+      "requirementID": "71000000-0000-4000-8000-000000000002",
+      "retailerProductID": "dg4-olive-oil-smooth-16floz",
+      "sourceURL": "https://exo-robotics.github.io/smartcart-solari/website/solari-demo/retailer-v4/product/dg4-olive-oil-smooth-16floz.html",
+      "title": "Demo Extra Virgin Olive Oil — Smooth",
+      "packageDescription": "16 fl oz",
+      "packageQuantity": 473.176473,
+      "packageUnit": "milliliter",
+      "visiblePrice": 6.75,
+      "currency": "USD",
+      "observedAt": "2026-09-01T19:00:15.944Z",
+      "confidence": "high",
+      "ambiguityReasons": [],
+      "proteinGramsPerPackage": null,
+      "collectionMethod": "solari-browser-controlled-demo",
+      "location": {
+        "kind": "controlled-demo",
+        "label": "SmartCart Demo Grocer synthetic catalog"
+      },
+      "catalogEra": "current-v4",
+      "syntheticPrice": true,
+      "freshness": {
+        "status": "fresh",
+        "ageSeconds": 6,
+        "maxAgeSeconds": 86400
+      }
+    },
+    {
+      "schemaVersion": "retailer-observation-v4",
+      "observationID": "obs-7047b6ad-9a14-4cfb-92c1-4388e7b9efda-dg4-penne-value-16oz",
+      "requirementID": "71000000-0000-4000-8000-000000000003",
+      "retailerProductID": "dg4-penne-value-16oz",
+      "sourceURL": "https://exo-robotics.github.io/smartcart-solari/website/solari-demo/retailer-v4/product/dg4-penne-value-16oz.html",
+      "title": "Demo Penne Pasta — Value",
+      "packageDescription": "16 oz",
+      "packageQuantity": 453.59237,
+      "packageUnit": "gram",
+      "visiblePrice": 1.24,
+      "currency": "USD",
+      "observedAt": "2026-09-01T19:00:16.522Z",
+      "confidence": "high",
+      "ambiguityReasons": [],
+      "proteinGramsPerPackage": null,
+      "collectionMethod": "solari-browser-controlled-demo",
+      "location": {
+        "kind": "controlled-demo",
+        "label": "SmartCart Demo Grocer synthetic catalog"
+      },
+      "catalogEra": "current-v4",
+      "syntheticPrice": true,
+      "freshness": {
+        "status": "fresh",
+        "ageSeconds": 5,
+        "maxAgeSeconds": 86400
+      }
+    },
+    {
+      "schemaVersion": "retailer-observation-v4",
+      "observationID": "obs-7047b6ad-9a14-4cfb-92c1-4388e7b9efda-dg4-penne-glutenfree-24oz",
+      "requirementID": "71000000-0000-4000-8000-000000000003",
+      "retailerProductID": "dg4-penne-glutenfree-24oz",
+      "sourceURL": "https://exo-robotics.github.io/smartcart-solari/website/solari-demo/retailer-v4/product/dg4-penne-glutenfree-24oz.html",
+      "title": "Demo Penne Pasta — Gluten Free",
+      "packageDescription": "24 oz",
+      "packageQuantity": 680.388555,
+      "packageUnit": "gram",
+      "visiblePrice": 11.98,
+      "currency": "USD",
+      "observedAt": "2026-09-01T19:00:17.028Z",
+      "confidence": "medium",
+      "ambiguityReasons": [
+        "Gluten-free attribute was not requested by this recipe."
+      ],
+      "proteinGramsPerPackage": null,
+      "collectionMethod": "solari-browser-controlled-demo",
+      "location": {
+        "kind": "controlled-demo",
+        "label": "SmartCart Demo Grocer synthetic catalog"
+      },
+      "catalogEra": "current-v4",
+      "syntheticPrice": true,
+      "freshness": {
+        "status": "fresh",
+        "ageSeconds": 5,
+        "maxAgeSeconds": 86400
+      }
+    },
+    {
+      "schemaVersion": "retailer-observation-v4",
+      "observationID": "obs-7047b6ad-9a14-4cfb-92c1-4388e7b9efda-dg4-heavy-cream-value-16floz",
+      "requirementID": "71000000-0000-4000-8000-000000000004",
+      "retailerProductID": "dg4-heavy-cream-value-16floz",
+      "sourceURL": "https://exo-robotics.github.io/smartcart-solari/website/solari-demo/retailer-v4/product/dg4-heavy-cream-value-16floz.html",
+      "title": "Demo Heavy Whipping Cream — Value",
+      "packageDescription": "16 fl oz",
+      "packageQuantity": 473.176473,
+      "packageUnit": "milliliter",
+      "visiblePrice": 2.96,
+      "currency": "USD",
+      "observedAt": "2026-09-01T19:00:17.581Z",
+      "confidence": "high",
+      "ambiguityReasons": [],
+      "proteinGramsPerPackage": null,
+      "collectionMethod": "solari-browser-controlled-demo",
+      "location": {
+        "kind": "controlled-demo",
+        "label": "SmartCart Demo Grocer synthetic catalog"
+      },
+      "catalogEra": "current-v4",
+      "syntheticPrice": true,
+      "freshness": {
+        "status": "fresh",
+        "ageSeconds": 4,
+        "maxAgeSeconds": 86400
+      }
+    },
+    {
+      "schemaVersion": "retailer-observation-v4",
+      "observationID": "obs-7047b6ad-9a14-4cfb-92c1-4388e7b9efda-dg4-heavy-cream-organic-16floz",
+      "requirementID": "71000000-0000-4000-8000-000000000004",
+      "retailerProductID": "dg4-heavy-cream-organic-16floz",
+      "sourceURL": "https://exo-robotics.github.io/smartcart-solari/website/solari-demo/retailer-v4/product/dg4-heavy-cream-organic-16floz.html",
+      "title": "Demo Heavy Whipping Cream — Organic",
+      "packageDescription": "16 fl oz",
+      "packageQuantity": 473.176473,
+      "packageUnit": "milliliter",
+      "visiblePrice": 5.87,
+      "currency": "USD",
+      "observedAt": "2026-09-01T19:00:18.082Z",
+      "confidence": "high",
+      "ambiguityReasons": [],
+      "proteinGramsPerPackage": null,
+      "collectionMethod": "solari-browser-controlled-demo",
+      "location": {
+        "kind": "controlled-demo",
+        "label": "SmartCart Demo Grocer synthetic catalog"
+      },
+      "catalogEra": "current-v4",
+      "syntheticPrice": true,
+      "freshness": {
+        "status": "fresh",
+        "ageSeconds": 3,
+        "maxAgeSeconds": 86400
+      }
+    },
+    {
+      "schemaVersion": "retailer-observation-v4",
+      "observationID": "obs-7047b6ad-9a14-4cfb-92c1-4388e7b9efda-dg4-parmesan-value-6oz",
+      "requirementID": "71000000-0000-4000-8000-000000000005",
+      "retailerProductID": "dg4-parmesan-value-6oz",
+      "sourceURL": "https://exo-robotics.github.io/smartcart-solari/website/solari-demo/retailer-v4/product/dg4-parmesan-value-6oz.html",
+      "title": "Demo Finely Shredded Parmesan — Value",
+      "packageDescription": "6 oz",
+      "packageQuantity": 170.09713875,
+      "packageUnit": "gram",
+      "visiblePrice": 2.08,
+      "currency": "USD",
+      "observedAt": "2026-09-01T19:00:18.578Z",
+      "confidence": "high",
+      "ambiguityReasons": [],
+      "proteinGramsPerPackage": null,
+      "collectionMethod": "solari-browser-controlled-demo",
+      "location": {
+        "kind": "controlled-demo",
+        "label": "SmartCart Demo Grocer synthetic catalog"
+      },
+      "catalogEra": "current-v4",
+      "syntheticPrice": true,
+      "freshness": {
+        "status": "fresh",
+        "ageSeconds": 3,
+        "maxAgeSeconds": 86400
+      }
+    },
+    {
+      "schemaVersion": "retailer-observation-v4",
+      "observationID": "obs-7047b6ad-9a14-4cfb-92c1-4388e7b9efda-dg4-parmesan-frigo-5oz",
+      "requirementID": "71000000-0000-4000-8000-000000000005",
+      "retailerProductID": "dg4-parmesan-frigo-5oz",
+      "sourceURL": "https://exo-robotics.github.io/smartcart-solari/website/solari-demo/retailer-v4/product/dg4-parmesan-frigo-5oz.html",
+      "title": "Demo Shredded Parmesan — Cup",
+      "packageDescription": "5 oz",
+      "packageQuantity": 141.747615625,
+      "packageUnit": "gram",
+      "visiblePrice": 3.28,
+      "currency": "USD",
+      "observedAt": "2026-09-01T19:00:19.070Z",
+      "confidence": "high",
+      "ambiguityReasons": [],
+      "proteinGramsPerPackage": null,
+      "collectionMethod": "solari-browser-controlled-demo",
+      "location": {
+        "kind": "controlled-demo",
+        "label": "SmartCart Demo Grocer synthetic catalog"
+      },
+      "catalogEra": "current-v4",
+      "syntheticPrice": true,
+      "freshness": {
+        "status": "fresh",
+        "ageSeconds": 3,
+        "maxAgeSeconds": 86400
+      }
+    },
+    {
+      "schemaVersion": "retailer-observation-v4",
+      "observationID": "obs-7047b6ad-9a14-4cfb-92c1-4388e7b9efda-dg4-parmesan-kraft-6oz",
+      "requirementID": "71000000-0000-4000-8000-000000000005",
+      "retailerProductID": "dg4-parmesan-kraft-6oz",
+      "sourceURL": "https://exo-robotics.github.io/smartcart-solari/website/solari-demo/retailer-v4/product/dg4-parmesan-kraft-6oz.html",
+      "title": "Demo Finely Shredded Parmesan — Premium",
+      "packageDescription": "6 oz",
+      "packageQuantity": 170.09713875,
+      "packageUnit": "gram",
+      "visiblePrice": 4.98,
+      "currency": "USD",
+      "observedAt": "2026-09-01T19:00:19.555Z",
+      "confidence": "high",
+      "ambiguityReasons": [],
+      "proteinGramsPerPackage": null,
+      "collectionMethod": "solari-browser-controlled-demo",
+      "location": {
+        "kind": "controlled-demo",
+        "label": "SmartCart Demo Grocer synthetic catalog"
+      },
+      "catalogEra": "current-v4",
+      "syntheticPrice": true,
+      "freshness": {
+        "status": "fresh",
+        "ageSeconds": 2,
+        "maxAgeSeconds": 86400
+      }
+    },
+    {
+      "schemaVersion": "retailer-observation-v4",
+      "observationID": "obs-7047b6ad-9a14-4cfb-92c1-4388e7b9efda-dg4-garlic-bulb-8ct",
+      "requirementID": "71000000-0000-4000-8000-000000000006",
+      "retailerProductID": "dg4-garlic-bulb-8ct",
+      "sourceURL": "https://exo-robotics.github.io/smartcart-solari/website/solari-demo/retailer-v4/product/dg4-garlic-bulb-8ct.html",
+      "title": "Demo Fresh Whole Garlic Bulb",
+      "packageDescription": "8 count",
+      "packageQuantity": 8,
+      "packageUnit": "count",
+      "visiblePrice": 0.78,
+      "currency": "USD",
+      "observedAt": "2026-09-01T19:00:20.041Z",
+      "confidence": "high",
+      "ambiguityReasons": [],
+      "proteinGramsPerPackage": null,
+      "collectionMethod": "solari-browser-controlled-demo",
+      "location": {
+        "kind": "controlled-demo",
+        "label": "SmartCart Demo Grocer synthetic catalog"
+      },
+      "catalogEra": "current-v4",
+      "syntheticPrice": true,
+      "freshness": {
+        "status": "fresh",
+        "ageSeconds": 2,
+        "maxAgeSeconds": 86400
+      }
+    },
+    {
+      "schemaVersion": "retailer-observation-v4",
+      "observationID": "obs-7047b6ad-9a14-4cfb-92c1-4388e7b9efda-dg4-lemon-each-1ct",
+      "requirementID": "71000000-0000-4000-8000-000000000007",
+      "retailerProductID": "dg4-lemon-each-1ct",
+      "sourceURL": "https://exo-robotics.github.io/smartcart-solari/website/solari-demo/retailer-v4/product/dg4-lemon-each-1ct.html",
+      "title": "Demo Fresh Lemon",
+      "packageDescription": "1 count",
+      "packageQuantity": 1,
+      "packageUnit": "count",
+      "visiblePrice": 0.64,
+      "currency": "USD",
+      "observedAt": "2026-09-01T19:00:20.542Z",
+      "confidence": "high",
+      "ambiguityReasons": [],
+      "proteinGramsPerPackage": null,
+      "collectionMethod": "solari-browser-controlled-demo",
+      "location": {
+        "kind": "controlled-demo",
+        "label": "SmartCart Demo Grocer synthetic catalog"
+      },
+      "catalogEra": "current-v4",
+      "syntheticPrice": true,
+      "freshness": {
+        "status": "fresh",
+        "ageSeconds": 1,
+        "maxAgeSeconds": 86400
+      }
+    },
+    {
+      "schemaVersion": "retailer-observation-v4",
+      "observationID": "obs-7047b6ad-9a14-4cfb-92c1-4388e7b9efda-dg4-parsley-bunch-1ct",
+      "requirementID": "71000000-0000-4000-8000-000000000008",
+      "retailerProductID": "dg4-parsley-bunch-1ct",
+      "sourceURL": "https://exo-robotics.github.io/smartcart-solari/website/solari-demo/retailer-v4/product/dg4-parsley-bunch-1ct.html",
+      "title": "Demo Fresh Cut Parsley",
+      "packageDescription": "1 count",
+      "packageQuantity": 1,
+      "packageUnit": "count",
+      "visiblePrice": 0.98,
+      "currency": "USD",
+      "observedAt": "2026-09-01T19:00:21.050Z",
+      "confidence": "high",
+      "ambiguityReasons": [],
+      "proteinGramsPerPackage": null,
+      "collectionMethod": "solari-browser-controlled-demo",
+      "location": {
+        "kind": "controlled-demo",
+        "label": "SmartCart Demo Grocer synthetic catalog"
+      },
+      "catalogEra": "current-v4",
+      "syntheticPrice": true,
+      "freshness": {
+        "status": "fresh",
+        "ageSeconds": 1,
+        "maxAgeSeconds": 86400
+      }
+    }
+  ],
+  "decisions": [
+    {
+      "schemaVersion": "basket-decision-v4",
+      "requirementID": "71000000-0000-4000-8000-000000000001",
+      "observationID": "obs-7047b6ad-9a14-4cfb-92c1-4388e7b9efda-dg4-chicken-organic-1-5lb",
+      "retailerProductID": "dg4-chicken-organic-1-5lb",
+      "packageCount": 1,
+      "requiredQuantity": 680,
+      "coveredQuantity": 680.388555,
+      "quantityUnit": "gram",
+      "surplusQuantity": 0.388555,
+      "relativeSurplus": 0.000571,
+      "lineTotal": 8.76,
+      "currency": "USD",
+      "proteinGramsPerDollar": null,
+      "substitutionNote": null,
+      "rationale": [
+        "1 package covers the reviewed requirement.",
+        "Solari Sandbox selected this line under the bounded relative-surplus-within-price-cap policy."
+      ],
+      "confidence": "high",
+      "ambiguityReasons": []
+    },
+    {
+      "schemaVersion": "basket-decision-v4",
+      "requirementID": "71000000-0000-4000-8000-000000000002",
+      "observationID": "obs-7047b6ad-9a14-4cfb-92c1-4388e7b9efda-dg4-olive-oil-value-17floz",
+      "retailerProductID": "dg4-olive-oil-value-17floz",
+      "packageCount": 1,
+      "requiredQuantity": 30,
+      "coveredQuantity": 502.750003,
+      "quantityUnit": "milliliter",
+      "surplusQuantity": 472.750003,
+      "relativeSurplus": 15.758333,
+      "lineTotal": 6.12,
+      "currency": "USD",
+      "proteinGramsPerDollar": null,
+      "substitutionNote": null,
+      "rationale": [
+        "1 package covers the reviewed requirement.",
+        "Solari Sandbox selected this line under the bounded relative-surplus-within-price-cap policy."
+      ],
+      "confidence": "high",
+      "ambiguityReasons": []
+    },
+    {
+      "schemaVersion": "basket-decision-v4",
+      "requirementID": "71000000-0000-4000-8000-000000000003",
+      "observationID": "obs-7047b6ad-9a14-4cfb-92c1-4388e7b9efda-dg4-penne-value-16oz",
+      "retailerProductID": "dg4-penne-value-16oz",
+      "packageCount": 1,
+      "requiredQuantity": 340,
+      "coveredQuantity": 453.59237,
+      "quantityUnit": "gram",
+      "surplusQuantity": 113.59237,
+      "relativeSurplus": 0.334095,
+      "lineTotal": 1.24,
+      "currency": "USD",
+      "proteinGramsPerDollar": null,
+      "substitutionNote": null,
+      "rationale": [
+        "1 package covers the reviewed requirement.",
+        "Solari Sandbox selected this line under the bounded relative-surplus-within-price-cap policy."
+      ],
+      "confidence": "high",
+      "ambiguityReasons": []
+    },
+    {
+      "schemaVersion": "basket-decision-v4",
+      "requirementID": "71000000-0000-4000-8000-000000000004",
+      "observationID": "obs-7047b6ad-9a14-4cfb-92c1-4388e7b9efda-dg4-heavy-cream-value-16floz",
+      "retailerProductID": "dg4-heavy-cream-value-16floz",
+      "packageCount": 1,
+      "requiredQuantity": 240,
+      "coveredQuantity": 473.176473,
+      "quantityUnit": "milliliter",
+      "surplusQuantity": 233.176473,
+      "relativeSurplus": 0.971569,
+      "lineTotal": 2.96,
+      "currency": "USD",
+      "proteinGramsPerDollar": null,
+      "substitutionNote": null,
+      "rationale": [
+        "1 package covers the reviewed requirement.",
+        "Solari Sandbox selected this line under the bounded relative-surplus-within-price-cap policy."
+      ],
+      "confidence": "high",
+      "ambiguityReasons": []
+    },
+    {
+      "schemaVersion": "basket-decision-v4",
+      "requirementID": "71000000-0000-4000-8000-000000000005",
+      "observationID": "obs-7047b6ad-9a14-4cfb-92c1-4388e7b9efda-dg4-parmesan-value-6oz",
+      "retailerProductID": "dg4-parmesan-value-6oz",
+      "packageCount": 1,
+      "requiredQuantity": 85,
+      "coveredQuantity": 170.097139,
+      "quantityUnit": "gram",
+      "surplusQuantity": 85.097139,
+      "relativeSurplus": 1.001143,
+      "lineTotal": 2.08,
+      "currency": "USD",
+      "proteinGramsPerDollar": null,
+      "substitutionNote": null,
+      "rationale": [
+        "1 package covers the reviewed requirement.",
+        "Solari Sandbox selected this line under the bounded relative-surplus-within-price-cap policy."
+      ],
+      "confidence": "high",
+      "ambiguityReasons": []
+    },
+    {
+      "schemaVersion": "basket-decision-v4",
+      "requirementID": "71000000-0000-4000-8000-000000000006",
+      "observationID": "obs-7047b6ad-9a14-4cfb-92c1-4388e7b9efda-dg4-garlic-bulb-8ct",
+      "retailerProductID": "dg4-garlic-bulb-8ct",
+      "packageCount": 1,
+      "requiredQuantity": 2,
+      "coveredQuantity": 8,
+      "quantityUnit": "count",
+      "surplusQuantity": 6,
+      "relativeSurplus": 3,
+      "lineTotal": 0.78,
+      "currency": "USD",
+      "proteinGramsPerDollar": null,
+      "substitutionNote": null,
+      "rationale": [
+        "1 package covers the reviewed requirement.",
+        "Solari Sandbox selected this line under the bounded relative-surplus-within-price-cap policy."
+      ],
+      "confidence": "high",
+      "ambiguityReasons": []
+    },
+    {
+      "schemaVersion": "basket-decision-v4",
+      "requirementID": "71000000-0000-4000-8000-000000000007",
+      "observationID": "obs-7047b6ad-9a14-4cfb-92c1-4388e7b9efda-dg4-lemon-each-1ct",
+      "retailerProductID": "dg4-lemon-each-1ct",
+      "packageCount": 2,
+      "requiredQuantity": 2,
+      "coveredQuantity": 2,
+      "quantityUnit": "count",
+      "surplusQuantity": 0,
+      "relativeSurplus": 0,
+      "lineTotal": 1.28,
+      "currency": "USD",
+      "proteinGramsPerDollar": null,
+      "substitutionNote": null,
+      "rationale": [
+        "2 packages cover the reviewed requirement.",
+        "Solari Sandbox selected this line under the bounded relative-surplus-within-price-cap policy."
+      ],
+      "confidence": "high",
+      "ambiguityReasons": []
+    },
+    {
+      "schemaVersion": "basket-decision-v4",
+      "requirementID": "71000000-0000-4000-8000-000000000008",
+      "observationID": "obs-7047b6ad-9a14-4cfb-92c1-4388e7b9efda-dg4-parsley-bunch-1ct",
+      "retailerProductID": "dg4-parsley-bunch-1ct",
+      "packageCount": 1,
+      "requiredQuantity": 1,
+      "coveredQuantity": 1,
+      "quantityUnit": "count",
+      "surplusQuantity": 0,
+      "relativeSurplus": 0,
+      "lineTotal": 0.98,
+      "currency": "USD",
+      "proteinGramsPerDollar": null,
+      "substitutionNote": null,
+      "rationale": [
+        "1 package covers the reviewed requirement.",
+        "Solari Sandbox selected this line under the bounded relative-surplus-within-price-cap policy."
+      ],
+      "confidence": "high",
+      "ambiguityReasons": []
+    }
+  ],
+  "trust": {
+    "priceClaim": "observed-visible-price-not-guaranteed",
+    "accountAccessed": false,
+    "cartModified": false,
+    "checkoutAutomated": false,
+    "userControlsHandoff": true,
+    "limitations": [
+      "Visible Demo Grocer prices are timestamped synthetic observations, not guarantees or checkout quotes.",
+      "Availability, tax, fees, fulfillment, and checkout totals remain unknown.",
+      "No account, cart, or checkout action was performed."
+    ]
+  }
+}

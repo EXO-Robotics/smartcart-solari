@@ -7,7 +7,7 @@ This document keeps implementation, local tests, provider execution, deployment,
 - Repository: [EXO-Robotics/smartcart-solari](https://github.com/EXO-Robotics/smartcart-solari)
 - Clean upstream base: [fe6589b1bd811a7ca8afa9824deba9d3cbde7ab9](https://github.com/EXO-Robotics/smartcart-ios/commit/fe6589b1bd811a7ca8afa9824deba9d3cbde7ab9)
 - Production SmartCart repository/deployment: unchanged
-- Immutable V4 provider-qualified runtime: **931e03468b1556e42a61e68d6c4e24c1a12e968d**
+- Immutable V4 provider-qualified runtime: **2dd4e6f30be8286a3a8f465c92a56427828a60e2**
 
 V4 provider execution was frozen and qualified at the exact runtime above. Later receipt, documentation, or supporting-site commits are publication-only and must not be mislabeled as the executed runtime.
 
@@ -30,21 +30,21 @@ Solari Browser must observe exact **current-v4** / synthetic owned pages. Solari
 
 | Surface | Status | Required proof |
 | --- | --- | --- |
-| Frozen V4 commit | **PASS** | `931e03468b1556e42a61e68d6c4e24c1a12e968d` |
+| Frozen V4 commit | **PASS** | `2dd4e6f30be8286a3a8f465c92a56427828a60e2` |
 | Focused backend | **PASS** | 21/21 V3/V4 qualification/provider/DP checks |
 | Full backend | **PASS** | 214/214 |
 | Dependency audit | **PASS** | 0 vulnerabilities |
 | Focused native | **PASS** | 28/28 on iPhone 17 Pro / iOS 26.5 Simulator |
-| Web/owned catalog | **PASS** | 19 pages / 8 groups; 7/7 web tests; Pages run `33545270825` |
+| Web/owned catalog | **PASS** | 19 pages / 8 groups; 7/7 web tests; Pages run `33546848706` |
 | Unsigned Release-SolariBeta build | **PASS** | generic iOS Simulator, signing disabled |
-| Credentialed V4 Browser+Sandbox | **PASS** | run `33545361427`; 8 requirements, 16 observations, 8 decisions; $0.63 bounded low-waste tradeoff; sanitized receipt |
+| Credentialed V4 Browser+Sandbox | **PASS** | run `33546912947`; 8 requirements, 16 observations, 8 decisions; $0.63 premium avoids about 680 g excess chicken; sanitized receipt |
 | V4 beta deployment | **PASS** | `dpl_2ucnyzesiFFFf7bU7bFraDaVerPh`; publication `5164426`; READY; health 200; challenge 201 |
 | Signed archive | **PENDING** | matching team capabilities/profiles |
 | Signed App Attest request | **PENDING** | physical-device registration, assertion, request, replay rejection |
 | TestFlight / App Store / downloadable app | **PENDING** | distribution evidence |
 | Authorized real retailer | **PENDING** | API/feed or documented automation permission plus retailer-specific qualification |
 
-The V4 provider receipt is [smartcart-solari-v4-qualification-33545361427.json](../evidence/live/smartcart-solari-v4-qualification-33545361427.json). It records a complete $24.83 synthetic basket versus the $24.20 cheapest adequate basket, a $0.63 bounded premium, a 0.985784 reduction in the dimensionless package-overage score, request/result digests, operator-only access boundary, exact commit, timestamps, provider provenance, and enforced cleanup. It does not claim signed App Attest or device execution.
+The V4 provider receipt is [smartcart-solari-v4-qualification-33546912947.json](../evidence/live/smartcart-solari-v4-qualification-33546912947.json). It records a complete $24.20 synthetic basket versus the $23.57 cheapest adequate basket and a $0.63 bounded premium to select 1.5 lb instead of 3 lb of chicken, avoiding about 680 g / 1.5 lb of excess. It also binds request/result digests, operator-only access boundary, exact commit, timestamps, provider provenance, and enforced cleanup. It does not claim signed App Attest or device execution.
 
 The V4 [deployment receipt](../evidence/live/smartcart-solari-v4-deployment-5164426-20260901.json) records production deployment **dpl_2ucnyzesiFFFf7bU7bFraDaVerPh** from clean publication commit **5164426e39ec5c5524135e82e6689a9fce923387**. READY, health 200, and challenge 201 prove the protected boundary is deployed; they do not prove a signed iPhone request or provider execution through that route.
 
@@ -117,4 +117,4 @@ The owned Demo Grocer is synthetic and provides no real-retailer value. Walmart 
 
 The defensible current statement is:
 
-> V4 expands the product boundary from one fixed three-line prototype to a bounded eligible subset of any waiting trip, with explicit skipped-line preservation and versioned evidence. A real credentialed eight-line Solari Browser+Sandbox run passed at `931e034` and exercised the bounded low-waste tradeoff; signed-device App Attest, distribution, and real-retailer qualification remain PENDING.
+> V4 expands the product boundary from one fixed three-line prototype to a bounded eligible subset of any waiting trip, with explicit skipped-line preservation and versioned evidence. A real credentialed eight-line Solari Browser+Sandbox run passed at `2dd4e6f` and used the bounded premium to avoid about 680 g / 1.5 lb of excess chicken; signed-device App Attest, distribution, and real-retailer qualification remain PENDING.

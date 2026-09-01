@@ -111,15 +111,15 @@ Persistent Browser profiles are deliberately unused. If enabled, they would stor
 
 The V4 provider path is frozen and credential-qualified:
 
-- runtime **931e03468b1556e42a61e68d6c4e24c1a12e968d**;
-- [run 33545361427](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33545361427);
-- [sanitized receipt](../evidence/live/smartcart-solari-v4-qualification-33545361427.json);
+- runtime **2dd4e6f30be8286a3a8f465c92a56427828a60e2**;
+- [run 33546912947](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33546912947);
+- [sanitized receipt](../evidence/live/smartcart-solari-v4-qualification-33546912947.json);
 - eight researched requirements spanning mass, volume, and count;
 - 16 fresh Browser observations and eight Sandbox decisions;
-- complete $24.83 synthetic basket versus $24.20 cheapest, spending $0.63 to reduce the package-overage score by 0.985784;
+- complete $24.20 synthetic basket versus $23.57 cheapest, spending $0.63 to select 1.5 lb rather than 3 lb of chicken and avoid about 680 g / 1.5 lb of shopper-visible excess;
 - Browser and Sandbox cleanup enforced before receipt;
 - focused provider/qualification tests 21/21, full backend 214/214, focused native 28/28, web 7/7, npm audit 0, unsigned Release-SolariBeta build PASS;
-- public V4 owned catalog and Pages deployment [33545270825](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33545270825).
+- public V4 owned catalog and Pages deployment [33546848706](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33546848706).
 
 V4 beta deployment is also complete at publication commit **5164426**: deployment **dpl_2ucnyzesiFFFf7bU7bFraDaVerPh** is READY and the [sanitized deployment receipt](../evidence/live/smartcart-solari-v4-deployment-5164426-20260901.json) records health 200 and challenge 201 without claiming signed-device execution.
 

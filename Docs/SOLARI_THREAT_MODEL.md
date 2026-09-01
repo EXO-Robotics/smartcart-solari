@@ -59,13 +59,13 @@ Official references: [Solari profiles](https://docs.getsolari.com/profiles) desc
 
 ## Evidence and release gates
 
-V4 run [33545361427](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33545361427) at runtime **931e03468b1556e42a61e68d6c4e24c1a12e968d** qualified the owned-source Browser/Sandbox path for eight requirements, 16 observations, mass/volume/count decisions, a real $0.63 bounded low-waste tradeoff, and cleanup. Its [provider receipt](../evidence/live/smartcart-solari-v4-qualification-33545361427.json) is operator qualification, not signed App Attest/device proof.
+V4 run [33546912947](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33546912947) at runtime **2dd4e6f30be8286a3a8f465c92a56427828a60e2** qualified the owned-source Browser/Sandbox path for eight requirements, 16 observations, mass/volume/count decisions, a real $0.63 bounded tradeoff that avoids about 680 g / 1.5 lb of excess chicken, and cleanup. Its [provider receipt](../evidence/live/smartcart-solari-v4-qualification-33546912947.json) is operator qualification, not signed App Attest/device proof.
 
 Historical V3 [provider](../evidence/live/smartcart-solari-v3-qualification-33533170189.json) and [deployment](../evidence/live/smartcart-solari-v3-deployment-772e65b-20260901.json) receipts remain scoped to the narrower predecessor.
 
 Before a V4 release claim, preserve the completed provider checks and finish the remaining product gates:
 
-- preserve runtime `931e034` and its credentialed Browser+Sandbox receipt;
+- preserve runtime `2dd4e6f` and its credentialed Browser+Sandbox receipt;
 - keep contract/backend/native/web/build/audit checks green;
 - keep all owned V4 pages published and verified;
 - deploy that exact runtime and record a separate smoke receipt;
