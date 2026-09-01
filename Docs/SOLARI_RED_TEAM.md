@@ -15,7 +15,7 @@ The demo was also repaired so a shopper's alternative selection survives stage c
 
 ## Low-finding dispositions
 
-Three Low findings remain legitimate, disclosed hardening work:
+At that iteration, three Low findings remained legitimate disclosed hardening work; Iteration 3 records their later disposition:
 
 1. Native types are intentionally narrower than the general wire schema for the frozen V1 demo; broader nullable and mixed-unit native ingestion remains future work.
 2. Live research has per-operation timeouts and a six-candidate cap, but no single aggregate deadline across Browser research and Sandbox evaluation.
@@ -46,4 +46,23 @@ Its finding artifact identifies the implementation commit separately from later 
 - Internal findings artifact: [`red-team/grok-review-02.json`](red-team/grok-review-02.json)
 - Qualification receipt: [`SOLARI_QUALIFICATION.md`](SOLARI_QUALIFICATION.md)
 
-The session verified the Medium confidence-claim fix, the demo state/math fixes, all three disclosed residual Lows, the deployed Pages code, the executable Browser/Sandbox separation, and the absence of a Sandbox client close/dispose API. Those are useful internal checks. Its numeric score and claims that Solari materially improved SmartCart are not retained as product evidence because no credentialed live Solari run exists.
+The session verified the Medium confidence-claim fix, the demo state/math fixes, all three disclosed residual Lows, the deployed Pages code, the executable Browser/Sandbox separation, and the absence of a Sandbox client close/dispose API. Those were useful internal checks. At that commit no credentialed live run existed; later sections supersede that execution gap with immutable first-party receipts, without converting a model review into external validation.
+
+## Iteration 3 — post-live skeptical review
+
+- Reviewed public commit: `95b28a465d00ba7c9d908cf9584f33aadd62e2a7`
+- Credentialed run inspected: [`33501521988`](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33501521988)
+- Public Pages replay and separate live receipt inspected
+- Findings: **0 Critical, 0 High, 0 Medium, 4 Low**
+- Internal score: **9.2/10**; retained here only because the requested final report asks for the reviewer score
+
+The fresh reviewer explicitly agreed that Solari materially improves SmartCart, the trust model is defensible, the claims are evidence-backed, and the repository demonstrates a real use case rather than only a website demo. It did not agree that the submission was effectively 10/10, citing four Low areas:
+
+1. Native decoding was narrower than nullable wire evidence and mixed pound/ounce package math.
+2. Browser and Sandbox had operation timeouts but did not share one aggregate deadline.
+3. Remote Browser DNS cannot be pinned, and rate limiting trusted forwarded client metadata by default.
+4. The receipt used externally suggestive confirmation wording and did not pin the exact selected SKUs, package counts, and subtotal.
+
+Commit `a55c11fb35fa3b9f86ed2976053e97f6c8dbf61e` fixed every actionable part: native nullable/mixed-unit parity, one shared deadline, default-off forwarded-address trust, explicit result cleanup provenance, first-party receipt terminology, and exact output pinning with negative tests. Remote Browser DNS pinning is not exposed by the Solari SDK; the bounded owned host, exact source paths, public-address preflight, redirect checks, and production egress recommendation remain the defensible mitigation. Credentialed run [`33504222095`](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33504222095) then passed the hardened qualifier.
+
+A fresh reviewer must inspect that remediation and receipt before final signoff. Its conclusions will be recorded as another internal iteration, never as independent audit proof.

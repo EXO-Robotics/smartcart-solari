@@ -47,7 +47,7 @@ Live Walmart research is disabled and fails closed without documented written au
 - Keeps `SOLARI_API_KEY` server-side.
 - Leaves live execution off by default and requires a separate server/operator Bearer token before any live provider work. Fixture replay remains public and rate-limited; iOS/web never receive the operator token.
 - Validates request size, quantities, source identifiers/URLs, evidence mode, and retailer authorization policy.
-- Permits live execution only on the owned Demo Grocer allowlist; rejects Target, and rejects Walmart unless both written-authorization gates are present; revalidates every redirect/final URL. No credentialed live run is claimed.
+- Permits live execution only on the owned Demo Grocer allowlist; rejects Target, and rejects Walmart unless both written-authorization gates are present; revalidates every redirect/final URL. Credentialed owned-surface runs are claimed only through their immutable sanitized receipts.
 - Starts short-lived Browser/Sandbox resources with bounded timeouts and concurrency/rate controls.
 - Converts page output to a retailer observation before Sandbox evaluation.
 - Validates all outputs and fails closed.
@@ -125,6 +125,6 @@ Solari [profiles](https://docs.getsolari.com/profiles) store login-bearing Playw
 
 The submission fork begins at clean `upstream/main` commit `fe6589b1bd811a7ca8afa9824deba9d3cbde7ab9`. Historical Walmart observations originate from that baseline and retain their historical timestamp. The fixture’s freshness is explicitly stale under the 24-hour live policy; recorded mode admits it only as clearly labeled historical replay, never as refreshed evidence. A fixture receipt identifies submission commit, contract version, fixture ID, command, result, and replay time.
 
-Live qualification additionally requires a server-side `SOLARI_API_KEY`, explicit `SOLARI_LIVE_EXECUTION_ENABLED=true`, a valid server/operator `SOLARI_OPERATOR_TOKEN` supplied as Bearer auth, owned Demo Grocer source, live evidence mode, observation IDs/timestamps/sources, and Browser/Sandbox cleanup proof. Neither credential is shipped to iOS/web. GitHub Actions run `33501521988` completed this qualification on commit `8d592fa2d11efe1a3f0996274c14c00caae08148`; the sanitized receipt is [`evidence/live/smartcart-solari-live-proof-33501521988.json`](../evidence/live/smartcart-solari-live-proof-33501521988.json).
+Live qualification additionally requires a server-side `SOLARI_API_KEY`, explicit `SOLARI_LIVE_EXECUTION_ENABLED=true`, a valid server/operator `SOLARI_OPERATOR_TOKEN` supplied as Bearer auth, owned Demo Grocer source, live evidence mode, observation IDs/timestamps/sources, and Browser/Sandbox cleanup proof. Neither credential is shipped to iOS/web. GitHub Actions run `33504222095` completed the hardened qualification on commit `a55c11fb35fa3b9f86ed2976053e97f6c8dbf61e`; the sanitized receipt is [`evidence/live/smartcart-solari-live-proof-33504222095.json`](../evidence/live/smartcart-solari-live-proof-33504222095.json).
 
 See [the demo runbook](SOLARI_DEMO_RUNBOOK.md) and [threat model](SOLARI_THREAT_MODEL.md).
