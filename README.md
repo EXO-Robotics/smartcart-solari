@@ -18,6 +18,8 @@ Three claims are deliberately separate:
 
 The deployed beta API base is `https://smartcart-solari-beta.vercel.app` ([health](https://smartcart-solari-beta.vercel.app/health); Vercel production deployment `dpl_FD8iBpRhvmEckcUm7oo7v5tMoxdh`). Its versioned [deployment receipt](evidence/live/smartcart-solari-beta-deployment-20260901.json) records READY status and smoke evidence: health `200`, challenge issuance `201`, invalid attestation `403`, and consumed-challenge replay `403`. These checks prove deployed routing, Upstash challenge lifecycle, and fail-closed rejection—not a valid Apple-signed attestation.
 
+Commit `c11d8c7` publishes the two immutable receipts and this native-product evidence narrative. The runtime and deployment receipts remain pinned to implementation commit `eee8c84`; documentation publication does not relabel that execution identity.
+
 ## End-to-end use case
 
 The bounded demo is **Chicken Parmesan Pasta**:

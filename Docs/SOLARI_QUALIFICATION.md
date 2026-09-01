@@ -5,6 +5,7 @@
 - Public repository: `https://github.com/EXO-Robotics/smartcart-solari`
 - Branch: `feat/native-solari-beta`
 - Current qualified implementation: `eee8c840b59def4428548c66203304193fa93520`
+- Evidence publication commit: `c11d8c7` (receipts and native-product narrative; runtime identity remains `eee8c84`)
 - Native integration sequence: `9369d70` → `2516414` → `eee8c84`
 - Clean upstream base: `fe6589b1bd811a7ca8afa9824deba9d3cbde7ab9`
 - Credentialed Solari run: [`33519606791`](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33519606791), successful at exact commit `eee8c84`
