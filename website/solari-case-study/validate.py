@@ -78,7 +78,14 @@ def inspect_case_study(root: Path = ROOT, receipt_path: Path = RECEIPT) -> list[
     index = root / "index.html"
     styles = root / "styles.css"
     script = root / "script.js"
-    for path in (index, styles, script, root / "assets" / "smartcart-food-stage.jpg"):
+    for path in (
+        index,
+        styles,
+        script,
+        root / "assets" / "smartcart-food-stage.jpg",
+        root / "assets" / "social-preview.jpg",
+        root / "assets" / "favicon.svg",
+    ):
         if not path.is_file():
             errors.append(f"missing required case-study file: {path.relative_to(root)}")
     if errors:
@@ -101,6 +108,9 @@ def inspect_case_study(root: Path = ROOT, receipt_path: Path = RECEIPT) -> list[
     for phrase in REQUIRED_PHRASES:
         if phrase.casefold() not in source.casefold():
             errors.append(f"index.html: missing required product marker {phrase!r}")
+    for social_marker in ("og:title", "og:description", "og:image", "twitter:card"):
+        if social_marker not in source:
+            errors.append(f"index.html: missing social preview marker {social_marker}")
     for pattern in FORBIDDEN_CLAIMS:
         if re.search(pattern, source, flags=re.IGNORECASE):
             errors.append(f"index.html: forbidden overclaim matched {pattern!r}")
