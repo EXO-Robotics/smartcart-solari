@@ -13,6 +13,7 @@
     "test:trip-intelligence": "node --test test/contracts.test.js test/trip-intelligence-service.test.js test/food-data-central.test.js test/public-trip-intelligence-api.test.js test/recipe-text-analyzer.test.js test/mcp-server.test.js test/public-mcp-api.test.js",
     "test:solari": "node --test test/solari*.test.js",
     "build:solari-demo-request": "node scripts/build-solari-demo-request.mjs",
+    "qualify:solari-live": "node scripts/qualify-solari-live.mjs",
     "mcp:stdio": "node src/mcp/stdio.js",
     "verify:mcp": "node scripts/verify-smartcart-mcp.mjs",
     "validate:weekly-meals": "node scripts/validate-weekly-meals.mjs"

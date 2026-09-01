@@ -93,6 +93,40 @@ test('Browser and Sandbox fail typed-unavailable when the server key is absent',
   await assert.rejects(() => new SolariSandboxOptimizer().optimize(request.requirements, []), { code: 'solari_unavailable', status: 503 });
 });
 
+test('Browser success is withheld unless session and client cleanup are confirmed', async () => {
+  const request = demoRequest(await fixtureRequest());
+  let currentURL;
+  let clientCloseAttempts = 0;
+  const provider = new SolariBrowserProvider({
+    apiKey: 'server-only-test-key',
+    solariFactory: () => ({
+      async launch() {
+        return {
+          async newPage() {
+            return {
+              async goto(url) { currentURL = url; },
+              url() { return currentURL; },
+              async waitForSelector() {},
+              async evaluate() {
+                return {
+                  productID: /([0-9]+)\.html$/.exec(currentURL)[1],
+                  title: 'Synthetic product', packageQuantity: 3, packageUnit: 'lb',
+                  priceCents: 947, currency: 'USD', rawText: 'visible synthetic evidence'
+                };
+              },
+              async close() {}
+            };
+          },
+          async close() { throw new Error('release was not confirmed'); }
+        };
+      },
+      async close() { clientCloseAttempts += 1; }
+    })
+  });
+  await assert.rejects(() => provider.observe(request), { code: 'solari_browser_cleanup_failed', status: 502 });
+  assert.equal(clientCloseAttempts, 1);
+});
+
 test('Browser fails closed when the page does not expose its exact product ID', async () => {
   const request = demoRequest(await fixtureRequest());
   let currentURL;
@@ -166,6 +200,26 @@ test('Sandbox output is required; live mode never falls back to a local decision
   });
   await assert.rejects(() => optimizer.optimize(request.requirements, observations), { code: 'solari_sandbox_invalid_output' });
   assert.equal(killed, 1);
+});
+
+test('Sandbox success is withheld unless microVM destruction is confirmed', async () => {
+  const request = await fixtureRequest();
+  const observations = await new WalmartFixtureReplayProvider({ now: () => Date.parse('2026-07-16T12:01:00Z') }).observe(request);
+  const expected = optimizerFingerprint(deterministicOptimize(request.requirements, observations, { method: 'solari-sandbox' }));
+  const optimizer = new SolariSandboxOptimizer({
+    apiKey: 'server-only-test-key',
+    clientFactory: () => ({
+      async create() {
+        return {
+          commands: { async run() { return { exitCode: 0, stdout: expected, stderr: '' }; } },
+          async kill() { throw new Error('kill was not confirmed'); }
+        };
+      }
+    })
+  });
+  await assert.rejects(() => optimizer.optimize(request.requirements, observations), {
+    code: 'solari_sandbox_cleanup_failed', status: 502
+  });
 });
 
 test('live Walmart Browser never runs without explicit written authorization', async () => {

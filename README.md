@@ -52,7 +52,7 @@ Official Solari references: [Quickstart](https://docs.getsolari.com/quickstart),
 - **Server-only credentials.** `SOLARI_API_KEY` and the separate live `SOLARI_OPERATOR_TOKEN` belong only in the backend runtime/operator channel. Neither is compiled into the iOS app or web demo, returned by an API, committed, logged, or sent to a Sandbox job.
 - **Live is default-off and operator-gated.** Public, rate-limited `recorded_fixture` requests never invoke Solari. Every `live` request is rejected before provider work unless `SOLARI_LIVE_EXECUTION_ENABLED=true`, a 32–256 character operator token is configured, and the same token arrives as a Bearer credential.
 - **Minimal retention.** The durable artifact is normalized evidence/decision JSON. Raw HTML, screenshots, recordings, signed control URLs, cookies, and browser storage are not required or retained.
-- **Short-lived compute.** The Browser session closes and the Solari Browser client closes in `finally`; the Sandbox is killed in `finally`. Failure returns unavailable/partial, never invented evidence.
+- **Short-lived compute.** Every Browser page, the Browser session, and the Solari Browser client close in `finally`; the Sandbox is killed in `finally`. Cleanup failures suppress the success response, so a live receipt cannot silently outlive its resources.
 - **User-controlled handoff.** The final action remains an explicit open of a retailer-owned page. “Visited” is not cart/order/purchase proof, and pantry updates remain explicit.
 
 Persistent Solari profiles are intentionally not used. Solari documents a profile as Playwright `storageState` containing cookies and per-origin localStorage and warns that it represents a real login. Enabling one would create account authority and sensitive retained state without a legitimate need. Any future profile use requires new consent, retention, access-control, deletion, and retailer-policy design; it is not a configuration toggle for this experiment.
@@ -118,6 +118,8 @@ npm start
 ```
 
 Fixture replay needs neither Solari nor operator credentials. For an authorized live Demo Grocer operator run, set `SOLARI_API_KEY`, `SOLARI_LIVE_EXECUTION_ENABLED=true`, a random 32–256 character `SOLARI_OPERATOR_TOKEN`, and `SOLARI_DEMO_RETAILER_BASE_URL` to an owned, credential-free public HTTPS `/solari-demo` root. `backend/.env.example` documents the optional Browser base URL, Sandbox base URL, 6-second Browser/10-second Sandbox timeouts, 32 KB request limit, and five-request-per-minute limit. Never add either secret to Xcode, the iOS app, web demo, fixture, snapshot, GitHub commit, or logged command. Open `SmartCart.xcodeproj`, select `SmartCart`, choose an iOS 17+ simulator, and run. Follow [the demo runbook](Docs/SOLARI_DEMO_RUNBOOK.md) for fixture replay and the separately gated live Demo Grocer mode.
+
+The public repository includes a manually dispatched [live qualification workflow](.github/workflows/solari-live-proof.yml). It accepts only the encrypted GitHub Actions secret named `SOLARI_API_KEY`, generates and masks a fresh operator token inside the runner, starts the backend on loopback, invokes the six owned Demo Grocer pages through Solari Browser, runs the verified basket decision in Solari Sandbox, and uploads only a sanitized receipt. It never deploys the key or operator token and never enables Walmart research.
 
 ### Current evidence status
 

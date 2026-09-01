@@ -1,0 +1,76 @@
+name: Solari live Browser + Sandbox proof
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: solari-live-proof
+  cancel-in-progress: false
+
+jobs:
+  qualify-owned-demo-grocer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install pinned backend dependencies
+        run: npm ci --prefix backend
+
+      - name: Run credentialed owned-retailer qualification
+        env:
+          SOLARI_API_KEY: ${{ secrets.SOLARI_API_KEY }}
+          SOLARI_DEMO_RETAILER_BASE_URL: https://exo-robotics.github.io/smartcart-solari/website/solari-demo
+          SOLARI_LIVE_EXECUTION_ENABLED: "true"
+          SOLARI_BROWSER_TIMEOUT_MS: "20000"
+          SOLARI_SANDBOX_TIMEOUT_MS: "20000"
+          SOLARI_QUALIFICATION_OUTPUT: ${{ runner.temp }}/smartcart-solari-live-proof.json
+          HOST: 127.0.0.1
+          PORT: "8787"
+        run: |
+          if [ -z "$SOLARI_API_KEY" ]; then
+            echo "SOLARI_API_KEY repository secret is required" >&2
+            exit 1
+          fi
+          SOLARI_OPERATOR_TOKEN="$(openssl rand -hex 32)"
+          export SOLARI_OPERATOR_TOKEN
+          echo "::add-mask::$SOLARI_OPERATOR_TOKEN"
+
+          npm start --prefix backend >"$RUNNER_TEMP/solari-server.log" 2>&1 &
+          SERVER_PID=$!
+          cleanup() {
+            kill -TERM "$SERVER_PID" 2>/dev/null || true
+            wait "$SERVER_PID" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8787/health >/dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              echo "SmartCart qualification backend did not become healthy" >&2
+              exit 1
+            fi
+            sleep 1
+          done
+
+          npm run --prefix backend qualify:solari-live
+
+      - name: Upload sanitized proof receipt
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smartcart-solari-live-proof-${{ github.sha }}
+          path: ${{ runner.temp }}/smartcart-solari-live-proof.json
+          if-no-files-found: error
+          retention-days: 90

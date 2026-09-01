@@ -39,6 +39,29 @@ function ambiguitiesFor(extracted) {
   return reasons;
 }
 
+async function closeBrowserResources(page, browser, client) {
+  const attempts = [
+    ...(page ? [['page', () => page.close()]] : []),
+    ...(browser ? [['browser', () => browser.close()]] : []),
+    ['client', () => client.close()]
+  ];
+  const failures = [];
+  for (const [resource, close] of attempts) {
+    try {
+      await close();
+    } catch {
+      failures.push(resource);
+    }
+  }
+  if (failures.length > 0) {
+    throw new SolariResearchError(
+      'solari_browser_cleanup_failed',
+      `Solari Browser cleanup was not confirmed for: ${failures.join(', ')}.`,
+      { status: 502 }
+    );
+  }
+}
+
 export class SolariBrowserProvider {
   constructor({
     apiKey,
@@ -60,6 +83,7 @@ export class SolariBrowserProvider {
     }
     const client = this.solariFactory({ apiKey: this.apiKey, ...(this.baseURL ? { baseUrl: this.baseURL } : {}), timeoutMs: this.timeoutMs });
     let browser;
+    let activePage;
     try {
       browser = await client.launch({
         stealth: false,
@@ -73,6 +97,7 @@ export class SolariBrowserProvider {
       for (const requirement of request.requirements) {
         for (const candidate of requirement.candidates) {
           const page = await browser.newPage();
+          activePage = page;
           try {
             await page.goto(candidate.sourceURL, { waitUntil: 'domcontentloaded', timeout: this.timeoutMs });
             if (typeof page.url !== 'function' || new URL(page.url()).href !== new URL(candidate.sourceURL).href) {
@@ -138,14 +163,14 @@ export class SolariBrowserProvider {
               freshness: freshness(observedAt, this.now)
             });
           } finally {
-            await page.close().catch(() => {});
+            await closeBrowserResources(page, null, { close: async () => {} });
+            activePage = null;
           }
         }
       }
       return observations;
     } finally {
-      if (browser) await browser.close().catch(() => {});
-      await client.close().catch(() => {});
+      await closeBrowserResources(activePage, browser, client);
     }
   }
 }

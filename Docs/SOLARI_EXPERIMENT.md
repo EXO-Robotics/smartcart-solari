@@ -51,7 +51,7 @@ Live Walmart research is disabled and fails closed without documented written au
 - Starts short-lived Browser/Sandbox resources with bounded timeouts and concurrency/rate controls.
 - Converts page output to a retailer observation before Sandbox evaluation.
 - Validates all outputs and fails closed.
-- Closes the Browser session and Solari Browser client, and kills Sandbox, in `finally` paths.
+- Closes every Browser page, the Browser session, and Solari Browser client, and kills Sandbox, in `finally` paths. Cleanup failure suppresses success rather than being silently ignored.
 - Returns explicit fixture/live/unavailable mode without upgrading labels.
 
 The live admission sequence is strict: `executionMode: "live"` → `SOLARI_LIVE_EXECUTION_ENABLED=true` → configured 32–256 character `SOLARI_OPERATOR_TOKEN` → exact constant-time Bearer-token match → retailer/source policy → Browser/Sandbox. A failure returns 403 before the service/provider. Recorded fixture mode bypasses live credentials because it invokes neither Browser nor Sandbox.

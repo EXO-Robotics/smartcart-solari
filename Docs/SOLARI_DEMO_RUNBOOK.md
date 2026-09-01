@@ -130,6 +130,28 @@ Open `http://127.0.0.1:8080/website/solari-demo/`. The Browser-controlled synthe
 
 ## 5. Live Demo Grocer (credential-gated)
 
+### Recommended public-repository qualification
+
+Store the real key as the repository's encrypted Actions secret. The command prompts for its value without putting it in the command line:
+
+```sh
+gh secret set SOLARI_API_KEY --repo EXO-Robotics/smartcart-solari
+```
+
+Then manually dispatch **Solari live Browser + Sandbox proof** from GitHub Actions. The workflow generates a one-run operator token, masks it before use, keeps both credentials in the runner/backend only, calls the backend exclusively over loopback, and uploads `smartcart-solari-live-proof.json`. That receipt omits raw page text, credentials, session IDs, CDP/WebSocket endpoints, and Sandbox control URLs. It binds the source commit and workflow run to the exact Browser observations, Sandbox decisions, basket total, source URLs/timestamps, trust assertions, and response hash.
+
+Do not dispatch until the secret is present. A missing secret is an expected hard failure, not a reason to add a placeholder or fixture fallback. Download and inspect the artifact before committing any live claim:
+
+```sh
+gh run list --repo EXO-Robotics/smartcart-solari --workflow solari-live-proof.yml
+gh run download RUN_ID --repo EXO-Robotics/smartcart-solari \
+  --name smartcart-solari-live-proof-COMMIT_SHA --dir /tmp/smartcart-solari-live-proof
+```
+
+The credentialed workflow targets only `https://exo-robotics.github.io/smartcart-solari/website/solari-demo`. It does not deploy a public live backend and does not make the operator Bearer available to iOS or browser JavaScript.
+
+### Controlled operator alternative
+
 Deploy `website/solari-demo/` to an owned, credential-free HTTPS origin so the cloud Browser can reach the controlled product pages, then set `SOLARI_DEMO_RETAILER_BASE_URL` to that deployment’s `/solari-demo` root. Use only that owned host/source and server-side `SOLARI_API_KEY`. Live execution also requires the explicit `SOLARI_LIVE_EXECUTION_ENABLED=true` flag and a randomly generated 32–256 character `SOLARI_OPERATOR_TOKEN` using only ASCII letters, digits, `.`, `_`, `~`, or `-`. `SOLARI_BROWSER_BASE_URL` is optional; `SOLARI_SANDBOX_BASE_URL` defaults to `https://api.getsolari.com`. Defaults are Browser 6,000 ms, Sandbox 10,000 ms, request body 32,768 bytes, and five research requests per minute. Never put either secret in Xcode, frontend state, screenshots, fixtures, logs, or committed `.env`; never paste a literal token into a saved command or shell history.
 
 Before running, verify:

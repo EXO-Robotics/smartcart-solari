@@ -117,7 +117,17 @@ export class SolariSandboxOptimizer {
       }
       return verified;
     } finally {
-      if (sandbox) await sandbox.kill().catch(() => {});
+      if (sandbox) {
+        try {
+          await sandbox.kill();
+        } catch {
+          throw new SolariResearchError(
+            'solari_sandbox_cleanup_failed',
+            'Solari Sandbox cleanup was not confirmed.',
+            { status: 502 }
+          );
+        }
+      }
     }
   }
 }
