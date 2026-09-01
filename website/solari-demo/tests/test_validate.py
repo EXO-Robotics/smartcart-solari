@@ -99,6 +99,10 @@ class ReplayFixtureValidationTests(unittest.TestCase):
         self.assertNotIn("what-if preview must keep incomplete totals nullable", errors)
         self.assertNotIn("what-if preview must normalize compatible weight units", errors)
 
+    def test_v3_qualification_receipt_binds_policy_economics(self) -> None:
+        errors = validate.validate_v3_receipt(validate.V3_RECEIPT)
+        self.assertEqual(errors, [])
+
 
 if __name__ == "__main__":
     unittest.main()

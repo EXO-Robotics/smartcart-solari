@@ -306,6 +306,33 @@ enum SolariResearchRequestBuilder {
         }
     }
 
+    static func refreshedPlan(
+        from plan: SolariResearchPlan,
+        now: Date = .now,
+        requestID: UUID = UUID()
+    ) -> SolariResearchPlan {
+        let previous = plan.request
+        let refreshedRequest = SolariResearchRequest(
+            schemaVersion: previous.schemaVersion,
+            requestID: requestID,
+            demoID: previous.demoID,
+            submittedAt: now,
+            retailerID: previous.retailerID,
+            executionMode: previous.executionMode,
+            storeReference: previous.storeReference,
+            optimizationPolicy: previous.optimizationPolicy,
+            requirements: previous.requirements
+        )
+        return SolariResearchPlan(
+            configuration: plan.configuration,
+            request: refreshedRequest,
+            fingerprint: plan.fingerprint,
+            sourceURLsByProductID: plan.sourceURLsByProductID,
+            originalSmartCartSelections: plan.originalSmartCartSelections,
+            servingCount: plan.servingCount
+        )
+    }
+
     private static func planFingerprint(
         request: SolariResearchRequest,
         originalSelections: [SolariOriginalSmartCartSelection],
@@ -364,7 +391,7 @@ enum SolariOriginalSmartCartContinuation {
     ) -> Bool {
         let result = research.result
         let handoff = SolariEvidenceHandoff(result: result)
-        guard result.requestID == plan.request.requestID,
+        guard research.planFingerprint == plan.fingerprint,
               result.demoID == SolariRetailerEvidenceSchema.demoID,
               result.retailerID == SolariRetailerEvidenceSchema.retailerID,
               !handoff.transfersToConfiguredRetailer,
@@ -474,6 +501,7 @@ struct SolariEvidenceValidator {
                 throw SolariEvidenceContractError.invalidObservation
             }
             let actualAgeSeconds = now.timeIntervalSince(observation.observedAt)
+            let ageAtCompletionSeconds = result.completedAt.timeIntervalSince(observation.observedAt)
             guard observation.observedAt <= now.addingTimeInterval(timestampTolerance),
                   observation.observedAt <= result.completedAt.addingTimeInterval(timestampTolerance),
                   observation.freshness.status == .fresh,
@@ -481,9 +509,10 @@ struct SolariEvidenceValidator {
                   let claimedAgeSeconds = observation.freshness.ageSeconds,
                   claimedAgeSeconds >= 0,
                   actualAgeSeconds >= -timestampTolerance,
+                  ageAtCompletionSeconds >= -freshnessAgeTolerance,
                   actualAgeSeconds <= maximumLiveObservationAge + freshnessAgeTolerance,
                   actualAgeSeconds <= Double(observation.freshness.maxAgeSeconds) + freshnessAgeTolerance,
-                  abs(max(0, actualAgeSeconds) - Double(claimedAgeSeconds)) <= freshnessAgeTolerance,
+                  abs(max(0, ageAtCompletionSeconds) - Double(claimedAgeSeconds)) <= freshnessAgeTolerance,
                   Double(claimedAgeSeconds) <= min(
                       Double(observation.freshness.maxAgeSeconds),
                       maximumLiveObservationAge
@@ -615,7 +644,11 @@ struct SolariEvidenceValidator {
         if result.observations.contains(where: { !$0.ambiguityReasons.isEmpty || $0.confidence != .high }) {
             warnings.append("Some observations are ambiguous or lower confidence. Review them before continuing.")
         }
-        return SolariValidatedResearch(result: result, warnings: Array(Set(warnings)).sorted())
+        return SolariValidatedResearch(
+            result: result,
+            warnings: Array(Set(warnings)).sorted(),
+            planFingerprint: plan.fingerprint
+        )
     }
 
     private func cheapestAdequateReference(
@@ -743,6 +776,9 @@ extension SolariResearchAuthorizing {
 }
 
 struct SolariRetailerResearchClient {
+    static let requestTimeoutInterval: TimeInterval = 75
+    static let resourceTimeoutInterval: TimeInterval = 90
+
     private let session: URLSession
     private let authorizer: any SolariResearchAuthorizing
 
@@ -797,6 +833,7 @@ struct SolariRetailerResearchClient {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.timeoutInterval = requestTimeoutInterval
         request.httpBody = try encoder.encode(envelope)
         return request
     }
@@ -825,15 +862,19 @@ struct SolariRetailerResearchClient {
     }()
 
     private static func ephemeralSession() -> URLSession {
+        URLSession(configuration: ephemeralSessionConfiguration())
+    }
+
+    static func ephemeralSessionConfiguration() -> URLSessionConfiguration {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.httpCookieStorage = nil
         configuration.httpShouldSetCookies = false
         configuration.urlCache = nil
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        configuration.timeoutIntervalForRequest = 30
-        configuration.timeoutIntervalForResource = 45
+        configuration.timeoutIntervalForRequest = requestTimeoutInterval
+        configuration.timeoutIntervalForResource = resourceTimeoutInterval
         configuration.waitsForConnectivity = false
-        return URLSession(configuration: configuration)
+        return configuration
     }
 }
 
@@ -849,7 +890,10 @@ struct SolariValidatedResearchCache {
 
     mutating func value(for fingerprint: String, now: Date = .now, bypass: Bool = false) -> SolariValidatedResearch? {
         entries = entries.filter { $0.value.expiresAt > now }
-        guard !bypass else { return nil }
+        guard !bypass else {
+            entries.removeValue(forKey: fingerprint)
+            return nil
+        }
         return entries[fingerprint]?.research
     }
 
@@ -1053,7 +1097,11 @@ enum SolariDebugRecordedFixture {
                 ]
             )
         )
-        return SolariValidatedResearch(result: result, warnings: result.trust.limitations)
+        return SolariValidatedResearch(
+            result: result,
+            warnings: result.trust.limitations,
+            planFingerprint: plan.fingerprint
+        )
     }
 
     private static func cheapestKey(product: Product, requirement: SolariShoppingRequirement) -> String {

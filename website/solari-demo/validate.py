@@ -15,7 +15,8 @@ from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parent
 CANONICAL_FIXTURE = ROOT.parents[1] / "contracts" / "fixtures" / "v1" / "solari" / "chicken-parmesan-walmart-result.json"
-LIVE_RECEIPT = ROOT.parents[1] / "evidence" / "live" / "smartcart-solari-live-proof-33519606791.json"
+V1_RECEIPT = ROOT.parents[1] / "evidence" / "live" / "smartcart-solari-live-proof-33519606791.json"
+V3_RECEIPT = ROOT.parents[1] / "evidence" / "live" / "smartcart-solari-v3-qualification-33529059284.json"
 LEGACY_PRODUCT_IDS = {"10414680", "10534084", "623835750", "10452414", "10307238", "47088917"}
 CURRENT_PRODUCT_SPECS = {
     "dg-chicken-value-3lb": (3, "lb", 947),
@@ -255,7 +256,7 @@ def validate_v3_policy_math(path: Path) -> list[str]:
     return errors
 
 
-def validate_live_receipt(path: Path) -> list[str]:
+def validate_v1_receipt(path: Path) -> list[str]:
     try:
         receipt = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
@@ -276,6 +277,57 @@ def validate_live_receipt(path: Path) -> list[str]:
             errors.append(f"prior V1 live receipt execution.{key} must equal {value!r}")
     if receipt.get("useCase", {}).get("retailer") != "SmartCart Demo Grocer synthetic catalog":
         errors.append("prior V1 live receipt must remain scoped to the synthetic Demo Grocer")
+    return errors
+
+
+def validate_v3_receipt(path: Path) -> list[str]:
+    try:
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        return [f"V3 qualification receipt unreadable: {error}"]
+
+    errors: list[str] = []
+    if receipt.get("receiptVersion") != "smartcart-solari-v3-qualification-v1":
+        errors.append("V3 qualification receipt version drifted")
+    if receipt.get("workflow", {}).get("runID") != "33529059284":
+        errors.append("V3 qualification receipt must bind run 33529059284")
+
+    execution = receipt.get("execution", {})
+    expected_execution = {
+        "assuranceScope": "server-side-direct-service-receipt",
+        "accessBoundary": "operator-qualification",
+        "browser": "solari-browser-provider-completed",
+        "sandbox": "solari-sandbox-provider-completed",
+    }
+    for key, value in expected_execution.items():
+        if execution.get(key) != value:
+            errors.append(f"V3 qualification receipt execution.{key} must equal {value!r}")
+
+    expected_products = {
+        "dg-chicken-rightsize-1lb",
+        "dg-penne-value-16oz",
+        "dg-parmesan-value-6oz",
+    }
+    if set(receipt.get("selectedProductIDs", [])) != expected_products:
+        errors.append("V3 qualification receipt selected products drifted")
+
+    basket = receipt.get("basket", {})
+    if basket.get("completeness") != "complete" or basket.get("observedSubtotal") != 13.32:
+        errors.append("V3 qualification receipt must record the complete $13.32 selected basket")
+    comparison = receipt.get("comparison", {})
+    expected_comparison = {
+        "cheapestAdequateSubtotal": 12.79,
+        "selectedSubtotal": 13.32,
+        "premiumOverCheapest": 0.53,
+        "surplusAvoidedOunces": 16,
+        "maxPremiumOverCheapest": 0.75,
+    }
+    for key, value in expected_comparison.items():
+        if comparison.get(key) != value:
+            errors.append(f"V3 qualification receipt comparison.{key} must equal {value!r}")
+    optimizer = receipt.get("optimizer", {})
+    if optimizer.get("authority") != "solari-sandbox" or optimizer.get("policyInvariantsVerified") is not True:
+        errors.append("V3 qualification receipt must preserve Sandbox authority and verified policy invariants")
     return errors
 
 
@@ -303,7 +355,8 @@ def inspect_demo(root: Path = ROOT) -> list[str]:
         root / "retailer" / "catalog.json",
     ))
     errors.extend(validate_v3_policy_math(root / "retailer" / "catalog.json"))
-    errors.extend(validate_live_receipt(LIVE_RECEIPT))
+    errors.extend(validate_v1_receipt(V1_RECEIPT))
+    errors.extend(validate_v3_receipt(V3_RECEIPT))
 
     for product_id in CURRENT_PRODUCT_SPECS:
         source = (root / "retailer" / "product" / f"{product_id}.html").read_text(encoding="utf-8")
@@ -327,16 +380,19 @@ def inspect_demo(root: Path = ROOT) -> list[str]:
     main_text = (root / "index.html").read_text(encoding="utf-8")
     required_markers = [
         "Research current options",
-        "Prior V1 credentialed proof remains valid",
+        "V3 Browser + Sandbox qualification complete",
+        "33529059284",
+        "smartcart-solari-v3-qualification-33529059284.json",
         "33519606791",
         "smartcart-solari-live-proof-33519606791.json",
         "Historical UI replay only",
-        "There is no credentialed V3 run yet",
-        "Expected V3 policy result · qualification pending",
-        "Starting from the $12.79 minimum-cost combination",
-        "expected optimizer result is $13.32",
-        "avoids 16 oz of chicken overbuy",
-        "not a new credentialed Solari run",
+        "V3 policy result · credentialed qualification",
+        "$12.79 cheapest adequate",
+        "$13.32 selected",
+        "$0.53 premium",
+        "16 oz of aggregate surplus avoided",
+        "supporting evidence and the owned Browser surface",
+        "not the product frontend",
         "does not prove signed native App Attest",
         "physical-device/TestFlight success",
         "Live Walmart Browser execution is disabled",
@@ -349,9 +405,13 @@ def inspect_demo(root: Path = ROOT) -> list[str]:
     handoff_section = main_text.split('id="stage-handoff"', 1)[-1].split("</section>", 1)[0]
     if "walmart" in handoff_section.casefold() or any(product_id in handoff_section for product_id in LEGACY_PRODUCT_IDS):
         errors.append("current Demo handoff must not expose Walmart or legacy V1 identity")
-    for marker in ("expected V3 preview", "owned synthetic Demo Grocer", "pending a new credentialed run"):
+    for marker in ("supporting V3 preview", "owned synthetic Demo Grocer candidates qualified by run 33529059284", "not the product frontend"):
         if marker.casefold() not in handoff_section.casefold():
             errors.append(f"current Demo handoff missing qualification marker: {marker}")
+    stale_v3_copy = ("There is no credentialed V3 run yet", "qualification pending", "pending a new credentialed run")
+    for marker in stale_v3_copy:
+        if marker.casefold() in main_text.casefold():
+            errors.append(f"main replay retains stale pre-qualification copy: {marker}")
     superseded_run = "".join(("33505", "918379"))
     superseded_receipt = f"smartcart-solari-live-proof-{superseded_run}.json"
     if superseded_run in main_text or superseded_receipt in main_text:
@@ -382,6 +442,8 @@ def inspect_demo(root: Path = ROOT) -> list[str]:
         errors.append("current Demo handoff renderer must not use Walmart or legacy V1 data")
     if "synthetic line total" not in render_handoff:
         errors.append("current Demo handoff prices must remain explicitly synthetic")
+    if "V3 qualification run 33529059284" not in render_handoff:
+        errors.append("current Demo handoff must cite the V3 qualification run")
     return sorted(set(errors))
 
 

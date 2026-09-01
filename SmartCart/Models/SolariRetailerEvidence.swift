@@ -313,6 +313,7 @@ struct SolariTrustBoundary: Codable, Hashable {
 struct SolariValidatedResearch: Hashable {
     let result: SolariResearchResult
     let warnings: [String]
+    let planFingerprint: String
 }
 
 struct SolariResearchPlan: Hashable {

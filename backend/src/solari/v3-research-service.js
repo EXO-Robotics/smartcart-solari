@@ -2,6 +2,7 @@ import { createContractValidator } from '../contracts/contract-validator.js';
 import { SolariBrowserProvider } from './browser-provider.js';
 import { controlledDemoProductURL } from './constants.js';
 import { SolariResearchError } from './errors.js';
+import { freshness } from './fixture-provider.js';
 import { assertPublicDemoBaseURL } from './url-policy.js';
 import {
   V3_DEMO_ID,
@@ -34,6 +35,17 @@ function structuredObservation(value) {
     collectionMethod: value.collectionMethod, location: value.location,
     catalogEra: value.catalogEra, syntheticPrice: value.syntheticPrice, freshness: value.freshness
   };
+}
+
+function observationsAtCompletion(observations, completedAtMilliseconds) {
+  return observations.map((observation) => ({
+    ...observation,
+    freshness: freshness(
+      observation.observedAt,
+      () => completedAtMilliseconds,
+      observation.freshness.maxAgeSeconds
+    )
+  }));
 }
 
 function assertBoundedRequest(request, baseURL) {
@@ -113,10 +125,14 @@ export function createSolariV3ResearchService(options = {}) {
     const validator = await validatorPromise;
     assertObservationSet(bounded, observations, validator);
     const optimized = await sandbox.optimize(bounded.requirements, observations, request.optimizationPolicy, { deadlineAt, clock, signal });
+    const completedAtMilliseconds = now();
+    const completedAt = new Date(completedAtMilliseconds).toISOString();
+    const completedObservations = observationsAtCompletion(observations, completedAtMilliseconds);
+    assertObservationSet(bounded, completedObservations, validator);
     const result = {
       schemaVersion: 'solari-shopping-research-result-v3', requestID: request.requestID, demoID: V3_DEMO_ID,
-      retailerID: 'smartcart-demo-grocer', completedAt: new Date(now()).toISOString(), executionMode: 'live', status: optimized.basket.completeness,
-      observations, decisions: optimized.decisions, basket: optimized.basket, comparison: optimized.comparison, optimizer: optimized.optimizer,
+      retailerID: 'smartcart-demo-grocer', completedAt, executionMode: 'live', status: optimized.basket.completeness,
+      observations: completedObservations, decisions: optimized.decisions, basket: optimized.basket, comparison: optimized.comparison, optimizer: optimized.optimizer,
       provenance: { browser: 'solari-browser', sandbox: 'solari-sandbox', fixtureReplay: false, accessBoundary, resourceCleanup: { browser: 'enforced-before-response', sandbox: 'enforced-before-response' } },
       trust: { priceClaim: 'observed-visible-price-not-guaranteed', accountAccessed: false, cartModified: false, checkoutAutomated: false, userControlsHandoff: true, limitations: ['Visible Demo Grocer prices are timestamped synthetic observations, not guarantees or checkout quotes.', 'Availability, tax, fees, fulfillment, and checkout totals remain unknown.', 'No account, cart, or checkout action was performed.'] }
     };

@@ -321,7 +321,7 @@
       const lineTotal = money.format((product.priceCents * selection.packageCount) / 100);
       copy.append(
         element("strong", "", product.name),
-        element("small", "", `${selection.packageCount} package${selection.packageCount === 1 ? "" : "s"} expected · ${lineTotal} synthetic line total · V3 qualification pending`)
+        element("small", "", `${selection.packageCount} package${selection.packageCount === 1 ? "" : "s"} selected · ${lineTotal} synthetic line total · V3 qualification run 33529059284`)
       );
 
       const link = element("a", "retailer-link", "Open synthetic page ↗");
@@ -343,7 +343,7 @@
     const status = document.querySelector("[data-research-status]");
     events.forEach((event) => event.classList.remove("is-complete"));
     if (meter) meter.style.width = "0%";
-    if (status) status.textContent = "Replaying the prior V1 receipt-backed sequence—no new Solari or retailer request is being made.";
+    if (status) status.textContent = "Replaying the V3 qualification receipt sequence—no new Solari or retailer request is being made.";
 
     const interval = prefersReducedMotion.matches ? 0 : 360;
     events.forEach((event, index) => {
@@ -351,7 +351,7 @@
         event.classList.add("is-complete");
         if (meter) meter.style.width = `${((index + 1) / events.length) * 100}%`;
         if (status && index === events.length - 1) {
-          status.textContent = "Prior V1 sequence replay complete · receipt records six Browser observations and three Sandbox decisions.";
+          status.textContent = "V3 qualification replay complete · receipt records six Browser observations and the $13.32 Sandbox basket decision.";
         }
       }, interval * (index + 1));
       state.timers.push(timer);
@@ -402,12 +402,22 @@
 
   const liveRunLink = document.querySelector("[data-live-run-link]");
   if (liveRunLink) {
-    liveRunLink.href = "https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33519606791";
+    liveRunLink.href = "https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33529059284";
   }
 
   const liveReceiptLink = document.querySelector("[data-live-receipt-link]");
   if (liveReceiptLink) {
-    liveReceiptLink.href = "https://exo-robotics.github.io/smartcart-solari/evidence/live/smartcart-solari-live-proof-33519606791.json";
+    liveReceiptLink.href = "https://exo-robotics.github.io/smartcart-solari/evidence/live/smartcart-solari-v3-qualification-33529059284.json";
+  }
+
+  const v1RunLink = document.querySelector("[data-v1-run-link]");
+  if (v1RunLink) {
+    v1RunLink.href = "https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33519606791";
+  }
+
+  const v1ReceiptLink = document.querySelector("[data-v1-receipt-link]");
+  if (v1ReceiptLink) {
+    v1ReceiptLink.href = "https://exo-robotics.github.io/smartcart-solari/evidence/live/smartcart-solari-live-proof-33519606791.json";
   }
 
   loadFixture().catch((error) => {

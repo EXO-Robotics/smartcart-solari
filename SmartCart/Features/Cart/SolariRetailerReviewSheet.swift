@@ -8,10 +8,16 @@ struct SolariRetailerReviewSheet: View {
 
     let context: SolariReviewContext
 
+    @State private var activePlan: SolariResearchPlan
     @State private var phase: Phase = .loading
     @State private var loadSequence = 0
     @State private var refreshNextLoad = false
     @State private var isProvenanceExpanded = false
+
+    init(context: SolariReviewContext) {
+        self.context = context
+        _activePlan = State(initialValue: context.plan)
+    }
 
     var body: some View {
         NavigationStack {
@@ -393,7 +399,7 @@ struct SolariRetailerReviewSheet: View {
                 }
             case .failed:
                 VStack(spacing: 10) {
-                    Button("Retry Option Research") { retry(refresh: true) }
+                    Button("Retry Option Research") { retry(refresh: false) }
                         .buttonStyle(PrimaryButtonStyle())
                         .accessibilityIdentifier("solari-retry")
                     Button("Continue with Normal SmartCart") { continueWithNormalSmartCartAfterFailure() }
@@ -405,6 +411,9 @@ struct SolariRetailerReviewSheet: View {
     }
 
     private func retry(refresh: Bool) {
+        if refresh {
+            activePlan = SolariResearchRequestBuilder.refreshedPlan(from: activePlan)
+        }
         phase = .loading
         refreshNextLoad = refresh
         loadSequence += 1
@@ -413,7 +422,7 @@ struct SolariRetailerReviewSheet: View {
     @MainActor
     private func loadEvidence(refresh: Bool) async {
         do {
-            let result = try await researchStore.research(plan: context.plan, refresh: refresh)
+            let result = try await researchStore.research(plan: activePlan, refresh: refresh)
             guard !Task.isCancelled else { return }
             phase = .loaded(result)
         } catch is CancellationError {
@@ -427,7 +436,7 @@ struct SolariRetailerReviewSheet: View {
     private func continueWithNormalSmartCartAfterFailure() {
         let servings = appModel.isMealPrepShopping ? 0 : appModel.desiredServings
         guard SolariResearchRequestBuilder.matchesCurrentPlan(
-            context.plan,
+            activePlan,
             items: appModel.shoppingItems,
             servingCount: servings
         ) else {
@@ -444,7 +453,7 @@ struct SolariRetailerReviewSheet: View {
     private func continueWithOriginalSmartCartList(_ research: SolariValidatedResearch) {
         let servings = appModel.isMealPrepShopping ? 0 : appModel.desiredServings
         guard SolariOriginalSmartCartContinuation.permitsFinalization(
-            plan: context.plan,
+            plan: activePlan,
             research: research,
             items: appModel.shoppingItems,
             servingCount: servings

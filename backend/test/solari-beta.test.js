@@ -157,6 +157,29 @@ test('V3 Browser boundary and result admit structured evidence only',async()=>{
   assert.equal('pageBody' in result.observations[0],false);
 });
 
+test('V3 result recomputes staggered observation freshness against its single completion time',async()=>{
+  const completionTime=Date.parse('2026-09-01T15:00:30Z');
+  const browserObservations=resultExample.observations.map((observation,index)=>({
+    ...structuredClone(observation),
+    schemaVersion:'retailer-observation-v1',
+    observedAt:new Date(Date.parse('2026-09-01T15:00:20Z')+(index*1_000)).toISOString(),
+    freshness:{status:'fresh',ageSeconds:0,maxAgeSeconds:86_400}
+  }));
+  const service=createSolariV3ResearchService({
+    config:{solariApiKey:'server-only',solariDemoRetailerBaseUrl:'https://demo.example/solari-demo',solariRequestTimeoutMs:45_000},
+    now:()=>completionTime,demoHostLookup:async()=>[{address:'93.184.216.34',family:4}],
+    browserProvider:{observe:async(request)=>{const urls=new Map(request.requirements.flatMap(({candidates})=>candidates).map((candidate)=>[candidate.retailerProductID,candidate.sourceURL]));return browserObservations.map((observation)=>({...observation,sourceURL:urls.get(observation.retailerProductID)}));}},
+    sandboxOptimizer:{optimize:async()=>({decisions:resultExample.decisions,basket:resultExample.basket,comparison:resultExample.comparison,optimizer:resultExample.optimizer})}
+  });
+  const result=await service.research(requestExample);
+  assert.equal(result.completedAt,'2026-09-01T15:00:30.000Z');
+  assert.deepEqual(result.observations.map(({freshness})=>freshness.ageSeconds),[10,9,8,7,6,5]);
+  for(const observation of result.observations){
+    assert.equal(observation.freshness.status,'fresh');
+    assert.equal(observation.freshness.ageSeconds,Math.floor((Date.parse(result.completedAt)-Date.parse(observation.observedAt))/1_000));
+  }
+});
+
 test('V3 service rejects stale, non-admitted, or incorrectly marked Browser evidence before Sandbox',async()=>{
   for(const mutate of [
     (observations)=>{observations[0].freshness.status='stale';},

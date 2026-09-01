@@ -61,6 +61,42 @@ final class SolariEvidenceContractTests: XCTestCase {
         XCTAssertFalse(SolariResearchRequestBuilder.matchesCurrentPlan(first, items: changed, servingCount: 4))
     }
 
+    func testExplicitRefreshMintsTransportIdentityWhileTrueRetryReusesExactAttempt() throws {
+        let original = eligiblePlan(
+            items: demoItems(),
+            now: now,
+            requestID: fixedUUID("10000000-0000-4000-8000-000000000001")
+        )
+        let refreshTime = now.addingTimeInterval(30)
+        let refreshed = SolariResearchRequestBuilder.refreshedPlan(
+            from: original,
+            now: refreshTime,
+            requestID: fixedUUID("10000000-0000-4000-8000-000000000002")
+        )
+
+        XCTAssertNotEqual(refreshed.request.requestID, original.request.requestID)
+        XCTAssertEqual(refreshed.request.submittedAt, refreshTime)
+        XCTAssertEqual(refreshed.fingerprint, original.fingerprint)
+        XCTAssertEqual(refreshed.request.requirements, original.request.requirements)
+        XCTAssertEqual(refreshed.originalSmartCartSelections, original.originalSmartCartSelections)
+
+        let firstAttemptBody = try SolariRetailerResearchClient.encoder.encode(refreshed.request)
+        let trueRetryBody = try SolariRetailerResearchClient.encoder.encode(refreshed.request)
+        XCTAssertEqual(trueRetryBody, firstAttemptBody, "A transport retry must reuse the exact refreshed attempt body and requestID")
+
+        let nextExplicitRefresh = SolariResearchRequestBuilder.refreshedPlan(
+            from: refreshed,
+            now: refreshTime.addingTimeInterval(30),
+            requestID: fixedUUID("10000000-0000-4000-8000-000000000003")
+        )
+        XCTAssertNotEqual(nextExplicitRefresh.request.requestID, refreshed.request.requestID)
+        XCTAssertNotEqual(
+            try SolariRetailerResearchClient.encoder.encode(nextExplicitRefresh.request),
+            firstAttemptBody
+        )
+        XCTAssertEqual(nextExplicitRefresh.fingerprint, original.fingerprint)
+    }
+
     func testExplicitIneligibilityReasonsCoverBoundsAndUnsupportedCatalog() {
         XCTAssertEqual(
             SolariResearchRequestBuilder.evaluate(
@@ -277,6 +313,49 @@ final class SolariEvidenceContractTests: XCTestCase {
         }
     }
 
+    func testValidatorAcceptsStaggeredQualificationFreshnessRelativeToCompletionAndRejectsFutureEvidence() throws {
+        let submittedAt = now.addingTimeInterval(-120)
+        let plan = eligiblePlan(items: demoItems(), now: submittedAt)
+        let original = result(for: plan)
+        let completion = now.addingTimeInterval(-20)
+        let staggeredObservations = original.observations.enumerated().map { index, observation in
+            let ageAtCompletion = index * 7
+            return replacing(
+                observation,
+                observedAt: completion.addingTimeInterval(-Double(ageAtCompletion)),
+                freshness: .init(
+                    status: .fresh,
+                    ageSeconds: ageAtCompletion,
+                    maxAgeSeconds: 86_400
+                )
+            )
+        }
+        let qualificationShaped = replacing(
+            original,
+            observations: staggeredObservations,
+            completedAt: completion
+        )
+
+        XCTAssertNoThrow(
+            try SolariEvidenceValidator(now: now).validate(qualificationShaped, for: plan)
+        )
+
+        var futureObservations = staggeredObservations
+        futureObservations[0] = replacing(
+            futureObservations[0],
+            observedAt: completion.addingTimeInterval(10),
+            freshness: .init(status: .fresh, ageSeconds: 0, maxAgeSeconds: 86_400)
+        )
+        XCTAssertThrowsError(
+            try SolariEvidenceValidator(now: now).validate(
+                replacing(original, observations: futureObservations, completedAt: completion),
+                for: plan
+            )
+        ) {
+            XCTAssertEqual($0 as? SolariEvidenceContractError, .staleObservation)
+        }
+    }
+
     func testValidatorAllowsSubstitutionNoteOnlyWhenItExactlyMatchesSelectedAmbiguity() throws {
         let plan = eligiblePlan(items: demoItems(), now: now)
         let original = result(for: plan)
@@ -436,11 +515,16 @@ final class SolariEvidenceContractTests: XCTestCase {
 
     func testMemoryCacheExpiresAndRefreshBypassesWithoutPersistence() {
         let plan = eligiblePlan(items: demoItems(), now: now)
-        let research = SolariValidatedResearch(result: result(for: plan), warnings: [])
+        let research = SolariValidatedResearch(
+            result: result(for: plan),
+            warnings: [],
+            planFingerprint: plan.fingerprint
+        )
         var cache = SolariValidatedResearchCache(timeToLive: 60)
         cache.insert(research, for: plan.fingerprint, now: now)
         XCTAssertNotNil(cache.value(for: plan.fingerprint, now: now.addingTimeInterval(59)))
         XCTAssertNil(cache.value(for: plan.fingerprint, now: now.addingTimeInterval(30), bypass: true))
+        XCTAssertNil(cache.value(for: plan.fingerprint, now: now.addingTimeInterval(31)))
         XCTAssertNil(cache.value(for: plan.fingerprint, now: now.addingTimeInterval(61)))
     }
 
@@ -493,6 +577,7 @@ final class SolariEvidenceContractTests: XCTestCase {
         )
 
         XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
+        XCTAssertEqual(request.timeoutInterval, 75)
         XCTAssertNil(request.value(forHTTPHeaderField: "x-smartcart-app-attest-key-id"))
         XCTAssertNil(request.value(forHTTPHeaderField: "x-smartcart-app-attest-challenge-id"))
         XCTAssertNil(request.value(forHTTPHeaderField: "x-smartcart-app-attest-assertion"))
@@ -506,6 +591,17 @@ final class SolariEvidenceContractTests: XCTestCase {
         XCTAssertEqual(envelope.keyID, keyID)
         XCTAssertEqual(Data(base64Encoded: envelope.assertionObject), assertion)
         XCTAssertEqual(Data(base64Encoded: envelope.payloadBase64), payload)
+
+        let sessionConfiguration = SolariRetailerResearchClient.ephemeralSessionConfiguration()
+        XCTAssertEqual(SolariRetailerResearchClient.requestTimeoutInterval, 75)
+        XCTAssertEqual(SolariRetailerResearchClient.resourceTimeoutInterval, 90)
+        XCTAssertEqual(sessionConfiguration.timeoutIntervalForRequest, 75)
+        XCTAssertEqual(sessionConfiguration.timeoutIntervalForResource, 90)
+        XCTAssertGreaterThan(sessionConfiguration.timeoutIntervalForRequest, 60)
+        XCTAssertGreaterThan(
+            sessionConfiguration.timeoutIntervalForResource,
+            sessionConfiguration.timeoutIntervalForRequest
+        )
     }
 
     func testDebugRecordedReplayIsClearlyNonLiveAndDoesNotClaimSolariOrAppAttestRan() throws {
@@ -773,14 +869,15 @@ final class SolariEvidenceContractTests: XCTestCase {
 
     private func replacing(
         _ result: SolariResearchResult,
-        observations: [SolariRetailerObservation]
+        observations: [SolariRetailerObservation],
+        completedAt: Date? = nil
     ) -> SolariResearchResult {
         SolariResearchResult(
             schemaVersion: result.schemaVersion,
             requestID: result.requestID,
             demoID: result.demoID,
             retailerID: result.retailerID,
-            completedAt: result.completedAt,
+            completedAt: completedAt ?? result.completedAt,
             executionMode: result.executionMode,
             status: result.status,
             observations: observations,
