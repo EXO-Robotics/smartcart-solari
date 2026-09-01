@@ -15,7 +15,9 @@
       "maxDuration": 10
     },
     "api/solari.js": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "supportsCancellation": true,
+      "includeFiles": "{../contracts/**,node_modules/patchright-core/**}"
     }
   },
   "routes": [
