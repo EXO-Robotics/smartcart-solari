@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A recorded SmartCart × Solari experiment replay: reviewed recipe, retailer evidence, deterministic package math, and a user-controlled handoff.">
+  <meta name="theme-color" content="#10253f">
+  <title>SmartCart × Solari — Chicken Parmesan Pasta replay</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to demo</a>
+
+  <header class="topbar">
+    <a class="wordmark" href="../index.html" aria-label="SmartCart website">
+      <span class="leaf-mark" aria-hidden="true">+</span>
+      <span>SmartCart</span>
+    </a>
+    <span class="lab-divider" aria-hidden="true"></span>
+    <span class="lab-name">Solari experiment</span>
+    <span class="replay-badge">Recorded demo evidence · not live</span>
+  </header>
+
+  <main id="main">
+    <section class="intro" aria-labelledby="page-title">
+      <div class="intro-copy">
+        <p class="kicker">One recipe · one retailer · one defensible decision</p>
+        <h1 id="page-title">A shopping plan with receipts.</h1>
+        <p class="intro-lede">SmartCart already knows what the meal needs. This experiment tests whether authorized Browser observations and isolated comparison can produce a better-evidenced basket—without taking over the purchase.</p>
+      </div>
+      <dl class="experiment-scope" aria-label="Experiment scope">
+        <div><dt>Meal</dt><dd>Chicken Parmesan Pasta</dd></div>
+        <div><dt>Retailer</dt><dd>Walmart · fixture replay</dd></div>
+        <div><dt>Handoff</dt><dd>User opens product pages</dd></div>
+      </dl>
+    </section>
+
+    <aside class="truth-ribbon" aria-label="Demo evidence limitation">
+      <span class="truth-dot" aria-hidden="true"></span>
+      <p><strong>Fixture replay — SmartCart seeded observations, not a Solari live run.</strong> Prices were recorded in an upstream fixture at <time datetime="2026-07-16T12:00:00Z">July 16, 2026 at 12:00 UTC</time>. They are not current retail evidence.</p>
+      <a data-fixture-link>Inspect canonical fixture JSON</a>
+    </aside>
+
+    <nav class="stage-nav" aria-label="Demo stages">
+      <button class="stage-tab is-active" type="button" data-stage-target="recipe" aria-controls="stage-recipe" aria-current="step">
+        <span>01</span> Recipe review
+      </button>
+      <button class="stage-tab" type="button" data-stage-target="research" aria-controls="stage-research">
+        <span>02</span> Browser evidence
+      </button>
+      <button class="stage-tab" type="button" data-stage-target="decision" aria-controls="stage-decision">
+        <span>03</span> Basket decision
+      </button>
+      <button class="stage-tab" type="button" data-stage-target="handoff" aria-controls="stage-handoff">
+        <span>04</span> Your handoff
+      </button>
+    </nav>
+
+    <section class="demo-stage is-active" id="stage-recipe" data-stage="recipe" aria-labelledby="recipe-title">
+      <div class="stage-heading">
+        <div>
+          <p class="step-label">Reviewed recipe</p>
+          <h2 id="recipe-title">Chicken Parmesan Pasta</h2>
+          <p>4 servings · ingredient identity and quantities reviewed before retailer research</p>
+        </div>
+        <span class="state-chip state-good">Ready for research</span>
+      </div>
+
+      <div class="recipe-workspace">
+        <div class="ingredient-sheet">
+          <div class="sheet-heading">
+            <h3>Shopping ingredients</h3>
+            <span>3 to research</span>
+          </div>
+          <ul class="ingredient-list">
+            <li><span class="ingredient-index">01</span><span><strong>Boneless skinless chicken breast</strong><small>1.5 lb required</small></span><span class="ingredient-state">Need</span></li>
+            <li><span class="ingredient-index">02</span><span><strong>Penne pasta</strong><small>12 oz required</small></span><span class="ingredient-state">Need</span></li>
+            <li><span class="ingredient-index">03</span><span><strong>Finely shredded Parmesan</strong><small>3 oz required</small></span><span class="ingredient-state">Need</span></li>
+          </ul>
+        </div>
+
+        <div class="pantry-sheet">
+          <div class="sheet-heading">
+            <h3>Already in pantry</h3>
+            <span>Excluded before research</span>
+          </div>
+          <ul class="pantry-list">
+            <li><span class="check-mark" aria-hidden="true">✓</span><span><strong>Olive oil</strong><small>2 tbsp removed from trip</small></span></li>
+            <li><span class="check-mark" aria-hidden="true">✓</span><span><strong>Garlic</strong><small>2 cloves removed from trip</small></span></li>
+          </ul>
+          <p class="boundary-note">Pantry decisions remain SmartCart state. Solari receives only the three ingredients still needed.</p>
+        </div>
+      </div>
+
+      <div class="normal-vs-solari" aria-labelledby="comparison-title">
+        <h3 id="comparison-title">What changes in this fork?</h3>
+        <div class="comparison-columns">
+          <div>
+            <p class="comparison-label">Normal SmartCart</p>
+            <p>Uses seeded or last-known exact product links and conservative package counts, but cannot refresh or evidence current visible retailer prices or compare a basket total from live observations.</p>
+          </div>
+          <div>
+            <p class="comparison-label accent">With the Solari experiment</p>
+            <p>Browser observations become structured evidence; isolated package math returns a priced, explainable recommendation.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="stage-action">
+        <p>No account, session cookie, location, or cart is supplied.</p>
+        <button class="primary-button" type="button" data-next-stage="research">Replay retailer research <span aria-hidden="true">→</span></button>
+      </div>
+    </section>
+
+    <section class="demo-stage" id="stage-research" data-stage="research" aria-labelledby="research-title" hidden>
+      <div class="stage-heading">
+        <div>
+          <p class="step-label">Solari Browser role</p>
+          <h2 id="research-title">Authorized evidence, not retailer scraping.</h2>
+          <p>This screen replays six upstream seeded Walmart observations. Live Walmart Browser execution is disabled without written authorization; the executable Browser target is the owned Demo Grocer surface.</p>
+        </div>
+        <span class="state-chip state-recorded">Replay data</span>
+      </div>
+
+      <div class="research-progress" aria-live="polite">
+        <div class="research-meter"><span data-research-meter></span></div>
+        <p data-research-status>Ready to replay recorded observation events.</p>
+        <button class="text-button" type="button" data-replay-events>Replay events</button>
+      </div>
+
+      <aside class="browser-boundary">
+        <div>
+          <p class="comparison-label accent">Executable Browser target</p>
+          <h3>SmartCart Demo Grocer</h3>
+          <p>Six synthetic product pages render only after JavaScript runs, giving Browser a necessary, authorized extraction job with no account, cart, or checkout surface.</p>
+        </div>
+        <a class="secondary-button demo-grocer-link" href="retailer/index.html">Open synthetic catalog</a>
+        <p class="terms-note">Walmart automation remains off absent authorization. See the <a data-walmart-terms target="_blank" rel="noreferrer noopener">official Walmart Terms of Use</a>.</p>
+      </aside>
+
+      <ol class="event-log" aria-label="Recorded research events">
+        <li data-event><span>01</span><strong>Scope</strong><p>Owned Demo Grocer pages only · no sign-in</p></li>
+        <li data-event><span>02</span><strong>Observe</strong><p>Six JS-rendered synthetic products</p></li>
+        <li data-event><span>03</span><strong>Structure</strong><p>Source URL, timestamp, confidence, ambiguity</p></li>
+        <li data-event><span>04</span><strong>Stop</strong><p>No cart, availability, checkout, or account action</p></li>
+      </ol>
+
+      <div class="candidate-section">
+        <div class="section-line">
+          <h3>Candidate evidence</h3>
+          <p>Walmart fixture replay below · choose alternatives to test package math.</p>
+        </div>
+        <div class="candidate-groups" data-candidate-groups>
+          <p class="loading-copy">Loading the checked-in replay fixture…</p>
+        </div>
+      </div>
+
+      <details class="contract-details">
+        <summary>What the evidence contract preserves</summary>
+        <div class="contract-grid">
+          <p><strong>Identity</strong><span>Retailer + product ID + exact source URL</span></p>
+          <p><strong>Observation</strong><span>Visible price + package + timestamp</span></p>
+          <p><strong>Uncertainty</strong><span>Nullable price/nutrition + ambiguity + confidence</span></p>
+          <p><strong>Boundaries</strong><span>Account, cart, and checkout actions all false</span></p>
+        </div>
+      </details>
+
+      <div class="stage-action">
+        <p>Observed price is evidence with a date—not a live-price promise.</p>
+        <button class="primary-button" type="button" data-next-stage="decision">Run basket replay <span aria-hidden="true">→</span></button>
+      </div>
+    </section>
+
+    <section class="demo-stage" id="stage-decision" data-stage="decision" aria-labelledby="decision-title" hidden>
+      <div class="stage-heading">
+        <div>
+          <p class="step-label">Solari Sandbox role</p>
+          <h2 id="decision-title">Enough food. Least checkout cost.</h2>
+          <p>A deterministic replay normalizes units, rounds packages up, preserves surplus, and compares supported candidates in isolation.</p>
+        </div>
+        <span class="state-chip state-good">Math reconciled</span>
+      </div>
+
+      <aside class="sandbox-provenance">
+        <strong>Replay provenance: Browser not run · Sandbox not run.</strong>
+        <span>The controlled executable path sends the same normalized candidates to Solari Sandbox; this recorded fixture was independently verified by SmartCart’s deterministic implementation.</span>
+      </aside>
+
+      <div class="decision-layout">
+        <article class="receipt" aria-labelledby="receipt-title">
+          <div class="receipt-header">
+            <p>SMARTCART / SOLARI</p>
+            <h3 id="receipt-title">Basket recommendation</h3>
+            <time datetime="2026-07-16T12:00:00Z">JUL 16 2026 · 12:00 UTC</time>
+          </div>
+          <div class="receipt-lines" data-receipt-lines></div>
+          <div class="receipt-total">
+            <span>Estimated basket</span>
+            <strong data-basket-total>$12.79</strong>
+          </div>
+          <p class="receipt-fine">Fixture total before tax, fees, fulfillment, or substitutions. Current price and availability unknown.</p>
+        </article>
+
+        <div class="decision-explanation">
+          <div class="math-story">
+            <h3>Why this basket</h3>
+            <ol>
+              <li><span>1</span><p><strong>Normalize</strong> recipe quantities and package units.</p></li>
+              <li><span>2</span><p><strong>Round up</strong> package counts so every requirement is covered.</p></li>
+              <li><span>3</span><p><strong>Minimize</strong> the observed checkout estimate, then surface surplus.</p></li>
+            </ol>
+          </div>
+
+          <dl class="decision-stats">
+            <div><dt>Decision confidence</dt><dd>96%</dd></div>
+            <div><dt>Packages</dt><dd>3</dd></div>
+            <div><dt>Protein / $</dt><dd>Not calculated</dd></div>
+          </dl>
+
+          <div class="ambiguity-block">
+            <h3>What remains unknown</h3>
+            <ul>
+              <li>Availability, fulfillment, tax, fees, and current price</li>
+              <li>Chicken package leaves 1.5 lb surplus</li>
+              <li>No reviewed nutrition evidence, so protein/$ is omitted</li>
+            </ul>
+          </div>
+
+          <details class="contract-details raw-decision">
+            <summary>Inspect decision evidence</summary>
+            <pre data-decision-json tabindex="0">Loading decision…</pre>
+          </details>
+        </div>
+      </div>
+
+      <div class="stage-action">
+        <p>Recommendation is advisory. Nothing has been added, reserved, or purchased.</p>
+        <button class="primary-button" type="button" data-next-stage="handoff">Review retailer handoff <span aria-hidden="true">→</span></button>
+      </div>
+    </section>
+
+    <section class="demo-stage" id="stage-handoff" data-stage="handoff" aria-labelledby="handoff-title" hidden>
+      <div class="stage-heading handoff-heading">
+        <div>
+          <p class="step-label">SmartCart boundary preserved</p>
+          <h2 id="handoff-title">You take it from here.</h2>
+          <p>Open each public product page, verify the current product, package, price, and availability, then decide what—if anything—to add in Walmart.</p>
+        </div>
+        <span class="state-chip state-user">User controlled</span>
+      </div>
+
+      <div class="handoff-layout">
+        <div class="handoff-list" data-handoff-list></div>
+        <aside class="handoff-boundary">
+          <p class="boundary-kicker">Before you leave</p>
+          <h3>SmartCart will not:</h3>
+          <ul>
+            <li>sign in or reuse a retailer session</li>
+            <li>add or change cart items</li>
+            <li>select substitutions or fulfillment</li>
+            <li>submit checkout or payment</li>
+          </ul>
+          <p>Retailer pages may differ from this replay. Walmart owns every product, price, availability, account, cart, and checkout action.</p>
+        </aside>
+      </div>
+
+      <div class="final-note">
+        <span class="final-mark" aria-hidden="true">✓</span>
+        <div><strong>Research ended at recommendation.</strong><p>No autonomous purchase path exists in this demo.</p></div>
+        <button class="secondary-button" type="button" data-next-stage="recipe">Replay from recipe</button>
+      </div>
+    </section>
+
+    <noscript>
+      <p class="noscript-note">This replay needs JavaScript to render candidate evidence. The complete canonical fixture is checked in under <code>contracts/fixtures/v1/solari/</code>.</p>
+    </noscript>
+  </main>
+
+  <footer>
+    <p><strong>SmartCart × Solari</strong> · internship experiment · one bounded retailer research workflow</p>
+    <p>Replay validates UI behavior and a user-controlled retailer handoff only. It is not evidence of a current retailer observation or Solari execution.</p>
+  </footer>
+</body>
+</html>
