@@ -88,18 +88,18 @@ Current result: PASS. This is not signing, App Attest, device, TestFlight, or Ap
 
 ### Native inspection flow
 
-1. Open Chicken Parmesan Pasta in Recipe Ready.
-2. Confirm olive oil and garlic are excluded; remaining quantities are 1.5 lb / 12 oz / 3 oz.
-3. Confirm **Research current options** appears alongside the normal SmartCart action when the beta endpoint is configured.
+1. Open any normal recipe/trip with waiting items. The seeded owned catalog currently covers exact SmartCart matches for chicken, pasta, olive oil, heavy cream, Parmesan, garlic, lemon, and parsley; unsupported lines must remain part of the original trip.
+2. Review quantities and mark pantry exclusions exactly as in normal SmartCart.
+3. Confirm **Research current options** appears alongside the normal SmartCart action when the Solari beta endpoint is configured.
 4. Tap it and verify normal SmartCart preparation occurs before the research sheet.
-5. In Debug replay, verify the sheet explicitly says App Attest, Browser, and Sandbox did not run.
-6. Verify the V3 sheet explains the synthetic owned source and low-surplus-within-`$0.75` policy.
-7. Inspect exact source/time, confidence/ambiguity, required/covered/package quantities, line totals, selected `$13.32`, cheapest `$12.79`, premium `$0.53`, and 16 oz surplus avoided.
-8. Verify overage is explicit; no per-serving or “smallest sufficient” shortcut obscures package surplus.
-9. Verify refresh evicts/bypasses cache, creates a new request identity, and edit/done does not finalize or mutate the original list.
-10. Change the plan and confirm continuation fails revalidation.
-11. Tap **Continue with original SmartCart list** and verify only original SmartCart retailer matches are finalized. No `dg-*` ID or price appears in the retailer queue/cart.
-12. Confirm no account, cart, purchase, checkout, inventory, or pantry-update claim.
+5. Verify **Researched X of Y items** and inspect every skipped line/reason. Semantic quantities such as “for frying” must be skipped rather than converted into invented mass or volume.
+6. Inspect selected product, package count, required/covered/surplus quantities, visible synthetic price, observed time/source, confidence/ambiguity, selected subtotal, cheapest adequate subtotal, and the $0.75 premium cap.
+7. Confirm the headline describes a **lower-overage basket** and the abstract package-overage score remains secondary. Exact leftover quantities must be readable on the affected line item.
+8. For the current credentialed proof, inspect run `33546912947` and its receipt: Sandbox chose 1.5 lb rather than the cheaper 3 lb chicken package, producing $24.20 selected versus $23.57 cheapest, a $0.63 premium, and about 680 g / 1.5 lb less excess chicken across an eight-line trip.
+9. In Debug replay, verify the sheet explicitly says App Attest, Browser, and Sandbox did not run. Do not present Debug replay as the credentialed result; the Actions receipt is the provider authority until signed-device App Attest is completed.
+10. Verify refresh evicts/bypasses cache, creates a new request identity, and edit/done does not finalize or mutate the original list. Change the plan and confirm continuation fails revalidation.
+11. Tap **Continue with original SmartCart list** and verify only original SmartCart retailer matches are finalized. No `dg4-*` ID or synthetic price appears in the retailer queue/cart.
+12. Confirm no account, cart, purchase, checkout, inventory, or pantry-update claim. Signed-device App Attest, TestFlight/App Store/downloadable distribution, and authorized real-retailer proof remain **PENDING**.
 
 The website can support explanation, but the demo narrative must begin with this native flow.
 
