@@ -5,3 +5,5 @@
 SMARTCART_BARCODE_BACKEND_URL = https:/$()/smartcart-barcode-api-omega.vercel.app
 SMARTCART_RECIPE_BACKEND_URL = http:/$()/localhost:8787
 SMARTCART_WEEKLY_MEALS_BASE_URL = https:/$()/smartcart-barcode-api-omega.vercel.app
+SMARTCART_SOLARI_EXPERIMENT_BACKEND_URL = http:/$()/localhost:8787
+SMARTCART_SOLARI_WALMART_FIXTURE_REPLAY = YES

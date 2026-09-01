@@ -92,6 +92,10 @@
 		AS1000000000000000000004 /* SmartCartShareExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = BS1000000000000000000007 /* SmartCartShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AS1000000000000000000005 /* SmartCartShareInboxTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BS1000000000000000000008 /* SmartCartShareInboxTests.swift */; };
 		AS1000000000000000000006 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = BS1000000000000000000009 /* PrivacyInfo.xcprivacy */; };
+		AC1000000000000000000001 /* SolariRetailerEvidence.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1000000000000000000001 /* SolariRetailerEvidence.swift */; };
+		AC1000000000000000000002 /* SolariRetailerResearchClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1000000000000000000002 /* SolariRetailerResearchClient.swift */; };
+		AC1000000000000000000003 /* SolariRetailerReviewSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1000000000000000000003 /* SolariRetailerReviewSheet.swift */; };
+		AC1000000000000000000004 /* SolariEvidenceContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1000000000000000000004 /* SolariEvidenceContractTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -200,6 +204,10 @@
 		B30000000000000000000001 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
 		B30000000000000000000002 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		B30000000000000000000003 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
+		BC1000000000000000000001 /* SolariRetailerEvidence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SolariRetailerEvidence.swift; sourceTree = "<group>"; };
+		BC1000000000000000000002 /* SolariRetailerResearchClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SolariRetailerResearchClient.swift; sourceTree = "<group>"; };
+		BC1000000000000000000003 /* SolariRetailerReviewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SolariRetailerReviewSheet.swift; sourceTree = "<group>"; };
+		BC1000000000000000000004 /* SolariEvidenceContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SolariEvidenceContractTests.swift; sourceTree = "<group>"; };
 		B70000000000000000000001 /* WeeklyMealModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models/WeeklyMealModels.swift; sourceTree = "<group>"; };
 		B70000000000000000000002 /* BundledWeeklyMealRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/BundledWeeklyMealRepository.swift; sourceTree = "<group>"; };
 		B70000000000000000000003 /* WeeklyMealCostEstimator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/WeeklyMealCostEstimator.swift; sourceTree = "<group>"; };
@@ -304,6 +312,7 @@
 				B1000000000000000000000D /* RetailerModels.swift */,
 				B1000000000000000000001B /* MealPrepModels.swift */,
 				B10000000000000000000020 /* OCRFocusRegion.swift */,
+				BC1000000000000000000001 /* SolariRetailerEvidence.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -339,6 +348,7 @@
 			children = (
 				B10000000000000000000009 /* CartView.swift */,
 				B1000000000000000000000A /* PickupSchedulerSheet.swift */,
+				BC1000000000000000000003 /* SolariRetailerReviewSheet.swift */,
 			);
 			path = Features/Cart;
 			sourceTree = "<group>";
@@ -381,6 +391,7 @@
 				B10000000000000000000025 /* IngredientIdentityService.swift */,
 				B10000000000000000000026 /* ShoppingResolutionService.swift */,
 				B10000000000000000000029 /* RetailerMatchingBatchService.swift */,
+				BC1000000000000000000002 /* SolariRetailerResearchClient.swift */,
 				B10000000000000000000023 /* ExactProductIdentity.swift */,
 				B10000000000000000000027 /* ProductPurchaseGroupingService.swift */,
 				B10000000000000000000028 /* SmartCartPersistenceCoordinator.swift */,
@@ -454,6 +465,7 @@
 				B2000000000000000000000D /* SmartCartPersistenceCoordinatorTests.swift */,
 				B8B000000000000000000001 /* RecipeLinkCapabilityTests.swift */,
 				B9B000000000000000000002 /* LocalOperationRecorderTests.swift */,
+				BC1000000000000000000004 /* SolariEvidenceContractTests.swift */,
 				D70000000000000000000002 /* WeeklyMeals */,
 				BS1000000000000000000008 /* SmartCartShareInboxTests.swift */,
 			);
@@ -642,6 +654,9 @@
 				A3F100000000000000000001 /* TripIntelligenceContracts.swift in Sources */,
 				A3F100000000000000000002 /* TripIntelligenceModelAdapters.swift in Sources */,
 				A3F100000000000000000003 /* TripIntelligenceClient.swift in Sources */,
+				AC1000000000000000000001 /* SolariRetailerEvidence.swift in Sources */,
+				AC1000000000000000000002 /* SolariRetailerResearchClient.swift in Sources */,
+				AC1000000000000000000003 /* SolariRetailerReviewSheet.swift in Sources */,
 				A10000000000000000000001 /* SmartCartApp.swift in Sources */,
 				A10000000000000000000002 /* Models.swift in Sources */,
 				A10000000000000000000003 /* AppModel.swift in Sources */,
@@ -700,6 +715,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A3F100000000000000000004 /* TripIntelligenceContractTests.swift in Sources */,
+				AC1000000000000000000004 /* SolariEvidenceContractTests.swift in Sources */,
 				A20000000000000000000001 /* SmartCartTests.swift in Sources */,
 				A20000000000000000000002 /* MealPrepAggregationTests.swift in Sources */,
 				A20000000000000000000003 /* ReleaseBlockerMigrationTests.swift in Sources */,

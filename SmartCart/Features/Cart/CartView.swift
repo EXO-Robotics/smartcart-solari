@@ -130,6 +130,10 @@ struct RecipeReadyView: View {
                 }
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
+            case .solariReview(let context):
+                SolariRetailerReviewSheet(context: context)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
             }
         }
         .confirmationDialog(
@@ -781,6 +785,22 @@ struct RecipeReadyView: View {
         let published = await appModel.startMatching()
         guard published, !Task.isCancelled else { return }
 
+        if let configuration = SolariBackendConfiguration(),
+           let executionMode = configuration.walmartExecutionMode,
+           let request = SolariResearchRequestBuilder.makeIfEligible(
+               items: appModel.shoppingItems,
+               retailer: appModel.selectedRetailer,
+               executionMode: executionMode
+           ) {
+            activeSheet = .solariReview(
+                SolariReviewContext(
+                    backendURL: configuration.backendURL,
+                    request: request
+                )
+            )
+            return
+        }
+
         _ = appModel.finalizeShoppingPlanForRetailerQueue()
     }
 }
@@ -842,12 +862,20 @@ private struct ShoppingLaunchOverlay: View {
     }
 }
 
-private enum RecipeReadySheet: String, Identifiable {
+private enum RecipeReadySheet: Identifiable {
     case pantry
     case shoppingSettings
     case sourceText
+    case solariReview(SolariReviewContext)
 
-    var id: String { rawValue }
+    var id: String {
+        switch self {
+        case .pantry: "pantry"
+        case .shoppingSettings: "shopping-settings"
+        case .sourceText: "source-text"
+        case .solariReview(let context): "solari-\(context.id.uuidString)"
+        }
+    }
 }
 
 private struct PendingIngredientDeletion: Identifiable {
