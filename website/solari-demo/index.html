@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="A recorded SmartCart × Solari experiment replay: reviewed recipe, retailer evidence, deterministic package math, and a user-controlled handoff.">
+  <meta name="description" content="SmartCart’s native Research current options experiment: reviewed post-pantry requirements, evidence-backed basket review, and a user-controlled retailer handoff.">
   <meta name="theme-color" content="#10253f">
-  <title>SmartCart × Solari — Chicken Parmesan Pasta replay</title>
+  <title>SmartCart × Solari — Research current options</title>
   <link rel="stylesheet" href="styles.css">
   <script src="app.js" defer></script>
 </head>
@@ -19,57 +19,57 @@
     </a>
     <span class="lab-divider" aria-hidden="true"></span>
     <span class="lab-name">Solari experiment</span>
-    <span class="replay-badge">Recorded demo evidence · not live</span>
+    <span class="replay-badge">Native experiment · distribution pending</span>
   </header>
 
   <main id="main">
     <section class="intro" aria-labelledby="page-title">
       <div class="intro-copy">
-        <p class="kicker">One recipe · one retailer · one defensible decision</p>
-        <h1 id="page-title">A shopping plan with receipts.</h1>
-        <p class="intro-lede">SmartCart already knows what the meal needs. This experiment tests whether authorized Browser observations and isolated comparison can produce a better-evidenced basket—without taking over the purchase.</p>
+        <p class="kicker">Recipe Ready · post-pantry · pre-handoff</p>
+        <h1 id="page-title">Research current options before you leave SmartCart.</h1>
+        <p class="intro-lede">The native experimental branch adds one explicit <strong>Research current options</strong> action after pantry exclusions. The shopper reviews the evidence-backed basket, then decides whether to continue to the retailer.</p>
       </div>
       <dl class="experiment-scope" aria-label="Experiment scope">
-        <div><dt>Meal</dt><dd>Chicken Parmesan Pasta</dd></div>
-        <div><dt>Retailer</dt><dd>Walmart · fixture replay</dd></div>
-        <div><dt>Handoff</dt><dd>User opens product pages</dd></div>
+        <div><dt>Entry</dt><dd>Recipe Ready · pantry applied</dd></div>
+        <div><dt>Action</dt><dd>Research current options</dd></div>
+        <div><dt>Authority</dt><dd>User-controlled handoff</dd></div>
       </dl>
     </section>
 
     <aside class="live-proof-ribbon" aria-label="Credentialed Solari execution proof">
       <span class="live-proof-mark" aria-hidden="true">✓</span>
-      <p><strong>Solari Browser + Sandbox ran successfully.</strong> Credentialed run <a href="https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33505918379" target="_blank" rel="noreferrer noopener">33505918379</a> observed six JavaScript-rendered products on the owned synthetic Demo Grocer, then selected three packages in Sandbox. <a href="https://exo-robotics.github.io/smartcart-solari/evidence/live/smartcart-solari-live-proof-33505918379.json">Inspect the sanitized live receipt</a>. This proves Solari execution, not current third-party retailer pricing.</p>
+      <p><strong>Credentialed first-party Solari proof is current.</strong> Run <a data-live-run-link data-run-id="33519606791" target="_blank" rel="noreferrer noopener">33519606791</a> observed six JavaScript-rendered products on the owned synthetic Demo Grocer, then selected three packages in Sandbox. <a data-live-receipt-link data-receipt-path="evidence/live/smartcart-solari-live-proof-33519606791.json" target="_blank" rel="noreferrer noopener">Inspect the sanitized execution receipt</a>. This proves Browser + Sandbox execution on the controlled surface only—not signed native App Attest, physical-device/TestFlight success, or current third-party retail data.</p>
     </aside>
 
     <aside class="truth-ribbon" aria-label="Demo evidence limitation">
       <span class="truth-dot" aria-hidden="true"></span>
-      <p><strong>Fixture replay — SmartCart seeded observations, not a Solari live run.</strong> Prices were recorded in an upstream fixture at <time datetime="2026-07-16T12:00:00Z">July 16, 2026 at 12:00 UTC</time>. They are not current retail evidence.</p>
+      <p><strong>Historical UI replay only.</strong> The interactive Walmart cards use SmartCart seed observations from <time datetime="2026-07-16T12:00:00Z">July 16, 2026 at 12:00 UTC</time> to demonstrate rendering and what-if behavior. They are not the native live input, a Solari run, or current retail evidence.</p>
       <a data-fixture-link>Inspect canonical fixture JSON</a>
     </aside>
 
     <nav class="stage-nav" aria-label="Demo stages">
       <button class="stage-tab is-active" type="button" data-stage-target="recipe" aria-controls="stage-recipe" aria-current="step">
-        <span>01</span> Recipe review
+        <span>01</span> Recipe Ready
       </button>
       <button class="stage-tab" type="button" data-stage-target="research" aria-controls="stage-research">
-        <span>02</span> Browser evidence
+        <span>02</span> Solari research
       </button>
       <button class="stage-tab" type="button" data-stage-target="decision" aria-controls="stage-decision">
-        <span>03</span> Basket decision
+        <span>03</span> Basket review
       </button>
       <button class="stage-tab" type="button" data-stage-target="handoff" aria-controls="stage-handoff">
-        <span>04</span> Your handoff
+        <span>04</span> Retailer handoff
       </button>
     </nav>
 
     <section class="demo-stage is-active" id="stage-recipe" data-stage="recipe" aria-labelledby="recipe-title">
       <div class="stage-heading">
         <div>
-          <p class="step-label">Reviewed recipe</p>
+          <p class="step-label">Native pre-handoff state</p>
           <h2 id="recipe-title">Chicken Parmesan Pasta</h2>
-          <p>4 servings · ingredient identity and quantities reviewed before retailer research</p>
+          <p>4 servings · reviewed requirements in Recipe Ready after pantry reconciliation</p>
         </div>
-        <span class="state-chip state-good">Ready for research</span>
+        <span class="state-chip state-good">Research available</span>
       </div>
 
       <div class="recipe-workspace">
@@ -114,52 +114,55 @@
 
       <div class="stage-action">
         <p>No account, session cookie, location, or cart is supplied.</p>
-        <button class="primary-button" type="button" data-next-stage="research">Replay retailer research <span aria-hidden="true">→</span></button>
+        <button class="primary-button" type="button" data-next-stage="research">Research current options <span aria-hidden="true">→</span></button>
       </div>
     </section>
 
     <section class="demo-stage" id="stage-research" data-stage="research" aria-labelledby="research-title" hidden>
       <div class="stage-heading">
         <div>
-          <p class="step-label">Solari Browser role</p>
-          <h2 id="research-title">Authorized evidence, not retailer scraping.</h2>
-          <p>This screen replays six upstream seeded Walmart observations. Live Walmart Browser execution is disabled without written authorization; the executable Browser target is the owned Demo Grocer surface.</p>
+          <p class="step-label">Research current options</p>
+          <h2 id="research-title">A bounded request leaves SmartCart.</h2>
+          <p>The native action sends only the three post-pantry requirements and admitted candidates to the server. The credentialed proof runs that Browser + Sandbox provider path against the owned Demo Grocer; this page does not initiate a new run.</p>
         </div>
-        <span class="state-chip state-recorded">Replay data</span>
+        <span class="state-chip state-good">Controlled proof</span>
       </div>
 
       <div class="research-progress" aria-live="polite">
         <div class="research-meter"><span data-research-meter></span></div>
-        <p data-research-status>Ready to replay recorded observation events.</p>
-        <button class="text-button" type="button" data-replay-events>Replay events</button>
+        <p data-research-status>Ready to replay the receipt-backed execution sequence.</p>
+        <button class="text-button" type="button" data-replay-events>Replay proof sequence</button>
       </div>
 
       <aside class="browser-boundary">
       <div>
         <p class="comparison-label accent">Executable Browser target</p>
         <h3>SmartCart Demo Grocer</h3>
-          <p>Six synthetic product pages render only after JavaScript runs, giving Browser a necessary, authorized extraction job with no account, cart, or checkout surface. The cancellation-hardened credentialed path completed in run 33505918379; the candidate cards below remain the Walmart fixture replay.</p>
+          <p>Six synthetic product pages render only after JavaScript runs, giving Browser a necessary, authorized extraction job with no account, cart, or checkout surface. The credentialed path completed in run 33519606791; the historical Walmart cards below are separate.</p>
         </div>
         <a class="secondary-button demo-grocer-link" href="retailer/index.html">Open synthetic catalog</a>
-        <p class="terms-note">Walmart automation remains off absent authorization. See the <a data-walmart-terms target="_blank" rel="noreferrer noopener">official Walmart Terms of Use</a>.</p>
+        <p class="terms-note">Live Walmart Browser execution is disabled absent written authorization. See the <a data-walmart-terms target="_blank" rel="noreferrer noopener">official Walmart Terms of Use</a>.</p>
       </aside>
 
-      <ol class="event-log" aria-label="Recorded research events">
-        <li data-event><span>01</span><strong>Scope</strong><p>Owned Demo Grocer pages only · no sign-in</p></li>
-        <li data-event><span>02</span><strong>Observe</strong><p>Six JS-rendered synthetic products</p></li>
-        <li data-event><span>03</span><strong>Structure</strong><p>Source URL, timestamp, confidence, ambiguity</p></li>
-        <li data-event><span>04</span><strong>Stop</strong><p>No cart, availability, checkout, or account action</p></li>
+      <ol class="event-log" aria-label="Receipt-backed execution sequence">
+        <li data-event><span>01</span><strong>Scope</strong><p>Owned Demo Grocer only · no sign-in</p></li>
+        <li data-event><span>02</span><strong>Browser</strong><p>Observe six JS-rendered synthetic products</p></li>
+        <li data-event><span>03</span><strong>Sandbox</strong><p>Normalize and select three sufficient packages</p></li>
+        <li data-event><span>04</span><strong>Return</strong><p>Evidence-backed result · no cart or checkout action</p></li>
       </ol>
 
-      <div class="candidate-section">
-        <div class="section-line">
-          <h3>Candidate evidence</h3>
-          <p>Walmart fixture replay below · choose alternatives to test package math.</p>
+      <details class="historical-replay">
+        <summary>Open historical Walmart fixture cards</summary>
+        <div class="candidate-section">
+          <div class="section-line">
+            <h3>Historical replay candidates</h3>
+            <p>Dated seed data · UI behavior only · not the credentialed run</p>
+          </div>
+          <div class="candidate-groups" data-candidate-groups>
+            <p class="loading-copy">Loading the checked-in historical fixture…</p>
+          </div>
         </div>
-        <div class="candidate-groups" data-candidate-groups>
-          <p class="loading-copy">Loading the checked-in replay fixture…</p>
-        </div>
-      </div>
+      </details>
 
       <details class="contract-details">
         <summary>What the evidence contract preserves</summary>
@@ -173,30 +176,30 @@
 
       <div class="stage-action">
         <p>Observed price is evidence with a date—not a live-price promise.</p>
-        <button class="primary-button" type="button" data-next-stage="decision">Run basket replay <span aria-hidden="true">→</span></button>
+        <button class="primary-button" type="button" data-next-stage="decision">Review basket result <span aria-hidden="true">→</span></button>
       </div>
     </section>
 
     <section class="demo-stage" id="stage-decision" data-stage="decision" aria-labelledby="decision-title" hidden>
       <div class="stage-heading">
         <div>
-          <p class="step-label">Solari Sandbox role</p>
-          <h2 id="decision-title">Enough food. Least checkout cost.</h2>
-          <p>A deterministic replay normalizes units, rounds packages up, preserves surplus, and compares supported candidates in isolation.</p>
+          <p class="step-label">Native basket review</p>
+          <h2 id="decision-title">Review the result before handoff.</h2>
+          <p>The native sheet presents source, timestamp, confidence, package math, surplus, and limitations before the shopper can continue. The interactive receipt below remains the historical Walmart UI replay.</p>
         </div>
-        <span class="state-chip state-good">Math reconciled</span>
+        <span class="state-chip state-user">Shopper reviews</span>
       </div>
 
       <aside class="sandbox-provenance">
-        <strong>Replay provenance: Browser not run · Sandbox not run.</strong>
-        <span>The controlled executable path sends the same normalized candidates to Solari Sandbox; this recorded fixture was independently verified by SmartCart’s deterministic implementation.</span>
+        <strong>Proof and replay stay distinct.</strong>
+        <span>Run 33519606791 proves Browser + Sandbox on Demo Grocer. The receipt UI below uses historical Walmart fixture data and does not claim another provider run.</span>
       </aside>
 
       <div class="decision-layout">
         <article class="receipt" aria-labelledby="receipt-title">
           <div class="receipt-header">
-            <p>SMARTCART / SOLARI</p>
-            <h3 id="receipt-title">Basket recommendation</h3>
+            <p>HISTORICAL WALMART FIXTURE</p>
+            <h3 id="receipt-title">Basket replay</h3>
             <time datetime="2026-07-16T12:00:00Z">JUL 16 2026 · 12:00 UTC</time>
           </div>
           <div class="receipt-lines" data-receipt-lines></div>
@@ -241,16 +244,16 @@
 
       <div class="stage-action">
         <p>Recommendation is advisory. Nothing has been added, reserved, or purchased.</p>
-        <button class="primary-button" type="button" data-next-stage="handoff">Review retailer handoff <span aria-hidden="true">→</span></button>
+        <button class="primary-button" type="button" data-next-stage="handoff">Continue to retailer handoff <span aria-hidden="true">→</span></button>
       </div>
     </section>
 
     <section class="demo-stage" id="stage-handoff" data-stage="handoff" aria-labelledby="handoff-title" hidden>
       <div class="stage-heading handoff-heading">
         <div>
-          <p class="step-label">SmartCart boundary preserved</p>
-          <h2 id="handoff-title">You take it from here.</h2>
-          <p>Open each public product page, verify the current product, package, price, and availability, then decide what—if anything—to add in Walmart.</p>
+          <p class="step-label">Native boundary preserved</p>
+          <h2 id="handoff-title">You decide whether to leave SmartCart.</h2>
+          <p>The native flow stops at an explicit retailer handoff. These links belong to the historical Walmart replay, so verify the current product, package, price, and availability before taking any retailer action.</p>
         </div>
         <span class="state-chip state-user">User controlled</span>
       </div>
@@ -272,7 +275,7 @@
 
       <div class="final-note">
         <span class="final-mark" aria-hidden="true">✓</span>
-        <div><strong>Research ended at recommendation.</strong><p>No autonomous purchase path exists in this demo.</p></div>
+        <div><strong>Research ends at review and explicit handoff.</strong><p>No autonomous purchase path exists in the native experiment or this demo.</p></div>
         <button class="secondary-button" type="button" data-next-stage="recipe">Replay from recipe</button>
       </div>
     </section>
@@ -284,7 +287,7 @@
 
   <footer>
     <p><strong>SmartCart × Solari</strong> · internship experiment · one bounded retailer research workflow</p>
-    <p>The replay validates UI behavior and a user-controlled retailer handoff; the separate credentialed receipt proves owned-surface Solari execution. Neither is current third-party retailer evidence.</p>
+    <p>Run 33519606791 proves owned-surface Browser + Sandbox execution. Signed native App Attest, physical-device/TestFlight, and distribution proof remain pending; historical Walmart cards are replay-only.</p>
   </footer>
 </body>
 </html>

@@ -216,6 +216,8 @@ h3 { margin-bottom: 0.65rem; font-size: 1.15rem; letter-spacing: -0.025em; }
   font-weight: 900;
 }
 
+.live-proof-ribbon + .truth-ribbon { margin-top: 0.75rem; }
+
 .truth-ribbon p { margin: 0; }
 .truth-ribbon strong { color: var(--navy); }
 .truth-ribbon a { font-weight: 850; white-space: nowrap; }
@@ -496,6 +498,23 @@ h3 { margin-bottom: 0.65rem; font-size: 1.15rem; letter-spacing: -0.025em; }
 .ambiguity-copy { grid-column: 1 / -1; padding-top: 0.4rem; border-top: 1px solid var(--line); }
 
 .loading-copy { padding: 2rem 0; color: var(--muted); }
+
+.historical-replay {
+  margin: 2.2rem 0 0;
+  border-top: 1px solid var(--line-dark);
+  border-bottom: 1px solid var(--line-dark);
+}
+
+.historical-replay > summary {
+  padding: 1rem 0;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 850;
+}
+
+.historical-replay[open] > summary { color: var(--navy); }
+.historical-replay .candidate-section { padding-bottom: 1.2rem; }
 
 .contract-details { border-bottom: 1px solid var(--line-dark); }
 .contract-details > summary { padding: 1.05rem 0; cursor: pointer; color: var(--navy); font-weight: 900; }

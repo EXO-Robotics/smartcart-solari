@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parent
 CANONICAL_FIXTURE = ROOT.parents[1] / "contracts" / "fixtures" / "v1" / "solari" / "chicken-parmesan-walmart-result.json"
+LIVE_RECEIPT = ROOT.parents[1] / "evidence" / "live" / "smartcart-solari-live-proof-33519606791.json"
 PRODUCT_IDS = {"10414680", "10534084", "623835750", "10452414", "10307238", "47088917"}
 ALLOWED_REMOTE_HOSTS = {"www.walmart.com", "github.com", "exo-robotics.github.io"}
 
@@ -147,6 +148,30 @@ def validate_catalog(path: Path) -> list[str]:
     return errors
 
 
+def validate_live_receipt(path: Path) -> list[str]:
+    try:
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        return [f"current live receipt unreadable: {error}"]
+
+    errors: list[str] = []
+    if receipt.get("workflow", {}).get("runID") != "33519606791":
+        errors.append("current live receipt must bind run 33519606791")
+    execution = receipt.get("execution", {})
+    expected = {
+        "assuranceScope": "first-party-execution-receipt",
+        "browser": "solari-browser-provider-completed",
+        "sandbox": "solari-sandbox-provider-completed",
+        "fixtureReplay": False,
+    }
+    for key, value in expected.items():
+        if execution.get(key) != value:
+            errors.append(f"current live receipt execution.{key} must equal {value!r}")
+    if receipt.get("useCase", {}).get("retailer") != "SmartCart Demo Grocer synthetic catalog":
+        errors.append("current live receipt must remain scoped to the synthetic Demo Grocer")
+    return errors
+
+
 def inspect_demo(root: Path = ROOT) -> list[str]:
     errors: list[str] = []
     required = [
@@ -164,13 +189,17 @@ def inspect_demo(root: Path = ROOT) -> list[str]:
         errors.extend(validate_html(html))
     errors.extend(validate_replay_fixture(CANONICAL_FIXTURE))
     errors.extend(validate_catalog(root / "retailer" / "catalog.json"))
+    errors.extend(validate_live_receipt(LIVE_RECEIPT))
 
     main_text = (root / "index.html").read_text(encoding="utf-8")
     required_markers = [
-        "Recorded demo evidence · not live",
-        "not a Solari live run",
-        "Solari Browser + Sandbox ran successfully",
-        "This proves Solari execution, not current third-party retailer pricing",
+        "Research current options",
+        "Credentialed first-party Solari proof is current",
+        "33519606791",
+        "smartcart-solari-live-proof-33519606791.json",
+        "Historical UI replay only",
+        "not signed native App Attest",
+        "physical-device/TestFlight success",
         "Live Walmart Browser execution is disabled",
         "user-controlled retailer handoff",
         "protein/$ is omitted",
@@ -178,6 +207,10 @@ def inspect_demo(root: Path = ROOT) -> list[str]:
     for marker in required_markers:
         if marker.casefold() not in main_text.casefold():
             errors.append(f"main replay missing trust marker: {marker}")
+    superseded_run = "".join(("33505", "918379"))
+    superseded_receipt = f"smartcart-solari-live-proof-{superseded_run}.json"
+    if superseded_run in main_text or superseded_receipt in main_text:
+        errors.append("main replay references superseded credentialed proof")
     if "96%" in main_text:
         errors.append("main replay must not invent numeric decision confidence")
     for marker in ("data-decision-confidence", "data-package-count", "data-receipt-fine"):

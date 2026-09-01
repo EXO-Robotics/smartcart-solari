@@ -1,130 +1,162 @@
 # Solari experiment design
 
-## Research question and success condition
+## Research question
 
-Can retailer-page research plus isolated basket computation improve SmartCart’s existing retailer handoff without taking authority away from the shopper?
+Can retailer-page research plus isolated basket computation improve SmartCart’s existing handoff without taking authority away from the shopper?
 
-Success is not “the agent bought groceries.” It is an auditable recommendation that starts from SmartCart’s reviewed recipe and pantry-derived need, ties every retailer claim to dated source evidence, makes package math reproducible, keeps missing/ambiguous evidence visible, and leaves the final handoff to the user. No retailer account, cart, checkout, or payment authority is acquired.
+Success is an auditable recommendation: it starts from SmartCart’s reviewed post-pantry need, ties each product/price claim to source and time, makes package math reproducible, preserves ambiguity and missing evidence, and leaves the final retailer handoff to the user. Success is not an agent buying groceries.
 
 ## Existing SmartCart boundary
 
-SmartCart’s established flow is recipe import/extraction → Recipe Ready correction → pantry allocation → shopping-list/Meal Prep aggregation → product matching/exceptions → user-driven Safari Shopping Trip → optional user-confirmed pantry reconciliation.
+The established flow is recipe import/extraction → Recipe Ready correction → pantry allocation → shopping-list or Meal Prep aggregation → product matching/exceptions → user-controlled Safari Shopping Trip → optional user-confirmed pantry reconciliation.
 
-- `RecipeParser` and ingredient identity remain authoritative; the contextual classifier is shadow-only.
-- `PantryMatchingService` conservatively determines full, partial, or possible coverage and does not treat uncertain cross-unit stock as exact coverage.
-- `MealPrepAggregationService` combines reviewed recipes while retaining uncertain/incompatible lines for review.
-- `RetailerCatalogService` provides bounded seeded matches and explicit search fallbacks; it does not refresh live prices.
-- `AppModel` owns UI/state and versioned persistence. Existing shopping sessions are frozen historical records.
+- `RecipeParser` and ingredient identity remain authoritative.
+- `PantryMatchingService` determines conservative full/partial/possible coverage.
+- `MealPrepAggregationService` combines reviewed recipes without silently merging uncertain identities/units.
+- SmartCart already computes conservative package counts when exact compatible package evidence exists.
+- `AppModel` owns UI/state and durable trip history.
+- A visited retailer page is not purchase evidence; cart, fulfillment, payment, checkout, and final price remain retailer/user authority.
 
-The experiment must not silently mutate prepared trips, purchase state, pantry, or retailer account state.
+The experiment inserts one optional research step after the existing matching work and before finalizing the existing retailer queue. It does not mutate a prepared trip, pantry, purchase state, or retailer account.
 
-At the upstream baseline, the Release app points only selected capabilities such as barcode identity and Weekly Meals at the deployed service, while recipe-page import is unconfigured/hidden. The wider Node application is explicitly local/demo and the deployed surface has no retailer research/scraping route. `/v1/solari/research` is additive in this isolated fork; it does not alter the production SmartCart remote or make the local/demo account and retailer handoff routes production-ready.
+## Native product flow
 
-## Chosen V1
+The `SmartCart-SolariBeta` path is user triggered:
 
-The fixed product demo is Chicken Parmesan Pasta. After pantry allocation, olive oil and garlic are excluded and the remaining need is chicken 1.5 lb, penne 12 oz, and Parmesan 3 oz.
+1. Recipe Ready shows the normal **Shop This Recipe** action and, only when the beta backend is configured, a separate **Research current options** action.
+2. Both actions use SmartCart’s normal `beginShoppingFromRecipeReady()` and `startMatching()` path.
+3. Normal shopping finalizes the retailer queue immediately.
+4. Research evaluates the resulting waiting items. One to three exact owned-catalog items with reviewed positive pound/ounce/count quantities are admitted; unsupported or duplicate identities fail with an explicit reason.
+5. A native review sheet loads and validates evidence. It never silently replaces the shopping plan.
+6. The user can refresh, edit, continue with normal SmartCart after a failure, or explicitly continue to the retailer queue.
+7. Before continuation, SmartCart recomputes the plan fingerprint. Any recipe, pantry, serving, product, or requirement change invalidates the evidence.
 
-There are two clearly separate evidence modes:
+Debug may replay a clearly marked synthetic recorded result without Browser, Sandbox, or App Attest. `Release-SolariBeta` has no replay bypass.
 
-1. **Walmart fixture replay.** Dated upstream SmartCart observations (`2026-07-16T12:00:00Z`) for products `10414680`, `10534084`, and `10452414` produce one package each and a historical fixture estimate of $12.79. This is the realistic retailer recommendation demo, but it is not live research.
-2. **Owned Demo Grocer live path.** Solari Browser may load only repository-controlled Demo Grocer product pages, and Solari Sandbox evaluates the resulting structured observations. This is the executable proof of necessary Browser + Sandbox usage without scraping a third-party retailer.
+## Supported source and demo
 
-Live Walmart research is disabled and fails closed without documented written authorization. Walmart’s current [Terms of Use](https://www.walmart.com/help/article/walmart-com-terms-of-use/3b75080af40340d6bbd596f116fae5a0) prohibit automated retrieval/scraping without express prior written consent. Target’s [Terms & Conditions](https://www.target.com/c/terms-conditions/-/N-4sr7l) restrict automated agents and extraction and recognize only Target-approved Agentic Commerce Agents. This is an explicit product/security control.
+The only live Browser target is the repository-controlled **SmartCart Demo Grocer** catalog. The fixed Chicken Parmesan Pasta need is chicken 1.5 lb, penne 12 oz, and Parmesan 3 oz after olive oil and garlic are excluded by pantry allocation.
 
-## Responsibilities
+This owned source is appropriate for proving dynamic-page observation, schemas, admission, cleanup, and native UX without violating retailer terms. It is synthetic: it does not establish real-retailer prices, availability, location behavior, or consumer value.
 
-### SmartCart iOS
+The Walmart experience is a replay of upstream records observed `2026-07-16T12:00:00Z`. Live Walmart is blocked without documented written authorization. Target live research is unsupported. Walmart’s [Terms](https://www.walmart.com/help/article/walmart-com-terms-of-use/3b75080af40340d6bbd596f116fae5a0) and Target’s [Terms](https://www.target.com/c/terms-conditions/-/N-4sr7l) make those policy boundaries explicit.
 
-- Supplies reviewed, post-pantry ingredient needs.
-- Requests research through the SmartCart backend, never Solari directly.
-- Decodes only supported evidence versions.
-- Shows evidence mode, source, observation timestamp, confidence/ambiguity, package decision, and total completeness.
-- Keeps retailer handoff an explicit user action.
-- Does not treat a visited page as purchase evidence or update pantry without existing confirmation.
+## Solari Browser responsibility
 
-### SmartCart backend
+Browser has one necessary job: observe an admitted JavaScript-rendered product page at a specific time.
 
-- Keeps `SOLARI_API_KEY` server-side.
-- Leaves live execution off by default and requires a separate server/operator Bearer token before any live provider work. Fixture replay remains public and rate-limited; iOS/web never receive the operator token.
-- Validates request size, quantities, source identifiers/URLs, evidence mode, and retailer authorization policy.
-- Permits live execution only on the owned Demo Grocer allowlist; rejects Target, and rejects Walmart unless both written-authorization gates are present; revalidates every redirect/final URL. Credentialed owned-surface runs are claimed only through their immutable sanitized receipts.
-- Starts short-lived Browser/Sandbox resources with bounded operation timeouts, one aggregate deadline, request-abort cancellation, and concurrency/rate controls.
-- Converts page output to a retailer observation before Sandbox evaluation.
-- Validates all outputs and fails closed.
-- Closes every Browser page, the Browser session, and Solari Browser client, and kills Sandbox, in `finally` paths. Cleanup failure suppresses success rather than being silently ignored.
-- Returns explicit fixture/live/unavailable mode without upgrading labels.
+- Start a fresh logged-out session with no profile, recording, proxy, stealth, or captcha capability.
+- Navigate only to the server-derived exact Demo Grocer product URL.
+- Extract visible identity, package, price, and ambiguity context as data.
+- Recheck the exact page URL before and after rendering and verify the product ID.
+- Emit a bounded structured observation; do not retain raw HTML/screenshots.
+- Close each page, the Browser session, and the Browser client before success.
 
-The live admission sequence is strict: `executionMode: "live"` → `SOLARI_LIVE_EXECUTION_ENABLED=true` → configured 32–256 character `SOLARI_OPERATOR_TOKEN` → exact constant-time Bearer-token match → retailer/source policy → Browser/Sandbox. A failure returns 403 before the service/provider. Recorded fixture mode bypasses live credentials because it invokes neither Browser nor Sandbox.
+Page text is untrusted data, never an instruction. There is no search/tool-choice loop, login, account access, cart control, or checkout.
 
-### Solari Browser
+Solari’s [session documentation](https://docs.getsolari.com/sessions) documents the fresh default and close lifecycle. [Profiles](https://docs.getsolari.com/profiles) contain login-bearing cookies/localStorage, so they are intentionally excluded.
 
-- Opens an allowlisted owned Demo Grocer product page in a fresh logged-out browser.
-- Reads visible identity, package, price, source URL, and context needed to assess ambiguity.
-- Emits structured data only.
-- Does not sign in, search broadly, click purchase controls, attach a profile, record, proxy, use stealth, solve captchas, or retain raw pages.
+## Solari Sandbox responsibility
 
-Solari’s [session documentation](https://docs.getsolari.com/sessions) says defaults are headless with no profile, recording, proxy, or stealth and documents explicit closure. These optional capabilities stay off.
+Sandbox receives only validated structured observations plus reviewed quantities. It:
 
-### Solari Sandbox
+- normalizes compatible pounds/ounces/counts;
+- computes required package count, coverage, and surplus;
+- compares admitted adequate candidates with visible prices;
+- selects the smallest sufficient observed basket;
+- returns versioned decisions and complete/partial totals.
 
-- Receives required quantities plus validated structured observations—not raw HTML, cookies, signed endpoints, the Solari key, or user account data.
-- Runs deterministic unit normalization, required-package count, candidate evaluation, total calculation, and completeness checks.
-- Produces a versioned basket decision referencing exact observation IDs.
-- Is killed after the run.
+Sandbox receives no Solari key, App Attest material, Upstash credential, cookies, capability URL, raw HTML, account data, or arbitrary executable page content. The evaluator is fixed; SmartCart independently recomputes its selections and arithmetic. Sandbox egress is not assumed to be blocked, so the job is designed not to need network access or secrets. The microVM is killed before success.
 
-Solari documents [Sandbox](https://docs.getsolari.com/sandboxes) as headless compute with commands/code/files and explicit `kill()`. The experiment does not assume network isolation merely because compute is sandboxed; the job needs no outbound network and receives no reusable secret.
+Solari documents Sandbox compute and explicit `kill()` in the [Sandbox guide](https://docs.getsolari.com/sandboxes).
 
-## Evidence model
+## V1 execution proof versus V2 product contract
 
-Two contract layers separate fact from inference:
+The immutable credentialed proof is Actions run [`33519606791`](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33519606791) at commit `eee8c84`. Its [V1 receipt](../evidence/live/smartcart-solari-live-proof-33519606791.json) records six fresh Browser observations (14:27:48–55Z), three Sandbox decisions, cleanup, and the `$12.79` owned synthetic basket. It proves actual Solari execution, not the native App Attest transport.
 
-1. **Retailer observation:** what one permitted product page or dated fixture appeared to show at a specific time.
-2. **Basket decision:** what deterministic package/basket logic concluded from a named set of observations and SmartCart needs.
+The native/deployed path is V2:
 
-Observation semantics include `retailer-observation-v1`, observation/requirement IDs, collection method, source/retailer product ID, canonical URL, title, package quantity/unit, nullable price/currency, `observedAt`, confidence, ambiguity, location/freshness labels, and a bounded extracted plain-text evidence field. `rawText` is not HTML, a screenshot, or a recording; it is bounded to 12 KB, treated as untrusted, and not logged or stored as session/account state.
+- `solari-shopping-research-request-v2`
+- `retailer-observation-v2`
+- `basket-decision-v2`
+- `solari-shopping-research-result-v2`
+- `solari-app-attest-research-envelope-v1`
 
-Decision semantics include `basket-decision-v1`, exact requirement/observation references, selected package count, normalized coverage/surplus and protein economics where defensible, substitution/ambiguity notes, nullable line totals/currency, and confidence/rationale. The `solari-shopping-research-result-v1` envelope adds nullable subtotal/completeness counts, `smallest-sufficient-package-v1` optimizer provenance, Browser/Sandbox execution provenance, and trust assertions.
+The contract files and examples are under [`contracts/v2/solari/`](../contracts/v2/solari/). V2 removes client-supplied source URLs: the app sends candidate product IDs; the backend derives exact URLs from its owned base. Result provenance requires Browser, Sandbox, enforced cleanup, `apple-app-attest`, and user-controlled handoff.
+
+No signed physical-device V2 request has run. The V1 Browser/Sandbox receipt and deployed V2 smoke evidence must not be combined into a claim that the signed native path is complete.
+
+## Apple App Attest and server admission
+
+The native client keeps a public App Attest key identifier, obtains a one-use operation-specific challenge, and registers a new key when necessary. For research, it computes an assertion over:
+
+- the challenge;
+- `POST`;
+- `/v1/solari/research`;
+- the SHA-256 digest of the exact encoded V2 request body.
+
+The request contains an envelope with the exact payload bytes, key ID, challenge ID, and assertion. There is no reusable bearer/API credential in iOS.
+
+The backend verifies beta enablement, runtime switch, challenge expiry/operation/key binding, registered non-revoked key, Apple assertion signature and app identity, allowlisted TestFlight validation category/build, monotonic counter, exact payload binding, and V2 schema before Solari work. Initial attestation verifies Apple’s certificate/receipt/nonce/key/app identity and stores the public verification record server-side. A locally sideloaded development build is not accepted as TestFlight evidence.
+
+The production smoke receipt proves challenge creation/consumption and invalid/replay rejection. A real signed attestation/assertion remains pending because the host has no valid signing identity.
+
+## Spend, replay, and lifecycle controls
+
+Upstash stores only bounded beta control state:
+
+- one-use challenges with short TTL;
+- attested public-key records and counters;
+- request idempotency reservations/results;
+- per-key hourly/daily and global daily counters;
+- concurrency leases;
+- the runtime kill-switch key.
+
+Admission atomically rejects quota/concurrency overflow. Duplicate request IDs with identical bytes can return the committed result; a different body conflicts. The native app also keeps a nonpersistent two-minute, eight-entry validated-result cache; **Refresh current options** bypasses it.
+
+The runtime switch is checked before challenge, attestation, and research, then polled during provider execution. Turning it off aborts in-flight work. An aborted/incomplete incoming request propagates cancellation through the backend and providers. Browser and Sandbox share an aggregate deadline. A response-socket hangup after a complete request body may not be observed by the handler, so that edge remains bounded by the aggregate deadline and runtime switch rather than immediate cancellation. Every success requires confirmed cleanup.
+
+## Evidence semantics
+
+A retailer observation is a fact claim about what an admitted page appeared to show at one timestamp. A basket decision is an inference from named requirements and observation IDs.
 
 Rules:
 
-- Unknown versions, absent/mismatched references, non-finite/negative numbers, unsupported currencies, incompatible units, or disallowed URLs fail closed.
-- Replaying a fixture preserves `observedAt`; a separate replay time cannot make it fresh.
-- A fixture cannot carry live-Solari mode.
-- Missing price remains `null`, never zero.
-- A complete total exists only when every included selected line has a validated package count and same-currency price. Otherwise total is `null`; any priced subtotal is separately labeled.
-- Protein-per-dollar is omitted unless independently attributable nutrition evidence is present.
-
-Contract authority:
-
-- [`contracts/v1/solari/basket-research-request.schema.json`](../contracts/v1/solari/basket-research-request.schema.json)
-- [`contracts/v1/solari/retailer-observation.schema.json`](../contracts/v1/solari/retailer-observation.schema.json)
-- [`contracts/v1/solari/basket-decision.schema.json`](../contracts/v1/solari/basket-decision.schema.json)
-- [`contracts/v1/solari/basket-research-result.schema.json`](../contracts/v1/solari/basket-research-result.schema.json)
-- Authoritative request/result fixtures: [`contracts/fixtures/v1/solari/`](../contracts/fixtures/v1/solari/)
-- Submission UI: [`website/solari-demo/`](../website/solari-demo/), which loads the authoritative result fixture rather than maintaining an independent price contract
+- unknown versions, duplicate/mismatched identities, out-of-allowlist products/URLs, invalid timestamps, stale/future live observations, incompatible units, or invalid numeric values fail closed;
+- visible price is nullable and never defaults to zero;
+- a complete subtotal exists only if every selected line has a valid package count and visible same-currency price;
+- replay timestamps never become fresh because they were replayed;
+- confidence and ambiguity remain qualitative evidence, not a made-up percentage;
+- protein-per-dollar is omitted without separately attributable nutrition evidence;
+- Browser/Sandbox success is not inventory, checkout, purchase, App Store, or physical-device proof.
 
 ## Failure behavior
 
-Retailer authorization absence, markup changes, login/consent/captcha walls, redirects outside the allowlist, private-network resolution, timeouts, missing selectors, title/package mismatch, or location ambiguity do not trigger broader browsing. The request is rejected or downgraded with a reason. SmartCart shows research unavailable/partial and preserves its normal handoff/search behavior.
+Missing signing/App Attest support, disabled runtime, exhausted quota, duplicate/replayed challenge/counter, invalid build, unsupported plan, source-policy failure, private DNS, unexpected redirect, product mismatch, timeout, page/captcha/login wall, incomplete observation, Sandbox error, native validation failure, or cleanup failure produces unavailable/error—not invented evidence.
 
-Browser success plus Sandbox failure is not a basket recommendation. Sandbox success against a fixture is not live retailer evidence. UI success is not availability, cart, purchase, device, deployment, or App Store proof.
+The native UI offers retry, edit, or normal SmartCart fallback. No failure path silently enables broader browsing or commerce authority.
 
 ## Intentionally excluded
 
-- Live Walmart/Target automation without documented authorization.
-- Broad retailer coverage or arbitrary web search/candidate discovery.
-- Profiles, cookie/localStorage reuse, login, replay, screenshots/raw HTML retention.
-- Proxy, stealth, captcha solving, or bypass attempts.
-- Cart/list writes, fulfillment, payment, checkout, orders, or purchase verification.
-- Solari Desktop.
-- Nutrition/protein economics without separate evidence.
+- live Walmart/Target automation without authorization;
+- broad retailer discovery or arbitrary client URLs;
+- Browser profiles, login, recording, raw HTML/screenshots, proxy, stealth, or captcha solving;
+- retailer account/list/cart/order, fulfillment, payment, checkout, or purchase detection;
+- persistent native evidence cache;
+- Solari Desktop;
+- nutrition/protein economics without separate evidence;
+- public native-use claims before signing/TestFlight evidence.
 
-Solari [profiles](https://docs.getsolari.com/profiles) store login-bearing Playwright `storageState`, including cookies and origin localStorage. They are excluded because logged-out research does not justify that privacy/authority increase.
+## Qualification boundary
 
-## Provenance and qualification
+The current evidence is:
 
-The submission fork begins at clean `upstream/main` commit `fe6589b1bd811a7ca8afa9824deba9d3cbde7ab9`. Historical Walmart observations originate from that baseline and retain their historical timestamp. The fixture’s freshness is explicitly stale under the 24-hour live policy; recorded mode admits it only as clearly labeled historical replay, never as refreshed evidence. A fixture receipt identifies submission commit, contract version, fixture ID, command, result, and replay time.
+- 55/55 focused Solari backend tests;
+- 185/185 full backend tests;
+- 13/13 focused native tests;
+- Release-SolariBeta simulator build PASS;
+- separate Debug simulator install/launch PASS;
+- Vercel deployment `dpl_FD8iBpRhvmEckcUm7oo7v5tMoxdh` READY with health 200, challenge 201, invalid 403, replay 403;
+- credentialed Browser/Sandbox run `33519606791` PASS at `eee8c84`.
 
-Live qualification additionally requires a server-side `SOLARI_API_KEY`, explicit `SOLARI_LIVE_EXECUTION_ENABLED=true`, a valid server/operator `SOLARI_OPERATOR_TOKEN` supplied as Bearer auth, owned Demo Grocer source, live evidence mode, observation IDs/timestamps/sources, and Browser/Sandbox cleanup proof. Neither credential is shipped to iOS/web. GitHub Actions run `33505918379` completed the cancellation-hardened qualification on commit `25ab69b582e5f6d92053a2f42640736e92b5b8dc`; the sanitized receipt is [`evidence/live/smartcart-solari-live-proof-33505918379.json`](../evidence/live/smartcart-solari-live-proof-33505918379.json).
-
-See [the demo runbook](SOLARI_DEMO_RUNBOOK.md) and [threat model](SOLARI_THREAT_MODEL.md).
+Physical iPhone signing, a real signed App Attest vector, TestFlight, and App Store remain PENDING with zero valid signing identities. See [qualification](SOLARI_QUALIFICATION.md), [threat model](SOLARI_THREAT_MODEL.md), and [runbook](SOLARI_DEMO_RUNBOOK.md).

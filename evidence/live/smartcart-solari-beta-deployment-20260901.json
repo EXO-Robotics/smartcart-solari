@@ -1,0 +1,48 @@
+{
+  "receiptVersion": "smartcart-solari-beta-deployment-v1",
+  "observedAt": "2026-09-01T14:29:57Z",
+  "submission": {
+    "repository": "EXO-Robotics/smartcart-solari",
+    "branch": "feat/native-solari-beta",
+    "commit": "eee8c840b59def4428548c66203304193fa93520"
+  },
+  "deployment": {
+    "provider": "vercel",
+    "project": "smartcart-solari-beta",
+    "deploymentID": "dpl_FD8iBpRhvmEckcUm7oo7v5tMoxdh",
+    "immutableURL": "https://smartcart-solari-beta-rnx53rz6a-blake23.vercel.app",
+    "applicationURL": "https://smartcart-solari-beta.vercel.app",
+    "target": "production",
+    "readyState": "READY"
+  },
+  "accessBoundary": {
+    "scheme": "apple-app-attest",
+    "teamID": "WCNJVRP99K",
+    "bundleID": "com.blakestudio.smartcart.solari-beta",
+    "allowedBuilds": ["4"],
+    "stateStore": "vercel-marketplace-upstash-redis",
+    "runtimeKillSwitch": "enabled",
+    "solariCredential": "server-side-secret-not-inspected"
+  },
+  "smoke": {
+    "healthStatus": 200,
+    "challengeStatus": 201,
+    "malformedAttestationStatus": 403,
+    "malformedAttestationCode": "app_attest_malformed",
+    "consumedChallengeReplayStatus": 403,
+    "consumedChallengeReplayCode": "app_attest_challenge_invalid",
+    "redisOneTimeChallengeBurnObserved": true
+  },
+  "separateLiveSolariProof": {
+    "workflowRunID": "33519606791",
+    "browser": "solari-browser-provider-completed",
+    "sandbox": "solari-sandbox-provider-completed",
+    "fixtureReplay": false
+  },
+  "limitations": [
+    "The endpoint, Redis admission boundary, and App Attest fail-closed behavior were observed in production.",
+    "A real signed TestFlight App Attest attestation/assertion was not available and remains pending.",
+    "The credentialed Browser and Sandbox run used the owned SmartCart Demo Grocer synthetic catalog, not a third-party retailer.",
+    "No physical-iPhone, TestFlight, App Store, retailer account, cart, purchase, or checkout claim is made."
+  ]
+}

@@ -1,13 +1,15 @@
-# SmartCart × Solari replay UI
+# SmartCart × Solari native-flow demo
 
-This dependency-free static demo presents the Chicken Parmesan Pasta experiment as a staged SmartCart workflow:
+This dependency-free static demo presents the Chicken Parmesan Pasta native experiment as a staged SmartCart workflow:
 
-1. reviewed recipe and pantry exclusions;
-2. Browser evidence boundary;
-3. package and basket decision;
+1. reviewed Recipe Ready state after pantry exclusions;
+2. the explicit **Research current options** action before retailer handoff;
+3. evidence-backed basket review;
 4. explicit, user-controlled retailer handoff.
 
-The Walmart evidence is a dated fixture replay from SmartCart upstream seeded records. It is not a live retailer observation and does not prove a Solari run. Walmart Browser execution is disabled absent written authorization. `retailer/` is an owned, synthetic, JavaScript-rendered catalog for controlled Solari Browser testing; it has no account, cart, checkout, or retailer affiliation.
+Credentialed GitHub Actions run `33519606791` proves Solari Browser + Sandbox execution against the owned synthetic Demo Grocer. Its sanitized receipt is `evidence/live/smartcart-solari-live-proof-33519606791.json`. That receipt does not prove a signed native App Attest request, physical-device/TestFlight success, distribution, or current third-party retailer pricing.
+
+The interactive Walmart evidence is deliberately demoted to a collapsed historical replay from SmartCart upstream seeded records. It is not the native live input and does not prove a Solari run. Walmart Browser execution is disabled absent written authorization. `retailer/` is the separate owned, synthetic, JavaScript-rendered catalog used for controlled Solari Browser testing; it has no account, cart, checkout, or retailer affiliation.
 
 Serve the repository root so both the UI and canonical contract fixtures remain addressable:
 
