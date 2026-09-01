@@ -78,7 +78,7 @@ function decisionFromCandidate(requirement, selected) {
     proteinGramsPerDollar: null,
     substitutionNote: observation.ambiguityReasons.length > 0 ? observation.ambiguityReasons[0] : null,
     rationale: [
-      `${selected.packageCount} package${selected.packageCount === 1 ? '' : 's'} cover the reviewed requirement.`,
+      `${selected.packageCount} package${selected.packageCount === 1 ? ' covers' : 's cover'} the reviewed requirement.`,
       selected.lineTotal === null
         ? 'No visible price was observed, so this line is excluded from the priced subtotal.'
         : 'Among admitted candidates with visible prices, this is the lowest observed adequate line total.'

@@ -25,17 +25,31 @@ function boundedRawText(value) {
   return text.slice(0, 12_000) || 'No visible product text was returned by the admitted page.';
 }
 
-function confidenceFor(extracted) {
-  if (extracted.title && extracted.packageQuantity && extracted.packageUnit && extracted.visiblePrice !== null) return 'high';
+function confidenceFor(extracted, ambiguityReasons) {
+  if (
+    ambiguityReasons.length === 0
+    && extracted.title
+    && extracted.packageQuantity
+    && extracted.packageUnit
+    && extracted.visiblePrice !== null
+  ) return 'high';
   if (extracted.title && (extracted.packageQuantity || extracted.visiblePrice !== null)) return 'medium';
   return 'low';
 }
 
-function ambiguitiesFor(extracted) {
+function ambiguitiesFor(extracted, requirement) {
   const reasons = [];
   if (!extracted.title) reasons.push('A product title could not be normalized from the visible page.');
   if (!extracted.packageQuantity || !extracted.packageUnit) reasons.push('Package quantity or unit could not be normalized.');
   if (extracted.visiblePrice === null) reasons.push('No visible USD price could be normalized; price remains unknown.');
+  const title = extracted.title?.toLowerCase() ?? '';
+  const requested = requirement.name.toLowerCase();
+  if (/\bgluten[ -]?free\b/.test(title) && !/\bgluten[ -]?free\b/.test(requested)) {
+    reasons.push('Gluten-free attribute was not requested by this recipe.');
+  }
+  if (/\bfinely shredded\b/.test(requested) && /\bshredded\b/.test(title) && !/\bfinely shredded\b/.test(title)) {
+    reasons.push('Shred size is not stated as finely shredded.');
+  }
   return reasons;
 }
 
@@ -136,6 +150,7 @@ export class SolariBrowserProvider {
             const currency = visiblePrice === null || data.currency !== 'USD' ? null : 'USD';
             const normalizedPrice = currency === 'USD' ? visiblePrice : null;
             const extracted = { title: data.title ? String(data.title).trim().slice(0, 500) : null, packageQuantity, packageUnit, visiblePrice: normalizedPrice };
+            const ambiguityReasons = ambiguitiesFor(extracted, requirement);
             const observedAt = new Date(this.now()).toISOString();
             observations.push({
               schemaVersion: 'retailer-observation-v1',
@@ -150,8 +165,8 @@ export class SolariBrowserProvider {
               visiblePrice: normalizedPrice,
               currency,
               observedAt,
-              confidence: confidenceFor(extracted),
-              ambiguityReasons: ambiguitiesFor(extracted),
+              confidence: confidenceFor(extracted, ambiguityReasons),
+              ambiguityReasons,
               proteinGramsPerPackage: null,
               collectionMethod: request.retailerID === 'smartcart-demo-grocer'
                 ? 'solari-browser-controlled-demo'

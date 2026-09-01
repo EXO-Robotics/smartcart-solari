@@ -57,8 +57,12 @@ test('Browser uses a fresh minimal session and closes page, browser, and client'
     url() { return currentURL; },
     async waitForSelector() {},
     async evaluate() {
+      const titles = {
+        '623835750': 'Demo Gluten Free Penne Pasta',
+        '10307238': 'Demo Shredded Parmesan'
+      };
       return {
-        productID: currentProductID, title: `Synthetic ${currentProductID}`,
+        productID: currentProductID, title: titles[currentProductID] ?? `Synthetic ${currentProductID}`,
         packageQuantity: currentProductID === '10414680' ? '3' : '6',
         packageUnit: currentProductID === '10414680' ? 'lb' : 'oz',
         priceCents: currentProductID === '10414680' ? '947' : '208', currency: 'USD', rawText: 'visible synthetic evidence'
@@ -85,6 +89,12 @@ test('Browser uses a fresh minimal session and closes page, browser, and client'
   assert.equal(pageClosed, 6);
   assert.equal(browserClosed, 1);
   assert.equal(clientClosed, 1);
+  const glutenFree = observations.find(({ retailerProductID }) => retailerProductID === '623835750');
+  assert.equal(glutenFree.confidence, 'medium');
+  assert.deepEqual(glutenFree.ambiguityReasons, ['Gluten-free attribute was not requested by this recipe.']);
+  const coarseShred = observations.find(({ retailerProductID }) => retailerProductID === '10307238');
+  assert.equal(coarseShred.confidence, 'medium');
+  assert.deepEqual(coarseShred.ambiguityReasons, ['Shred size is not stated as finely shredded.']);
 });
 
 test('Browser and Sandbox fail typed-unavailable when the server key is absent', async () => {
