@@ -18,6 +18,9 @@ RECEIPT = REPO_ROOT / "evidence" / "live" / "smartcart-solari-v4-qualification-3
 NATIVE_REPLAY_SHA256 = "bc8707dc41dc08895daa948b0c217c7e72044b31d22e803ea80a6e323268b699"
 ALLOWED_REMOTE_HOSTS = {"github.com", "docs.getsolari.com"}
 REQUIRED_PHRASES = {
+    "Solving real production issues",
+    "Solari Browser",
+    "Solari Sandbox",
     "The frontend is replaceable",
     "Solari is the capability",
     "owned, synthetic retailer",
@@ -124,6 +127,15 @@ def inspect_case_study(root: Path = ROOT, receipt_path: Path = RECEIPT) -> list[
     for social_marker in ("og:title", "og:description", "og:image", "twitter:card"):
         if social_marker not in source:
             errors.append(f"index.html: missing social preview marker {social_marker}")
+    if 'aria-label="Case study navigation"' in source:
+        errors.append("index.html: retired top-center case-study navigation must stay removed")
+    for comparison_marker in (
+        'tabindex="-1" data-mode="before"',
+        'aria-hidden="true" inert data-process="before"',
+        'aria-hidden="true" inert data-panel="before"',
+    ):
+        if comparison_marker not in source:
+            errors.append(f"index.html: missing accessible comparison state marker {comparison_marker!r}")
     for replay_marker in (
         "DEBUG RECORDED REPLAY · NOT LIVE",
         "Solari Browser and Sandbox do not run inside this clip",
@@ -162,6 +174,9 @@ def inspect_case_study(root: Path = ROOT, receipt_path: Path = RECEIPT) -> list[
     for key in ("smartcart", "procurement", "travel", '"field-service"'):
         if key not in javascript:
             errors.append(f"script.js: missing replaceable frontend model {key}")
+    for accessibility_key in ("panel.inert = hidden", '"ArrowRight"', '"ArrowLeft"'):
+        if accessibility_key not in javascript:
+            errors.append(f"script.js: missing accessible comparison behavior {accessibility_key}")
     if "prefers-reduced-motion" not in javascript or "prefers-reduced-motion" not in styles.read_text(encoding="utf-8"):
         errors.append("case study must honor prefers-reduced-motion in CSS and JavaScript")
 
