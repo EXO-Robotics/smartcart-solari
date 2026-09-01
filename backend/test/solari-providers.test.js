@@ -103,6 +103,66 @@ test('Browser and Sandbox fail typed-unavailable when the server key is absent',
   await assert.rejects(() => new SolariSandboxOptimizer().optimize(request.requirements, []), { code: 'solari_unavailable', status: 503 });
 });
 
+test('Browser and Sandbox reject work after the aggregate request deadline', async () => {
+  const request = demoRequest(await fixtureRequest());
+  let browserFactories = 0;
+  const browser = new SolariBrowserProvider({
+    apiKey: 'server-only-test-key',
+    solariFactory: () => { browserFactories += 1; return {}; }
+  });
+  await assert.rejects(
+    () => browser.observe(request, { deadlineAt: 100, clock: () => 100 }),
+    { code: 'solari_request_timeout', status: 504, retryable: true }
+  );
+  assert.equal(browserFactories, 0);
+
+  let sandboxFactories = 0;
+  const sandbox = new SolariSandboxOptimizer({
+    apiKey: 'server-only-test-key',
+    clientFactory: () => { sandboxFactories += 1; return {}; }
+  });
+  await assert.rejects(
+    () => sandbox.optimize(request.requirements, [], { deadlineAt: 100, clock: () => 100 }),
+    { code: 'solari_request_timeout', status: 504, retryable: true }
+  );
+  assert.equal(sandboxFactories, 0);
+});
+
+test('research service shares one aggregate deadline across Browser and Sandbox', async () => {
+  const request = demoRequest(await fixtureRequest());
+  const fixedNow = Date.parse('2026-09-01T12:00:00Z');
+  const observations = await new WalmartFixtureReplayProvider({ now: () => fixedNow }).observe(request);
+  let deadlineNow = 1_000;
+  let browserDeadline;
+  let sandboxDeadline;
+  const service = createSolariResearchService({
+    config: {
+      solariDemoRetailerBaseUrl: 'https://demo.example/solari-demo',
+      solariRequestTimeoutMs: 45_000
+    },
+    now: () => fixedNow,
+    deadlineClock: () => deadlineNow,
+    demoHostLookup: async () => [{ address: '93.184.216.34', family: 4 }],
+    browserProvider: {
+      async observe(_request, context) {
+        browserDeadline = context.deadlineAt;
+        deadlineNow = 30_000;
+        return observations;
+      }
+    },
+    sandboxOptimizer: {
+      async optimize(requirements, admittedObservations, context) {
+        sandboxDeadline = context.deadlineAt;
+        return deterministicOptimize(requirements, admittedObservations, { method: 'solari-sandbox' });
+      }
+    }
+  });
+  const result = await service.research(request);
+  assert.equal(browserDeadline, 46_000);
+  assert.equal(sandboxDeadline, browserDeadline);
+  assert.equal(result.optimizer.method, 'solari-sandbox');
+});
+
 test('Browser success is withheld unless session and client cleanup are confirmed', async () => {
   const request = demoRequest(await fixtureRequest());
   let currentURL;

@@ -15,6 +15,7 @@ export function createSolariResearchService(options = {}) {
   const config = options.config ?? {};
   const validatorPromise = options.validator ? Promise.resolve(options.validator) : createContractValidator();
   const now = options.now ?? Date.now;
+  const deadlineClock = options.deadlineClock ?? Date.now;
   const fixtureProvider = options.fixtureProvider ?? new WalmartFixtureReplayProvider({ now });
   const browserProvider = options.browserProvider ?? new SolariBrowserProvider({
     apiKey: config.solariApiKey,
@@ -35,6 +36,9 @@ export function createSolariResearchService(options = {}) {
   }
 
   async function research(request) {
+    const deadlineAt = request.executionMode === 'live'
+      ? deadlineClock() + config.solariRequestTimeoutMs
+      : undefined;
     if (request.executionMode === 'live' && request.retailerID === 'smartcart-demo-grocer') {
       await assertPublicDemoBaseURL(config.solariDemoRetailerBaseUrl, { lookup: options.demoHostLookup });
     }
@@ -76,7 +80,7 @@ export function createSolariResearchService(options = {}) {
       if (request.retailerID === 'smartcart-demo-grocer' && !config.solariDemoRetailerBaseUrl) {
         throw new SolariResearchError('controlled_demo_unavailable', 'The controlled Demo Grocer base URL is not configured.', { status: 503 });
       }
-      observations = await browserProvider.observe(request);
+      observations = await browserProvider.observe(request, { deadlineAt, clock: deadlineClock });
       for (const observation of observations) {
         const validation = validator.validate(SOLARI_OBSERVATION_SCHEMA_ID, observation);
         if (!validation.valid) {
@@ -87,7 +91,7 @@ export function createSolariResearchService(options = {}) {
           );
         }
       }
-      optimized = await sandboxOptimizer.optimize(request.requirements, observations);
+      optimized = await sandboxOptimizer.optimize(request.requirements, observations, { deadlineAt, clock: deadlineClock });
       fixtureReplay = false;
     }
 
@@ -113,7 +117,11 @@ export function createSolariResearchService(options = {}) {
       provenance: {
         browser: fixtureReplay ? 'not-run-fixture-replay' : 'solari-browser',
         sandbox: fixtureReplay ? 'not-run-fixture-replay' : 'solari-sandbox',
-        fixtureReplay
+        fixtureReplay,
+        resourceCleanup: {
+          browser: fixtureReplay ? 'not-run-fixture-replay' : 'enforced-before-response',
+          sandbox: fixtureReplay ? 'not-run-fixture-replay' : 'enforced-before-response'
+        }
       },
       trust: {
         priceClaim: fixtureReplay ? 'recorded-fixture-not-live' : 'observed-visible-price-not-guaranteed',

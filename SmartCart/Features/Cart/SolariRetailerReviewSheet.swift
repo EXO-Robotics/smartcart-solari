@@ -168,11 +168,11 @@ struct SolariRetailerReviewSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 10) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(observation.title)
+                    Text(observation.title ?? "Product title unavailable")
                         .font(.headline)
                         .foregroundStyle(SmartCartTheme.navy)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text("\(decision.packageCount) × \(observation.packageDescription)")
+                    Text("\(decision.packageCount) × \(observation.packageDescription ?? "package details unavailable")")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(SmartCartTheme.secondaryInk)
                 }

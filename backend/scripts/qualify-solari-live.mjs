@@ -9,6 +9,12 @@ import { buildSolariDemoRequest } from './build-solari-demo-request.mjs';
 const DEFAULT_RETAILER_BASE_URL = 'https://exo-robotics.github.io/smartcart-solari/website/solari-demo';
 const DEFAULT_ENDPOINT = 'http://127.0.0.1:8787/v1/solari/research';
 const REPOSITORY = 'EXO-Robotics/smartcart-solari';
+const EXPECTED_PRODUCT_IDS = ['10307238', '10414680', '10452414', '10534084', '47088917', '623835750'];
+const EXPECTED_SELECTIONS = Object.freeze({
+  '20000000-0000-0000-0000-000000000001': { productID: '10414680', packageCount: 1, lineTotal: 9.47 },
+  '20000000-0000-0000-0000-000000000002': { productID: '10534084', packageCount: 1, lineTotal: 1.24 },
+  '20000000-0000-0000-0000-000000000003': { productID: '10452414', packageCount: 1, lineTotal: 2.08 }
+});
 
 function invariant(condition, message) {
   if (!condition) throw new Error(`Live qualification failed: ${message}`);
@@ -57,12 +63,15 @@ export async function createLiveQualificationReceipt({
   invariant(response.provenance.browser === 'solari-browser', 'Solari Browser provenance is absent');
   invariant(response.provenance.sandbox === 'solari-sandbox', 'Solari Sandbox provenance is absent');
   invariant(response.provenance.fixtureReplay === false, 'fixture replay cannot qualify as live evidence');
+  invariant(response.provenance.resourceCleanup?.browser === 'enforced-before-response', 'Browser cleanup enforcement is absent');
+  invariant(response.provenance.resourceCleanup?.sandbox === 'enforced-before-response', 'Sandbox cleanup enforcement is absent');
   invariant(response.optimizer.method === 'solari-sandbox', 'Sandbox is not the named optimizer');
   invariant(response.optimizer.independentlyVerified === true, 'Sandbox output was not independently verified');
   invariant(response.observations.length === 6, 'the bounded six-candidate research set is incomplete');
   invariant(response.decisions.length === 3, 'the three shopping requirements were not all decided');
   invariant(response.status === 'complete' && response.basket.completeness === 'complete', 'basket is incomplete');
   invariant(response.basket.pricedLineCount === 3, 'all three chosen lines must have visible prices');
+  invariant(response.basket.observedSubtotal === 12.79 && response.basket.currency === 'USD', 'the frozen demo basket is not exactly $12.79 USD');
   invariant(response.trust.priceClaim === 'observed-visible-price-not-guaranteed', 'price disclosure is incorrect');
   invariant(response.trust.accountAccessed === false, 'a retailer account was accessed');
   invariant(response.trust.cartModified === false, 'a retailer cart was modified');
@@ -70,6 +79,17 @@ export async function createLiveQualificationReceipt({
   invariant(response.trust.userControlsHandoff === true, 'user-controlled handoff was not preserved');
 
   const admittedBase = new URL(retailerBaseURL);
+  const observedProductIDs = response.observations.map(({ retailerProductID }) => retailerProductID).sort();
+  invariant(JSON.stringify(observedProductIDs) === JSON.stringify(EXPECTED_PRODUCT_IDS), 'the exact six admitted product IDs were not observed');
+  const observationsByID = new Map(response.observations.map((observation) => [observation.observationID, observation]));
+  for (const decision of response.decisions) {
+    const expected = EXPECTED_SELECTIONS[decision.requirementID];
+    const observation = observationsByID.get(decision.observationID);
+    invariant(expected && observation, 'a decision does not reference the frozen demo evidence set');
+    invariant(observation.retailerProductID === expected.productID, 'Sandbox selected an unexpected product ID');
+    invariant(decision.packageCount === expected.packageCount, 'Sandbox selected an unexpected package count');
+    invariant(decision.lineTotal === expected.lineTotal, 'Sandbox returned an unexpected line total');
+  }
   for (const observation of response.observations) {
     const source = new URL(observation.sourceURL);
     invariant(source.origin === admittedBase.origin, 'an observation came from an unowned origin');
@@ -108,12 +128,13 @@ export async function createLiveQualificationReceipt({
       responseCompletedAt: response.completedAt,
       dataMode,
       responseSha256: sourceHash,
-      browser: 'solari-browser-confirmed',
-      sandbox: 'solari-sandbox-confirmed',
+      assuranceScope: 'first-party-execution-receipt',
+      browser: 'solari-browser-provider-completed',
+      sandbox: 'solari-sandbox-provider-completed',
       fixtureReplay: false,
       resourceCleanup: {
-        browserPagesSessionAndClient: 'confirmed-before-success-response',
-        sandbox: 'confirmed-killed-before-success-response'
+        browserPagesSessionAndClient: 'first-party-enforced-before-success-response',
+        sandbox: 'first-party-enforced-before-success-response'
       }
     },
     evidence: response.observations.map(sanitizeObservation),

@@ -1,6 +1,7 @@
 import { Solari } from '@solarisdk/browser';
 import { freshness } from './fixture-provider.js';
 import { SolariResearchError } from './errors.js';
+import { timeoutWithinDeadline } from './deadline.js';
 
 function normalizeUnit(value) {
   const unit = String(value ?? '').trim().toLowerCase();
@@ -91,11 +92,15 @@ export class SolariBrowserProvider {
     this.solariFactory = solariFactory;
   }
 
-  async observe(request) {
+  async observe(request, { deadlineAt, clock = Date.now } = {}) {
     if (!this.apiKey) {
       throw new SolariResearchError('solari_unavailable', 'Solari is unavailable because the server-side API key is not configured.', { status: 503 });
     }
-    const client = this.solariFactory({ apiKey: this.apiKey, ...(this.baseURL ? { baseUrl: this.baseURL } : {}), timeoutMs: this.timeoutMs });
+    const client = this.solariFactory({
+      apiKey: this.apiKey,
+      ...(this.baseURL ? { baseUrl: this.baseURL } : {}),
+      timeoutMs: timeoutWithinDeadline(this.timeoutMs, deadlineAt, clock)
+    });
     let browser;
     let activePage;
     try {
@@ -113,12 +118,17 @@ export class SolariBrowserProvider {
           const page = await browser.newPage();
           activePage = page;
           try {
-            await page.goto(candidate.sourceURL, { waitUntil: 'domcontentloaded', timeout: this.timeoutMs });
+            await page.goto(candidate.sourceURL, {
+              waitUntil: 'domcontentloaded',
+              timeout: timeoutWithinDeadline(this.timeoutMs, deadlineAt, clock)
+            });
             if (typeof page.url !== 'function' || new URL(page.url()).href !== new URL(candidate.sourceURL).href) {
               throw new SolariResearchError('retailer_redirect_not_allowed', 'The admitted page redirected outside its exact candidate URL.', { status: 502 });
             }
             if (request.retailerID === 'smartcart-demo-grocer') {
-              await page.waitForSelector('[data-solari-product="true"]', { timeout: this.timeoutMs });
+              await page.waitForSelector('[data-solari-product="true"]', {
+                timeout: timeoutWithinDeadline(this.timeoutMs, deadlineAt, clock)
+              });
             }
             const data = await page.evaluate(() => {
               const root = document.querySelector('[data-solari-product="true"]');

@@ -38,11 +38,18 @@
       }
     },
     "provenance": {
-      "type": "object", "additionalProperties": false, "required": ["browser", "sandbox", "fixtureReplay"],
+      "type": "object", "additionalProperties": false, "required": ["browser", "sandbox", "fixtureReplay", "resourceCleanup"],
       "properties": {
         "browser": { "enum": ["not-run-fixture-replay", "solari-browser"] },
         "sandbox": { "enum": ["not-run-fixture-replay", "solari-sandbox"] },
-        "fixtureReplay": { "type": "boolean" }
+        "fixtureReplay": { "type": "boolean" },
+        "resourceCleanup": {
+          "type": "object", "additionalProperties": false, "required": ["browser", "sandbox"],
+          "properties": {
+            "browser": { "enum": ["not-run-fixture-replay", "enforced-before-response"] },
+            "sandbox": { "enum": ["not-run-fixture-replay", "enforced-before-response"] }
+          }
+        }
       }
     },
     "trust": {

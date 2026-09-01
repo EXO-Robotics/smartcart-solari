@@ -68,6 +68,9 @@ test('POST /v1/solari/research returns the bounded fixture replay with explicit 
     assert.equal(payload.executionMode, 'recorded_fixture');
     assert.equal(payload.provenance.fixtureReplay, true);
     assert.equal(payload.provenance.browser, 'not-run-fixture-replay');
+    assert.deepEqual(payload.provenance.resourceCleanup, {
+      browser: 'not-run-fixture-replay', sandbox: 'not-run-fixture-replay'
+    });
     assert.equal(payload.basket.observedSubtotal, 12.79);
     assert.equal(payload.trust.checkoutAutomated, false);
   } finally { await server.close(); }
@@ -94,6 +97,21 @@ test('per-client Solari rate limit is narrowly independent from the general back
     assert.equal(limited.response.status, 429);
     assert.equal(limited.payload.error.code, 'rate_limited');
     assert.ok(Number(limited.response.headers.get('retry-after')) >= 1);
+  } finally { await server.close(); }
+});
+
+test('untrusted forwarded addresses cannot bypass the Solari rate limit', async () => {
+  const server = await listen({
+    config: {
+      solariRateLimitPerMinute: 1,
+      solariMaxBodyBytes: 32_768,
+      solariTrustForwardedFor: false
+    }
+  });
+  try {
+    assert.equal((await post(server.api, await fixture(), { 'x-forwarded-for': '198.51.100.10' })).response.status, 200);
+    const spoofed = await post(server.api, await fixture(), { 'x-forwarded-for': '203.0.113.20' });
+    assert.equal(spoofed.response.status, 429);
   } finally { await server.close(); }
 });
 

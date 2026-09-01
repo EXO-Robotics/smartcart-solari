@@ -13,9 +13,11 @@ function routeForRequest(url) {
   return ['/api/solari.js', '/api/solari'].includes(url.pathname) && url.searchParams.get('route') === 'research';
 }
 
-function clientKey(request) {
-  const forwarded = request.headers['x-forwarded-for'];
-  const value = typeof forwarded === 'string' ? forwarded.split(',')[0].trim() : request.socket?.remoteAddress;
+function clientKey(request, trustForwardedFor = false) {
+  const forwarded = trustForwardedFor ? request.headers['x-forwarded-for'] : undefined;
+  const value = typeof forwarded === 'string' && forwarded.trim()
+    ? forwarded.split(',')[0].trim()
+    : request.socket?.remoteAddress;
   return value || 'unknown';
 }
 
@@ -76,7 +78,7 @@ export function createPublicSolariApi(options = {}) {
         send(response, 404, { error: { code: 'route_not_found', message: 'Route does not exist.', retryable: false } }, traceID);
         return;
       }
-      const rate = limiter.consume(clientKey(request));
+      const rate = limiter.consume(clientKey(request, config.solariTrustForwardedFor));
       const rateHeaders = {
         'x-rate-limit-limit': String(rate.limit),
         'x-rate-limit-remaining': String(rate.remaining),

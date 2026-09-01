@@ -229,12 +229,11 @@ struct SolariEvidenceValidator {
             }
             guard !observation.observationID.isEmpty,
                   observation.observationID.count <= 100,
-                  !observation.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                  observation.title.count <= 500,
-                  !observation.packageDescription.isEmpty,
-                  observation.packageDescription.count <= 160,
-                  observation.packageQuantity.isFinite,
-                  observation.packageQuantity > 0,
+                  observation.title.map({
+                      !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && $0.count <= 500
+                  }) ?? true,
+                  observation.packageDescription.map({ !$0.isEmpty && $0.count <= 160 }) ?? true,
+                  observation.packageQuantity.map({ $0.isFinite && $0 > 0 }) ?? true,
                   observation.ambiguityReasons.count <= 8,
                   observation.ambiguityReasons.allSatisfy({ !$0.isEmpty && $0.count <= 300 }) else {
                 throw SolariEvidenceContractError.invalidObservation
@@ -263,22 +262,29 @@ struct SolariEvidenceValidator {
             }
             guard let requirement = requirementsByID[decision.requirementID],
                   let observation = observationsByID[decision.observationID],
+                  let packageQuantity = observation.packageQuantity,
+                  let packageUnit = observation.packageUnit,
                   observation.requirementID == decision.requirementID,
-                  observation.packageUnit == decision.quantityUnit,
+                  packageUnit == decision.quantityUnit,
                   decision.confidence == observation.confidence,
                   decision.ambiguityReasons == observation.ambiguityReasons else {
                 throw SolariEvidenceContractError.invalidDecisionReference
             }
             guard (1...50).contains(decision.packageCount),
                   approximatelyEqual(decision.requiredQuantity, requirement.requiredQuantity),
-                  decision.quantityUnit == requirement.unit.evidenceUnit,
+                  compatible(requirement.unit.evidenceUnit, decision.quantityUnit),
                   (1...8).contains(decision.rationale.count),
                   decision.rationale.allSatisfy({ !$0.isEmpty && $0.count <= 240 }),
                   decision.substitutionNote.map({ $0.count <= 300 }) ?? true else {
                 throw SolariEvidenceContractError.invalidPackageMath
             }
-            let expectedCoverage = observation.packageQuantity * Double(decision.packageCount)
-            let expectedSurplus = expectedCoverage - decision.requiredQuantity
+            guard let requiredBase = baseQuantity(requirement.requiredQuantity, unit: requirement.unit.evidenceUnit),
+                  let packageBase = baseQuantity(packageQuantity, unit: packageUnit),
+                  let decisionScale = unitScale(decision.quantityUnit) else {
+                throw SolariEvidenceContractError.invalidPackageMath
+            }
+            let expectedCoverage = packageQuantity * Double(decision.packageCount)
+            let expectedSurplus = (packageBase * Double(decision.packageCount) - requiredBase) / decisionScale
             guard approximatelyEqual(decision.coveredQuantity, expectedCoverage),
                   expectedSurplus >= -0.000_1,
                   approximatelyEqual(decision.surplusQuantity, max(0, expectedSurplus)) else {
@@ -382,6 +388,23 @@ struct SolariEvidenceValidator {
     private func approximatelyEqual(_ lhs: Double, _ rhs: Double) -> Bool {
         guard lhs.isFinite, rhs.isFinite else { return false }
         return abs(lhs - rhs) <= 0.000_1 * max(1, abs(lhs), abs(rhs))
+    }
+
+    private func compatible(_ lhs: SolariEvidenceUnit, _ rhs: SolariEvidenceUnit) -> Bool {
+        (lhs == .count) == (rhs == .count)
+    }
+
+    private func unitScale(_ unit: SolariEvidenceUnit) -> Double? {
+        switch unit {
+        case .ounce: 1
+        case .pound: 16
+        case .count: 1
+        }
+    }
+
+    private func baseQuantity(_ value: Double, unit: SolariEvidenceUnit) -> Double? {
+        guard value.isFinite, let scale = unitScale(unit) else { return nil }
+        return value * scale
     }
 
     private func decimalEqual(_ lhs: Decimal, _ rhs: Decimal) -> Bool {

@@ -96,7 +96,10 @@
   ],
   "basket": { "completeness": "complete", "observedSubtotal": 12.79, "currency": "USD", "pricedLineCount": 3, "missingPriceLineCount": 0, "unmatchedRequirementCount": 0 },
   "optimizer": { "method": "smartcart-deterministic-fixture-replay", "algorithmVersion": "smallest-sufficient-package-v1", "independentlyVerified": false },
-  "provenance": { "browser": "not-run-fixture-replay", "sandbox": "not-run-fixture-replay", "fixtureReplay": true },
+  "provenance": {
+    "browser": "not-run-fixture-replay", "sandbox": "not-run-fixture-replay", "fixtureReplay": true,
+    "resourceCleanup": { "browser": "not-run-fixture-replay", "sandbox": "not-run-fixture-replay" }
+  },
   "trust": {
     "priceClaim": "recorded-fixture-not-live", "accountAccessed": false, "cartModified": false, "checkoutAutomated": false,
     "userControlsHandoff": true,

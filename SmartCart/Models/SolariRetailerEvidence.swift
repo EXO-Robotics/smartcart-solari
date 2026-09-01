@@ -114,10 +114,10 @@ struct SolariRetailerObservation: Codable, Identifiable, Hashable {
     let requirementID: UUID
     let retailerProductID: String
     let sourceURL: URL
-    let title: String
-    let packageDescription: String
-    let packageQuantity: Double
-    let packageUnit: SolariEvidenceUnit
+    let title: String?
+    let packageDescription: String?
+    let packageQuantity: Double?
+    let packageUnit: SolariEvidenceUnit?
     let visiblePrice: Decimal?
     let currency: String?
     let observedAt: Date

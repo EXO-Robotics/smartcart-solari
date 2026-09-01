@@ -104,6 +104,27 @@ final class SolariEvidenceContractTests: XCTestCase {
         }
     }
 
+    func testUnselectedNullableObservationDecodesAndRemainsReviewable() throws {
+        let request = try decodeRequest()
+        let result = try mutatedResult { object in
+            var observations = object["observations"] as! [[String: Any]]
+            observations[2]["title"] = NSNull()
+            observations[2]["packageDescription"] = NSNull()
+            observations[2]["packageQuantity"] = NSNull()
+            observations[2]["packageUnit"] = NSNull()
+            observations[2]["visiblePrice"] = NSNull()
+            observations[2]["currency"] = NSNull()
+            observations[2]["confidence"] = "low"
+            observations[2]["ambiguityReasons"] = ["Product details could not be normalized."]
+            object["observations"] = observations
+        }
+
+        let validated = try validator().validate(result, for: request)
+        XCTAssertNil(validated.result.observations[2].title)
+        XCTAssertNil(validated.result.observations[2].packageQuantity)
+        XCTAssertTrue(validated.warnings.contains(where: { $0.contains("ambiguous") }))
+    }
+
     func testExactDemoPlanBuildsBoundedCredentialFreeRequest() throws {
         let request = try XCTUnwrap(
             SolariResearchRequestBuilder.makeIfEligible(

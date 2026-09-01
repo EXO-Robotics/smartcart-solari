@@ -24,7 +24,10 @@ async function liveResult() {
     algorithmVersion: 'smallest-sufficient-package-v1',
     independentlyVerified: true
   };
-  result.provenance = { browser: 'solari-browser', sandbox: 'solari-sandbox', fixtureReplay: false };
+  result.provenance = {
+    browser: 'solari-browser', sandbox: 'solari-sandbox', fixtureReplay: false,
+    resourceCleanup: { browser: 'enforced-before-response', sandbox: 'enforced-before-response' }
+  };
   result.trust = {
     priceClaim: 'observed-visible-price-not-guaranteed',
     accountAccessed: false,
@@ -60,8 +63,9 @@ test('live qualifier creates a public receipt only for real Browser plus Sandbox
     workflowRunAttempt: '1',
     qualifiedAt: '2026-09-01T12:01:00Z'
   });
-  assert.equal(receipt.execution.browser, 'solari-browser-confirmed');
-  assert.equal(receipt.execution.sandbox, 'solari-sandbox-confirmed');
+  assert.equal(receipt.execution.assuranceScope, 'first-party-execution-receipt');
+  assert.equal(receipt.execution.browser, 'solari-browser-provider-completed');
+  assert.equal(receipt.execution.sandbox, 'solari-sandbox-provider-completed');
   assert.equal(receipt.basket.observedSubtotal, 12.79);
   assert.equal(receipt.evidence.length, 6);
   assert.ok(receipt.evidence.every((observation) => !('rawText' in observation)));
@@ -97,6 +101,36 @@ test('live qualifier rejects fixture replay, missing provenance, and misleading 
     responseText: JSON.stringify(unsafe),
     retailerBaseURL
   }), /does not satisfy|retailer cart was modified/);
+});
+
+test('live qualifier rejects changed Sandbox selections and basket totals', async () => {
+  const changedSelection = await liveResult();
+  const parmesanDecision = changedSelection.decisions.find(
+    ({ requirementID }) => requirementID === '20000000-0000-0000-0000-000000000003'
+  );
+  const shreddedParmesan = changedSelection.observations.find(
+    ({ retailerProductID }) => retailerProductID === '623835750'
+  );
+  parmesanDecision.observationID = shreddedParmesan.observationID;
+  parmesanDecision.lineTotal = shreddedParmesan.visiblePrice;
+  changedSelection.basket.observedSubtotal = 14.69;
+  await assert.rejects(() => createLiveQualificationReceipt({
+    status: 200,
+    dataMode: 'live',
+    response: changedSelection,
+    responseText: JSON.stringify(changedSelection),
+    retailerBaseURL
+  }), /frozen demo basket is not exactly|unexpected product ID/);
+
+  const changedSubtotal = await liveResult();
+  changedSubtotal.basket.observedSubtotal = 12.8;
+  await assert.rejects(() => createLiveQualificationReceipt({
+    status: 200,
+    dataMode: 'live',
+    response: changedSubtotal,
+    responseText: JSON.stringify(changedSubtotal),
+    retailerBaseURL
+  }), /frozen demo basket is not exactly|does not satisfy/);
 });
 
 test('live qualifier can call only the loopback SmartCart endpoint', () => {

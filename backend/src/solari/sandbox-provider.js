@@ -5,6 +5,7 @@ import {
   summarizeDecisions
 } from './optimizer.js';
 import { SolariResearchError } from './errors.js';
+import { timeoutWithinDeadline } from './deadline.js';
 
 const PYTHON_OPTIMIZER = String.raw`
 import json, math, sys
@@ -57,22 +58,26 @@ export class SolariSandboxOptimizer {
     this.clientFactory = clientFactory;
   }
 
-  async optimize(requirements, observations) {
+  async optimize(requirements, observations, { deadlineAt, clock = Date.now } = {}) {
     if (!this.apiKey) {
       throw new SolariResearchError('solari_unavailable', 'Solari is unavailable because the server-side API key is not configured.', { status: 503 });
     }
-    const client = this.clientFactory({ apiKey: this.apiKey, baseUrl: this.baseURL, callTimeoutMs: this.timeoutMs });
+    const client = this.clientFactory({
+      apiKey: this.apiKey,
+      baseUrl: this.baseURL,
+      callTimeoutMs: timeoutWithinDeadline(this.timeoutMs, deadlineAt, clock)
+    });
     let sandbox;
     try {
       sandbox = await client.create({
         template: 'base',
-        timeoutMs: this.timeoutMs,
+        timeoutMs: timeoutWithinDeadline(this.timeoutMs, deadlineAt, clock),
         lifecycle: { onTimeout: 'kill', autoResume: false },
         metadata: { purpose: 'smartcart-public-basket-optimization-v1' }
       });
       const result = await sandbox.commands.run('python3', {
         args: ['-c', PYTHON_OPTIMIZER, JSON.stringify(publicPayload(requirements, observations))],
-        timeoutMs: this.timeoutMs
+        timeoutMs: timeoutWithinDeadline(this.timeoutMs, deadlineAt, clock)
       });
       if (result.exitCode !== 0 || result.stderr.trim()) {
         throw new SolariResearchError('solari_sandbox_failed', 'Solari Sandbox could not complete the bounded optimizer.', { status: 502 });
