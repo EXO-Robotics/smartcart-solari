@@ -51,6 +51,15 @@ async function qualifiedResult() {
 
 const result = await qualifiedResult();
 
+test('V4 qualification trip exercises a real bounded low-waste tradeoff', () => {
+  assert.ok(result.decisions.some(({ retailerProductID }) => retailerProductID === 'dg4-olive-oil-smooth-16floz'));
+  assert.equal(result.comparison.cheapestAdequateSubtotal, 24.2);
+  assert.equal(result.comparison.selectedSubtotal, 24.83);
+  assert.equal(result.comparison.premiumOverCheapest, 0.63);
+  assert.ok(result.comparison.relativeSurplusAvoided > 0.98);
+  assert.ok(result.comparison.relativeSurplusAvoided < 0.99);
+});
+
 test('V4 qualification receipt is sanitized, exact-request-bound, and truthfully operator-qualified', async () => {
   const receipt = await createV4QualificationReceipt(result, {
     request, qualifiedAt: '2026-09-01T16:01:00Z', commit: '0123456789abcdef0123456789abcdef01234567', workflowRunID: '33540000000', workflowRunAttempt: '1'

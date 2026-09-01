@@ -4,6 +4,29 @@ import XCTest
 final class SolariEvidenceContractTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_788_278_400)
 
+    func testBasketComparisonPresentationUsesScoresInsteadOfFalsePercentages() {
+        let tradeoff = SolariBasketComparison(
+            cheapestAdequateSubtotal: 24.20, selectedSubtotal: 24.83, premiumOverCheapest: 0.63,
+            cheapestAggregateRelativeSurplus: 21.065711, selectedAggregateRelativeSurplus: 20.0799,
+            relativeSurplusAvoided: 0.985811, maxPremiumOverCheapest: 0.75, currency: "USD"
+        )
+        let presentation = SolariBasketComparisonPresentation(tradeoff)
+        XCTAssertTrue(presentation.headline.contains("package-overage score by 0.99"))
+        XCTAssertTrue(presentation.detail.contains("package-overage score"))
+        XCTAssertFalse(presentation.headline.contains("%"))
+        XCTAssertFalse(presentation.detail.contains("%"))
+
+        let cheapest = SolariBasketComparison(
+            cheapestAdequateSubtotal: 24.20, selectedSubtotal: 24.20, premiumOverCheapest: 0,
+            cheapestAggregateRelativeSurplus: 21.065711, selectedAggregateRelativeSurplus: 21.065711,
+            relativeSurplusAvoided: 0, maxPremiumOverCheapest: 0.75, currency: "USD"
+        )
+        XCTAssertEqual(
+            SolariBasketComparisonPresentation(cheapest).headline,
+            "Selected basket is the cheapest adequate option for this trip."
+        )
+    }
+
     func testOneOfEightWaitingLinesProducesPartialCoveragePlan() {
         let plan = eligiblePlan([item(1, "Chicken breast", 1.5, "lb", "10414680")] + (2...8).map(unsupported))
         XCTAssertEqual(plan.request.requirements.count, 1)
@@ -443,7 +466,7 @@ final class SolariEvidenceContractTests: XCTestCase {
         case "dg4-penne-glutenfree-24oz": .init(title: "Penne gluten free", quantity: 680.388_555, unit: .gram, price: 11.98)
         case "dg4-olive-oil-value-17floz": .init(title: "Olive oil value", quantity: 502.750_002_562_5, unit: .milliliter, price: 6.12)
         case "dg4-olive-oil-organic-17floz": .init(title: "Olive oil organic", quantity: 502.750_002_562_5, unit: .milliliter, price: 7.36)
-        case "dg4-olive-oil-smooth-16floz": .init(title: "Olive oil smooth", quantity: 473.176_473, unit: .milliliter, price: 7.38)
+        case "dg4-olive-oil-smooth-16floz": .init(title: "Olive oil smooth", quantity: 473.176_473, unit: .milliliter, price: 6.75)
         case "dg4-parmesan-value-6oz": .init(title: "Parmesan value", quantity: 170.097_138_75, unit: .gram, price: 2.08)
         case "dg4-parmesan-frigo-5oz": .init(title: "Parmesan cup", quantity: 141.747_615_625, unit: .gram, price: 3.28)
         case "dg4-parmesan-kraft-6oz": .init(title: "Parmesan premium", quantity: 170.097_138_75, unit: .gram, price: 4.98)

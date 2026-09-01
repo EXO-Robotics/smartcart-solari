@@ -18,7 +18,7 @@ export const V4_PRODUCT_CATALOG = Object.freeze({
   'dg4-penne-glutenfree-24oz': product('pasta', 'mass', 'Demo Penne Pasta — Gluten Free', 24, 'oz', 11.98),
   'dg4-olive-oil-value-17floz': product('olive-oil', 'volume', 'Demo Extra Virgin Olive Oil — Value', 17, 'fl oz', 6.12),
   'dg4-olive-oil-organic-17floz': product('olive-oil', 'volume', 'Demo Extra Virgin Olive Oil — Organic', 17, 'fl oz', 7.36),
-  'dg4-olive-oil-smooth-16floz': product('olive-oil', 'volume', 'Demo Extra Virgin Olive Oil — Smooth', 16, 'fl oz', 7.38),
+  'dg4-olive-oil-smooth-16floz': product('olive-oil', 'volume', 'Demo Extra Virgin Olive Oil — Smooth', 16, 'fl oz', 6.75),
   'dg4-heavy-cream-value-16floz': product('heavy-cream', 'volume', 'Demo Heavy Whipping Cream — Value', 16, 'fl oz', 2.96),
   'dg4-heavy-cream-organic-16floz': product('heavy-cream', 'volume', 'Demo Heavy Whipping Cream — Organic', 16, 'fl oz', 5.87),
   'dg4-parmesan-value-6oz': product('parmesan', 'mass', 'Demo Finely Shredded Parmesan — Value', 6, 'oz', 2.08),

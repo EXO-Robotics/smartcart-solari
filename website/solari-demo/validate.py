@@ -29,7 +29,7 @@ CURRENT_PRODUCT_SPECS = {
 V4_PRODUCT_SPECS = {
     "dg4-chicken-value-3lb": (3, "lb", 947), "dg4-chicken-organic-1-5lb": (1.5, "lb", 876), "dg4-chicken-free-range-3lb": (3, "lb", 1392),
     "dg4-penne-value-16oz": (16, "oz", 124), "dg4-penne-glutenfree-24oz": (24, "oz", 1198),
-    "dg4-olive-oil-value-17floz": (17, "fl oz", 612), "dg4-olive-oil-organic-17floz": (17, "fl oz", 736), "dg4-olive-oil-smooth-16floz": (16, "fl oz", 738),
+    "dg4-olive-oil-value-17floz": (17, "fl oz", 612), "dg4-olive-oil-organic-17floz": (17, "fl oz", 736), "dg4-olive-oil-smooth-16floz": (16, "fl oz", 675),
     "dg4-heavy-cream-value-16floz": (16, "fl oz", 296), "dg4-heavy-cream-organic-16floz": (16, "fl oz", 587),
     "dg4-parmesan-value-6oz": (6, "oz", 208), "dg4-parmesan-frigo-5oz": (5, "oz", 328), "dg4-parmesan-kraft-6oz": (6, "oz", 498),
     "dg4-garlic-bulb-8ct": (8, "count", 78), "dg4-garlic-peeled-6oz": (6, "oz", 307), "dg4-garlic-minced-8oz": (8, "oz", 312),

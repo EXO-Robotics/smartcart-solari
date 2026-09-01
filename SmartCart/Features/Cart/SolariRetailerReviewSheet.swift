@@ -1,5 +1,38 @@
 import SwiftUI
 
+struct SolariBasketComparisonPresentation: Equatable {
+    let headline: String
+    let detail: String
+
+    init(_ comparison: SolariBasketComparison) {
+        let premium = NSDecimalNumber(decimal: comparison.premiumOverCheapest).doubleValue
+        let selectedSubtotal = Self.currencyText(comparison.selectedSubtotal)
+        let cheapestSubtotal = Self.currencyText(comparison.cheapestAdequateSubtotal)
+        let premiumCap = Self.currencyText(comparison.maxPremiumOverCheapest)
+
+        if premium <= 0.005 || comparison.relativeSurplusAvoided <= 0.0005 {
+            headline = "Selected basket is the cheapest adequate option for this trip."
+        } else {
+            headline =
+                "Spend \(Self.currencyText(comparison.premiumOverCheapest)) above the cheapest adequate basket " +
+                "to reduce the package-overage score by \(Self.scoreText(comparison.relativeSurplusAvoided))."
+        }
+
+        detail =
+            "Selected: \(selectedSubtotal), package-overage score \(Self.scoreText(comparison.selectedAggregateRelativeSurplus)) · " +
+            "Cheapest: \(cheapestSubtotal), package-overage score \(Self.scoreText(comparison.cheapestAggregateRelativeSurplus)) · " +
+            "Premium cap: \(premiumCap)"
+    }
+
+    private static func currencyText(_ value: Decimal) -> String {
+        NSDecimalNumber(decimal: value).doubleValue.formatted(.currency(code: "USD"))
+    }
+
+    private static func scoreText(_ value: Double) -> String {
+        value.formatted(.number.precision(.fractionLength(0...2)))
+    }
+}
+
 struct SolariRetailerReviewSheet: View {
     @Environment(AppModel.self) private var appModel
     @Environment(SolariResearchStore.self) private var researchStore
@@ -194,24 +227,16 @@ struct SolariRetailerReviewSheet: View {
     }
 
     private func comparisonSummary(_ comparison: SolariBasketComparison) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let presentation = SolariBasketComparisonPresentation(comparison)
+        return VStack(alignment: .leading, spacing: 8) {
             Label("Low-waste tradeoff", systemImage: "scale.3d")
                 .font(.headline)
                 .foregroundStyle(SmartCartTheme.navy)
-            Text(
-                "Spend \(currencyText(comparison.premiumOverCheapest)) above the cheapest adequate basket " +
-                "to reduce normalized package surplus by \(percentText(comparison.relativeSurplusAvoided))."
-            )
+            Text(presentation.headline)
                 .font(.system(.title3, design: .rounded, weight: .bold))
                 .foregroundStyle(SmartCartTheme.navy)
                 .fixedSize(horizontal: false, vertical: true)
-            Text(
-                "Selected: \(currencyText(comparison.selectedSubtotal)), " +
-                "\(percentText(comparison.selectedAggregateRelativeSurplus)) aggregate relative surplus · " +
-                "Cheapest: \(currencyText(comparison.cheapestAdequateSubtotal)), " +
-                "\(percentText(comparison.cheapestAggregateRelativeSurplus)) aggregate relative surplus · " +
-                "Premium cap: \(currencyText(comparison.maxPremiumOverCheapest))"
-            )
+            Text(presentation.detail)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(SmartCartTheme.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
@@ -522,10 +547,6 @@ struct SolariRetailerReviewSheet: View {
 
     private func quantityText(_ value: Double) -> String {
         value.formatted(.number.precision(.fractionLength(0...2)))
-    }
-
-    private func percentText(_ value: Double) -> String {
-        value.formatted(.percent.precision(.fractionLength(0...1)))
     }
 
     private func unitText(_ unit: SolariEvidenceUnit) -> String {
