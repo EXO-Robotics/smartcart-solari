@@ -1,0 +1,309 @@
+{
+  "receiptVersion": "smartcart-solari-v3-qualification-v1",
+  "qualifiedAt": "2026-09-01T15:59:15.244Z",
+  "submission": {
+    "repository": "EXO-Robotics/smartcart-solari",
+    "commit": "ced1154e76a376a7d630900f7c5f4b4317a3932d"
+  },
+  "workflow": {
+    "runID": "33529059284",
+    "runAttempt": "1"
+  },
+  "execution": {
+    "requestID": "61dfcca5-6511-4aaa-a88c-0dd75e44ffd1",
+    "completedAt": "2026-09-01T15:59:15.213Z",
+    "assuranceScope": "server-side-direct-service-receipt",
+    "accessBoundary": "operator-qualification",
+    "browser": "solari-browser-provider-completed",
+    "sandbox": "solari-sandbox-provider-completed",
+    "resourceCleanup": {
+      "browser": "enforced-before-receipt",
+      "sandbox": "enforced-before-receipt"
+    },
+    "resultSha256": "0a0358ad273844a554b53ebc3be56cda0415dbedffa5108045232b74480930b1"
+  },
+  "selectedProductIDs": [
+    "dg-chicken-rightsize-1lb",
+    "dg-penne-value-16oz",
+    "dg-parmesan-value-6oz"
+  ],
+  "basket": {
+    "completeness": "complete",
+    "observedSubtotal": 13.32,
+    "currency": "USD",
+    "pricedLineCount": 3,
+    "missingPriceLineCount": 0,
+    "unmatchedRequirementCount": 0
+  },
+  "comparison": {
+    "cheapestAdequateSubtotal": 12.79,
+    "selectedSubtotal": 13.32,
+    "premiumOverCheapest": 0.53,
+    "cheapestAggregateSurplusOunces": 31,
+    "selectedAggregateSurplusOunces": 15,
+    "surplusAvoidedOunces": 16,
+    "maxPremiumOverCheapest": 0.75,
+    "currency": "USD"
+  },
+  "optimizer": {
+    "method": "solari-sandbox",
+    "algorithmVersion": "surplus-within-price-cap-v1",
+    "objective": "minimize-package-surplus",
+    "authority": "solari-sandbox",
+    "verification": "smartcart-policy-invariants-no-local-global-argmin",
+    "policyInvariantsVerified": true
+  },
+  "evidence": [
+    {
+      "schemaVersion": "retailer-observation-v3",
+      "observationID": "obs-61dfcca5-6511-4aaa-a88c-0dd75e44ffd1-dg-chicken-value-3lb",
+      "requirementID": "40000000-0000-4000-8000-000000000001",
+      "retailerProductID": "dg-chicken-value-3lb",
+      "sourceURL": "https://exo-robotics.github.io/smartcart-solari/website/solari-demo/retailer/product/dg-chicken-value-3lb.html",
+      "title": "Demo Boneless Skinless Chicken Breasts — Value",
+      "packageDescription": "3 pound",
+      "packageQuantity": 3,
+      "packageUnit": "pound",
+      "visiblePrice": 9.47,
+      "currency": "USD",
+      "observedAt": "2026-09-01T15:59:06.656Z",
+      "confidence": "high",
+      "ambiguityReasons": [],
+      "proteinGramsPerPackage": null,
+      "collectionMethod": "solari-browser-controlled-demo",
+      "location": {
+        "kind": "controlled-demo",
+        "label": "SmartCart Demo Grocer synthetic catalog"
+      },
+      "catalogEra": "current-v3",
+      "syntheticPrice": true,
+      "freshness": {
+        "status": "fresh",
+        "ageSeconds": 0,
+        "maxAgeSeconds": 86400
+      }
+    },
+    {
+      "schemaVersion": "retailer-observation-v3",
+      "observationID": "obs-61dfcca5-6511-4aaa-a88c-0dd75e44ffd1-dg-chicken-rightsize-1lb",
+      "requirementID": "40000000-0000-4000-8000-000000000001",
+      "retailerProductID": "dg-chicken-rightsize-1lb",
+      "sourceURL": "https://exo-robotics.github.io/smartcart-solari/website/solari-demo/retailer/product/dg-chicken-rightsize-1lb.html",
+      "title": "Demo Boneless Skinless Chicken Breasts — Right Size",
+      "packageDescription": "1 pound",
+      "packageQuantity": 1,
+      "packageUnit": "pound",
+      "visiblePrice": 5,
+      "currency": "USD",
+      "observedAt": "2026-09-01T15:59:08.176Z",
+      "confidence": "high",
+      "ambiguityReasons": [],
+      "proteinGramsPerPackage": null,
+      "collectionMethod": "solari-browser-controlled-demo",
+      "location": {
+        "kind": "controlled-demo",
+        "label": "SmartCart Demo Grocer synthetic catalog"
+      },
+      "catalogEra": "current-v3",
+      "syntheticPrice": true,
+      "freshness": {
+        "status": "fresh",
+        "ageSeconds": 0,
+        "maxAgeSeconds": 86400
+      }
+    },
+    {
+      "schemaVersion": "retailer-observation-v3",
+      "observationID": "obs-61dfcca5-6511-4aaa-a88c-0dd75e44ffd1-dg-penne-value-16oz",
+      "requirementID": "40000000-0000-4000-8000-000000000002",
+      "retailerProductID": "dg-penne-value-16oz",
+      "sourceURL": "https://exo-robotics.github.io/smartcart-solari/website/solari-demo/retailer/product/dg-penne-value-16oz.html",
+      "title": "Demo Penne Pasta — Value",
+      "packageDescription": "16 ounce",
+      "packageQuantity": 16,
+      "packageUnit": "ounce",
+      "visiblePrice": 1.24,
+      "currency": "USD",
+      "observedAt": "2026-09-01T15:59:09.659Z",
+      "confidence": "high",
+      "ambiguityReasons": [],
+      "proteinGramsPerPackage": null,
+      "collectionMethod": "solari-browser-controlled-demo",
+      "location": {
+        "kind": "controlled-demo",
+        "label": "SmartCart Demo Grocer synthetic catalog"
+      },
+      "catalogEra": "current-v3",
+      "syntheticPrice": true,
+      "freshness": {
+        "status": "fresh",
+        "ageSeconds": 0,
+        "maxAgeSeconds": 86400
+      }
+    },
+    {
+      "schemaVersion": "retailer-observation-v3",
+      "observationID": "obs-61dfcca5-6511-4aaa-a88c-0dd75e44ffd1-dg-penne-rightsize-12oz",
+      "requirementID": "40000000-0000-4000-8000-000000000002",
+      "retailerProductID": "dg-penne-rightsize-12oz",
+      "sourceURL": "https://exo-robotics.github.io/smartcart-solari/website/solari-demo/retailer/product/dg-penne-rightsize-12oz.html",
+      "title": "Demo Penne Pasta — Right Size",
+      "packageDescription": "12 ounce",
+      "packageQuantity": 12,
+      "packageUnit": "ounce",
+      "visiblePrice": 1.65,
+      "currency": "USD",
+      "observedAt": "2026-09-01T15:59:11.138Z",
+      "confidence": "high",
+      "ambiguityReasons": [],
+      "proteinGramsPerPackage": null,
+      "collectionMethod": "solari-browser-controlled-demo",
+      "location": {
+        "kind": "controlled-demo",
+        "label": "SmartCart Demo Grocer synthetic catalog"
+      },
+      "catalogEra": "current-v3",
+      "syntheticPrice": true,
+      "freshness": {
+        "status": "fresh",
+        "ageSeconds": 0,
+        "maxAgeSeconds": 86400
+      }
+    },
+    {
+      "schemaVersion": "retailer-observation-v3",
+      "observationID": "obs-61dfcca5-6511-4aaa-a88c-0dd75e44ffd1-dg-parmesan-value-6oz",
+      "requirementID": "40000000-0000-4000-8000-000000000003",
+      "retailerProductID": "dg-parmesan-value-6oz",
+      "sourceURL": "https://exo-robotics.github.io/smartcart-solari/website/solari-demo/retailer/product/dg-parmesan-value-6oz.html",
+      "title": "Demo Finely Shredded Parmesan — Value",
+      "packageDescription": "6 ounce",
+      "packageQuantity": 6,
+      "packageUnit": "ounce",
+      "visiblePrice": 2.08,
+      "currency": "USD",
+      "observedAt": "2026-09-01T15:59:12.620Z",
+      "confidence": "high",
+      "ambiguityReasons": [],
+      "proteinGramsPerPackage": null,
+      "collectionMethod": "solari-browser-controlled-demo",
+      "location": {
+        "kind": "controlled-demo",
+        "label": "SmartCart Demo Grocer synthetic catalog"
+      },
+      "catalogEra": "current-v3",
+      "syntheticPrice": true,
+      "freshness": {
+        "status": "fresh",
+        "ageSeconds": 0,
+        "maxAgeSeconds": 86400
+      }
+    },
+    {
+      "schemaVersion": "retailer-observation-v3",
+      "observationID": "obs-61dfcca5-6511-4aaa-a88c-0dd75e44ffd1-dg-parmesan-rightsize-3oz",
+      "requirementID": "40000000-0000-4000-8000-000000000003",
+      "retailerProductID": "dg-parmesan-rightsize-3oz",
+      "sourceURL": "https://exo-robotics.github.io/smartcart-solari/website/solari-demo/retailer/product/dg-parmesan-rightsize-3oz.html",
+      "title": "Demo Finely Shredded Parmesan — Right Size",
+      "packageDescription": "3 ounce",
+      "packageQuantity": 3,
+      "packageUnit": "ounce",
+      "visiblePrice": 2.42,
+      "currency": "USD",
+      "observedAt": "2026-09-01T15:59:14.090Z",
+      "confidence": "high",
+      "ambiguityReasons": [],
+      "proteinGramsPerPackage": null,
+      "collectionMethod": "solari-browser-controlled-demo",
+      "location": {
+        "kind": "controlled-demo",
+        "label": "SmartCart Demo Grocer synthetic catalog"
+      },
+      "catalogEra": "current-v3",
+      "syntheticPrice": true,
+      "freshness": {
+        "status": "fresh",
+        "ageSeconds": 0,
+        "maxAgeSeconds": 86400
+      }
+    }
+  ],
+  "decisions": [
+    {
+      "schemaVersion": "basket-decision-v3",
+      "requirementID": "40000000-0000-4000-8000-000000000001",
+      "observationID": "obs-61dfcca5-6511-4aaa-a88c-0dd75e44ffd1-dg-chicken-rightsize-1lb",
+      "packageCount": 2,
+      "requiredQuantity": 1.5,
+      "coveredQuantity": 2,
+      "quantityUnit": "pound",
+      "surplusQuantity": 0.5,
+      "surplusOunces": 8,
+      "lineTotal": 10,
+      "currency": "USD",
+      "proteinGramsPerDollar": null,
+      "substitutionNote": null,
+      "rationale": [
+        "2 packages cover the reviewed requirement.",
+        "Solari Sandbox selected this line under the bounded surplus-within-price-cap policy."
+      ],
+      "confidence": "high",
+      "ambiguityReasons": []
+    },
+    {
+      "schemaVersion": "basket-decision-v3",
+      "requirementID": "40000000-0000-4000-8000-000000000002",
+      "observationID": "obs-61dfcca5-6511-4aaa-a88c-0dd75e44ffd1-dg-penne-value-16oz",
+      "packageCount": 1,
+      "requiredQuantity": 12,
+      "coveredQuantity": 16,
+      "quantityUnit": "ounce",
+      "surplusQuantity": 4,
+      "surplusOunces": 4,
+      "lineTotal": 1.24,
+      "currency": "USD",
+      "proteinGramsPerDollar": null,
+      "substitutionNote": null,
+      "rationale": [
+        "1 package cover the reviewed requirement.",
+        "Solari Sandbox selected this line under the bounded surplus-within-price-cap policy."
+      ],
+      "confidence": "high",
+      "ambiguityReasons": []
+    },
+    {
+      "schemaVersion": "basket-decision-v3",
+      "requirementID": "40000000-0000-4000-8000-000000000003",
+      "observationID": "obs-61dfcca5-6511-4aaa-a88c-0dd75e44ffd1-dg-parmesan-value-6oz",
+      "packageCount": 1,
+      "requiredQuantity": 3,
+      "coveredQuantity": 6,
+      "quantityUnit": "ounce",
+      "surplusQuantity": 3,
+      "surplusOunces": 3,
+      "lineTotal": 2.08,
+      "currency": "USD",
+      "proteinGramsPerDollar": null,
+      "substitutionNote": null,
+      "rationale": [
+        "1 package cover the reviewed requirement.",
+        "Solari Sandbox selected this line under the bounded surplus-within-price-cap policy."
+      ],
+      "confidence": "high",
+      "ambiguityReasons": []
+    }
+  ],
+  "trust": {
+    "priceClaim": "observed-visible-price-not-guaranteed",
+    "accountAccessed": false,
+    "cartModified": false,
+    "checkoutAutomated": false,
+    "userControlsHandoff": true,
+    "limitations": [
+      "Visible Demo Grocer prices are timestamped synthetic observations, not guarantees or checkout quotes.",
+      "Availability, tax, fees, fulfillment, and checkout totals remain unknown.",
+      "No account, cart, or checkout action was performed."
+    ]
+  }
+}

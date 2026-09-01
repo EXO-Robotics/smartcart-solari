@@ -1,0 +1,53 @@
+{
+  "receiptVersion": "smartcart-solari-v3-deployment-v1",
+  "observedAt": "2026-09-01T16:01:46Z",
+  "submission": {
+    "repository": "EXO-Robotics/smartcart-solari",
+    "branch": "main",
+    "commit": "ced1154e76a376a7d630900f7c5f4b4317a3932d"
+  },
+  "deployment": {
+    "provider": "vercel",
+    "project": "smartcart-solari-beta",
+    "deploymentID": "dpl_6DgqhKjWN4fm1CHpL6cWcZnWks2x",
+    "immutableURL": "https://smartcart-solari-beta-cipegeumf-blake23.vercel.app",
+    "applicationURL": "https://smartcart-solari-beta.vercel.app",
+    "target": "production",
+    "readyState": "READY"
+  },
+  "accessBoundary": {
+    "scheme": "apple-app-attest",
+    "teamID": "WCNJVRP99K",
+    "bundleID": "com.blakestudio.smartcart.solari-beta",
+    "allowedBuilds": ["4"],
+    "stateStore": "vercel-marketplace-upstash-redis",
+    "runtimeKillSwitch": "enabled",
+    "solariCredential": "server-side-secret-not-inspected",
+    "v1OperatorLiveCoDeployment": "rejected-by-configuration"
+  },
+  "smoke": {
+    "healthStatus": 200,
+    "challengeStatus": 201,
+    "v3EnvelopeContractRejectionStatus": 400,
+    "v3EnvelopeContractRejectionCode": "contract_validation_failed",
+    "v3RequestContractObserved": true,
+    "providerExecutionOnRejectedEnvelope": false
+  },
+  "credentialedV3Qualification": {
+    "workflowRunID": "33529059284",
+    "commit": "ced1154e76a376a7d630900f7c5f4b4317a3932d",
+    "browser": "solari-browser-provider-completed",
+    "sandbox": "solari-sandbox-provider-completed",
+    "fixtureReplay": false,
+    "selectedSubtotal": 13.32,
+    "premiumOverCheapest": 0.53,
+    "surplusAvoidedOunces": 16
+  },
+  "limitations": [
+    "The protected backend, Upstash challenge admission, and V3 App Attest request contract were observed in production.",
+    "The credentialed Browser and Sandbox qualification used the owned SmartCart Demo Grocer synthetic catalog, not a third-party retailer.",
+    "The qualification access boundary was direct server-side operator qualification; it does not claim a signed native App Attest request.",
+    "A physical iPhone is currently offline, so signed-device App Attest, TestFlight, App Store, and downloadable-app proof remain pending.",
+    "No retailer account, cart, purchase, or checkout action was performed or claimed."
+  ]
+}

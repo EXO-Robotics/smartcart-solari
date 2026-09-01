@@ -1,116 +1,123 @@
-# Solari submission qualification receipt
+# Solari V3 qualification
 
-## Exact identities
+This document separates code/test evidence, credentialed Solari execution, deployed backend evidence, simulator evidence, and still-pending signed-device evidence. None substitutes for another.
 
-- Public repository: `https://github.com/EXO-Robotics/smartcart-solari`
-- Branch: `feat/native-solari-beta`
-- Current qualified implementation: `eee8c840b59def4428548c66203304193fa93520`
-- Evidence publication commit: `c11d8c7` (receipts and native-product narrative; runtime identity remains `eee8c84`)
-- Native integration sequence: `9369d70` → `2516414` → `eee8c84`
-- Clean upstream base: `fe6589b1bd811a7ca8afa9824deba9d3cbde7ab9`
-- Credentialed Solari run: [`33519606791`](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33519606791), successful at exact commit `eee8c84`
-- Solari execution receipt: [`smartcart-solari-live-proof-33519606791.json`](../evidence/live/smartcart-solari-live-proof-33519606791.json)
-- Vercel production deployment: `dpl_FD8iBpRhvmEckcUm7oo7v5tMoxdh`, READY
-- API base: `https://smartcart-solari-beta.vercel.app` ([health](https://smartcart-solari-beta.vercel.app/health))
-- Deployment/smoke receipt: [`smartcart-solari-beta-deployment-20260901.json`](../evidence/live/smartcart-solari-beta-deployment-20260901.json)
-- Public replay/demo: `https://exo-robotics.github.io/smartcart-solari/website/solari-demo/`
+## Exact submission identity
 
-Production SmartCart is not redirected or modified. The normal Release configuration still contains no Solari endpoint. The beta uses a separate scheme, build configuration, bundle identity, endpoint, entitlements file, and public submission repository.
+- Repository: [`EXO-Robotics/smartcart-solari`](https://github.com/EXO-Robotics/smartcart-solari)
+- Branch: `feat/native-solari-beta` / public `main`
+- Qualified code commit: `ced1154e76a376a7d630900f7c5f4b4317a3932d`
+- Clean upstream base: [`fe6589b1bd811a7ca8afa9824deba9d3cbde7ab9`](https://github.com/EXO-Robotics/smartcart-ios/commit/fe6589b1bd811a7ca8afa9824deba9d3cbde7ab9)
+- Production SmartCart repository/deployment: unchanged
 
-## What is implemented in the native product flow
+## Current evidence matrix
 
-Commit `9369d70` adds an optional **Research current options** action to Recipe Ready. It follows the normal path through reviewed recipe state, pantry exclusion, shopping-list aggregation, and product matching. Instead of immediately finalizing the Safari queue, the explicit research intent evaluates the current waiting items and opens the native Solari Basket Review sheet.
+| Surface | Evidence | Result | What it proves |
+| --- | --- | --- | --- |
+| Focused Solari backend | `npm --prefix backend run test:solari` | 71/71 PASS | V1 replay/live safeguards, V3 contracts/providers/optimizer, App Attest admission, cleanup/cancellation, URL/source policy |
+| Full backend | `npm --prefix backend test` | 201/201 PASS | No observed backend regression at the exact code state |
+| Dependency audit | `npm audit` | 0 vulnerabilities | npm’s current installed dependency audit found no known advisory |
+| Focused native | `SolariEvidenceContractTests` on iPhone 17 Pro, iOS 26.5 Simulator | 20/20 PASS | request building, V3 evidence validation, freshness/math/policy checks, unchanged-list continuation |
+| Web | Python demo tests | 6/6 PASS | public artifact/catalog structure and required V3 markers |
+| Beta build | generic iOS Simulator, `Release-SolariBeta`, unsigned | PASS | beta configuration compiles without claiming signing/device execution |
+| Owned catalog | Pages run [`33528975472`](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33528975472) | six `dg-*` pages HTTP 200 | exact JavaScript-rendered Browser targets are publicly reachable |
+| V3 providers | Actions run [`33529059284`](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33529059284) | PASS | actual Solari Browser and Sandbox ran against the owned synthetic source |
+| Vercel | deployment `dpl_6DgqhKjWN4fm1CHpL6cWcZnWks2x` | READY | current protected backend code is deployed |
+| Signed archive | local archive attempt | FAIL / PENDING | signing/provisioning prerequisites are not satisfied |
+| Signed native App Attest | physical iPhone | PENDING | no signed native research request has run |
+| TestFlight / App Store / downloadable app | distribution | PENDING | no public native availability claim |
 
-The admitted plan is deliberately narrow:
+## Credentialed V3 Browser + Sandbox proof
 
-- one to three waiting shopping items;
-- positive reviewed quantities in pounds, ounces, or count;
-- unique requirement, ingredient, and candidate identities;
-- exact candidates from the owned Demo Grocer set;
-- no source URLs, retailer credentials, account data, or Solari secret supplied by the app.
+The authority is [`evidence/live/smartcart-solari-v3-qualification-33529059284.json`](../evidence/live/smartcart-solari-v3-qualification-33529059284.json).
 
-The sheet shows package count/size, coverage and surplus, visible line price, observed subtotal or incomplete state, source, timestamp, confidence, ambiguity, provenance, and limitations. The user can refresh, edit, fall back to normal SmartCart, or explicitly continue to the existing retailer queue. A changed plan invalidates the result before handoff.
+The receipt records:
 
-Commit `2516414` adds the productionized V2 boundary: Apple App Attest challenge/attestation/assertion verification, exact request-byte binding, replay counters, idempotency, Upstash quotas/concurrency leases, runtime kill switch, V2 schemas, and server-side Solari admission. Commit `eee8c84` packages the contracts and Browser runtime assets needed by the Vercel function.
+- receipt version `smartcart-solari-v3-qualification-v1`;
+- exact commit `ced1154e76a376a7d630900f7c5f4b4317a3932d` and run `33529059284`;
+- qualification time `2026-09-01T15:59:15.244Z`;
+- `server-side-direct-service-receipt` / `operator-qualification` access boundary;
+- six fresh `retailer-observation-v3` records from exact `dg-*` pages;
+- every observation marked `current-v3`, `syntheticPrice: true`, and controlled-demo location;
+- Browser and Sandbox completion plus cleanup before the receipt;
+- an internally computed SHA-256 digest of the accepted result;
+- no fixture replay, retailer account, cart change, or checkout automation.
 
-## Actual credentialed Browser + Sandbox evidence
+### Qualified decision
 
-Actions run `33519606791` is the current Solari execution proof. The [receipt](../evidence/live/smartcart-solari-live-proof-33519606791.json) binds the run to commit `eee8c84` and records:
+| Metric | Receipt value |
+| --- | ---: |
+| Selected observed synthetic subtotal | $13.32 |
+| Cheapest adequate subtotal | $12.79 |
+| Premium | $0.53 |
+| Maximum premium | $0.75 |
+| Cheapest basket surplus | 31 oz |
+| Selected basket surplus | 15 oz |
+| Surplus avoided | 16 oz |
 
-- six fresh Browser observations from `2026-09-01T14:27:48.423Z` through `2026-09-01T14:27:55.394Z`;
-- the exact six owned Demo Grocer product URLs and product IDs;
-- three selected packages: 3 lb chicken, 16 oz penne, and 6 oz finely shredded Parmesan;
-- one package per requirement and a complete synthetic subtotal of `$12.79`;
-- three Sandbox decisions using `smallest-sufficient-package-v1`;
-- independent SmartCart arithmetic verification;
-- Browser page/session/client and Sandbox cleanup enforced before success;
-- no fixture replay, account, cart, or checkout action.
+Selected products were `dg-chicken-rightsize-1lb` (two packages), `dg-penne-value-16oz` (one), and `dg-parmesan-value-6oz` (one). Solari Sandbox is the authority for the global low-surplus selection among baskets within the price cap. SmartCart verified admitted evidence, coverage/package/price arithmetic, stable cheapest reference, comparison arithmetic, and premium cap; it did not locally recompute the global argmin.
 
-This proves actual Solari Browser and Sandbox execution against SmartCart’s owned synthetic catalog. It does not prove a real retailer’s price, availability, or consumer value, and it does not prove that an Apple-signed native V2 request reached the deployed backend.
+This is real credentialed Solari execution against an owned synthetic catalog. It is not a signed iPhone/App Attest receipt, a third-party retailer run, a live/guaranteed price claim, or consumer-value proof.
 
-## Deployed App Attest/Upstash boundary
+## Owned Pages proof
 
-The [deployment receipt](../evidence/live/smartcart-solari-beta-deployment-20260901.json) is the authority for deployment identity and smoke results. It records production READY state and:
+Pages run [`33528975472`](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33528975472) deployed the current V3 artifact at `https://exo-robotics.github.io/smartcart-solari/website/solari-demo/`. Each exact page returned HTTP 200:
 
-| Smoke check | Result | Meaning |
-| --- | --- | --- |
-| `GET /health` | `200` | deployed service route is reachable |
-| challenge issuance | `201` | enabled runtime and Upstash one-use challenge write are reachable |
-| malformed attestation | `403` | invalid Apple evidence fails closed |
-| replay of consumed challenge | `403` | the one-use challenge was burned and could not be reused |
+- `dg-chicken-value-3lb.html`
+- `dg-chicken-rightsize-1lb.html`
+- `dg-penne-value-16oz.html`
+- `dg-penne-rightsize-12oz.html`
+- `dg-parmesan-value-6oz.html`
+- `dg-parmesan-rightsize-3oz.html`
 
-The smoke deliberately used invalid attestation material. It proves routing, state-store integration, challenge consumption, and the reject path. It is not a successful Apple attestation or assertion. No signed native research request is claimed.
+The Browser qualification—not an HTTP 200 alone—proves the rendered evidence markers were observed.
 
-## Fresh qualification matrix
+## Production deployment proof
 
-| Qualification | Result |
-| --- | --- |
-| `npm run test:solari` | 55 passed, 0 failed |
-| full backend `npm test` | 185 passed, 0 failed |
-| focused native Solari tests | 13 passed, 0 failed |
-| `Release-SolariBeta` simulator build | PASS |
-| separate Debug simulator install and launch | PASS |
-| Vercel production deployment | READY |
-| deployed App Attest/Upstash smoke | health 200; challenge 201; invalid 403; replay 403 |
-| credentialed Solari Browser + Sandbox workflow | PASS, run `33519606791`, commit `eee8c84` |
-| physical iPhone code signing identities | **PENDING — 0 valid identities** |
-| valid signed App Attest attestation/assertion/research vector | **PENDING** |
-| TestFlight and App Store | **PENDING** |
+The authority is [`evidence/live/smartcart-solari-v3-deployment-20260901.json`](../evidence/live/smartcart-solari-v3-deployment-20260901.json).
 
-The Release-SolariBeta simulator build proves compilation and packaging for that configuration. The Debug simulator launch proves the app can install and reach the local replay UI. Simulator App Attest is not accepted as physical-device/TestFlight proof. Neither result makes the native beta publicly usable.
+- Deployment: `dpl_6DgqhKjWN4fm1CHpL6cWcZnWks2x`
+- Immutable URL: `https://smartcart-solari-beta-cipegeumf-blake23.vercel.app`
+- App alias: `https://smartcart-solari-beta.vercel.app`
+- State: READY / production
+- Commit: `ced1154e76a376a7d630900f7c5f4b4317a3932d`
+- Access design: Apple App Attest, allowlisted beta bundle/build, Upstash state, runtime kill switch, server-side Solari credential
+- Co-deployment safety: V1 operator-live route rejected by configuration when App Attest beta is enabled
 
-## V2 evidence and admission contract
+Sanitized smoke at `2026-09-01T16:01:46Z` recorded health 200, challenge issuance 201, malformed V3 envelope rejection 400 with `contract_validation_failed`, correct V3 request-contract selection, and zero provider execution for the rejected request.
 
-The native path accepts only:
+That smoke proves deployed routing, one-use challenge issuance, V3 contract selection, and fail-closed rejection. It does not prove an Apple certificate chain, device key registration, assertion counter, or successful signed native request.
 
-- `solari-shopping-research-request-v2`
-- `retailer-observation-v2`
-- `basket-decision-v2`
-- `solari-shopping-research-result-v2`
-- `solari-app-attest-research-envelope-v1`
+## Native product evidence
 
-Challenge and initial-attestation schemas are versioned separately under [`contracts/v2/solari/`](../contracts/v2/solari/). The App Attest assertion hash binds the one-use server challenge, HTTP method/path, and SHA-256 digest of the exact encoded research body. The backend checks the Apple certificate chain/receipt/nonce/app identity, allowed build, registered key, monotonic assertion counter, one-use challenge, request schema, and owned-catalog policy before provider work.
+The normal native flow now exposes **Research current options** after pantry exclusions and existing product preparation, before retailer handoff. Its successful state shows the V3 comparison and provides **Continue with original SmartCart list**. Continuation revalidates only the original requirement/match fingerprint and finalizes SmartCart’s existing user-controlled queue; Demo Grocer IDs/prices are not transferred.
 
-After admission, Upstash atomically enforces request idempotency, per-key hourly/daily quotas, a global daily quota, and a concurrency lease. The runtime key is checked before challenge, attestation, and research and is polled during provider work; disabling it cancels live work. Aborted/incomplete incoming requests propagate cancellation. Browser and Sandbox providers share a bounded request deadline and clean up before success. A response-socket hangup after a complete request body may run until that deadline or kill-switch observation.
+Focused native tests passed 20/20 on iPhone 17 Pro / iOS 26.5 Simulator. A generic unsigned `Release-SolariBeta` simulator build passed. These are compilation/contract evidence, not public native availability or App Attest proof.
 
-The native app independently checks request/result identity, exact derived source URL, product allowlist, freshness, package and subtotal math, completeness, Browser/Sandbox provenance, enforced cleanup, App Attest access boundary, and user-controlled handoff. Validated results are cached in memory for two minutes with at most eight entries; refresh bypasses the cache and nothing is persisted.
+## Signing and physical-device status
 
-## Trust claims supported
+Three valid Apple Development identities are now visible. A signed archive nevertheless failed for exact provisioning/capability reasons:
 
-- Solari Browser and Sandbox materially perform distinct jobs in the owned-catalog workflow.
-- Observations include source and timestamps; visible prices are explicitly non-guaranteed.
-- Missing/ambiguous evidence stays visible and cannot become a complete total silently.
-- Solari, Redis, and control credentials stay server-side.
-- Browser profiles/login state and retailer account/cart/checkout authority are absent.
-- Runtime disablement, quotas, idempotency, cancellation, and cleanup bound spend and resource lifetime.
-- The normal SmartCart handoff and pantry-confirmation boundaries remain user controlled.
+1. the personal team **Blake Grove** does not support Associated Domains and App Attest for `com.blakestudio.smartcart.solari-beta`;
+2. no matching iOS App Development provisioning profile exists;
+3. the Share Extension provisioning profile has an application-groups mismatch.
 
-## Not demonstrated / remaining gates
+The physical iPhone is offline. Therefore signed archive, real signed App Attest registration/assertion/research, physical-device UI, TestFlight, App Store, and downloadable-app status all remain **PENDING**. Do not weaken entitlements, add a client secret, or enable Release fixture replay to manufacture a pass.
 
-1. **Signed native path:** the host has zero valid signing identities, so no physical iPhone build, initial Apple attestation, assertion, or end-to-end V2 native research call has run. The verifier intentionally accepts only an allowlisted TestFlight validation category/build, so a locally sideloaded development build is not a substitute.
-2. **Distribution:** there is no TestFlight build, App Store build, or public native beta.
-3. **Retailer value:** Demo Grocer is owned and synthetic. Walmart remains fixture replay only; Target live research is unsupported. A real consumer trial needs an authorized retailer source.
-4. **Remote DNS TOCTOU:** the server performs fail-closed public-DNS preflight and exact pre/post-render URL checks, but the remote Browser SDK does not provide DNS pinning. An authorized production source needs locked owned DNS and a trusted egress boundary.
-5. **Operational rollout:** secrets, allowed-build changes, kill-switch ownership, quota alerts, retention review, incident response, and physical-device accessibility checks require an operator runbook before inviting testers.
+## Historical evidence kept separate
 
-These are explicit release gates, not failed Browser/Sandbox proof. Do not describe the native beta as shipped or publicly usable until the signed App Attest vector and distribution evidence exist.
+- V1 credentialed run `33519606791` and its `$12.79` basket are historical prior proof only. They do not cover the V3 IDs, page markers, `$13.32` decision, or global low-surplus policy.
+- The Walmart fixture is replay of upstream seeded observations dated `2026-07-16T12:00:00Z`. It invokes no Solari provider and does not establish current, guaranteed, location-specific, or checkout pricing.
+- The public website explains the product and hosts owned Browser targets. It is not a substitute for the native SmartCart integration.
+
+## Remaining qualification gates
+
+- use a team/profile set that supports Associated Domains, App Attest, the beta bundle ID, and the Share Extension app group;
+- produce a signed Release-SolariBeta archive;
+- bring a physical iPhone online and run initial attestation plus a request-bound assertion;
+- verify replay rejection, runtime kill switch, quota/cancellation UX, and cleanup on that signed path;
+- inspect source/time/ambiguity/partial-total and unchanged-handoff copy on device with VoiceOver and Dynamic Type;
+- separately qualify TestFlight, App Store, and any downloadable/public-native claim;
+- use an authorized retailer API/feed or documented automation permission before claiming real-retailer value.
+
+Until those gates pass, the defensible claim is: **the native product integration, protected deployed backend, owned dynamic pages, and credentialed V3 Browser/Sandbox computation are demonstrated; signed consumer-native and real-retailer value remain pending.**
