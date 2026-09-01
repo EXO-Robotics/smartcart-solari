@@ -49,7 +49,7 @@ Sandbox receives only canonical requirements and structured Browser observations
 2. calculates line price and relative surplus, (covered - required) / required;
 3. establishes the cheapest adequate basket;
 4. indexes dynamic-programming states by premium cents up to $0.75;
-5. minimizes aggregate relative surplus;
+5. minimizes aggregate relative surplus, shown to users as a dimensionless package-overage score rather than a percentage;
 6. breaks ties by observed subtotal and then retailer product ID;
 7. emits decisions and comparison;
 8. tears down the microVM on all paths.
@@ -111,15 +111,15 @@ Persistent Browser profiles are deliberately unused. If enabled, they would stor
 
 The V4 provider path is frozen and credential-qualified:
 
-- runtime **aee4429f2246518b935005f0bae068e170b2db64**;
-- [run 33542014049](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33542014049);
-- [sanitized receipt](../evidence/live/smartcart-solari-v4-qualification-33542014049.json);
+- runtime **931e03468b1556e42a61e68d6c4e24c1a12e968d**;
+- [run 33545361427](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33545361427);
+- [sanitized receipt](../evidence/live/smartcart-solari-v4-qualification-33545361427.json);
 - eight researched requirements spanning mass, volume, and count;
 - 16 fresh Browser observations and eight Sandbox decisions;
-- complete $24.20 synthetic basket;
+- complete $24.83 synthetic basket versus $24.20 cheapest, spending $0.63 to reduce the package-overage score by 0.985784;
 - Browser and Sandbox cleanup enforced before receipt;
-- focused provider/qualification tests 20/20, full backend 213/213, focused native 27/27, web 7/7, npm audit 0, unsigned Release-SolariBeta build PASS;
-- public V4 owned catalog and Pages deployment [33541494887](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33541494887).
+- focused provider/qualification tests 21/21, full backend 214/214, focused native 28/28, web 7/7, npm audit 0, unsigned Release-SolariBeta build PASS;
+- public V4 owned catalog and Pages deployment [33545270825](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33545270825).
 
 V4 beta deployment is also complete at publication commit **0decb99**: deployment **dpl_8pdJYo4v3kjUiosFfNHDcfQh2v2s** is READY and the [sanitized deployment receipt](../evidence/live/smartcart-solari-v4-deployment-0decb99-20260901.json) records health 200 and challenge 201 without claiming signed-device execution.
 

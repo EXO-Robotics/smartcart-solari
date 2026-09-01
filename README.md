@@ -14,7 +14,7 @@ Normal SmartCart already extracts ingredients, excludes pantry items, aggregates
 
 **Solari Browser** renders only exact allowlisted pages on the repository-owned Demo Grocer. It observes product identity, package quantity/unit, visible synthetic price, source URL, timestamp, and required V4 provenance markers. Static links or replay data cannot prove that a JavaScript-rendered page was observed during a provider run.
 
-**Solari Sandbox** receives only bounded structured requirements and Browser observations. It runs the **relative-surplus-premium-dp-v1** dynamic program: establish the cheapest adequate basket, then minimize aggregate relative surplus among baskets no more than $0.75 above that baseline. It is the global-selection authority. SmartCart independently verifies evidence membership, coverage, package and price arithmetic, cheapest reference, and premium cap, but does not recompute the global argmin.
+**Solari Sandbox** receives only bounded structured requirements and Browser observations. It runs the **relative-surplus-premium-dp-v1** dynamic program: establish the cheapest adequate basket, then minimize aggregate relative surplus among baskets no more than $0.75 above that baseline. The UI calls this dimensionless sum of each line's `(covered - required) / required` ratio the **package-overage score**; it is not presented as a percentage. Sandbox is the global-selection authority. SmartCart independently verifies evidence membership, coverage, package and price arithmetic, cheapest reference, and premium cap, but does not recompute the global argmin.
 
 Desktop is intentionally absent; it has no necessary job.
 
@@ -79,7 +79,7 @@ Official provider references: [Solari SDK](https://docs.getsolari.com/sdk), [ses
 
 ## Evidence status
 
-V4 is frozen and credential-qualified at runtime **aee4429f2246518b935005f0bae068e170b2db64**. [GitHub Actions run 33542014049](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33542014049) executed the real Solari Browser and Sandbox providers against an eight-line mass/volume/count trip: 16 fresh observations, eight decisions, a complete synthetic $24.20 basket, and confirmed cleanup. The [sanitized V4 receipt](evidence/live/smartcart-solari-v4-qualification-33542014049.json) binds the request/result digests and exact runtime commit.
+V4 is frozen and credential-qualified at runtime **931e03468b1556e42a61e68d6c4e24c1a12e968d**. [GitHub Actions run 33545361427](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33545361427) executed the real Solari Browser and Sandbox providers against an eight-line mass/volume/count trip: 16 fresh observations, eight decisions, and confirmed cleanup. Sandbox selected a complete synthetic **$24.83** basket versus the **$24.20** cheapest adequate basket, spending **$0.63** within the user's $0.75 cap to reduce the package-overage score by **0.985784**. The [sanitized V4 receipt](evidence/live/smartcart-solari-v4-qualification-33545361427.json) binds the request/result digests and exact runtime commit.
 
 That provider receipt is server-side operator qualification. It is not signed native App Attest, real-retailer, device, TestFlight, App Store, or downloadable-app proof. Those gates remain **PENDING**.
 
@@ -119,7 +119,7 @@ xcodebuild \
   CODE_SIGNING_ALLOWED=NO build
 ~~~
 
-At qualified V4 source state: focused V3/V4 qualification tests **20/20**, full backend **213/213**, focused native **27/27** on iPhone 17 Pro / iOS 26.5 Simulator, web **7/7**, dependency audit **0 vulnerabilities**, and unsigned **Release-SolariBeta BUILD SUCCEEDED**. The broader native suite retains two pre-existing baseline-failing test methods; V4-focused tests are green. See [qualification](Docs/SOLARI_QUALIFICATION.md) and the [demo runbook](Docs/SOLARI_DEMO_RUNBOOK.md) for claim gates.
+At qualified V4 source state: focused V3/V4 qualification tests **21/21**, full backend **214/214**, focused native **28/28** on iPhone 17 Pro / iOS 26.5 Simulator, web **7/7**, dependency audit **0 vulnerabilities**, and unsigned **Release-SolariBeta BUILD SUCCEEDED**. The broader native suite retains two pre-existing baseline-failing test methods; V4-focused tests are green. See [qualification](Docs/SOLARI_QUALIFICATION.md) and the [demo runbook](Docs/SOLARI_DEMO_RUNBOOK.md) for claim gates.
 
 ## Deployment
 
