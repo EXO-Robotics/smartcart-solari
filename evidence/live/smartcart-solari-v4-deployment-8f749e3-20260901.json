@@ -1,0 +1,45 @@
+{
+  "receiptVersion": "smartcart-solari-v4-deployment-v1",
+  "recordedAt": "2026-09-01T19:02:33Z",
+  "repository": "EXO-Robotics/smartcart-solari",
+  "sourceTreeCommit": "8f749e33808119ee403142929da5b757ed934e35",
+  "providerQualifiedRuntimeCommit": "2dd4e6f30be8286a3a8f465c92a56427828a60e2",
+  "deployment": {
+    "provider": "vercel",
+    "method": "authenticated-cli-production-deploy-from-clean-linked-worktree",
+    "id": "dpl_AkwuZcEt7N6WdFmR6Tye4BrqasbR",
+    "readyState": "READY",
+    "target": "production",
+    "immutableURL": "https://smartcart-solari-beta-7kmhamzb3-blake23.vercel.app",
+    "alias": "https://smartcart-solari-beta.vercel.app",
+    "inspectorURL": "https://vercel.com/blake23/smartcart-solari-beta/AkwuZcEt7N6WdFmR6Tye4BrqasbR"
+  },
+  "smoke": {
+    "health": {
+      "method": "GET",
+      "path": "/health",
+      "httpStatus": 200,
+      "observedService": "smartcart-barcode-catalog"
+    },
+    "appAttestChallenge": {
+      "method": "POST",
+      "path": "/v1/solari/access/challenges",
+      "httpStatus": 201,
+      "challengeValuesRetained": false
+    }
+  },
+  "claimBoundary": {
+    "proves": [
+      "the shopper-visible V4 publication tree deployed to the protected beta alias",
+      "the deployment reached READY",
+      "the public health route responded",
+      "the App Attest challenge admission route accepted a valid-shape request"
+    ],
+    "doesNotProve": [
+      "a signed App Attest assertion from an iPhone",
+      "Solari Browser or Sandbox execution through the native route",
+      "TestFlight, App Store, or downloadable distribution",
+      "authorized real-retailer research"
+    ]
+  }
+}
