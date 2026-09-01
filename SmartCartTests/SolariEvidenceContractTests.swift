@@ -3,277 +3,458 @@ import XCTest
 @testable import SmartCart
 
 final class SolariEvidenceContractTests: XCTestCase {
-    private let validationDate = Date(timeIntervalSince1970: 1_799_000_000)
+    private let now = Date(timeIntervalSince1970: 1_799_000_000)
 
-    private var fixtureRoot: URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appending(path: "contracts/fixtures/v1/solari")
-    }
-
-    func testCanonicalRecordedFixtureAcceptsHistoricalTimestampAndWarnsNotLive() throws {
-        let request = try decodeRequest()
-        let result = try decodeResult()
-
-        let validated = try SolariEvidenceValidator(now: validationDate).validate(result, for: request)
-
-        XCTAssertEqual(validated.result.basket.observedSubtotal, decimal("12.79"))
-        XCTAssertEqual(validated.result.observations.first?.observedAt, isoDate("2026-07-16T12:00:00Z"))
-        XCTAssertTrue(validated.warnings.contains(where: { $0.contains("historical") && $0.contains("not live") }))
-    }
-
-    func testUnknownResultVersionFailsClosed() throws {
-        let request = try decodeRequest()
-        let result = try mutatedResult { $0["schemaVersion"] = "solari-shopping-research-result-v2" }
-
-        XCTAssertThrowsError(try validator().validate(result, for: request)) { error in
-            XCTAssertEqual(error as? SolariEvidenceContractError, .unknownSchemaVersion)
-        }
-    }
-
-    func testUnsubmittedSourceURLFailsClosed() throws {
-        let request = try decodeRequest()
-        let result = try mutatedResult { object in
-            var observations = object["observations"] as! [[String: Any]]
-            observations[0]["sourceURL"] = "https://www.walmart.com/ip/not-submitted/999"
-            object["observations"] = observations
-        }
-
-        XCTAssertThrowsError(try validator().validate(result, for: request)) { error in
-            XCTAssertEqual(error as? SolariEvidenceContractError, .invalidObservationReference)
-        }
-    }
-
-    func testLiveModeRejectsHistoricalStaleObservation() throws {
-        let request = try mutatedRequest { object in
-            object["executionMode"] = "live"
-            object["submittedAt"] = "2026-12-31T23:58:00Z"
-        }
-        let result = try mutatedResult { object in
-            object["executionMode"] = "live"
-            object["completedAt"] = "2026-12-31T23:59:00Z"
-            var observations = object["observations"] as! [[String: Any]]
-            for index in observations.indices {
-                observations[index]["collectionMethod"] = "solari-browser-controlled-demo"
-            }
-            object["observations"] = observations
-        }
-        let now = isoDate("2027-01-01T00:00:00Z")
-
-        XCTAssertThrowsError(try SolariEvidenceValidator(now: now).validate(result, for: request)) { error in
-            XCTAssertEqual(error as? SolariEvidenceContractError, .staleObservation)
-        }
-    }
-
-    func testCompleteClaimWithMissingPriceLineFailsClosed() throws {
-        let request = try decodeRequest()
-        let result = try mutatedResult { object in
-            var observations = object["observations"] as! [[String: Any]]
-            observations[0]["visiblePrice"] = NSNull()
-            observations[0]["currency"] = NSNull()
-            object["observations"] = observations
-
-            var decisions = object["decisions"] as! [[String: Any]]
-            decisions[0]["lineTotal"] = NSNull()
-            decisions[0]["currency"] = NSNull()
-            object["decisions"] = decisions
-
-            var basket = object["basket"] as! [String: Any]
-            basket["observedSubtotal"] = 3.32
-            basket["pricedLineCount"] = 2
-            basket["missingPriceLineCount"] = 1
-            object["basket"] = basket
-        }
-
-        XCTAssertThrowsError(try validator().validate(result, for: request)) { error in
-            XCTAssertEqual(error as? SolariEvidenceContractError, .incompleteBasketClaim)
-        }
-    }
-
-    func testInconsistentLinePriceFailsClosed() throws {
-        let request = try decodeRequest()
-        let result = try mutatedResult { object in
-            var decisions = object["decisions"] as! [[String: Any]]
-            decisions[0]["lineTotal"] = 10.00
-            object["decisions"] = decisions
-        }
-
-        XCTAssertThrowsError(try validator().validate(result, for: request)) { error in
-            XCTAssertEqual(error as? SolariEvidenceContractError, .invalidPriceMath)
-        }
-    }
-
-    func testUnselectedNullableObservationDecodesAndRemainsReviewable() throws {
-        let request = try decodeRequest()
-        let result = try mutatedResult { object in
-            var observations = object["observations"] as! [[String: Any]]
-            observations[2]["title"] = NSNull()
-            observations[2]["packageDescription"] = NSNull()
-            observations[2]["packageQuantity"] = NSNull()
-            observations[2]["packageUnit"] = NSNull()
-            observations[2]["visiblePrice"] = NSNull()
-            observations[2]["currency"] = NSNull()
-            observations[2]["confidence"] = "low"
-            observations[2]["ambiguityReasons"] = ["Product details could not be normalized."]
-            object["observations"] = observations
-        }
-
-        let validated = try validator().validate(result, for: request)
-        XCTAssertNil(validated.result.observations[2].title)
-        XCTAssertNil(validated.result.observations[2].packageQuantity)
-        XCTAssertTrue(validated.warnings.contains(where: { $0.contains("ambiguous") }))
-    }
-
-    func testExactDemoPlanBuildsBoundedCredentialFreeRequest() throws {
-        let request = try XCTUnwrap(
-            SolariResearchRequestBuilder.makeIfEligible(
-                items: demoItems(),
-                retailer: .walmart,
-                executionMode: .recordedFixture,
-                now: validationDate
+    func testOneToThreeSupportedWaitingItemsBuildGeneralizedV2Request() throws {
+        for count in 1...3 {
+            let eligibility = SolariResearchRequestBuilder.evaluate(
+                items: Array(demoItems().prefix(count)),
+                configuration: configuration(),
+                servingCount: 4,
+                now: now,
+                requestID: fixedUUID("10000000-0000-0000-0000-000000000001")
             )
-        )
-        let encoded = try SolariRetailerResearchClient.encoder.encode(request)
-        let text = try XCTUnwrap(String(data: encoded, encoding: .utf8)).lowercased()
+            guard case .eligible(let plan) = eligibility else {
+                return XCTFail("Expected \(count) items to be eligible")
+            }
+            XCTAssertEqual(plan.request.schemaVersion, "solari-shopping-research-request-v2")
+            XCTAssertEqual(plan.request.demoID, "owned-demo-grocer-basket-v2")
+            XCTAssertEqual(plan.request.retailerID, "smartcart-demo-grocer")
+            XCTAssertEqual(plan.request.requirements.count, count)
+            XCTAssertTrue(plan.request.requirements.allSatisfy { (1...3).contains($0.candidateProductIDs.count) })
+            XCTAssertTrue(plan.sourceURLsByProductID.values.allSatisfy {
+                $0.absoluteString.hasPrefix("https://exo-robotics.github.io/smartcart-solari/website/solari-demo/retailer/product/")
+            })
+        }
+    }
 
-        XCTAssertEqual(request.requirements.count, 3)
-        XCTAssertEqual(Set(request.requirements.flatMap(\.candidates).map(\.retailerProductID)), Set([
-            "10414680", "10534084", "623835750", "10452414", "10307238", "47088917"
-        ]))
+    func testPlanFingerprintIsDeterministicAndBindsReviewedPlanNotTransportMetadata() throws {
+        let items = demoItems()
+        let first = eligiblePlan(
+            items: items,
+            now: now,
+            requestID: fixedUUID("10000000-0000-0000-0000-000000000001")
+        )
+        let second = eligiblePlan(
+            items: items.reversed(),
+            now: now.addingTimeInterval(60),
+            requestID: fixedUUID("10000000-0000-0000-0000-000000000002")
+        )
+        XCTAssertEqual(first.fingerprint, second.fingerprint)
+
+        var changed = items
+        changed[0].requestedAmount = 2
+        let changedPlan = eligiblePlan(items: changed, now: now, requestID: first.request.requestID)
+        XCTAssertNotEqual(first.fingerprint, changedPlan.fingerprint)
+        XCTAssertFalse(SolariResearchRequestBuilder.matchesCurrentPlan(first, items: changed, servingCount: 4))
+    }
+
+    func testExplicitIneligibilityReasonsCoverBoundsAndUnsupportedCatalog() {
+        var tooMany = demoItems()
+        tooMany.append(demoItems()[0].withFreshIdentity())
+        XCTAssertEqual(
+            SolariResearchRequestBuilder.evaluate(
+                items: tooMany,
+                configuration: configuration(),
+                servingCount: 4
+            ),
+            .ineligible([.tooManyWaitingItems(4)])
+        )
+
+        let unsupported = item(
+            id: fixedUUID("20000000-0000-0000-0000-000000000099"),
+            name: "Fresh basil",
+            amount: 1,
+            unit: "count",
+            products: [product(id: "unsupported")]
+        )
+        XCTAssertEqual(
+            SolariResearchRequestBuilder.evaluate(
+                items: [unsupported],
+                configuration: configuration(),
+                servingCount: 4
+            ),
+            .ineligible([.unsupportedProduct("Fresh basil")])
+        )
+    }
+
+    func testEncodedRequestContainsOnlyCandidateIDsAndNoSourceOrCredentialMaterial() throws {
+        let plan = eligiblePlan(items: demoItems(), now: now)
+        let data = try SolariRetailerResearchClient.encoder.encode(plan.request)
+        let text = try XCTUnwrap(String(data: data, encoding: .utf8)).lowercased()
+        XCTAssertTrue(text.contains("candidateproductids"))
+        XCTAssertFalse(text.contains("sourceurl"))
         XCTAssertFalse(text.contains("cookie"))
         XCTAssertFalse(text.contains("credential"))
         XCTAssertFalse(text.contains("account"))
         XCTAssertFalse(text.contains("session"))
-        XCTAssertFalse(text.contains("pantry"))
+        XCTAssertFalse(text.contains("solari_api_key"))
     }
 
-    func testNonDemoWalmartPlanUsesNormalSmartCartPath() {
-        var items = demoItems()
-        items.removeLast()
+    func testConfigurationDerivesExactOwnedSourceAndRejectsCredentialsOrHTTP() {
+        let configuration = configuration()
+        XCTAssertEqual(
+            configuration.sourceURL(for: "10414680")?.absoluteString,
+            "https://exo-robotics.github.io/smartcart-solari/website/solari-demo/retailer/product/10414680.html"
+        )
+        XCTAssertNil(configuration.sourceURL(for: "unknown"))
+        XCTAssertNil(SolariBackendConfiguration(
+            backendRawValue: "https://user:secret@example.com",
+            demoRetailerRawValue: "https://example.com/demo"
+        ))
+        XCTAssertNil(SolariBackendConfiguration(
+            backendRawValue: "http://example.com",
+            demoRetailerRawValue: "https://example.com/demo"
+        ))
+        XCTAssertNil(SolariBackendConfiguration(
+            backendRawValue: "https://example.com",
+            demoRetailerRawValue: "http://example.com/demo"
+        ))
+    }
 
-        XCTAssertNil(
-            SolariResearchRequestBuilder.makeIfEligible(
-                items: items,
-                retailer: .walmart,
-                executionMode: .recordedFixture,
-                now: validationDate
+    func testValidatorAcceptsGeneralizedEvidenceWithTypedProvenance() throws {
+        let plan = eligiblePlan(items: [demoItems()[0]], now: now)
+        let validated = try SolariEvidenceValidator(now: now).validate(result(for: plan), for: plan)
+        XCTAssertEqual(validated.result.basket.observedSubtotal, Decimal(string: "9.47"))
+        XCTAssertEqual(validated.result.provenance.accessBoundary, .appleAppAttest)
+        XCTAssertEqual(validated.result.optimizer.method, .sandbox)
+    }
+
+    func testValidatorRejectsMismatchedDerivedSourceURL() throws {
+        let plan = eligiblePlan(items: [demoItems()[0]], now: now)
+        let original = result(for: plan)
+        let observation = original.observations[0]
+        let invalid = SolariRetailerObservation(
+            schemaVersion: observation.schemaVersion,
+            observationID: observation.observationID,
+            requirementID: observation.requirementID,
+            retailerProductID: observation.retailerProductID,
+            sourceURL: URL(string: "https://evil.example/product")!,
+            title: observation.title,
+            packageDescription: observation.packageDescription,
+            packageQuantity: observation.packageQuantity,
+            packageUnit: observation.packageUnit,
+            visiblePrice: observation.visiblePrice,
+            currency: observation.currency,
+            observedAt: observation.observedAt,
+            confidence: observation.confidence,
+            ambiguityReasons: observation.ambiguityReasons,
+            collectionMethod: observation.collectionMethod,
+            freshness: observation.freshness
+        )
+        let mutated = replacing(original, observations: [invalid])
+        XCTAssertThrowsError(try SolariEvidenceValidator(now: now).validate(mutated, for: plan)) {
+            XCTAssertEqual($0 as? SolariEvidenceContractError, .invalidObservationReference)
+        }
+    }
+
+    func testValidatorRejectsInvalidTrustBoundary() throws {
+        let plan = eligiblePlan(items: [demoItems()[0]], now: now)
+        let original = result(for: plan)
+        let invalidTrust = SolariTrustBoundary(
+            priceClaim: .observedNotGuaranteed,
+            accountAccessed: true,
+            cartModified: false,
+            checkoutAutomated: false,
+            userControlsHandoff: true,
+            limitations: ["Visible test prices are not guaranteed."]
+        )
+        let mutated = SolariResearchResult(
+            schemaVersion: original.schemaVersion,
+            requestID: original.requestID,
+            demoID: original.demoID,
+            retailerID: original.retailerID,
+            completedAt: original.completedAt,
+            executionMode: original.executionMode,
+            status: original.status,
+            observations: original.observations,
+            decisions: original.decisions,
+            basket: original.basket,
+            optimizer: original.optimizer,
+            provenance: original.provenance,
+            trust: invalidTrust
+        )
+        XCTAssertThrowsError(try SolariEvidenceValidator(now: now).validate(mutated, for: plan)) {
+            XCTAssertEqual($0 as? SolariEvidenceContractError, .invalidProvenance)
+        }
+    }
+
+    func testMemoryCacheExpiresAndRefreshBypassesWithoutPersistence() {
+        let plan = eligiblePlan(items: [demoItems()[0]], now: now)
+        let research = SolariValidatedResearch(result: result(for: plan), warnings: [])
+        var cache = SolariValidatedResearchCache(timeToLive: 60)
+        cache.insert(research, for: plan.fingerprint, now: now)
+        XCTAssertNotNil(cache.value(for: plan.fingerprint, now: now.addingTimeInterval(59)))
+        XCTAssertNil(cache.value(for: plan.fingerprint, now: now.addingTimeInterval(30), bypass: true))
+        XCTAssertNil(cache.value(for: plan.fingerprint, now: now.addingTimeInterval(61)))
+    }
+
+    func testAppAttestAssertionHashBindsChallengeAndExactBodyBytes() {
+        let challengeBase64URL = "q6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6s"
+        let first = SolariAppAttestClient.assertionClientDataHash(
+            challengeBase64URL: challengeBase64URL,
+            exactResearchBody: Data("{\"a\":1}".utf8)
+        )
+        let second = SolariAppAttestClient.assertionClientDataHash(
+            challengeBase64URL: challengeBase64URL,
+            exactResearchBody: Data("{\"a\":1 }".utf8)
+        )
+        XCTAssertEqual(first.count, 32)
+        XCTAssertEqual(
+            first.map { String(format: "%02x", $0) }.joined(),
+            "60e66913e5f0c2a399818f3c18fc4853f726e32b7f4554038a04c3037e360d1f"
+        )
+        XCTAssertNotEqual(first, second)
+        XCTAssertEqual(
+            SolariAppAttestClient.attestationClientDataHash(challenge: Data(repeating: 0xAB, count: 32)).count,
+            32
+        )
+    }
+
+    func testAppAttestKeyIdentifierRequiresCanonicalStandardPaddedBase64() {
+        let standardPadded = Data(repeating: 0xFB, count: 32).base64EncodedString()
+        XCTAssertTrue(standardPadded.contains("+"))
+        XCTAssertTrue(standardPadded.hasSuffix("="))
+        XCTAssertTrue(SolariAppAttestClient.isValidKeyID(standardPadded))
+        XCTAssertFalse(SolariAppAttestClient.isValidKeyID(String(standardPadded.dropLast())))
+        XCTAssertFalse(SolariAppAttestClient.isValidKeyID(
+            standardPadded.replacingOccurrences(of: "+", with: "-")
+        ))
+    }
+
+    func testResearchTransportUsesJSONEnvelopeWithExactPayloadAndNoAttestHeaders() throws {
+        let payload = Data("{\"schemaVersion\":\"solari-shopping-research-request-v2\"}".utf8)
+        let keyID = Data(repeating: 0xFB, count: 32).base64EncodedString()
+        let assertion = Data([0x01, 0x02, 0x03, 0xFE])
+        let challengeID = fixedUUID("30000000-0000-0000-0000-000000000001")
+        let request = try SolariRetailerResearchClient.researchRequest(
+            exactBody: payload,
+            authorization: SolariAppAttestAuthorization(
+                keyID: keyID,
+                challengeID: challengeID,
+                assertion: assertion
+            ),
+            endpoint: URL(string: "https://example.com/v1/solari/research")!
+        )
+
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
+        XCTAssertNil(request.value(forHTTPHeaderField: "x-smartcart-app-attest-key-id"))
+        XCTAssertNil(request.value(forHTTPHeaderField: "x-smartcart-app-attest-challenge-id"))
+        XCTAssertNil(request.value(forHTTPHeaderField: "x-smartcart-app-attest-assertion"))
+
+        let envelope = try SolariRetailerResearchClient.decoder.decode(
+            SolariAppAttestResearchEnvelope.self,
+            from: try XCTUnwrap(request.httpBody)
+        )
+        XCTAssertEqual(envelope.schemaVersion, "solari-app-attest-research-envelope-v1")
+        XCTAssertEqual(envelope.challengeID, challengeID)
+        XCTAssertEqual(envelope.keyID, keyID)
+        XCTAssertEqual(Data(base64Encoded: envelope.assertionObject), assertion)
+        XCTAssertEqual(Data(base64Encoded: envelope.payloadBase64), payload)
+    }
+
+    func testDebugRecordedReplayIsClearlyNonLiveAndDoesNotClaimSolariOrAppAttestRan() throws {
+        let fixtureConfiguration = SolariBackendConfiguration(
+            backendRawValue: "https://smartcart-solari-beta.example.com",
+            demoRetailerRawValue: "https://exo-robotics.github.io/smartcart-solari/website/solari-demo",
+            debugFixtureReplayEnabled: true
+        )!
+        let eligibility = SolariResearchRequestBuilder.evaluate(
+            items: [demoItems()[0]],
+            configuration: fixtureConfiguration,
+            servingCount: 4,
+            now: now
+        )
+        guard case .eligible(let plan) = eligibility else { return XCTFail("Fixture plan was ineligible") }
+        XCTAssertEqual(plan.request.executionMode, .recordedFixture)
+
+        let replay = try SolariDebugRecordedFixture.make(for: plan)
+        XCTAssertEqual(replay.result.executionMode, .recordedFixture)
+        XCTAssertEqual(replay.result.provenance.browser, .notRunFixture)
+        XCTAssertEqual(replay.result.provenance.sandbox, .notRunFixture)
+        XCTAssertEqual(replay.result.provenance.accessBoundary, .notUsedRecordedFixture)
+        XCTAssertEqual(replay.result.trust.priceClaim, .recordedFixtureNotLive)
+        XCTAssertTrue(replay.warnings.contains(where: { $0.contains("did not run") }))
+    }
+
+    private func eligiblePlan(
+        items: [ShoppingListItem],
+        now: Date,
+        requestID: UUID = UUID()
+    ) -> SolariResearchPlan {
+        let eligibility = SolariResearchRequestBuilder.evaluate(
+            items: items,
+            configuration: configuration(),
+            servingCount: 4,
+            now: now,
+            requestID: requestID
+        )
+        guard case .eligible(let plan) = eligibility else {
+            fatalError("Test plan unexpectedly ineligible")
+        }
+        return plan
+    }
+
+    private func result(for plan: SolariResearchPlan) -> SolariResearchResult {
+        let requirement = plan.request.requirements[0]
+        let productID = requirement.candidateProductIDs[0]
+        let observation = SolariRetailerObservation(
+            schemaVersion: SolariRetailerEvidenceSchema.observationVersion,
+            observationID: "obs-\(productID)",
+            requirementID: requirement.id,
+            retailerProductID: productID,
+            sourceURL: plan.sourceURLsByProductID[productID]!,
+            title: "Demo Chicken Breasts",
+            packageDescription: "3 lb synthetic package",
+            packageQuantity: 3,
+            packageUnit: .pound,
+            visiblePrice: Decimal(string: "9.47"),
+            currency: "USD",
+            observedAt: now.addingTimeInterval(-5),
+            confidence: .high,
+            ambiguityReasons: [],
+            collectionMethod: .controlledDemo,
+            freshness: SolariObservationFreshness(status: .fresh, ageSeconds: 5, maxAgeSeconds: 86_400)
+        )
+        let decision = SolariBasketDecision(
+            schemaVersion: SolariRetailerEvidenceSchema.decisionVersion,
+            requirementID: requirement.id,
+            observationID: observation.observationID,
+            packageCount: 1,
+            requiredQuantity: requirement.requiredQuantity,
+            coveredQuantity: 3,
+            quantityUnit: .pound,
+            surplusQuantity: 3 - requirement.requiredQuantity,
+            lineTotal: Decimal(string: "9.47"),
+            currency: "USD",
+            proteinGramsPerDollar: nil,
+            substitutionNote: nil,
+            rationale: ["Smallest sufficient admitted package."],
+            confidence: .high,
+            ambiguityReasons: []
+        )
+        return SolariResearchResult(
+            schemaVersion: SolariRetailerEvidenceSchema.resultVersion,
+            requestID: plan.request.requestID,
+            demoID: plan.request.demoID,
+            retailerID: plan.request.retailerID,
+            completedAt: now,
+            executionMode: .live,
+            status: .complete,
+            observations: [observation],
+            decisions: [decision],
+            basket: SolariBasketSummary(
+                completeness: .complete,
+                observedSubtotal: Decimal(string: "9.47"),
+                currency: "USD",
+                pricedLineCount: 1,
+                missingPriceLineCount: 0,
+                unmatchedRequirementCount: 0
+            ),
+            optimizer: SolariOptimizerProvenance(
+                method: .sandbox,
+                algorithmVersion: "smallest-sufficient-package-v2",
+                independentlyVerified: true
+            ),
+            provenance: SolariExecutionProvenance(
+                browser: .browser,
+                sandbox: .sandbox,
+                fixtureReplay: false,
+                resourceCleanup: .init(browser: .enforcedBeforeResponse, sandbox: .enforcedBeforeResponse),
+                accessBoundary: .appleAppAttest
+            ),
+            trust: SolariTrustBoundary(
+                priceClaim: .observedNotGuaranteed,
+                accountAccessed: false,
+                cartModified: false,
+                checkoutAutomated: false,
+                userControlsHandoff: true,
+                limitations: ["Visible synthetic prices are timestamped observations, not guarantees."]
             )
         )
     }
 
-    func testBackendConfigurationRejectsCredentialsAndInsecureRemoteHTTP() {
-        XCTAssertNil(SolariBackendConfiguration(rawValue: "https://user:secret@example.com"))
-        XCTAssertNil(SolariBackendConfiguration(rawValue: "http://example.com"))
-        XCTAssertNil(SolariBackendConfiguration(rawValue: ""))
-    }
-
-    private func validator() -> SolariEvidenceValidator {
-        SolariEvidenceValidator(now: validationDate)
-    }
-
-    private func decodeRequest() throws -> SolariResearchRequest {
-        try SolariRetailerResearchClient.decoder.decode(
-            SolariResearchRequest.self,
-            from: Data(contentsOf: fixtureRoot.appending(path: "chicken-parmesan-walmart-request.json"))
+    private func replacing(
+        _ result: SolariResearchResult,
+        observations: [SolariRetailerObservation]
+    ) -> SolariResearchResult {
+        SolariResearchResult(
+            schemaVersion: result.schemaVersion,
+            requestID: result.requestID,
+            demoID: result.demoID,
+            retailerID: result.retailerID,
+            completedAt: result.completedAt,
+            executionMode: result.executionMode,
+            status: result.status,
+            observations: observations,
+            decisions: result.decisions,
+            basket: result.basket,
+            optimizer: result.optimizer,
+            provenance: result.provenance,
+            trust: result.trust
         )
     }
 
-    private func decodeResult() throws -> SolariResearchResult {
-        try SolariRetailerResearchClient.decoder.decode(
-            SolariResearchResult.self,
-            from: Data(contentsOf: fixtureRoot.appending(path: "chicken-parmesan-walmart-result.json"))
-        )
-    }
-
-    private func mutatedRequest(
-        _ mutation: (inout [String: Any]) -> Void
-    ) throws -> SolariResearchRequest {
-        var object = try jsonObject("chicken-parmesan-walmart-request.json")
-        mutation(&object)
-        return try SolariRetailerResearchClient.decoder.decode(
-            SolariResearchRequest.self,
-            from: JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
-        )
-    }
-
-    private func mutatedResult(
-        _ mutation: (inout [String: Any]) -> Void
-    ) throws -> SolariResearchResult {
-        var object = try jsonObject("chicken-parmesan-walmart-result.json")
-        mutation(&object)
-        return try SolariRetailerResearchClient.decoder.decode(
-            SolariResearchResult.self,
-            from: JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
-        )
-    }
-
-    private func jsonObject(_ name: String) throws -> [String: Any] {
-        try XCTUnwrap(
-            JSONSerialization.jsonObject(
-                with: Data(contentsOf: fixtureRoot.appending(path: name))
-            ) as? [String: Any]
-        )
+    private func configuration() -> SolariBackendConfiguration {
+        SolariBackendConfiguration(
+            backendRawValue: "https://smartcart-solari-beta.example.com",
+            demoRetailerRawValue: "https://exo-robotics.github.io/smartcart-solari/website/solari-demo"
+        )!
     }
 
     private func demoItems() -> [ShoppingListItem] {
-        let storeID = UUID(uuidString: "90000000-0000-0000-0000-000000000001")!
-        return [
+        [
             item(
-                name: "Boneless skinless chicken breast",
+                id: fixedUUID("20000000-0000-0000-0000-000000000001"),
+                name: "Boneless chicken breast",
                 amount: 1.5,
                 unit: "lb",
-                selected: product(id: "10414680", packageQuantity: 3, packageUnit: "lb"),
-                alternatives: [],
-                storeID: storeID
+                products: [product(id: "10414680")]
             ),
             item(
+                id: fixedUUID("20000000-0000-0000-0000-000000000002"),
                 name: "Penne pasta",
                 amount: 12,
                 unit: "oz",
-                selected: product(id: "10534084", packageQuantity: 16, packageUnit: "oz"),
-                alternatives: [product(id: "623835750", packageQuantity: 24, packageUnit: "oz")],
-                storeID: storeID
+                products: [product(id: "10534084"), product(id: "623835750")]
             ),
             item(
-                name: "Finely shredded Parmesan",
+                id: fixedUUID("20000000-0000-0000-0000-000000000003"),
+                name: "Parmesan",
                 amount: 3,
                 unit: "oz",
-                selected: product(id: "10452414", packageQuantity: 6, packageUnit: "oz"),
-                alternatives: [
-                    product(id: "10307238", packageQuantity: 5, packageUnit: "oz"),
-                    product(id: "47088917", packageQuantity: 6, packageUnit: "oz")
-                ],
-                storeID: storeID
+                products: [product(id: "10452414"), product(id: "10307238"), product(id: "47088917")]
             )
         ]
     }
 
     private func item(
+        id: UUID,
         name: String,
         amount: Double,
         unit: String,
-        selected: RetailerProductRecord,
-        alternatives: [RetailerProductRecord],
-        storeID: UUID
+        products: [RetailerProductRecord]
     ) -> ShoppingListItem {
         ShoppingListItem(
-            ingredient: Ingredient(name: name, quantity: amount, unit: unit),
+            id: id,
+            ingredient: Ingredient(
+                id: UUID(uuidString: id.uuidString.replacingOccurrences(of: "20000000", with: "30000000"))!,
+                name: name,
+                quantity: amount,
+                unit: unit
+            ),
             requestedQuantity: "\(amount.formatted()) \(unit)",
             requestedAmount: amount,
             purchaseQuantity: 1,
-            product: selected,
-            alternatives: alternatives,
-            storeID: storeID,
-            matchScore: 1
+            product: products[0],
+            alternatives: Array(products.dropFirst()),
+            storeID: fixedUUID("90000000-0000-0000-0000-000000000001"),
+            matchScore: 1,
+            matchingInputFingerprint: "reviewed-\(id.uuidString)"
         )
     }
 
-    private func product(
-        id: String,
-        packageQuantity: Double,
-        packageUnit: String
-    ) -> RetailerProductRecord {
+    private func product(id: String) -> RetailerProductRecord {
         RetailerProductRecord(
             retailerID: ShoppingRetailer.walmart.rawValue,
             storeID: nil,
@@ -281,9 +462,9 @@ final class SolariEvidenceContractTests: XCTestCase {
             title: "Fixture \(id)",
             brand: "Fixture",
             exactURL: URL(string: "https://www.walmart.com/ip/\(id)")!,
-            packageDescription: "\(packageQuantity) \(packageUnit)",
-            packageQuantity: packageQuantity,
-            packageUnit: packageUnit,
+            packageDescription: "3 lb",
+            packageQuantity: 3,
+            packageUnit: "lb",
             observedPrice: 1,
             unitPriceText: "$1",
             priceType: .exact,
@@ -291,18 +472,29 @@ final class SolariEvidenceContractTests: XCTestCase {
             fulfillmentMethods: [],
             organicStatus: .unknown,
             dataSource: .demoSeed,
-            observedAt: validationDate,
+            observedAt: now,
+            linkKind: .exactProduct,
             symbol: "basket",
             confidence: .high,
             matchKeywords: []
         )
     }
 
-    private func isoDate(_ value: String) -> Date {
-        ISO8601DateFormatter().date(from: value)!
-    }
+    private func fixedUUID(_ value: String) -> UUID { UUID(uuidString: value)! }
+}
 
-    private func decimal(_ value: String) -> Decimal {
-        Decimal(string: value, locale: Locale(identifier: "en_US_POSIX"))!
+private extension ShoppingListItem {
+    func withFreshIdentity() -> ShoppingListItem {
+        ShoppingListItem(
+            ingredient: Ingredient(name: ingredient.name, quantity: ingredient.quantity, unit: ingredient.unit),
+            requestedQuantity: requestedQuantity,
+            requestedAmount: requestedAmount,
+            purchaseQuantity: purchaseQuantity,
+            product: product,
+            alternatives: alternatives,
+            storeID: storeID,
+            status: status,
+            matchScore: matchScore
+        )
     }
 }

@@ -1,0 +1,8 @@
+#include "Release.xcconfig"
+
+// This is an explicit beta-only configuration. The backend hostname is a
+// deployment placeholder until the App Attest verifier is publicly qualified.
+// No token, Solari API key, retailer credential, or session identifier belongs
+// in an app build setting.
+SMARTCART_SOLARI_EXPERIMENT_BACKEND_URL = https:/$()/smartcart-solari-beta.vercel.app
+SMARTCART_SOLARI_DEMO_RETAILER_BASE_URL = https:/$()/exo-robotics.github.io/smartcart-solari/website/solari-demo

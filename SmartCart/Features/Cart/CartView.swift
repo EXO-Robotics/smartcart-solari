@@ -12,6 +12,7 @@ struct RecipeReadyView: View {
     @State private var activeSheet: RecipeReadySheet?
     @State private var issueCursor = 0
     @State private var isPreparingProducts = false
+    @State private var researchUnavailableMessage: String?
     @State private var pendingIngredientDeletion: PendingIngredientDeletion?
     @AccessibilityFocusState private var focusedIssueID: UUID?
 
@@ -53,7 +54,7 @@ struct RecipeReadyView: View {
                     }
 
                     Button {
-                        Task { await startShopping() }
+                        Task { await startShopping(intent: .normal) }
                     } label: {
                         if isPreparingProducts {
                             HStack {
@@ -96,6 +97,19 @@ struct RecipeReadyView: View {
                             : "\(appModel.isMealPrepShopping ? "Shop Meal Prep" : "Shop This Recipe"), \(appModel.recipeReadyExpectedPurchaseCount) items"
                     )
                     .accessibilityHint(appModel.recipeReadyDisabledExplanation ?? "Prepares products in the background and opens the Safari shopping queue")
+
+                    if SolariBackendConfiguration() != nil {
+                        Button {
+                            Task { await startShopping(intent: .researchCurrentOptions) }
+                        } label: {
+                            Label("Research current options", systemImage: "sparkles.rectangle.stack")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(SecondaryButtonStyle())
+                        .disabled(!appModel.recipeReadyCanStartShopping || isPreparingProducts)
+                        .accessibilityIdentifier("recipe-ready-research-current-options")
+                        .accessibilityHint("Uses Solari Browser and Sandbox after Apple App Attest verifies this app and the exact request")
+                    }
                 }
             }
         }
@@ -150,6 +164,21 @@ struct RecipeReadyView: View {
         ) {
             Button("Remove", role: .destructive, action: confirmIngredientDeletion)
             Button("Cancel", role: .cancel) { pendingIngredientDeletion = nil }
+        }
+        .alert(
+            "Solari research unavailable",
+            isPresented: Binding(
+                get: { researchUnavailableMessage != nil },
+                set: { if !$0 { researchUnavailableMessage = nil } }
+            )
+        ) {
+            Button("Continue with Normal SmartCart") {
+                researchUnavailableMessage = nil
+                _ = appModel.finalizeShoppingPlanForRetailerQueue()
+            }
+            Button("Edit", role: .cancel) { researchUnavailableMessage = nil }
+        } message: {
+            Text(researchUnavailableMessage ?? "This plan is not eligible for the bounded Solari beta.")
         }
         .overlay {
             if isPreparingProducts {
@@ -771,12 +800,12 @@ struct RecipeReadyView: View {
         }
     }
 
-    private func startShopping() async {
+    private func startShopping(intent: ShoppingStartIntent) async {
         guard appModel.recipeReadyCanStartShopping, !isPreparingProducts else { return }
-        await prepareProducts()
+        await prepareProducts(intent: intent)
     }
 
-    private func prepareProducts() async {
+    private func prepareProducts(intent: ShoppingStartIntent) async {
         guard !isPreparingProducts else { return }
         isPreparingProducts = true
         defer { isPreparingProducts = false }
@@ -785,24 +814,30 @@ struct RecipeReadyView: View {
         let published = await appModel.startMatching()
         guard published, !Task.isCancelled else { return }
 
-        if let configuration = SolariBackendConfiguration(),
-           let executionMode = configuration.walmartExecutionMode,
-           let request = SolariResearchRequestBuilder.makeIfEligible(
-               items: appModel.shoppingItems,
-               retailer: appModel.selectedRetailer,
-               executionMode: executionMode
-           ) {
-            activeSheet = .solariReview(
-                SolariReviewContext(
-                    backendURL: configuration.backendURL,
-                    request: request
-                )
-            )
+        guard intent == .researchCurrentOptions else {
+            _ = appModel.finalizeShoppingPlanForRetailerQueue()
             return
         }
 
-        _ = appModel.finalizeShoppingPlanForRetailerQueue()
+        let eligibility = SolariResearchRequestBuilder.evaluate(
+            items: appModel.shoppingItems,
+            configuration: SolariBackendConfiguration(),
+            servingCount: appModel.isMealPrepShopping ? 0 : appModel.desiredServings
+        )
+        switch eligibility {
+        case .eligible(let plan):
+            activeSheet = .solariReview(SolariReviewContext(plan: plan))
+        case .ineligible(let reasons):
+            researchUnavailableMessage = reasons
+                .compactMap(\.errorDescription)
+                .joined(separator: "\n\n")
+        }
     }
+}
+
+private enum ShoppingStartIntent: Equatable {
+    case normal
+    case researchCurrentOptions
 }
 
 private struct ShoppingLaunchOverlay: View {
@@ -873,7 +908,7 @@ private enum RecipeReadySheet: Identifiable {
         case .pantry: "pantry"
         case .shoppingSettings: "shopping-settings"
         case .sourceText: "source-text"
-        case .solariReview(let context): "solari-\(context.id.uuidString)"
+        case .solariReview(let context): "solari-\(context.id)"
         }
     }
 }

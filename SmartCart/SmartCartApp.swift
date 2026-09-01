@@ -7,6 +7,7 @@ struct SmartCartApp: App {
     @State private var appModel = AppModel()
     @State private var appearanceController = SmartCartAppearanceController()
     @State private var weeklyMealsStore = WeeklyMealsStore()
+    @State private var solariResearchStore = SolariResearchStore()
     @State private var handoffCoordinator = SmartCartHandoffCoordinator()
 
     var body: some Scene {
@@ -15,6 +16,7 @@ struct SmartCartApp: App {
                 .environment(appModel)
                 .environment(appearanceController)
                 .environment(weeklyMealsStore)
+                .environment(solariResearchStore)
                 .preferredColorScheme(appearanceController.appearance.colorScheme)
                 .onAppear {
                     if let raw = ProcessInfo.processInfo.environment["SMARTCART_START_TAB"],

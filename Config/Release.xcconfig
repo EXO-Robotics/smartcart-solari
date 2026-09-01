@@ -9,7 +9,7 @@ SMARTCART_WEEKLY_MEALS_BASE_URL = https:/$()/smartcart-barcode-api-omega.vercel.
 // HTTPS service exposing /v1/recipe-pages/extract and its session routes.
 SMARTCART_RECIPE_BACKEND_URL =
 
-// The public submission keeps the experimental retailer-research backend and
-// Walmart fixture replay disabled unless a separate build config opts in.
+// Normal production Release remains unchanged. A separate SolariBeta build
+// configuration is the only release-like configuration that opts in.
 SMARTCART_SOLARI_EXPERIMENT_BACKEND_URL =
-SMARTCART_SOLARI_WALMART_FIXTURE_REPLAY = NO
+SMARTCART_SOLARI_DEMO_RETAILER_BASE_URL =

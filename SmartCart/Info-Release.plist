@@ -34,8 +34,10 @@
 	<string>$(SMARTCART_RECIPE_BACKEND_URL)</string>
 	<key>SmartCartSolariExperimentBackendURL</key>
 	<string>$(SMARTCART_SOLARI_EXPERIMENT_BACKEND_URL)</string>
-	<key>SmartCartSolariWalmartFixtureReplay</key>
-	<string>$(SMARTCART_SOLARI_WALMART_FIXTURE_REPLAY)</string>
+	<key>SmartCartSolariDemoRetailerBaseURL</key>
+	<string>$(SMARTCART_SOLARI_DEMO_RETAILER_BASE_URL)</string>
+	<key>SmartCartSolariDebugFixtureReplay</key>
+	<string>$(SMARTCART_SOLARI_DEBUG_FIXTURE_REPLAY)</string>
 	<key>SmartCartWeeklyMealsBaseURL</key>
 	<string>$(SMARTCART_WEEKLY_MEALS_BASE_URL)</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>

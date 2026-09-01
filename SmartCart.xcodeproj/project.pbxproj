@@ -96,6 +96,7 @@
 		AC1000000000000000000002 /* SolariRetailerResearchClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1000000000000000000002 /* SolariRetailerResearchClient.swift */; };
 		AC1000000000000000000003 /* SolariRetailerReviewSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1000000000000000000003 /* SolariRetailerReviewSheet.swift */; };
 		AC1000000000000000000004 /* SolariEvidenceContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1000000000000000000004 /* SolariEvidenceContractTests.swift */; };
+		AC1000000000000000000005 /* SolariAppAttestClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1000000000000000000005 /* SolariAppAttestClient.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -204,10 +205,13 @@
 		B30000000000000000000001 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
 		B30000000000000000000002 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		B30000000000000000000003 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
+		B30000000000000000000004 /* Release-SolariBeta.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Release-SolariBeta.xcconfig"; sourceTree = "<group>"; };
 		BC1000000000000000000001 /* SolariRetailerEvidence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SolariRetailerEvidence.swift; sourceTree = "<group>"; };
 		BC1000000000000000000002 /* SolariRetailerResearchClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SolariRetailerResearchClient.swift; sourceTree = "<group>"; };
 		BC1000000000000000000003 /* SolariRetailerReviewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SolariRetailerReviewSheet.swift; sourceTree = "<group>"; };
 		BC1000000000000000000004 /* SolariEvidenceContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SolariEvidenceContractTests.swift; sourceTree = "<group>"; };
+		BC1000000000000000000005 /* SolariAppAttestClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SolariAppAttestClient.swift; sourceTree = "<group>"; };
+		BC1000000000000000000006 /* SmartCart-SolariBeta.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "SmartCart-SolariBeta.entitlements"; sourceTree = "<group>"; };
 		B70000000000000000000001 /* WeeklyMealModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models/WeeklyMealModels.swift; sourceTree = "<group>"; };
 		B70000000000000000000002 /* BundledWeeklyMealRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/BundledWeeklyMealRepository.swift; sourceTree = "<group>"; };
 		B70000000000000000000003 /* WeeklyMealCostEstimator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/WeeklyMealCostEstimator.swift; sourceTree = "<group>"; };
@@ -275,6 +279,7 @@
 				B30000000000000000000001 /* Base.xcconfig */,
 				B30000000000000000000002 /* Debug.xcconfig */,
 				B30000000000000000000003 /* Release.xcconfig */,
+				B30000000000000000000004 /* Release-SolariBeta.xcconfig */,
 			);
 			path = Config;
 			sourceTree = "<group>";
@@ -285,6 +290,7 @@
 				B1000000000000000000001F /* Info.plist */,
 				B8B000000000000000000002 /* Info-Release.plist */,
 				BS1000000000000000000005 /* SmartCart.entitlements */,
+				BC1000000000000000000006 /* SmartCart-SolariBeta.entitlements */,
 				B10000000000000000000001 /* SmartCartApp.swift */,
 				B10000000000000000000006 /* RootView.swift */,
 				B10000000000000000000013 /* PrivacyInfo.xcprivacy */,
@@ -392,6 +398,7 @@
 				B10000000000000000000026 /* ShoppingResolutionService.swift */,
 				B10000000000000000000029 /* RetailerMatchingBatchService.swift */,
 				BC1000000000000000000002 /* SolariRetailerResearchClient.swift */,
+				BC1000000000000000000005 /* SolariAppAttestClient.swift */,
 				B10000000000000000000023 /* ExactProductIdentity.swift */,
 				B10000000000000000000027 /* ProductPurchaseGroupingService.swift */,
 				B10000000000000000000028 /* SmartCartPersistenceCoordinator.swift */,
@@ -657,6 +664,7 @@
 				AC1000000000000000000001 /* SolariRetailerEvidence.swift in Sources */,
 				AC1000000000000000000002 /* SolariRetailerResearchClient.swift in Sources */,
 				AC1000000000000000000003 /* SolariRetailerReviewSheet.swift in Sources */,
+				AC1000000000000000000005 /* SolariAppAttestClient.swift in Sources */,
 				A10000000000000000000001 /* SmartCartApp.swift in Sources */,
 				A10000000000000000000002 /* Models.swift in Sources */,
 				A10000000000000000000003 /* AppModel.swift in Sources */,
@@ -832,6 +840,26 @@
 			};
 			name = Release;
 		};
+		F10000000000000000000007 /* Release-SolariBeta */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = "Release-SolariBeta";
+		};
 		F10000000000000000000005 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = B30000000000000000000002 /* Debug.xcconfig */;
@@ -901,6 +929,34 @@
 			};
 			name = Release;
 		};
+		F10000000000000000000008 /* Release-SolariBeta */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = B30000000000000000000004 /* Release-SolariBeta.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = "SmartCart/SmartCart-SolariBeta.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 4;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "SmartCart/Info-Release.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "SmartCart Solari Beta";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.food-and-drink";
+				INFOPLIST_KEY_NSCameraUsageDescription = "SmartCart uses the camera to scan recipe cards, cookbook pages, and pantry barcodes.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "SmartCart imports recipe screenshots and photos from your library.";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.3.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.blakestudio.smartcart.solari-beta;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = "Release-SolariBeta";
+		};
 		F20000000000000000000001 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -930,6 +986,21 @@
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SmartCart.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/SmartCart";
 			};
 			name = Release;
+		};
+		F20000000000000000000004 /* Release-SolariBeta */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.blakestudio.smartcartTests.solari-beta;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SmartCart.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/SmartCart";
+			};
+			name = "Release-SolariBeta";
 		};
 		FS1000000000000000000001 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -983,6 +1054,32 @@
 			};
 			name = Release;
 		};
+		FS1000000000000000000004 /* Release-SolariBeta */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = B30000000000000000000003 /* Release.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = SmartCartShareExtension/SmartCartShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 4;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "SmartCartShareExtension/Info-Release.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.3.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.blakestudio.smartcart.solari-beta.ShareExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = "Release-SolariBeta";
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -991,6 +1088,7 @@
 			buildConfigurations = (
 				F10000000000000000000003 /* Debug */,
 				F10000000000000000000004 /* Release */,
+				F10000000000000000000007 /* Release-SolariBeta */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -1000,6 +1098,7 @@
 			buildConfigurations = (
 				F10000000000000000000005 /* Debug */,
 				F10000000000000000000006 /* Release */,
+				F10000000000000000000008 /* Release-SolariBeta */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -1009,6 +1108,7 @@
 			buildConfigurations = (
 				F20000000000000000000001 /* Debug */,
 				F20000000000000000000002 /* Release */,
+				F20000000000000000000004 /* Release-SolariBeta */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -1018,6 +1118,7 @@
 			buildConfigurations = (
 				FS1000000000000000000001 /* Debug */,
 				FS1000000000000000000002 /* Release */,
+				FS1000000000000000000004 /* Release-SolariBeta */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
