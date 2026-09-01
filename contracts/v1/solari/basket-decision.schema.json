@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.smartcart.app/v1/solari/basket-decision.schema.json",
+  "title": "BasketDecisionV1",
+  "type": "object", "additionalProperties": false,
+  "required": [
+    "schemaVersion", "requirementID", "observationID", "packageCount", "requiredQuantity", "coveredQuantity",
+    "quantityUnit", "surplusQuantity", "lineTotal", "currency", "proteinGramsPerDollar", "substitutionNote",
+    "rationale", "confidence", "ambiguityReasons"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "basket-decision-v1" },
+    "requirementID": { "type": "string", "format": "uuid" },
+    "observationID": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,99}$" },
+    "packageCount": { "type": "integer", "minimum": 1, "maximum": 50 },
+    "requiredQuantity": { "type": "number", "exclusiveMinimum": 0, "maximum": 10000 },
+    "coveredQuantity": { "type": "number", "exclusiveMinimum": 0, "maximum": 10000 },
+    "quantityUnit": { "enum": ["ounce", "pound", "count"] },
+    "surplusQuantity": { "type": "number", "minimum": 0, "maximum": 10000 },
+    "lineTotal": { "type": ["number", "null"], "minimum": 0, "maximum": 100000 },
+    "currency": { "type": ["string", "null"], "enum": ["USD", null] },
+    "proteinGramsPerDollar": { "type": "null" },
+    "substitutionNote": { "type": ["string", "null"], "maxLength": 300 },
+    "rationale": { "type": "array", "minItems": 1, "maxItems": 8, "items": { "type": "string", "minLength": 1, "maxLength": 240 } },
+    "confidence": { "enum": ["high", "medium", "low"] },
+    "ambiguityReasons": { "type": "array", "maxItems": 8, "items": { "type": "string", "minLength": 1, "maxLength": 300 } }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "lineTotal": { "type": "number" } }, "required": ["lineTotal"] },
+      "then": { "properties": { "currency": { "const": "USD" } } },
+      "else": { "properties": { "currency": { "type": "null" } } }
+    }
+  ]
+}

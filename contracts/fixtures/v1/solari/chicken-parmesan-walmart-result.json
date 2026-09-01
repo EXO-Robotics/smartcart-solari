@@ -1,0 +1,105 @@
+{
+  "schemaVersion": "solari-shopping-research-result-v1",
+  "requestID": "10000000-0000-0000-0000-000000000001",
+  "demoID": "chicken-parmesan-pasta-v1",
+  "retailerID": "walmart",
+  "completedAt": "2026-07-16T12:00:30Z",
+  "executionMode": "recorded_fixture",
+  "status": "complete",
+  "observations": [
+    {
+      "schemaVersion": "retailer-observation-v1", "observationID": "obs-walmart-10414680",
+      "requirementID": "20000000-0000-0000-0000-000000000001", "retailerProductID": "10414680",
+      "sourceURL": "https://www.walmart.com/ip/10414680", "title": "All Natural Boneless Skinless Chicken Breasts",
+      "packageDescription": "3 lb frozen bag", "packageQuantity": 3, "packageUnit": "pound",
+      "visiblePrice": 9.47, "currency": "USD", "observedAt": "2026-07-16T12:00:00Z", "confidence": "high",
+      "ambiguityReasons": [], "proteinGramsPerPackage": null, "collectionMethod": "smartcart-seeded-fixture-replay",
+      "location": { "kind": "online-unspecified-store", "label": "Walmart.com; no store selected in fixture" },
+      "rawText": "All Natural Boneless Skinless Chicken Breasts; 3 lb frozen bag; recorded visible price $9.47 USD. SmartCart seeded fixture replay, not a live retailer observation.",
+      "freshness": { "status": "stale", "ageSeconds": 3974400, "maxAgeSeconds": 86400 }
+    },
+    {
+      "schemaVersion": "retailer-observation-v1", "observationID": "obs-walmart-10534084",
+      "requirementID": "20000000-0000-0000-0000-000000000002", "retailerProductID": "10534084",
+      "sourceURL": "https://www.walmart.com/ip/10534084", "title": "Penne Pasta", "packageDescription": "16 oz box",
+      "packageQuantity": 16, "packageUnit": "ounce", "visiblePrice": 1.24, "currency": "USD",
+      "observedAt": "2026-07-16T12:00:00Z", "confidence": "high", "ambiguityReasons": [], "proteinGramsPerPackage": null,
+      "collectionMethod": "smartcart-seeded-fixture-replay", "location": { "kind": "online-unspecified-store", "label": "Walmart.com; no store selected in fixture" },
+      "rawText": "Penne Pasta; 16 oz box; recorded visible price $1.24 USD. SmartCart seeded fixture replay, not a live retailer observation.",
+      "freshness": { "status": "stale", "ageSeconds": 3974400, "maxAgeSeconds": 86400 }
+    },
+    {
+      "schemaVersion": "retailer-observation-v1", "observationID": "obs-walmart-623835750",
+      "requirementID": "20000000-0000-0000-0000-000000000002", "retailerProductID": "623835750",
+      "sourceURL": "https://www.walmart.com/ip/623835750", "title": "Gluten Free Penne Pasta", "packageDescription": "2 x 12 oz",
+      "packageQuantity": 24, "packageUnit": "ounce", "visiblePrice": 11.98, "currency": "USD",
+      "observedAt": "2026-07-16T12:00:00Z", "confidence": "medium", "ambiguityReasons": ["Gluten-free attribute was not requested by this recipe."],
+      "proteinGramsPerPackage": null, "collectionMethod": "smartcart-seeded-fixture-replay",
+      "location": { "kind": "online-unspecified-store", "label": "Walmart.com; no store selected in fixture" },
+      "rawText": "Gluten Free Penne Pasta; 2 x 12 oz; recorded visible price $11.98 USD. SmartCart seeded fixture replay, not a live retailer observation.",
+      "freshness": { "status": "stale", "ageSeconds": 3974400, "maxAgeSeconds": 86400 }
+    },
+    {
+      "schemaVersion": "retailer-observation-v1", "observationID": "obs-walmart-10452414",
+      "requirementID": "20000000-0000-0000-0000-000000000003", "retailerProductID": "10452414",
+      "sourceURL": "https://www.walmart.com/ip/10452414", "title": "Finely Shredded Parmesan Cheese", "packageDescription": "6 oz bag",
+      "packageQuantity": 6, "packageUnit": "ounce", "visiblePrice": 2.08, "currency": "USD",
+      "observedAt": "2026-07-16T12:00:00Z", "confidence": "high", "ambiguityReasons": [], "proteinGramsPerPackage": null,
+      "collectionMethod": "smartcart-seeded-fixture-replay", "location": { "kind": "online-unspecified-store", "label": "Walmart.com; no store selected in fixture" },
+      "rawText": "Finely Shredded Parmesan Cheese; 6 oz bag; recorded visible price $2.08 USD. SmartCart seeded fixture replay, not a live retailer observation.",
+      "freshness": { "status": "stale", "ageSeconds": 3974400, "maxAgeSeconds": 86400 }
+    },
+    {
+      "schemaVersion": "retailer-observation-v1", "observationID": "obs-walmart-10307238",
+      "requirementID": "20000000-0000-0000-0000-000000000003", "retailerProductID": "10307238",
+      "sourceURL": "https://www.walmart.com/ip/10307238", "title": "Shredded Parmesan Cheese", "packageDescription": "5 oz cup",
+      "packageQuantity": 5, "packageUnit": "ounce", "visiblePrice": 3.28, "currency": "USD",
+      "observedAt": "2026-07-16T12:00:00Z", "confidence": "medium", "ambiguityReasons": ["Shred size is not stated as finely shredded."],
+      "proteinGramsPerPackage": null, "collectionMethod": "smartcart-seeded-fixture-replay",
+      "location": { "kind": "online-unspecified-store", "label": "Walmart.com; no store selected in fixture" },
+      "rawText": "Shredded Parmesan Cheese; 5 oz cup; recorded visible price $3.28 USD. SmartCart seeded fixture replay, not a live retailer observation.",
+      "freshness": { "status": "stale", "ageSeconds": 3974400, "maxAgeSeconds": 86400 }
+    },
+    {
+      "schemaVersion": "retailer-observation-v1", "observationID": "obs-walmart-47088917",
+      "requirementID": "20000000-0000-0000-0000-000000000003", "retailerProductID": "47088917",
+      "sourceURL": "https://www.walmart.com/ip/47088917", "title": "Finely Shredded Parmesan Cheese", "packageDescription": "6 oz bag",
+      "packageQuantity": 6, "packageUnit": "ounce", "visiblePrice": 4.98, "currency": "USD",
+      "observedAt": "2026-07-16T12:00:00Z", "confidence": "high", "ambiguityReasons": [], "proteinGramsPerPackage": null,
+      "collectionMethod": "smartcart-seeded-fixture-replay", "location": { "kind": "online-unspecified-store", "label": "Walmart.com; no store selected in fixture" },
+      "rawText": "Finely Shredded Parmesan Cheese; 6 oz bag; recorded visible price $4.98 USD. SmartCart seeded fixture replay, not a live retailer observation.",
+      "freshness": { "status": "stale", "ageSeconds": 3974400, "maxAgeSeconds": 86400 }
+    }
+  ],
+  "decisions": [
+    {
+      "schemaVersion": "basket-decision-v1", "requirementID": "20000000-0000-0000-0000-000000000001",
+      "observationID": "obs-walmart-10414680", "packageCount": 1, "requiredQuantity": 1.5, "coveredQuantity": 3,
+      "quantityUnit": "pound", "surplusQuantity": 1.5, "lineTotal": 9.47, "currency": "USD", "proteinGramsPerDollar": null,
+      "substitutionNote": null, "rationale": ["One package covers the reviewed requirement.", "This is the lowest recorded adequate line total among admitted candidates."],
+      "confidence": "high", "ambiguityReasons": []
+    },
+    {
+      "schemaVersion": "basket-decision-v1", "requirementID": "20000000-0000-0000-0000-000000000002",
+      "observationID": "obs-walmart-10534084", "packageCount": 1, "requiredQuantity": 12, "coveredQuantity": 16,
+      "quantityUnit": "ounce", "surplusQuantity": 4, "lineTotal": 1.24, "currency": "USD", "proteinGramsPerDollar": null,
+      "substitutionNote": null, "rationale": ["One package covers the reviewed requirement.", "This is the lowest recorded adequate line total among admitted candidates."],
+      "confidence": "high", "ambiguityReasons": []
+    },
+    {
+      "schemaVersion": "basket-decision-v1", "requirementID": "20000000-0000-0000-0000-000000000003",
+      "observationID": "obs-walmart-10452414", "packageCount": 1, "requiredQuantity": 3, "coveredQuantity": 6,
+      "quantityUnit": "ounce", "surplusQuantity": 3, "lineTotal": 2.08, "currency": "USD", "proteinGramsPerDollar": null,
+      "substitutionNote": null, "rationale": ["One package covers the reviewed requirement.", "This is the lowest recorded adequate line total among admitted candidates."],
+      "confidence": "high", "ambiguityReasons": []
+    }
+  ],
+  "basket": { "completeness": "complete", "observedSubtotal": 12.79, "currency": "USD", "pricedLineCount": 3, "missingPriceLineCount": 0, "unmatchedRequirementCount": 0 },
+  "optimizer": { "method": "smartcart-deterministic-fixture-replay", "algorithmVersion": "smallest-sufficient-package-v1", "independentlyVerified": false },
+  "provenance": { "browser": "not-run-fixture-replay", "sandbox": "not-run-fixture-replay", "fixtureReplay": true },
+  "trust": {
+    "priceClaim": "recorded-fixture-not-live", "accountAccessed": false, "cartModified": false, "checkoutAutomated": false,
+    "userControlsHandoff": true,
+    "limitations": ["Prices are dated SmartCart seed data from 2026-07-16, not a live Solari Browser run.", "Availability, tax, fees, fulfillment, and current checkout totals are unknown.", "No reviewed nutrition evidence is present, so protein per dollar is intentionally omitted."]
+  }
+}

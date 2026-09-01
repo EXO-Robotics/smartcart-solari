@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.smartcart.app/v1/solari/basket-research-request.schema.json",
+  "title": "BasketResearchRequestV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "requestID", "demoID", "submittedAt", "retailerID", "executionMode", "storeReference", "requirements"],
+  "properties": {
+    "schemaVersion": { "const": "solari-shopping-research-request-v1" },
+    "requestID": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$" },
+    "demoID": { "const": "chicken-parmesan-pasta-v1" },
+    "submittedAt": { "type": "string", "format": "date-time" },
+    "retailerID": { "enum": ["walmart", "smartcart-demo-grocer"] },
+    "executionMode": { "enum": ["recorded_fixture", "live"] },
+    "storeReference": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "requirements": {
+      "type": "array", "minItems": 1, "maxItems": 3,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "ingredientID", "name", "requestedQuantityText", "requiredQuantity", "unit", "candidates"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "ingredientID": { "type": "string", "format": "uuid" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 160 },
+          "requestedQuantityText": { "type": "string", "minLength": 1, "maxLength": 160 },
+          "requiredQuantity": { "type": "number", "exclusiveMinimum": 0, "maximum": 10000 },
+          "unit": { "enum": ["oz", "lb", "count"] },
+          "candidates": {
+            "type": "array", "minItems": 1, "maxItems": 3,
+            "items": {
+              "type": "object", "additionalProperties": false, "required": ["retailerProductID", "sourceURL"],
+              "properties": {
+                "retailerProductID": { "enum": ["10414680", "10534084", "623835750", "10452414", "10307238", "47088917"] },
+                "sourceURL": { "type": "string", "format": "uri", "maxLength": 2048 }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

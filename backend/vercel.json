@@ -13,6 +13,9 @@
     },
     "api/handoff.js": {
       "maxDuration": 10
+    },
+    "api/solari.js": {
+      "maxDuration": 60
     }
   },
   "routes": [
@@ -53,6 +56,11 @@
       "src": "/v1/handoffs/claim",
       "methods": ["POST"],
       "dest": "/api/handoff.js?route=claim"
+    },
+    {
+      "src": "/v1/solari/research",
+      "methods": ["POST"],
+      "dest": "/api/solari.js?route=research"
     },
     {
       "src": "/t",

@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "solari-shopping-research-request-v1",
+  "requestID": "10000000-0000-0000-0000-000000000001",
+  "demoID": "chicken-parmesan-pasta-v1",
+  "submittedAt": "2026-07-16T11:59:00Z",
+  "retailerID": "walmart",
+  "executionMode": "recorded_fixture",
+  "storeReference": "walmart-online-no-store-selected",
+  "requirements": [
+    {
+      "id": "20000000-0000-0000-0000-000000000001",
+      "ingredientID": "30000000-0000-0000-0000-000000000001",
+      "name": "Boneless skinless chicken breast",
+      "requestedQuantityText": "1.5 lb",
+      "requiredQuantity": 1.5,
+      "unit": "lb",
+      "candidates": [
+        { "retailerProductID": "10414680", "sourceURL": "https://www.walmart.com/ip/10414680" }
+      ]
+    },
+    {
+      "id": "20000000-0000-0000-0000-000000000002",
+      "ingredientID": "30000000-0000-0000-0000-000000000002",
+      "name": "Penne pasta",
+      "requestedQuantityText": "12 oz",
+      "requiredQuantity": 12,
+      "unit": "oz",
+      "candidates": [
+        { "retailerProductID": "10534084", "sourceURL": "https://www.walmart.com/ip/10534084" },
+        { "retailerProductID": "623835750", "sourceURL": "https://www.walmart.com/ip/623835750" }
+      ]
+    },
+    {
+      "id": "20000000-0000-0000-0000-000000000003",
+      "ingredientID": "30000000-0000-0000-0000-000000000003",
+      "name": "Finely shredded Parmesan",
+      "requestedQuantityText": "3 oz",
+      "requiredQuantity": 3,
+      "unit": "oz",
+      "candidates": [
+        { "retailerProductID": "10452414", "sourceURL": "https://www.walmart.com/ip/10452414" },
+        { "retailerProductID": "10307238", "sourceURL": "https://www.walmart.com/ip/10307238" },
+        { "retailerProductID": "47088917", "sourceURL": "https://www.walmart.com/ip/47088917" }
+      ]
+    }
+  ]
+}

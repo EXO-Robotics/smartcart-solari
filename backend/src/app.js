@@ -18,6 +18,7 @@ import {
   InstacartDemoProvider,
   InstacartHandoffService
 } from './services/instacart-handoff.js';
+import { createPublicSolariApi } from './solari/public-api.js';
 
 function bearerToken(request) {
   const header = request.headers.authorization;
@@ -107,6 +108,15 @@ export function createApp(options = {}) {
     rateLimit: config.barcodeProviderRateLimit,
     now
   });
+  const solariApi = options.solariApi ?? createPublicSolariApi({
+    config,
+    logger,
+    now,
+    service: options.solariResearchService,
+    fixtureProvider: options.solariFixtureProvider,
+    browserProvider: options.solariBrowserProvider,
+    sandboxOptimizer: options.solariSandboxOptimizer
+  });
 
   async function handler(request, response) {
     const id = requestId(request);
@@ -127,6 +137,10 @@ export function createApp(options = {}) {
     try {
       const url = new URL(request.url ?? '/', 'http://smartcart.local');
       const method = request.method ?? 'GET';
+      if (url.pathname === '/v1/solari/research') {
+        await solariApi.handler(request, response);
+        return;
+      }
       const rate = limiter.consume(`${clientKey(request)}:${url.pathname}`);
       const rateHeaders = {
         'x-rate-limit-limit': String(rate.limit),
@@ -360,7 +374,8 @@ export function createApp(options = {}) {
       recipePageFetcher,
       recipePageExtractor,
       instacartHandoff,
-      barcodeCatalog
+      barcodeCatalog,
+      solariResearch: solariApi.services.research
     }
   };
 }

@@ -151,11 +151,11 @@ test('public Trip Intelligence rejects an oversized body pre-parsed by Vercel', 
   }
 });
 
-test('Vercel exposes only the reviewed barcode, intelligence, MCP, and native handoff surfaces', async () => {
+test('Vercel exposes only the reviewed barcode, intelligence, MCP, handoff, and Solari surfaces', async () => {
   const config = JSON.parse(await readFile(new URL('../vercel.json', import.meta.url), 'utf8'));
   assert.deepEqual(
     Object.keys(config.functions).sort(),
-    ['api/handoff.js', 'api/index.js', 'api/intelligence.js', 'api/mcp.js']
+    ['api/handoff.js', 'api/index.js', 'api/intelligence.js', 'api/mcp.js', 'api/solari.js']
   );
   assert.deepEqual(config.routes, [
     {
@@ -193,6 +193,11 @@ test('Vercel exposes only the reviewed barcode, intelligence, MCP, and native ha
       src: '/v1/handoffs/claim',
       methods: ['POST'],
       dest: '/api/handoff.js?route=claim'
+    },
+    {
+      src: '/v1/solari/research',
+      methods: ['POST'],
+      dest: '/api/solari.js?route=research'
     },
     {
       src: '/t',

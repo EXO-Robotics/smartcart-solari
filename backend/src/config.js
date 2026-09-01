@@ -8,6 +8,14 @@ function integer(name, fallback, { min = 1, max = Number.MAX_SAFE_INTEGER } = {}
   return parsed;
 }
 
+function boolean(name, fallback = false) {
+  const value = process.env[name];
+  if (value === undefined || value === '') return fallback;
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  throw new Error(`${name} must be exactly true or false`);
+}
+
 export function loadConfig(overrides = {}) {
   const env = overrides.env ?? process.env.NODE_ENV ?? 'development';
   const config = {
@@ -41,6 +49,18 @@ export function loadConfig(overrides = {}) {
     usdaFoodDataCacheTtlMs: integer('USDA_FDC_CACHE_TTL_SECONDS', 86_400, { max: 2_592_000 }) * 1_000,
     usdaFoodDataCacheMaxEntries: integer('USDA_FDC_CACHE_MAX_ENTRIES', 512, { max: 10_000 }),
     tripIntelligenceRateLimitPerMinute: integer('TRIP_INTELLIGENCE_RATE_LIMIT_PER_MINUTE', 30, { max: 1_000 }),
+    solariApiKey: process.env.SOLARI_API_KEY || undefined,
+    solariBrowserBaseUrl: process.env.SOLARI_BROWSER_BASE_URL || undefined,
+    solariSandboxBaseUrl: process.env.SOLARI_SANDBOX_BASE_URL ?? 'https://api.getsolari.com',
+    solariDemoRetailerBaseUrl: process.env.SOLARI_DEMO_RETAILER_BASE_URL || undefined,
+    solariBrowserTimeoutMs: integer('SOLARI_BROWSER_TIMEOUT_MS', 6_000, { min: 1_000, max: 20_000 }),
+    solariSandboxTimeoutMs: integer('SOLARI_SANDBOX_TIMEOUT_MS', 10_000, { min: 1_000, max: 20_000 }),
+    solariMaxBodyBytes: integer('SOLARI_MAX_BODY_BYTES', 32_768, { min: 4_096, max: 65_536 }),
+    solariRateLimitPerMinute: integer('SOLARI_RATE_LIMIT_PER_MINUTE', 5, { max: 30 }),
+    solariLiveExecutionEnabled: boolean('SOLARI_LIVE_EXECUTION_ENABLED', false),
+    solariOperatorToken: process.env.SOLARI_OPERATOR_TOKEN || undefined,
+    solariRetailerResearchAuthorized: boolean('SOLARI_RETAILER_RESEARCH_AUTHORIZED', false),
+    solariWalmartWrittenAuthorizationReference: process.env.SOLARI_WALMART_WRITTEN_AUTHORIZATION_REFERENCE || undefined,
     mcpRateLimitPerMinute: integer('MCP_RATE_LIMIT_PER_MINUTE', 60, { max: 1_000 }),
     smartCartHandoffBaseUrl: process.env.SMARTCART_HANDOFF_BASE_URL || undefined,
     smartCartHandoffTtlMs: integer('SMARTCART_HANDOFF_TTL_SECONDS', 600, { min: 60, max: 600 }) * 1_000,
