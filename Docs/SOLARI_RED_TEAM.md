@@ -159,3 +159,22 @@ These are disclosed constraints, not permission to broaden automation. Walmart s
 - signed archive / physical App Attest / TestFlight / App Store / downloadable app: PENDING.
 
 The post-fix review inspected public head `bc083d6` and runtime `772e65b`. This log records that internal conclusion while continuing to treat runtime receipts, tests, and explicit PENDING gates as the authoritative evidence.
+
+## V4 generalized-trip red-team loop
+
+Two fresh terminal Grok sessions reviewed V4 from detached read-only worktrees. Their scores are internal development feedback, not external validation, provider evidence, device proof, or product-market-fit evidence.
+
+The first V4 pass found no Critical or High issue. It reproduced and accepted one Medium: the then-current live Sandbox proof spent $0.63 to select 16 fl oz rather than 17 fl oz of synthetic olive oil for a 30 ml requirement. The computation was correct, but the one-fluid-ounce difference was not shopper-material enough to substantiate the low-waste product claim. That reviewer also verified that the earlier percentage-formatting defect was fixed and that V4 no longer required exactly three ingredients.
+
+Disposition: **fixed and re-qualified**. Runtime `2dd4e6f30be8286a3a8f465c92a56427828a60e2` changed the owned synthetic catalog so the cheapest adequate trip uses a 3 lb chicken package while the bounded low-waste selection uses 1.5 lb. The native comparison now leads with the lower-overage basket and dollar premium, keeps the dimensionless package-overage score secondary, and points users to exact line-item leftovers. Credentialed run [`33546912947`](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33546912947) executed Browser and Sandbox across eight requirements and recorded a $24.20 selected basket versus $23.57 cheapest, a $0.63 premium, and about 680 g / 1.5 lb of avoided excess chicken in the [sanitized receipt](../evidence/live/smartcart-solari-v4-qualification-33546912947.json).
+
+The second fresh V4 reviewer inspected publication head `c2991a4` and runtime `2dd4e6f`. Its exact severity conclusion was **no Critical, High, or Medium findings**. It scored the explicitly bounded owned-source / unsigned native-beta submission **10/10** and answered **Yes** to all four required conclusions: Solari materially improves SmartCart; the trust model remains defensible; claims are evidence-backed; and the submission is effectively 10/10 within that stated scope.
+
+The second reviewer retained two Low hardening issues:
+
+- remote Browser DNS cannot be pinned through the current SDK, although exact HTTPS host/path/product checks, public-address preflight, redirect rejection, owned DNS, and default-off execution bound the current risk;
+- `SOLARI_TRUST_FORWARDED_FOR` could make rate limiting trust forwarded client IP if an operator enables it, so it must remain false unless the TLS-terminating proxy is explicitly trusted and documented.
+
+It rejected as unsupported the claims that V4 still has a fixed-three gate, that Solari is fake or locally substituted, that semantic quantities are invented, that Demo Grocer IDs contaminate the retailer queue, that live retailer prices or device distribution are overclaimed, that credentials reach iOS, and that App Attest/quota/cancellation/cleanup/result-validation gaps block the bounded submission. Historical V1/V3 code remains isolated from the App Attest V4 beta envelope and is not presented as the current product path.
+
+The authoritative V4 evidence remains the credentialed provider receipt, deployed-boundary receipt, source, and tests. The internal score is not a substitute for those artifacts, and signed-device App Attest, TestFlight/App Store/downloadable distribution, authorized real-retailer evidence, and consumer PMF remain **PENDING**.
