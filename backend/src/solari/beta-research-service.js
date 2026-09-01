@@ -11,6 +11,29 @@ export const V2_ENVELOPE_SCHEMA_ID = 'https://schemas.smartcart.app/v2/solari/ap
 export const V2_CHALLENGE_REQUEST_SCHEMA_ID = 'https://schemas.smartcart.app/v2/solari/app-attest-challenge-request.schema.json';
 export const V2_ATTESTATION_REQUEST_SCHEMA_ID = 'https://schemas.smartcart.app/v2/solari/app-attestation-request.schema.json';
 
+function structuredV2Observation(value) {
+  return {
+    schemaVersion: 'retailer-observation-v2',
+    observationID: value.observationID,
+    requirementID: value.requirementID,
+    retailerProductID: value.retailerProductID,
+    sourceURL: value.sourceURL,
+    title: value.title,
+    packageDescription: value.packageDescription,
+    packageQuantity: value.packageQuantity,
+    packageUnit: value.packageUnit,
+    visiblePrice: value.visiblePrice,
+    currency: value.currency,
+    observedAt: value.observedAt,
+    confidence: value.confidence,
+    ambiguityReasons: value.ambiguityReasons,
+    proteinGramsPerPackage: value.proteinGramsPerPackage,
+    collectionMethod: value.collectionMethod,
+    location: value.location,
+    freshness: value.freshness
+  };
+}
+
 function assertBoundedRequest(request, baseURL) {
   if (request.retailerID !== 'smartcart-demo-grocer' || request.executionMode !== 'live') {
     throw new SolariResearchError('beta_retailer_not_allowed', 'The beta admits only live owned Demo Grocer research.', { status: 400 });
@@ -48,9 +71,9 @@ export function createSolariBetaResearchService(options={}) {
     if(!config.solariDemoRetailerBaseUrl)throw new SolariResearchError('controlled_demo_unavailable','The owned Demo Grocer base URL is not configured.',{status:503});
     await assertPublicDemoBaseURL(config.solariDemoRetailerBaseUrl,{lookup:options.demoHostLookup});
     const bounded=assertBoundedRequest(request,config.solariDemoRetailerBaseUrl),deadlineAt=clock()+config.solariRequestTimeoutMs;
-    const observationsV1=await browser.observe(bounded,{deadlineAt,clock,signal});
-    const optimized=await sandbox.optimize(bounded.requirements,observationsV1,{deadlineAt,clock,signal});
-    const observations=observationsV1.map((value)=>({...value,schemaVersion:'retailer-observation-v2'}));
+    const browserObservations=await browser.observe(bounded,{deadlineAt,clock,signal,evidenceVersion:'v2'});
+    const observations=browserObservations.map(structuredV2Observation);
+    const optimized=await sandbox.optimize(bounded.requirements,observations,{deadlineAt,clock,signal});
     const decisions=optimized.decisions.map((value)=>({...value,schemaVersion:'basket-decision-v2'}));
     const result={
       schemaVersion:'solari-shopping-research-result-v2',requestID:request.requestID,demoID:request.demoID,

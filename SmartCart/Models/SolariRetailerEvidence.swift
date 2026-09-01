@@ -1,13 +1,14 @@
 import Foundation
 
 enum SolariRetailerEvidenceSchema {
-    static let requestVersion = "solari-shopping-research-request-v2"
-    static let resultVersion = "solari-shopping-research-result-v2"
-    static let observationVersion = "retailer-observation-v2"
-    static let decisionVersion = "basket-decision-v2"
-    static let demoID = "owned-demo-grocer-basket-v2"
+    static let requestVersion = "solari-shopping-research-request-v3"
+    static let resultVersion = "solari-shopping-research-result-v3"
+    static let observationVersion = "retailer-observation-v3"
+    static let decisionVersion = "basket-decision-v3"
+    static let demoID = "owned-demo-grocer-basket-v3"
     static let retailerID = "smartcart-demo-grocer"
-    static let storeReference = "smartcart-demo-grocer-owned-catalog-v1"
+    static let storeReference = "smartcart-demo-grocer-owned-catalog-v2"
+    static let requiredRequirementCount = 3
     static let maximumRequirements = 3
     static let maximumCandidatesPerRequirement = 3
     static let maximumResponseBytes = 256 * 1_024
@@ -21,7 +22,56 @@ struct SolariResearchRequest: Codable, Hashable {
     let retailerID: String
     let executionMode: SolariExecutionMode
     let storeReference: String
+    let optimizationPolicy: SolariOptimizationPolicy
     let requirements: [SolariShoppingRequirement]
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case requestID
+        case demoID
+        case submittedAt
+        case retailerID
+        case executionMode
+        case storeReference
+        case optimizationPolicy
+        case requirements
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(schemaVersion, forKey: .schemaVersion)
+        try container.encode(requestID.uuidString.lowercased(), forKey: .requestID)
+        try container.encode(demoID, forKey: .demoID)
+        try container.encode(submittedAt, forKey: .submittedAt)
+        try container.encode(retailerID, forKey: .retailerID)
+        try container.encode(executionMode, forKey: .executionMode)
+        try container.encode(storeReference, forKey: .storeReference)
+        try container.encode(optimizationPolicy, forKey: .optimizationPolicy)
+        try container.encode(requirements, forKey: .requirements)
+    }
+}
+
+enum SolariOptimizationObjective: String, Codable, Hashable {
+    case minimizePackageSurplus = "minimize-package-surplus"
+}
+
+enum SolariOptimizationTieBreak: String, Codable, Hashable {
+    case observedSubtotal = "observed-subtotal"
+    case retailerProductID = "retailer-product-id"
+}
+
+struct SolariOptimizationPolicy: Codable, Hashable {
+    let objective: SolariOptimizationObjective
+    let maxPremiumOverCheapest: Decimal
+    let currency: String
+    let tieBreak: [SolariOptimizationTieBreak]
+
+    static let fixedV3 = SolariOptimizationPolicy(
+        objective: .minimizePackageSurplus,
+        maxPremiumOverCheapest: Decimal(string: "0.75")!,
+        currency: "USD",
+        tieBreak: [.observedSubtotal, .retailerProductID]
+    )
 }
 
 struct SolariShoppingRequirement: Codable, Identifiable, Hashable {
@@ -101,6 +151,7 @@ struct SolariResearchResult: Codable, Hashable {
     let observations: [SolariRetailerObservation]
     let decisions: [SolariBasketDecision]
     let basket: SolariBasketSummary
+    let comparison: SolariBasketComparison
     let optimizer: SolariOptimizerProvenance
     let provenance: SolariExecutionProvenance
     let trust: SolariTrustBoundary
@@ -121,10 +172,24 @@ struct SolariRetailerObservation: Codable, Identifiable, Hashable {
     let observedAt: Date
     let confidence: SolariObservationConfidence
     let ambiguityReasons: [String]
+    let proteinGramsPerPackage: Double?
     let collectionMethod: SolariCollectionMethod
+    let location: SolariObservationLocation
+    let catalogEra: String
+    let syntheticPrice: Bool
     let freshness: SolariObservationFreshness
 
     var id: String { observationID }
+}
+
+struct SolariObservationLocation: Codable, Hashable {
+    let kind: String
+    let label: String
+
+    static let controlledDemo = SolariObservationLocation(
+        kind: "controlled-demo",
+        label: "SmartCart Demo Grocer synthetic catalog"
+    )
 }
 
 struct SolariBasketDecision: Codable, Identifiable, Hashable {
@@ -136,6 +201,7 @@ struct SolariBasketDecision: Codable, Identifiable, Hashable {
     let coveredQuantity: Double
     let quantityUnit: SolariEvidenceUnit
     let surplusQuantity: Double
+    let surplusOunces: Double
     let lineTotal: Decimal?
     let currency: String?
     let proteinGramsPerDollar: Double?
@@ -161,6 +227,17 @@ struct SolariBasketSummary: Codable, Hashable {
     let unmatchedRequirementCount: Int
 }
 
+struct SolariBasketComparison: Codable, Hashable {
+    let cheapestAdequateSubtotal: Decimal
+    let selectedSubtotal: Decimal
+    let premiumOverCheapest: Decimal
+    let cheapestAggregateSurplusOunces: Double
+    let selectedAggregateSurplusOunces: Double
+    let surplusAvoidedOunces: Double
+    let maxPremiumOverCheapest: Decimal
+    let currency: String
+}
+
 enum SolariOptimizerMethod: String, Codable, Hashable {
     case sandbox = "solari-sandbox"
     case deterministicFixture = "smartcart-deterministic-fixture-replay"
@@ -169,7 +246,20 @@ enum SolariOptimizerMethod: String, Codable, Hashable {
 struct SolariOptimizerProvenance: Codable, Hashable {
     let method: SolariOptimizerMethod
     let algorithmVersion: String
-    let independentlyVerified: Bool
+    let objective: SolariOptimizationObjective
+    let authority: SolariOptimizerAuthority
+    let verification: SolariOptimizerVerification
+    let policyInvariantsVerified: Bool
+}
+
+enum SolariOptimizerAuthority: String, Codable, Hashable {
+    case sandbox = "solari-sandbox"
+    case notRunFixture = "not-run-fixture-replay"
+}
+
+enum SolariOptimizerVerification: String, Codable, Hashable {
+    case smartCartPolicyInvariants = "smartcart-policy-invariants-no-local-global-argmin"
+    case notRunFixture = "not-run-fixture-replay"
 }
 
 enum SolariBrowserProvenance: String, Codable, Hashable {
@@ -189,6 +279,7 @@ enum SolariResourceCleanupStatus: String, Codable, Hashable {
 
 enum SolariAccessBoundary: String, Codable, Hashable {
     case appleAppAttest = "apple-app-attest"
+    case operatorQualification = "operator-qualification"
     case notUsedRecordedFixture = "not-used-recorded-fixture"
 }
 
@@ -229,7 +320,14 @@ struct SolariResearchPlan: Hashable {
     let request: SolariResearchRequest
     let fingerprint: String
     let sourceURLsByProductID: [String: URL]
+    let originalSmartCartSelections: [SolariOriginalSmartCartSelection]
     let servingCount: Int
+}
+
+struct SolariOriginalSmartCartSelection: Codable, Hashable {
+    let requirementID: UUID
+    let retailerID: String
+    let retailerProductID: String
 }
 
 struct SolariReviewContext: Identifiable, Hashable {
@@ -237,13 +335,29 @@ struct SolariReviewContext: Identifiable, Hashable {
     let plan: SolariResearchPlan
 }
 
+struct SolariEvidenceHandoff: Equatable, Hashable {
+    let retailerID: String
+    let selectedSourceURLs: [URL]
+    let transfersToConfiguredRetailer: Bool
+
+    init(result: SolariResearchResult) {
+        var observationsByID: [String: SolariRetailerObservation] = [:]
+        result.observations.forEach { observationsByID[$0.observationID] = $0 }
+        retailerID = result.retailerID
+        selectedSourceURLs = result.decisions.compactMap { observationsByID[$0.observationID]?.sourceURL }
+        transfersToConfiguredRetailer = false
+    }
+}
+
 enum SolariResearchIneligibilityReason: LocalizedError, Equatable, Hashable {
     case configurationUnavailable
     case noWaitingItems
     case tooManyWaitingItems(Int)
+    case requiresCompleteDemoTrip(Int)
     case unsupportedProduct(String)
     case missingExactCandidate(String)
     case invalidQuantity(String)
+    case canonicalRequirementMismatch(name: String, expected: String)
     case unsupportedUnit(String)
     case duplicateRequirement
     case duplicateCandidate
@@ -255,13 +369,17 @@ enum SolariResearchIneligibilityReason: LocalizedError, Equatable, Hashable {
         case .noWaitingItems:
             "There are no waiting shopping items to research."
         case .tooManyWaitingItems(let count):
-            "This beta researches one to three waiting items at a time; the current plan has \(count)."
+            "The V3 low-waste comparison requires exactly three waiting items; the current plan has \(count)."
+        case .requiresCompleteDemoTrip(let count):
+            "The V3 low-waste comparison requires the complete three-item Demo Grocer trip; the current plan has \(count)."
         case .unsupportedProduct(let name):
             "\(name) has no candidate in the owned Demo Grocer catalog."
         case .missingExactCandidate(let name):
             "\(name) does not have an exact reviewed product candidate."
         case .invalidQuantity(let name):
             "\(name) needs a positive, reviewed quantity before research."
+        case .canonicalRequirementMismatch(let name, let expected):
+            "\(name) is outside the fixed V3 Demo Grocer comparison. Expected \(expected)."
         case .unsupportedUnit(let unit):
             "The Demo Grocer beta cannot normalize the unit “\(unit)”."
         case .duplicateRequirement:
@@ -293,6 +411,7 @@ enum SolariEvidenceContractError: LocalizedError, Equatable {
     case invalidPriceMath
     case invalidProteinMath
     case invalidBasketSummary
+    case invalidComparison
     case incompleteBasketClaim
     case invalidProvenance
 
@@ -313,6 +432,7 @@ enum SolariEvidenceContractError: LocalizedError, Equatable {
         case .invalidPriceMath: "Solari returned inconsistent visible-price math."
         case .invalidProteinMath: "Solari returned unsupported protein-per-dollar data."
         case .invalidBasketSummary: "Solari returned an inconsistent basket summary."
+        case .invalidComparison: "Solari returned inconsistent cheapest-basket or package-surplus comparison math."
         case .incompleteBasketClaim: "Solari labeled an incomplete or unpriced basket as complete."
         case .invalidProvenance: "Solari returned evidence without the required Browser, Sandbox, App Attest, and user-control boundaries."
         }

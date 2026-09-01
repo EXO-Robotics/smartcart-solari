@@ -65,7 +65,7 @@ test('public Solari API wires challenge, attestation, and V2 envelope without th
   const betaApi={
     async challenge(payload){calls.push(['challenge',payload]);return{status:201,payload:{schemaVersion:'solari-app-attest-challenge-result-v1'}};},
     async attestation(payload){calls.push(['attestation',payload]);return{status:201,payload:{schemaVersion:'solari-app-attestation-result-v1'}};},
-    async researchEnvelope(payload){calls.push(['research',payload]);return{status:200,payload:{schemaVersion:'solari-shopping-research-result-v2',executionMode:'live'}};}
+    async researchEnvelope(payload){calls.push(['research',payload]);return{status:200,payload:{schemaVersion:'solari-shopping-research-result-v3',executionMode:'live'}};}
   };
   let v1Calls=0;const server=await listen({betaApi,service:{research:async()=>{v1Calls+=1;}}});
   const challenge=await post(server.api,{schemaVersion:'solari-app-attest-challenge-request-v1'}, {}, '/v1/solari/access/challenges');
@@ -229,6 +229,27 @@ test('live Browser and Sandbox execution requires both enablement and an operato
     assert.equal(admitted.response.status, 200);
     assert.equal(serviceCalls, 1);
   } finally { await enabled.close(); }
+});
+
+test('App Attest beta deployment rejects V1 operator-live execution before provider work', async () => {
+  const operatorToken = 'operator-only-token-1234567890abcdef';
+  let serviceCalls = 0;
+  const server = await listen({
+    config: {
+      solariRateLimitPerMinute: 5,
+      solariMaxBodyBytes: 32_768,
+      solariBetaEnabled: true,
+      solariLiveExecutionEnabled: true,
+      solariOperatorToken: operatorToken
+    },
+    service: { async research() { serviceCalls += 1; return { executionMode: 'live' }; } }
+  });
+  try {
+    const denied = await post(server.api, await liveDemoFixture(), { authorization: `Bearer ${operatorToken}` });
+    assert.equal(denied.response.status, 503);
+    assert.equal(denied.payload.error.code, 'solari_execution_mode_conflict');
+    assert.equal(serviceCalls, 0);
+  } finally { await server.close(); }
 });
 
 test('operator-authorized controlled live request returns typed unavailable when server key is missing', async () => {

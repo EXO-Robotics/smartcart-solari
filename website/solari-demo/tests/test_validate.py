@@ -45,11 +45,52 @@ class ReplayFixtureValidationTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name)
         (root / "catalog.json").write_text('{"synthetic":false,"products":[]}', encoding="utf-8")
-        errors = []
-        catalog = __import__("json").loads((root / "catalog.json").read_text(encoding="utf-8"))
-        if catalog.get("synthetic") is not True:
-            errors.append("controlled catalog must be marked synthetic")
-        self.assertIn("controlled catalog must be marked synthetic", errors)
+        errors = validate.validate_catalog(root / "catalog.json", historical=False)
+        self.assertTrue(any("controlled catalog must be marked synthetic" in error for error in errors))
+
+    def test_current_v3_and_historical_v1_catalogs_are_separate(self) -> None:
+        root = MODULE.parent / "retailer"
+        current_errors = validate.validate_catalog(root / "catalog.json", historical=False)
+        legacy_errors = validate.validate_catalog(root / "legacy-catalog.json", historical=True)
+        self.assertEqual(current_errors, [])
+        self.assertEqual(legacy_errors, [])
+        self.assertEqual(validate.validate_v3_policy_math(root / "catalog.json"), [])
+
+        current = __import__("json").loads((root / "catalog.json").read_text(encoding="utf-8"))
+        legacy = __import__("json").loads((root / "legacy-catalog.json").read_text(encoding="utf-8"))
+        self.assertEqual({item["id"] for item in current["products"]}, set(validate.CURRENT_PRODUCT_SPECS))
+        self.assertEqual({item["id"] for item in legacy["products"]}, validate.LEGACY_PRODUCT_IDS)
+
+    def test_current_generated_product_output_forbids_stock_claims(self) -> None:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name)
+        catalog = root / "catalog.json"
+        catalog.write_text('{"synthetic":true,"products":[]}', encoding="utf-8")
+
+        safe_renderer = root / "safe.js"
+        safe_renderer.write_text("""
+          function renderProduct(product, catalog) {
+            const article = document.createElement("article");
+            article.dataset.catalogEra = "current-v3";
+            article.dataset.syntheticPrice = "true";
+          }
+          function renderCatalog() {}
+        """, encoding="utf-8")
+        self.assertEqual(validate.validate_current_product_output(safe_renderer, catalog), [])
+
+        unsafe_renderer = root / "unsafe.js"
+        unsafe_renderer.write_text("""
+          function renderProduct(product, catalog) {
+            const article = document.createElement("article");
+            article.dataset.catalogEra = "current-v3";
+            article.dataset.syntheticPrice = "true";
+            const jsonLD = { offers: { availability: "https://schema.org/InStock" } };
+          }
+          function renderCatalog() {}
+        """, encoding="utf-8")
+        errors = validate.validate_current_product_output(unsafe_renderer, catalog)
+        self.assertIn("renderer must not generate availability or stock claims", errors)
 
     def test_public_demo_has_no_numeric_confidence_or_selection_reset(self) -> None:
         errors = validate.inspect_demo()

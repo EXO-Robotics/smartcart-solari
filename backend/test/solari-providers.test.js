@@ -98,6 +98,41 @@ test('Browser uses a fresh minimal session and closes page, browser, and client'
   assert.deepEqual(coarseShred.ambiguityReasons, ['Shred size is not stated as finely shredded.']);
 });
 
+test('Browser V2 mode never extracts or emits raw page text', async () => {
+  const full = demoRequest(await fixtureRequest());
+  const request = {...full,requirements:[{...full.requirements[0],candidates:[full.requirements[0].candidates[0]]}]};
+  let includeRawText;
+  const page={
+    async goto(){},url(){return request.requirements[0].candidates[0].sourceURL;},async waitForSelector(){},
+    async evaluate(_fn,argument){includeRawText=argument;return{productID:'10414680',title:'Demo Chicken Breasts',packageQuantity:'3',packageUnit:'lb',priceCents:'947',currency:'USD',rawText:'provider must ignore this body'};},
+    async close(){}
+  };
+  const provider=new SolariBrowserProvider({apiKey:'server-only-test-key',now:()=>Date.parse('2026-09-01T14:00:00Z'),solariFactory:()=>({
+    async launch(){return{async newPage(){return page;},async close(){}};},async close(){}
+  })});
+  const observations=await provider.observe(request,{evidenceVersion:'v2'});
+  assert.equal(includeRawText,false);
+  assert.equal(observations.length,1);
+  assert.equal('rawText' in observations[0],false);
+  assert.doesNotMatch(JSON.stringify(observations),/provider must ignore this body/);
+});
+
+test('Browser V3 mode extracts exact catalog-era and synthetic-price markers', async () => {
+  const full=demoRequest(await fixtureRequest());
+  full.requestID='60000000-0000-4000-8000-000000000001';
+  full.requirements[0].candidates[0]={retailerProductID:'dg-chicken-value-3lb',sourceURL:'https://demo.example/solari-demo/retailer/product/dg-chicken-value-3lb.html'};
+  const request={...full,requirements:[{...full.requirements[0],candidates:[full.requirements[0].candidates[0]]}]};
+  const page={
+    async goto(){},url(){return request.requirements[0].candidates[0].sourceURL;},async waitForSelector(){},
+    async evaluate(){return{productID:'dg-chicken-value-3lb',title:'Demo Value Chicken Breasts',packageQuantity:'3',packageUnit:'lb',priceCents:'947',currency:'USD',catalogEra:'current-v3',syntheticPrice:'true'};},
+    async close(){}
+  };
+  const provider=new SolariBrowserProvider({apiKey:'server-only-test-key',now:()=>Date.parse('2026-09-01T15:00:00Z'),solariFactory:()=>({async launch(){return{async newPage(){return page;},async close(){}};},async close(){}})});
+  const[observation]=await provider.observe(request,{evidenceVersion:'v3'});
+  assert.equal(observation.catalogEra,'current-v3');assert.equal(observation.syntheticPrice,true);
+  assert.equal('rawText' in observation,false);
+});
+
 test('Browser and Sandbox fail typed-unavailable when the server key is absent', async () => {
   const request = demoRequest(await fixtureRequest());
   await assert.rejects(() => new SolariBrowserProvider().observe(request), { code: 'solari_unavailable', status: 503 });

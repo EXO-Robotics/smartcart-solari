@@ -2,8 +2,10 @@
   "use strict";
 
   const fixtureURL = "../../contracts/fixtures/v1/solari/chicken-parmesan-walmart-result.json";
+  const v3CatalogURL = "retailer/catalog.json";
   const state = {
     fixture: null,
+    v3Catalog: null,
     selectedByRequirement: new Map(),
     timers: [],
   };
@@ -16,6 +18,11 @@
 
   const unitLabels = { pound: "lb", ounce: "oz", count: "count" };
   const weightScale = { pound: 16, ounce: 1 };
+  const v3ExpectedHandoff = [
+    { productID: "dg-chicken-rightsize-1lb", packageCount: 2 },
+    { productID: "dg-penne-value-16oz", packageCount: 1 },
+    { productID: "dg-parmesan-value-6oz", packageCount: 1 },
+  ];
 
   const money = new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -302,23 +309,26 @@
 
   function renderHandoff() {
     const host = document.querySelector("[data-handoff-list]");
-    if (!host || !state.fixture) return;
+    if (!host || !state.v3Catalog) return;
     clear(host);
 
-    selectedObservations().forEach((observation, index) => {
+    const productsByID = new Map(state.v3Catalog.products.map((product) => [product.id, product]));
+    v3ExpectedHandoff.forEach((selection, index) => {
+      const product = productsByID.get(selection.productID);
+      if (!product) return;
       const item = element("div", "handoff-item");
       const copy = element("span");
-      const count = packageMath(observation)?.count;
+      const lineTotal = money.format((product.priceCents * selection.packageCount) / 100);
       copy.append(
-        element("strong", "", observation.title ?? "Product title unavailable"),
-        element("small", "", `${count ?? "No compatible"} package${count === 1 ? "" : "s"} suggested · recorded ${observation.visiblePrice === null ? "price unavailable" : money.format(observation.visiblePrice)} each · current price unknown`)
+        element("strong", "", product.name),
+        element("small", "", `${selection.packageCount} package${selection.packageCount === 1 ? "" : "s"} expected · ${lineTotal} synthetic line total · V3 qualification pending`)
       );
 
-      const link = element("a", "retailer-link", "Open source page ↗");
-      link.href = observation.sourceURL;
+      const link = element("a", "retailer-link", "Open synthetic page ↗");
+      link.href = `retailer/product/${product.id}.html`;
       link.target = "_blank";
       link.rel = "noreferrer noopener";
-      link.setAttribute("aria-label", `Open Walmart source page for ${observation.title}; current details must be verified`);
+      link.setAttribute("aria-label", `Open current synthetic Demo Grocer page for ${product.name}`);
 
       item.append(element("span", "handoff-number", String(index + 1).padStart(2, "0")), copy, link);
       host.append(item);
@@ -333,7 +343,7 @@
     const status = document.querySelector("[data-research-status]");
     events.forEach((event) => event.classList.remove("is-complete"));
     if (meter) meter.style.width = "0%";
-    if (status) status.textContent = "Replaying the receipt-backed sequence—no new Solari or retailer request is being made.";
+    if (status) status.textContent = "Replaying the prior V1 receipt-backed sequence—no new Solari or retailer request is being made.";
 
     const interval = prefersReducedMotion.matches ? 0 : 360;
     events.forEach((event, index) => {
@@ -341,7 +351,7 @@
         event.classList.add("is-complete");
         if (meter) meter.style.width = `${((index + 1) / events.length) * 100}%`;
         if (status && index === events.length - 1) {
-          status.textContent = "Sequence replay complete · receipt records six Browser observations and three Sandbox decisions.";
+          status.textContent = "Prior V1 sequence replay complete · receipt records six Browser observations and three Sandbox decisions.";
         }
       }, interval * (index + 1));
       state.timers.push(timer);
@@ -349,13 +359,21 @@
   }
 
   async function loadFixture() {
-    const response = await fetch(fixtureURL, { cache: "no-store" });
-    if (!response.ok) throw new Error(`Fixture request failed: ${response.status}`);
-    const fixture = await response.json();
+    const [fixtureResponse, catalogResponse] = await Promise.all([
+      fetch(fixtureURL, { cache: "no-store" }),
+      fetch(v3CatalogURL, { cache: "no-store" }),
+    ]);
+    if (!fixtureResponse.ok) throw new Error(`Fixture request failed: ${fixtureResponse.status}`);
+    if (!catalogResponse.ok) throw new Error(`V3 catalog request failed: ${catalogResponse.status}`);
+    const [fixture, v3Catalog] = await Promise.all([fixtureResponse.json(), catalogResponse.json()]);
     if (fixture.schemaVersion !== "solari-shopping-research-result-v1") {
       throw new Error("Unsupported replay fixture schema");
     }
+    if (v3Catalog.catalogVersion !== "smartcart.demo-grocer.v3" || v3Catalog.current !== true) {
+      throw new Error("Unsupported current Demo Grocer catalog");
+    }
     state.fixture = fixture;
+    state.v3Catalog = v3Catalog;
     fixture.decisions.forEach((decision) => {
       state.selectedByRequirement.set(decision.requirementID, decision.observationID);
     });

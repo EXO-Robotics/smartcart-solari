@@ -28,7 +28,6 @@
         "kind": "controlled-demo",
         "label": "SmartCart Demo Grocer synthetic catalog"
       },
-      "rawText": "Demo Chicken Breasts; 3 pound synthetic package; visible test price $9.47 USD.",
       "freshness": {
         "status": "fresh",
         "ageSeconds": 5,

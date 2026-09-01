@@ -4,8 +4,11 @@
 from __future__ import annotations
 
 import json
+import math
+import re
 import sys
 from html.parser import HTMLParser
+from itertools import product
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -13,8 +16,22 @@ from urllib.parse import urlsplit
 ROOT = Path(__file__).resolve().parent
 CANONICAL_FIXTURE = ROOT.parents[1] / "contracts" / "fixtures" / "v1" / "solari" / "chicken-parmesan-walmart-result.json"
 LIVE_RECEIPT = ROOT.parents[1] / "evidence" / "live" / "smartcart-solari-live-proof-33519606791.json"
-PRODUCT_IDS = {"10414680", "10534084", "623835750", "10452414", "10307238", "47088917"}
+LEGACY_PRODUCT_IDS = {"10414680", "10534084", "623835750", "10452414", "10307238", "47088917"}
+CURRENT_PRODUCT_SPECS = {
+    "dg-chicken-value-3lb": (3, "lb", 947),
+    "dg-chicken-rightsize-1lb": (1, "lb", 500),
+    "dg-penne-value-16oz": (16, "oz", 124),
+    "dg-penne-rightsize-12oz": (12, "oz", 165),
+    "dg-parmesan-value-6oz": (6, "oz", 208),
+    "dg-parmesan-rightsize-3oz": (3, "oz", 242),
+}
 ALLOWED_REMOTE_HOSTS = {"www.walmart.com", "github.com", "exo-robotics.github.io"}
+FORBIDDEN_STOCK_CLAIM_PATTERNS = (
+    r"\bavailability\b",
+    r"\bin\s*stock\b",
+    r"\bout\s*of\s*stock\b",
+    r"\bstock(?:ed|ing|level|status)?\b",
+)
 
 
 class ReplayHTMLParser(HTMLParser):
@@ -119,7 +136,7 @@ def validate_replay_fixture(path: Path) -> list[str]:
         if trust.get(key) != value:
             errors.append(f"fixture trust.{key} must equal {value!r}")
     observations = fixture.get("observations", [])
-    if {item.get("retailerProductID") for item in observations} != PRODUCT_IDS:
+    if {item.get("retailerProductID") for item in observations} != LEGACY_PRODUCT_IDS:
         errors.append("fixture must contain exactly the six reviewed product IDs")
     for item in observations:
         if item.get("collectionMethod") != "smartcart-seeded-fixture-replay":
@@ -131,20 +148,110 @@ def validate_replay_fixture(path: Path) -> list[str]:
     return errors
 
 
-def validate_catalog(path: Path) -> list[str]:
+def validate_catalog(path: Path, *, historical: bool) -> list[str]:
     catalog = json.loads(path.read_text(encoding="utf-8"))
     errors: list[str] = []
     if catalog.get("synthetic") is not True:
-        errors.append("controlled catalog must be marked synthetic")
-    if {item.get("id") for item in catalog.get("products", [])} != PRODUCT_IDS:
-        errors.append("controlled catalog must contain exactly the six demo IDs")
+        errors.append(f"{path.name}: controlled catalog must be marked synthetic")
+    if catalog.get("historical") is not historical or catalog.get("current") is historical:
+        errors.append(f"{path.name}: catalog era flags are inconsistent")
+
+    products = catalog.get("products", [])
+    product_ids = {item.get("id") for item in products}
+    expected_ids = LEGACY_PRODUCT_IDS if historical else set(CURRENT_PRODUCT_SPECS)
+    if product_ids != expected_ids:
+        errors.append(f"{path.name}: catalog must contain exactly its six expected IDs")
+    if not historical:
+        serialized = json.dumps(catalog).casefold()
+        if "walmart" in serialized or product_ids & LEGACY_PRODUCT_IDS:
+            errors.append("current V3 catalog must not expose Walmart or legacy product identity")
+        if catalog.get("priceProvenance") != "synthetic-test-data":
+            errors.append("current V3 prices must be labeled synthetic test data")
+        for product in products:
+            expected = CURRENT_PRODUCT_SPECS.get(product.get("id"))
+            actual = (product.get("packageValue"), product.get("packageUnit"), product.get("priceCents"))
+            if expected != actual:
+                errors.append(f"{product.get('id')}: current V3 package or price data drifted")
+            if product.get("syntheticPrice") is not True:
+                errors.append(f"{product.get('id')}: current V3 price must be explicitly synthetic")
+    elif catalog.get("priceProvenance") != "historical-synthetic-test-data":
+        errors.append("legacy V1 prices must be labeled historical synthetic test data")
+
     script = (ROOT / "retailer" / "retailer.js").read_text(encoding="utf-8")
     for attribute in (
         "solariProduct", "productId", "productName", "packageValue",
-        "packageUnit", "priceCents", "currency",
+        "packageUnit", "priceCents", "currency", "catalogEra", "syntheticPrice",
     ):
         if f"dataset.{attribute}" not in script:
             errors.append(f"controlled catalog renderer missing dataset.{attribute}")
+    if "legacy-catalog.json" not in script:
+        errors.append("controlled catalog renderer must preserve historical V1 routing")
+    return errors
+
+
+def validate_current_product_output(renderer_path: Path, catalog_path: Path) -> list[str]:
+    """Fail closed if the generated current product surface implies stock state."""
+    renderer = renderer_path.read_text(encoding="utf-8")
+    render_product = renderer.split("function renderProduct", 1)[-1].split("function renderCatalog", 1)[0]
+    catalog = catalog_path.read_text(encoding="utf-8")
+    errors: list[str] = []
+
+    for label, source in (("renderer", render_product), ("current catalog", catalog)):
+        for pattern in FORBIDDEN_STOCK_CLAIM_PATTERNS:
+            if re.search(pattern, source, flags=re.IGNORECASE):
+                errors.append(f"{label} must not generate availability or stock claims")
+                break
+
+    for attribute in ("catalogEra", "syntheticPrice"):
+        if f"article.dataset.{attribute}" not in render_product:
+            errors.append(f"current product output must preserve data-{re.sub(r'(?<!^)(?=[A-Z])', '-', attribute).lower()}")
+    return errors
+
+
+def validate_v3_policy_math(path: Path) -> list[str]:
+    catalog = json.loads(path.read_text(encoding="utf-8"))
+    grouped: dict[str, list[dict[str, object]]] = {"chicken": [], "penne": [], "parmesan": []}
+    required_ounces = {"chicken": 24, "penne": 12, "parmesan": 3}
+    for item in catalog.get("products", []):
+        product_id = str(item.get("id", ""))
+        group = next((name for name in grouped if product_id.startswith(f"dg-{name}-")), None)
+        if group:
+            package_ounces = float(item["packageValue"]) * (16 if item["packageUnit"] == "lb" else 1)
+            count = math.ceil(required_ounces[group] / package_ounces)
+            grouped[group].append({
+                "id": product_id,
+                "count": count,
+                "lineCents": int(item["priceCents"]) * count,
+                "overbuyOunces": package_ounces * count - required_ounces[group],
+            })
+
+    if any(len(options) != 2 for options in grouped.values()):
+        return ["current V3 policy requires exactly two candidates per ingredient"]
+
+    baskets = []
+    for choices in product(*(grouped[name] for name in ("chicken", "penne", "parmesan"))):
+        baskets.append({
+            "ids": tuple(choice["id"] for choice in choices),
+            "counts": tuple(choice["count"] for choice in choices),
+            "cents": sum(choice["lineCents"] for choice in choices),
+            "overbuy": sum(choice["overbuyOunces"] for choice in choices),
+        })
+    baseline = min(baskets, key=lambda basket: basket["cents"])
+    eligible = [basket for basket in baskets if basket["cents"] <= baseline["cents"] + 75]
+    winner = min(eligible, key=lambda basket: (basket["overbuy"], basket["cents"], basket["ids"]))
+    expected_ids = (
+        "dg-chicken-rightsize-1lb",
+        "dg-penne-value-16oz",
+        "dg-parmesan-value-6oz",
+    )
+
+    errors: list[str] = []
+    if baseline["cents"] != 1279:
+        errors.append("current V3 minimum-cost basket must remain $12.79")
+    if winner["cents"] != 1332 or winner["ids"] != expected_ids or winner["counts"] != (2, 1, 1):
+        errors.append("current V3 $0.75 premium policy must select the expected $13.32 basket")
+    if baseline["overbuy"] - winner["overbuy"] != 16:
+        errors.append("current V3 policy must avoid exactly 16 oz of overbuy")
     return errors
 
 
@@ -152,11 +259,11 @@ def validate_live_receipt(path: Path) -> list[str]:
     try:
         receipt = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
-        return [f"current live receipt unreadable: {error}"]
+        return [f"prior V1 live receipt unreadable: {error}"]
 
     errors: list[str] = []
     if receipt.get("workflow", {}).get("runID") != "33519606791":
-        errors.append("current live receipt must bind run 33519606791")
+        errors.append("prior V1 live receipt must bind run 33519606791")
     execution = receipt.get("execution", {})
     expected = {
         "assuranceScope": "first-party-execution-receipt",
@@ -166,9 +273,9 @@ def validate_live_receipt(path: Path) -> list[str]:
     }
     for key, value in expected.items():
         if execution.get(key) != value:
-            errors.append(f"current live receipt execution.{key} must equal {value!r}")
+            errors.append(f"prior V1 live receipt execution.{key} must equal {value!r}")
     if receipt.get("useCase", {}).get("retailer") != "SmartCart Demo Grocer synthetic catalog":
-        errors.append("current live receipt must remain scoped to the synthetic Demo Grocer")
+        errors.append("prior V1 live receipt must remain scoped to the synthetic Demo Grocer")
     return errors
 
 
@@ -176,9 +283,10 @@ def inspect_demo(root: Path = ROOT) -> list[str]:
     errors: list[str] = []
     required = [
         "index.html", "styles.css", "app.js", "README.md", "validate.py",
-        "retailer/index.html", "retailer/styles.css", "retailer/retailer.js", "retailer/catalog.json",
+        "retailer/index.html", "retailer/styles.css", "retailer/retailer.js",
+        "retailer/catalog.json", "retailer/legacy-catalog.json",
     ]
-    required.extend(f"retailer/product/{product_id}.html" for product_id in sorted(PRODUCT_IDS))
+    required.extend(f"retailer/product/{product_id}.html" for product_id in sorted(LEGACY_PRODUCT_IDS | set(CURRENT_PRODUCT_SPECS)))
     for relative in required:
         if not (root / relative).is_file():
             errors.append(f"missing required file: {relative}")
@@ -188,17 +296,48 @@ def inspect_demo(root: Path = ROOT) -> list[str]:
     for html in sorted(root.rglob("*.html")):
         errors.extend(validate_html(html))
     errors.extend(validate_replay_fixture(CANONICAL_FIXTURE))
-    errors.extend(validate_catalog(root / "retailer" / "catalog.json"))
+    errors.extend(validate_catalog(root / "retailer" / "catalog.json", historical=False))
+    errors.extend(validate_catalog(root / "retailer" / "legacy-catalog.json", historical=True))
+    errors.extend(validate_current_product_output(
+        root / "retailer" / "retailer.js",
+        root / "retailer" / "catalog.json",
+    ))
+    errors.extend(validate_v3_policy_math(root / "retailer" / "catalog.json"))
     errors.extend(validate_live_receipt(LIVE_RECEIPT))
+
+    for product_id in CURRENT_PRODUCT_SPECS:
+        source = (root / "retailer" / "product" / f"{product_id}.html").read_text(encoding="utf-8")
+        for marker in ("Current V3 synthetic", "no retailer affiliation", "no account, cart, fulfillment, payment, or checkout"):
+            if marker.casefold() not in source.casefold():
+                errors.append(f"{product_id}: current product page missing boundary label {marker!r}")
+        if "walmart" in source.casefold() or any(legacy_id in source for legacy_id in LEGACY_PRODUCT_IDS):
+            errors.append(f"{product_id}: current product page leaked legacy Walmart identity")
+        if any(re.search(pattern, source, flags=re.IGNORECASE) for pattern in FORBIDDEN_STOCK_CLAIM_PATTERNS):
+            errors.append(f"{product_id}: current product page must not claim availability or stock state")
+    for product_id in LEGACY_PRODUCT_IDS:
+        source = (root / "retailer" / "product" / f"{product_id}.html").read_text(encoding="utf-8")
+        for marker in ("Historical V1 synthetic", "immutable evidence URLs", "no account, cart, fulfillment, payment, or checkout"):
+            if marker.casefold() not in source.casefold():
+                errors.append(f"{product_id}: legacy product page missing historical boundary label {marker!r}")
+
+    current_index = (root / "retailer" / "index.html").read_text(encoding="utf-8")
+    if any(product_id in current_index for product_id in LEGACY_PRODUCT_IDS) or "legacy-catalog" in current_index:
+        errors.append("default Demo Grocer index must not expose historical V1 products")
 
     main_text = (root / "index.html").read_text(encoding="utf-8")
     required_markers = [
         "Research current options",
-        "Credentialed first-party Solari proof is current",
+        "Prior V1 credentialed proof remains valid",
         "33519606791",
         "smartcart-solari-live-proof-33519606791.json",
         "Historical UI replay only",
-        "not signed native App Attest",
+        "There is no credentialed V3 run yet",
+        "Expected V3 policy result · qualification pending",
+        "Starting from the $12.79 minimum-cost combination",
+        "expected optimizer result is $13.32",
+        "avoids 16 oz of chicken overbuy",
+        "not a new credentialed Solari run",
+        "does not prove signed native App Attest",
         "physical-device/TestFlight success",
         "Live Walmart Browser execution is disabled",
         "user-controlled retailer handoff",
@@ -207,6 +346,12 @@ def inspect_demo(root: Path = ROOT) -> list[str]:
     for marker in required_markers:
         if marker.casefold() not in main_text.casefold():
             errors.append(f"main replay missing trust marker: {marker}")
+    handoff_section = main_text.split('id="stage-handoff"', 1)[-1].split("</section>", 1)[0]
+    if "walmart" in handoff_section.casefold() or any(product_id in handoff_section for product_id in LEGACY_PRODUCT_IDS):
+        errors.append("current Demo handoff must not expose Walmart or legacy V1 identity")
+    for marker in ("expected V3 preview", "owned synthetic Demo Grocer", "pending a new credentialed run"):
+        if marker.casefold() not in handoff_section.casefold():
+            errors.append(f"current Demo handoff missing qualification marker: {marker}")
     superseded_run = "".join(("33505", "918379"))
     superseded_receipt = f"smartcart-solari-live-proof-{superseded_run}.json"
     if superseded_run in main_text or superseded_receipt in main_text:
@@ -224,6 +369,19 @@ def inspect_demo(root: Path = ROOT) -> list[str]:
         errors.append("what-if preview must keep incomplete totals nullable")
     if "weightScale" not in app_text:
         errors.append("what-if preview must normalize compatible weight units")
+    expected_handoff_ids = {
+        "dg-chicken-rightsize-1lb",
+        "dg-penne-value-16oz",
+        "dg-parmesan-value-6oz",
+    }
+    handoff_spec = app_text.split("const v3ExpectedHandoff", 1)[-1].split("];", 1)[0]
+    if set(re.findall(r'productID: "([^"]+)"', handoff_spec)) != expected_handoff_ids:
+        errors.append("current Demo handoff must use only the expected V3 low-waste products")
+    render_handoff = app_text.split("function renderHandoff", 1)[-1].split("function replayEvents", 1)[0]
+    if "walmart" in render_handoff.casefold() or any(product_id in render_handoff for product_id in LEGACY_PRODUCT_IDS):
+        errors.append("current Demo handoff renderer must not use Walmart or legacy V1 data")
+    if "synthetic line total" not in render_handoff:
+        errors.append("current Demo handoff prices must remain explicitly synthetic")
     return sorted(set(errors))
 
 
@@ -234,7 +392,7 @@ def main() -> int:
         for error in errors:
             print(f"- {error}")
         return 1
-    print("Solari demo validation passed: canonical replay, controlled catalog, local assets, links, and trust markers checked.")
+    print("Solari demo validation passed: current V3 catalog, historical V1 routing, canonical replay, links, and trust markers checked.")
     return 0
 
 

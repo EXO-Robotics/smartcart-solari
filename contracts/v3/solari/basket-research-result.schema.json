@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.smartcart.app/v3/solari/basket-research-result.schema.json",
+  "title": "BasketResearchResultV3",
+  "type": "object", "additionalProperties": false,
+  "required": ["schemaVersion", "requestID", "demoID", "retailerID", "completedAt", "executionMode", "status", "observations", "decisions", "basket", "comparison", "optimizer", "provenance", "trust"],
+  "properties": {
+    "schemaVersion": { "const": "solari-shopping-research-result-v3" },
+    "requestID": { "type": "string", "format": "uuid" },
+    "demoID": { "const": "owned-demo-grocer-basket-v3" },
+    "retailerID": { "const": "smartcart-demo-grocer" },
+    "completedAt": { "type": "string", "format": "date-time" },
+    "executionMode": { "const": "live" },
+    "status": { "const": "complete" },
+    "observations": { "type": "array", "minItems": 6, "maxItems": 6, "uniqueItems": true, "items": { "$ref": "https://schemas.smartcart.app/v3/solari/retailer-observation.schema.json" } },
+    "decisions": { "type": "array", "minItems": 3, "maxItems": 3, "uniqueItems": true, "items": { "$ref": "https://schemas.smartcart.app/v3/solari/basket-decision.schema.json" } },
+    "basket": { "type": "object", "additionalProperties": false, "required": ["completeness", "observedSubtotal", "currency", "pricedLineCount", "missingPriceLineCount", "unmatchedRequirementCount"], "properties": { "completeness": { "const": "complete" }, "observedSubtotal": { "type": "number", "minimum": 0, "maximum": 100000 }, "currency": { "const": "USD" }, "pricedLineCount": { "const": 3 }, "missingPriceLineCount": { "const": 0 }, "unmatchedRequirementCount": { "const": 0 } } },
+    "comparison": { "type": "object", "additionalProperties": false, "required": ["cheapestAdequateSubtotal", "selectedSubtotal", "premiumOverCheapest", "cheapestAggregateSurplusOunces", "selectedAggregateSurplusOunces", "surplusAvoidedOunces", "maxPremiumOverCheapest", "currency"], "properties": { "cheapestAdequateSubtotal": { "type": "number", "minimum": 0 }, "selectedSubtotal": { "type": "number", "minimum": 0 }, "premiumOverCheapest": { "type": "number", "minimum": 0, "maximum": 0.75 }, "cheapestAggregateSurplusOunces": { "type": "number", "minimum": 0 }, "selectedAggregateSurplusOunces": { "type": "number", "minimum": 0 }, "surplusAvoidedOunces": { "type": "number", "minimum": 0 }, "maxPremiumOverCheapest": { "const": 0.75 }, "currency": { "const": "USD" } } },
+    "optimizer": { "type": "object", "additionalProperties": false, "required": ["method", "algorithmVersion", "objective", "authority", "verification", "policyInvariantsVerified"], "properties": { "method": { "const": "solari-sandbox" }, "algorithmVersion": { "const": "surplus-within-price-cap-v1" }, "objective": { "const": "minimize-package-surplus" }, "authority": { "const": "solari-sandbox" }, "verification": { "const": "smartcart-policy-invariants-no-local-global-argmin" }, "policyInvariantsVerified": { "const": true } } },
+    "provenance": { "type": "object", "additionalProperties": false, "required": ["browser", "sandbox", "fixtureReplay", "resourceCleanup", "accessBoundary"], "properties": { "browser": { "const": "solari-browser" }, "sandbox": { "const": "solari-sandbox" }, "fixtureReplay": { "const": false }, "resourceCleanup": { "type": "object", "additionalProperties": false, "required": ["browser", "sandbox"], "properties": { "browser": { "const": "enforced-before-response" }, "sandbox": { "const": "enforced-before-response" } } }, "accessBoundary": { "enum": ["apple-app-attest", "operator-qualification"] } } },
+    "trust": { "type": "object", "additionalProperties": false, "required": ["priceClaim", "accountAccessed", "cartModified", "checkoutAutomated", "userControlsHandoff", "limitations"], "properties": { "priceClaim": { "const": "observed-visible-price-not-guaranteed" }, "accountAccessed": { "const": false }, "cartModified": { "const": false }, "checkoutAutomated": { "const": false }, "userControlsHandoff": { "const": true }, "limitations": { "type": "array", "minItems": 1, "maxItems": 10, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 400 } } } }
+  }
+}

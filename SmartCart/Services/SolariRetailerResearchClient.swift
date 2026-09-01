@@ -83,8 +83,61 @@ struct SolariBackendConfiguration: Equatable, Hashable {
 }
 
 enum SolariResearchRequestBuilder {
+    private enum CanonicalDemoGroup: String, CaseIterable {
+        case chicken
+        case penne
+        case parmesan
+
+        var candidateProductIDs: [String] {
+            switch self {
+            case .chicken: ["dg-chicken-value-3lb", "dg-chicken-rightsize-1lb"]
+            case .penne: ["dg-penne-value-16oz", "dg-penne-rightsize-12oz"]
+            case .parmesan: ["dg-parmesan-value-6oz", "dg-parmesan-rightsize-3oz"]
+            }
+        }
+
+        var expectedDescription: String {
+            switch self {
+            case .chicken: "a chicken requirement of exactly 1.5 lb"
+            case .penne: "a penne or pasta requirement of exactly 12 oz"
+            case .parmesan: "a Parmesan requirement of exactly 3 oz"
+            }
+        }
+
+        func admits(name: String, quantity: Double, unit: SolariRequirementUnit) -> Bool {
+            let foldedName = name.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            switch self {
+            case .chicken:
+                return foldedName.localizedStandardContains("chicken") &&
+                    unit == .pound && approximatelyEqual(quantity, 1.5)
+            case .penne:
+                return (foldedName.localizedStandardContains("penne") ||
+                    foldedName.localizedStandardContains("pasta")) &&
+                    unit == .ounce && approximatelyEqual(quantity, 12)
+            case .parmesan:
+                return foldedName.localizedStandardContains("parmesan") &&
+                    unit == .ounce && approximatelyEqual(quantity, 3)
+            }
+        }
+
+        private func approximatelyEqual(_ lhs: Double, _ rhs: Double) -> Bool {
+            lhs.isFinite && abs(lhs - rhs) <= 0.000_001
+        }
+    }
+
     static let supportedProductIDs: Set<String> = [
-        "10414680", "10534084", "623835750", "10452414", "10307238", "47088917"
+        "dg-chicken-value-3lb", "dg-chicken-rightsize-1lb",
+        "dg-penne-value-16oz", "dg-penne-rightsize-12oz",
+        "dg-parmesan-value-6oz", "dg-parmesan-rightsize-3oz"
+    ]
+
+    static let demoCandidateIDsByMatchedProductID: [String: [String]] = [
+        "10414680": ["dg-chicken-value-3lb", "dg-chicken-rightsize-1lb"],
+        "10534084": ["dg-penne-value-16oz", "dg-penne-rightsize-12oz"],
+        "623835750": ["dg-penne-value-16oz", "dg-penne-rightsize-12oz"],
+        "10452414": ["dg-parmesan-value-6oz", "dg-parmesan-rightsize-3oz"],
+        "10307238": ["dg-parmesan-value-6oz", "dg-parmesan-rightsize-3oz"],
+        "47088917": ["dg-parmesan-value-6oz", "dg-parmesan-rightsize-3oz"]
     ]
 
     static func evaluate(
@@ -100,6 +153,9 @@ enum SolariResearchRequestBuilder {
         guard waitingItems.count <= SolariRetailerEvidenceSchema.maximumRequirements else {
             return .ineligible([.tooManyWaitingItems(waitingItems.count)])
         }
+        guard waitingItems.count == SolariRetailerEvidenceSchema.requiredRequirementCount else {
+            return .ineligible([.requiresCompleteDemoTrip(waitingItems.count)])
+        }
         guard Set(waitingItems.map(\.id)).count == waitingItems.count,
               Set(waitingItems.map(\.ingredient.id)).count == waitingItems.count else {
             return .ineligible([.duplicateRequirement])
@@ -109,10 +165,12 @@ enum SolariResearchRequestBuilder {
         var requirements: [SolariShoppingRequirement] = []
         var sourceURLs: [String: URL] = [:]
         var allCandidateIDs: [String] = []
+        var originalSelections: [SolariOriginalSmartCartSelection] = []
 
         for item in waitingItems.sorted(by: { $0.id.uuidString < $1.id.uuidString }) {
             let name = bounded(item.ingredient.name, maximumLength: 160)
-            guard let amount = item.requestedAmount, amount.isFinite, amount > 0, amount <= 10_000 else {
+            guard !name.isEmpty,
+                  let amount = item.requestedAmount, amount.isFinite, amount > 0, amount <= 100 else {
                 reasons.append(.invalidQuantity(name))
                 continue
             }
@@ -120,18 +178,43 @@ enum SolariResearchRequestBuilder {
                 reasons.append(.unsupportedUnit(item.ingredient.unit))
                 continue
             }
+            guard unit != .count else {
+                reasons.append(.unsupportedUnit(item.ingredient.unit))
+                continue
+            }
 
-            let availableProducts = [item.product] + item.alternatives
-            let supported = availableProducts.filter { supportedProductIDs.contains($0.retailerProductID) }
-            guard !supported.isEmpty else {
+            let availableProducts = ([item.product] + item.alternatives).filter { $0.linkKind == .exactProduct }
+            let mappedCandidateGroups = availableProducts.compactMap {
+                demoCandidateIDsByMatchedProductID[$0.retailerProductID]
+            }
+            let distinctGroupKeys = Set(mappedCandidateGroups.map { $0.joined(separator: "|") })
+            guard !mappedCandidateGroups.isEmpty, distinctGroupKeys.count == 1 else {
                 reasons.append(.unsupportedProduct(name))
                 continue
             }
+            guard let group = CanonicalDemoGroup.allCases.first(where: {
+                $0.candidateProductIDs == mappedCandidateGroups[0]
+            }) else {
+                reasons.append(.unsupportedProduct(name))
+                continue
+            }
+            guard group.admits(name: name, quantity: amount, unit: unit) else {
+                reasons.append(.canonicalRequirementMismatch(
+                    name: name,
+                    expected: group.expectedDescription
+                ))
+                continue
+            }
+            guard item.product.linkKind == .exactProduct,
+                  demoCandidateIDsByMatchedProductID[item.product.retailerProductID] == group.candidateProductIDs,
+                  !supportedProductIDs.contains(item.product.retailerProductID) else {
+                reasons.append(.missingExactCandidate(name))
+                continue
+            }
             var seen: Set<String> = []
-            let candidates = supported.compactMap { product -> String? in
-                guard product.linkKind == .exactProduct,
-                      seen.insert(product.retailerProductID).inserted else { return nil }
-                return product.retailerProductID
+            let candidates = mappedCandidateGroups.flatMap { $0 }.compactMap { productID -> String? in
+                guard seen.insert(productID).inserted else { return nil }
+                return productID
             }.prefix(SolariRetailerEvidenceSchema.maximumCandidatesPerRequirement)
             guard !candidates.isEmpty else {
                 reasons.append(.missingExactCandidate(name))
@@ -157,6 +240,13 @@ enum SolariResearchRequestBuilder {
                     candidateProductIDs: candidateIDs
                 )
             )
+            originalSelections.append(
+                SolariOriginalSmartCartSelection(
+                    requirementID: item.id,
+                    retailerID: item.product.retailerID,
+                    retailerProductID: item.product.retailerProductID
+                )
+            )
         }
 
         guard reasons.isEmpty, requirements.count == waitingItems.count else {
@@ -178,16 +268,22 @@ enum SolariResearchRequestBuilder {
             retailerID: SolariRetailerEvidenceSchema.retailerID,
             executionMode: executionMode,
             storeReference: SolariRetailerEvidenceSchema.storeReference,
+            optimizationPolicy: .fixedV3,
             requirements: requirements
         )
         let admittedServingCount = max(0, servingCount)
-        let fingerprint = planFingerprint(request: request, servingCount: admittedServingCount)
+        let fingerprint = planFingerprint(
+            request: request,
+            originalSelections: originalSelections,
+            servingCount: admittedServingCount
+        )
         return .eligible(
             SolariResearchPlan(
                 configuration: configuration,
                 request: request,
                 fingerprint: fingerprint,
                 sourceURLsByProductID: sourceURLs,
+                originalSmartCartSelections: originalSelections,
                 servingCount: admittedServingCount
             )
         )
@@ -210,29 +306,39 @@ enum SolariResearchRequestBuilder {
         }
     }
 
-    private static func planFingerprint(request: SolariResearchRequest, servingCount: Int) -> String {
+    private static func planFingerprint(
+        request: SolariResearchRequest,
+        originalSelections: [SolariOriginalSmartCartSelection],
+        servingCount: Int
+    ) -> String {
         struct FingerprintInput: Encodable {
             let version: String
             let demoID: String
             let retailerID: String
             let storeReference: String
             let executionMode: SolariExecutionMode
+            let optimizationPolicy: SolariOptimizationPolicy
             let servingCount: Int
             let requirements: [SolariShoppingRequirement]
+            let originalSelections: [SolariOriginalSmartCartSelection]
         }
         let input = FingerprintInput(
-            version: "smartcart-solari-plan-fingerprint-v1",
+            version: "smartcart-solari-plan-fingerprint-v3",
             demoID: request.demoID,
             retailerID: request.retailerID,
             storeReference: request.storeReference,
             executionMode: request.executionMode,
+            optimizationPolicy: request.optimizationPolicy,
             servingCount: servingCount,
-            requirements: request.requirements
+            requirements: request.requirements,
+            originalSelections: originalSelections.sorted {
+                $0.requirementID.uuidString < $1.requirementID.uuidString
+            }
         )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         let data = try! encoder.encode(input)
-        return "solari-plan-v1:" + SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        return "solari-plan-v3:" + SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
     private static func normalizedUnit(_ value: String) -> SolariRequirementUnit? {
@@ -249,10 +355,50 @@ enum SolariResearchRequestBuilder {
     }
 }
 
+enum SolariOriginalSmartCartContinuation {
+    static func permitsFinalization(
+        plan: SolariResearchPlan,
+        research: SolariValidatedResearch,
+        items: [ShoppingListItem],
+        servingCount: Int
+    ) -> Bool {
+        let result = research.result
+        let handoff = SolariEvidenceHandoff(result: result)
+        guard result.requestID == plan.request.requestID,
+              result.demoID == SolariRetailerEvidenceSchema.demoID,
+              result.retailerID == SolariRetailerEvidenceSchema.retailerID,
+              !handoff.transfersToConfiguredRetailer,
+              Set(handoff.selectedSourceURLs).isSubset(of: Set(plan.sourceURLsByProductID.values)),
+              SolariResearchRequestBuilder.matchesCurrentPlan(
+                  plan,
+                  items: items,
+                  servingCount: servingCount
+              ) else { return false }
+
+        let currentSelections = items
+            .filter { $0.status == .waiting }
+            .map {
+                SolariOriginalSmartCartSelection(
+                    requirementID: $0.id,
+                    retailerID: $0.product.retailerID,
+                    retailerProductID: $0.product.retailerProductID
+                )
+            }
+            .sorted { $0.requirementID.uuidString < $1.requirementID.uuidString }
+        let admittedSelections = plan.originalSmartCartSelections.sorted {
+            $0.requirementID.uuidString < $1.requirementID.uuidString
+        }
+        return currentSelections == admittedSelections && currentSelections.allSatisfy {
+            !SolariResearchRequestBuilder.supportedProductIDs.contains($0.retailerProductID)
+        }
+    }
+}
+
 struct SolariEvidenceValidator {
     var now: Date = .now
     var maximumLiveObservationAge: TimeInterval = 24 * 60 * 60
     var timestampTolerance: TimeInterval = 5 * 60
+    var freshnessAgeTolerance: TimeInterval = 5
 
     func validate(_ result: SolariResearchResult, for plan: SolariResearchPlan) throws -> SolariValidatedResearch {
         let request = plan.request
@@ -273,11 +419,17 @@ struct SolariEvidenceValidator {
             throw SolariEvidenceContractError.invalidCompletionTimestamp
         }
         guard result.observations.count <= request.requirements.count * SolariRetailerEvidenceSchema.maximumCandidatesPerRequirement,
-              result.decisions.count <= request.requirements.count else {
+              result.observations.count == 6,
+              result.decisions.count == request.requirements.count,
+              result.decisions.count == 3 else {
             throw SolariEvidenceContractError.tooManyResults
         }
         guard result.optimizer.method == .sandbox,
-              result.optimizer.independentlyVerified,
+              result.optimizer.algorithmVersion == "surplus-within-price-cap-v1",
+              result.optimizer.objective == .minimizePackageSurplus,
+              result.optimizer.authority == .sandbox,
+              result.optimizer.verification == .smartCartPolicyInvariants,
+              result.optimizer.policyInvariantsVerified,
               result.provenance.browser == .browser,
               result.provenance.sandbox == .sandbox,
               !result.provenance.fixtureReplay,
@@ -289,7 +441,8 @@ struct SolariEvidenceValidator {
               !result.trust.cartModified,
               !result.trust.checkoutAutomated,
               result.trust.userControlsHandoff,
-              !result.trust.limitations.isEmpty else { throw SolariEvidenceContractError.invalidProvenance }
+              !result.trust.limitations.isEmpty,
+              request.optimizationPolicy == .fixedV3 else { throw SolariEvidenceContractError.invalidProvenance }
 
         let requirementsByID = Dictionary(uniqueKeysWithValues: request.requirements.map { ($0.id, $0) })
         var observationsByID: [String: SolariRetailerObservation] = [:]
@@ -302,14 +455,17 @@ struct SolariEvidenceValidator {
                   plan.sourceURLsByProductID[observation.retailerProductID] == observation.sourceURL else {
                 throw SolariEvidenceContractError.invalidObservationReference
             }
-            guard !observation.observationID.isEmpty,
-                  observation.observationID.count <= 100,
+            guard isLowercaseEvidenceID(observation.observationID),
                   observation.title.map({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && $0.count <= 500 }) ?? true,
                   observation.packageDescription.map({ !$0.isEmpty && $0.count <= 160 }) ?? true,
                   observation.packageQuantity.map({ $0.isFinite && $0 > 0 }) ?? true,
                   observation.ambiguityReasons.count <= 8,
                   observation.ambiguityReasons.allSatisfy({ !$0.isEmpty && $0.count <= 300 }),
-                  observation.collectionMethod == .controlledDemo else {
+                  observation.proteinGramsPerPackage == nil,
+                  observation.collectionMethod == .controlledDemo,
+                  observation.location == .controlledDemo,
+                  observation.catalogEra == "current-v3",
+                  observation.syntheticPrice else {
                 throw SolariEvidenceContractError.invalidObservation
             }
             if let price = observation.visiblePrice {
@@ -317,21 +473,37 @@ struct SolariEvidenceValidator {
             } else if observation.currency != nil {
                 throw SolariEvidenceContractError.invalidObservation
             }
+            let actualAgeSeconds = now.timeIntervalSince(observation.observedAt)
             guard observation.observedAt <= now.addingTimeInterval(timestampTolerance),
                   observation.observedAt <= result.completedAt.addingTimeInterval(timestampTolerance),
-                  observation.observedAt >= now.addingTimeInterval(-maximumLiveObservationAge),
                   observation.freshness.status == .fresh,
                   observation.freshness.maxAgeSeconds >= 60,
-                  observation.freshness.ageSeconds.map({
-                      $0 >= 0 && $0 <= min(observation.freshness.maxAgeSeconds, Int(maximumLiveObservationAge))
-                  }) ?? false else {
+                  let claimedAgeSeconds = observation.freshness.ageSeconds,
+                  claimedAgeSeconds >= 0,
+                  actualAgeSeconds >= -timestampTolerance,
+                  actualAgeSeconds <= maximumLiveObservationAge + freshnessAgeTolerance,
+                  actualAgeSeconds <= Double(observation.freshness.maxAgeSeconds) + freshnessAgeTolerance,
+                  abs(max(0, actualAgeSeconds) - Double(claimedAgeSeconds)) <= freshnessAgeTolerance,
+                  Double(claimedAgeSeconds) <= min(
+                      Double(observation.freshness.maxAgeSeconds),
+                      maximumLiveObservationAge
+                  ) + freshnessAgeTolerance else {
                 throw SolariEvidenceContractError.staleObservation
             }
             observationsByID[observation.observationID] = observation
         }
+        for requirement in request.requirements {
+            let observedCandidateIDs = Set(result.observations.lazy
+                .filter { $0.requirementID == requirement.id }
+                .map(\.retailerProductID))
+            guard observedCandidateIDs == Set(requirement.candidateProductIDs) else {
+                throw SolariEvidenceContractError.invalidObservationReference
+            }
+        }
 
         var decidedRequirementIDs: Set<UUID> = []
         var computedSubtotal: Decimal = 0
+        var selectedAggregateSurplusOunces = 0.0
         var priced = 0
         var unpriced = 0
         for decision in result.decisions {
@@ -353,7 +525,9 @@ struct SolariEvidenceValidator {
                   compatible(requirement.unit.evidenceUnit, decision.quantityUnit),
                   (1...8).contains(decision.rationale.count),
                   decision.rationale.allSatisfy({ !$0.isEmpty && $0.count <= 240 }),
-                  decision.substitutionNote.map({ $0.count <= 300 }) ?? true else {
+                  decision.substitutionNote.map({
+                      !$0.isEmpty && $0.count <= 300 && observation.ambiguityReasons.contains($0)
+                  }) ?? true else {
                 throw SolariEvidenceContractError.invalidPackageMath
             }
             guard let requiredBase = baseQuantity(requirement.requiredQuantity, unit: requirement.unit.evidenceUnit),
@@ -366,6 +540,14 @@ struct SolariEvidenceValidator {
                   approximatelyEqual(decision.surplusQuantity, max(0, expectedSurplus)) else {
                 throw SolariEvidenceContractError.invalidPackageMath
             }
+            guard let surplusOunces = baseQuantity(decision.surplusQuantity, unit: decision.quantityUnit),
+                  decision.quantityUnit != .count else {
+                throw SolariEvidenceContractError.invalidPackageMath
+            }
+            guard approximatelyEqual(decision.surplusOunces, surplusOunces) else {
+                throw SolariEvidenceContractError.invalidPackageMath
+            }
+            selectedAggregateSurplusOunces += surplusOunces
             guard decision.proteinGramsPerDollar == nil else { throw SolariEvidenceContractError.invalidProteinMath }
             if let price = observation.visiblePrice {
                 guard let lineTotal = decision.lineTotal,
@@ -400,6 +582,32 @@ struct SolariEvidenceValidator {
         }
         if result.basket.completeness == .complete && !complete { throw SolariEvidenceContractError.incompleteBasketClaim }
         if result.basket.completeness == .partial && complete { throw SolariEvidenceContractError.invalidBasketSummary }
+        guard complete,
+              result.status == .complete,
+              result.basket.completeness == .complete,
+              let selectedSubtotal = result.basket.observedSubtotal else {
+            throw SolariEvidenceContractError.incompleteBasketClaim
+        }
+
+        let cheapest = try cheapestAdequateReference(
+            requirements: request.requirements,
+            observations: Array(observationsByID.values)
+        )
+        let premium = selectedSubtotal - cheapest.subtotal
+        let avoidedSurplus = cheapest.aggregateSurplusOunces - selectedAggregateSurplusOunces
+        guard premium >= 0,
+              premium <= request.optimizationPolicy.maxPremiumOverCheapest,
+              avoidedSurplus >= -0.000_1,
+              decimalEqual(result.comparison.cheapestAdequateSubtotal, cheapest.subtotal),
+              decimalEqual(result.comparison.selectedSubtotal, selectedSubtotal),
+              decimalEqual(result.comparison.premiumOverCheapest, premium),
+              decimalEqual(result.comparison.maxPremiumOverCheapest, request.optimizationPolicy.maxPremiumOverCheapest),
+              approximatelyEqual(result.comparison.cheapestAggregateSurplusOunces, cheapest.aggregateSurplusOunces),
+              approximatelyEqual(result.comparison.selectedAggregateSurplusOunces, selectedAggregateSurplusOunces),
+              approximatelyEqual(result.comparison.surplusAvoidedOunces, max(0, avoidedSurplus)),
+              result.comparison.currency == request.optimizationPolicy.currency else {
+            throw SolariEvidenceContractError.invalidComparison
+        }
 
         var warnings = result.trust.limitations
         if unmatched > 0 { warnings.append("\(unmatched) shopping requirement could not be matched to admitted evidence.") }
@@ -410,8 +618,55 @@ struct SolariEvidenceValidator {
         return SolariValidatedResearch(result: result, warnings: Array(Set(warnings)).sorted())
     }
 
+    private func cheapestAdequateReference(
+        requirements: [SolariShoppingRequirement],
+        observations: [SolariRetailerObservation]
+    ) throws -> (subtotal: Decimal, aggregateSurplusOunces: Double) {
+        var subtotal: Decimal = 0
+        var aggregateSurplusOunces = 0.0
+        for requirement in requirements {
+            guard requirement.unit != .count,
+                  let requiredOunces = baseQuantity(requirement.requiredQuantity, unit: requirement.unit.evidenceUnit) else {
+                throw SolariEvidenceContractError.invalidComparison
+            }
+            let candidates = observations.filter { $0.requirementID == requirement.id }
+            let adequate = candidates.compactMap { observation -> (id: String, total: Decimal, surplus: Double)? in
+                guard let packageQuantity = observation.packageQuantity,
+                      let packageUnit = observation.packageUnit,
+                      packageUnit != .count,
+                      let packageOunces = baseQuantity(packageQuantity, unit: packageUnit),
+                      packageOunces > 0,
+                      let price = observation.visiblePrice,
+                      observation.currency == "USD" else { return nil }
+                let packageCount = max(1, Int(ceil(requiredOunces / packageOunces)))
+                return (
+                    observation.retailerProductID,
+                    price * Decimal(packageCount),
+                    max(0, packageOunces * Double(packageCount) - requiredOunces)
+                )
+            }
+            guard adequate.count == requirement.candidateProductIDs.count,
+                  let cheapest = adequate.min(by: {
+                      if $0.total != $1.total { return $0.total < $1.total }
+                      return $0.id < $1.id
+                  }) else {
+                throw SolariEvidenceContractError.invalidComparison
+            }
+            subtotal += cheapest.total
+            aggregateSurplusOunces += cheapest.surplus
+        }
+        return (subtotal, aggregateSurplusOunces)
+    }
+
     private func approximatelyEqual(_ lhs: Double, _ rhs: Double) -> Bool {
         lhs.isFinite && rhs.isFinite && abs(lhs - rhs) <= 0.000_1 * max(1, abs(lhs), abs(rhs))
+    }
+
+    private func isLowercaseEvidenceID(_ value: String) -> Bool {
+        value.range(
+            of: "^[a-z0-9][a-z0-9-]{0,119}$",
+            options: .regularExpression
+        ) != nil
     }
 
     private func compatible(_ lhs: SolariEvidenceUnit, _ rhs: SolariEvidenceUnit) -> Bool {
@@ -646,12 +901,12 @@ enum SolariDebugRecordedFixture {
     }
 
     private static let products: [String: Product] = [
-        "10414680": Product(id: "10414680", title: "Demo Boneless Skinless Chicken Breasts", packageDescription: "3 lb frozen bag", packageQuantity: 3, packageUnit: .pound, price: 9.47),
-        "10534084": Product(id: "10534084", title: "Demo Penne Pasta", packageDescription: "16 oz box", packageQuantity: 16, packageUnit: .ounce, price: 1.24),
-        "623835750": Product(id: "623835750", title: "Demo Gluten Free Penne Pasta", packageDescription: "2 × 12 oz", packageQuantity: 24, packageUnit: .ounce, price: 11.98),
-        "10452414": Product(id: "10452414", title: "Demo Finely Shredded Parmesan", packageDescription: "6 oz bag", packageQuantity: 6, packageUnit: .ounce, price: 2.08),
-        "10307238": Product(id: "10307238", title: "Demo Shredded Parmesan", packageDescription: "5 oz cup", packageQuantity: 5, packageUnit: .ounce, price: 3.28),
-        "47088917": Product(id: "47088917", title: "Demo Finely Shredded Parmesan Reserve", packageDescription: "6 oz bag", packageQuantity: 6, packageUnit: .ounce, price: 4.98)
+        "dg-chicken-value-3lb": Product(id: "dg-chicken-value-3lb", title: "Demo Grocer Value Chicken Breast", packageDescription: "3 lb synthetic package", packageQuantity: 3, packageUnit: .pound, price: 9.47),
+        "dg-chicken-rightsize-1lb": Product(id: "dg-chicken-rightsize-1lb", title: "Demo Grocer Right-Size Chicken Breast", packageDescription: "1 lb synthetic package", packageQuantity: 1, packageUnit: .pound, price: 5.00),
+        "dg-penne-value-16oz": Product(id: "dg-penne-value-16oz", title: "Demo Grocer Value Penne", packageDescription: "16 oz synthetic box", packageQuantity: 16, packageUnit: .ounce, price: 1.24),
+        "dg-penne-rightsize-12oz": Product(id: "dg-penne-rightsize-12oz", title: "Demo Grocer Right-Size Penne", packageDescription: "12 oz synthetic box", packageQuantity: 12, packageUnit: .ounce, price: 1.65),
+        "dg-parmesan-value-6oz": Product(id: "dg-parmesan-value-6oz", title: "Demo Grocer Value Parmesan", packageDescription: "6 oz synthetic package", packageQuantity: 6, packageUnit: .ounce, price: 2.08),
+        "dg-parmesan-rightsize-3oz": Product(id: "dg-parmesan-rightsize-3oz", title: "Demo Grocer Right-Size Parmesan", packageDescription: "3 oz synthetic package", packageQuantity: 3, packageUnit: .ounce, price: 2.42)
     ]
 
     static func make(for plan: SolariResearchPlan) throws -> SolariValidatedResearch {
@@ -662,6 +917,9 @@ enum SolariDebugRecordedFixture {
         var observations: [SolariRetailerObservation] = []
         var decisions: [SolariBasketDecision] = []
         var subtotal: Decimal = 0
+        var cheapestSubtotal: Decimal = 0
+        var selectedAggregateSurplusOunces = 0.0
+        var cheapestAggregateSurplusOunces = 0.0
 
         for requirement in plan.request.requirements {
             let candidates = requirement.candidateProductIDs.compactMap { products[$0] }
@@ -687,15 +945,20 @@ enum SolariDebugRecordedFixture {
                     observedAt: observedAt,
                     confidence: .high,
                     ambiguityReasons: [],
+                    proteinGramsPerPackage: nil,
                     collectionMethod: .controlledDemo,
+                    location: .controlledDemo,
+                    catalogEra: "current-v3",
+                    syntheticPrice: true,
                     freshness: SolariObservationFreshness(status: .stale, ageSeconds: nil, maxAgeSeconds: 86_400)
                 )
             }
             observations.append(contentsOf: candidateObservations)
 
-            guard let selected = candidates.min(by: {
-                selectionKey(product: $0, requirement: requirement) < selectionKey(product: $1, requirement: requirement)
+            guard let cheapest = candidates.min(by: {
+                cheapestKey(product: $0, requirement: requirement) < cheapestKey(product: $1, requirement: requirement)
             }),
+            let selected = selectedProduct(from: candidates),
             let observation = candidateObservations.first(where: { $0.retailerProductID == selected.id }) else {
                 throw SolariRetailerResearchClientError.invalidRequest
             }
@@ -707,6 +970,12 @@ enum SolariDebugRecordedFixture {
             let surplus = surplusBase / scale(selected.packageUnit)
             let lineTotal = selected.price * Decimal(packageCount)
             subtotal += lineTotal
+            selectedAggregateSurplusOunces += surplusBase
+
+            let cheapestPackageBase = baseQuantity(cheapest.packageQuantity, unit: cheapest.packageUnit)
+            let cheapestCount = max(1, Int(ceil(requiredBase / cheapestPackageBase)))
+            cheapestSubtotal += cheapest.price * Decimal(cheapestCount)
+            cheapestAggregateSurplusOunces += cheapestPackageBase * Double(cheapestCount) - requiredBase
             decisions.append(
                 SolariBasketDecision(
                     schemaVersion: SolariRetailerEvidenceSchema.decisionVersion,
@@ -717,11 +986,12 @@ enum SolariDebugRecordedFixture {
                     coveredQuantity: covered,
                     quantityUnit: selected.packageUnit,
                     surplusQuantity: max(0, surplus),
+                    surplusOunces: max(0, surplusBase),
                     lineTotal: lineTotal,
                     currency: "USD",
                     proteinGramsPerDollar: nil,
-                    substitutionNote: selected.id == requirement.candidateProductIDs.first ? nil : "Recorded optimizer selected a lower-cost sufficient package.",
-                    rationale: ["Recorded deterministic replay selected the lowest-cost sufficient admitted package."],
+                    substitutionNote: nil,
+                    rationale: ["Recorded V3 low-waste comparison selected this admitted package within the shared premium cap."],
                     confidence: .high,
                     ambiguityReasons: []
                 )
@@ -746,10 +1016,23 @@ enum SolariDebugRecordedFixture {
                 missingPriceLineCount: 0,
                 unmatchedRequirementCount: 0
             ),
+            comparison: SolariBasketComparison(
+                cheapestAdequateSubtotal: cheapestSubtotal,
+                selectedSubtotal: subtotal,
+                premiumOverCheapest: subtotal - cheapestSubtotal,
+                cheapestAggregateSurplusOunces: cheapestAggregateSurplusOunces,
+                selectedAggregateSurplusOunces: selectedAggregateSurplusOunces,
+                surplusAvoidedOunces: max(0, cheapestAggregateSurplusOunces - selectedAggregateSurplusOunces),
+                maxPremiumOverCheapest: plan.request.optimizationPolicy.maxPremiumOverCheapest,
+                currency: "USD"
+            ),
             optimizer: SolariOptimizerProvenance(
                 method: .deterministicFixture,
-                algorithmVersion: "recorded-smallest-sufficient-package-v2",
-                independentlyVerified: true
+                algorithmVersion: "recorded-low-waste-comparison-v3",
+                objective: .minimizePackageSurplus,
+                authority: .notRunFixture,
+                verification: .notRunFixture,
+                policyInvariantsVerified: false
             ),
             provenance: SolariExecutionProvenance(
                 browser: .notRunFixture,
@@ -773,13 +1056,23 @@ enum SolariDebugRecordedFixture {
         return SolariValidatedResearch(result: result, warnings: result.trust.limitations)
     }
 
-    private static func selectionKey(product: Product, requirement: SolariShoppingRequirement) -> String {
+    private static func cheapestKey(product: Product, requirement: SolariShoppingRequirement) -> String {
         let required = baseQuantity(requirement.requiredQuantity, unit: requirement.unit.evidenceUnit)
         let package = baseQuantity(product.packageQuantity, unit: product.packageUnit)
         let count = max(1, Int(ceil(required / package)))
         let cents = NSDecimalNumber(decimal: product.price * Decimal(count)).multiplying(byPowerOf10: 2).intValue
-        let surplus = Int(((package * Double(count)) - required) * 1_000)
-        return String(format: "%010d-%010d-%@", cents, surplus, product.id)
+        return String(format: "%010d-%@", cents, product.id)
+    }
+
+    private static func selectedProduct(from products: [Product]) -> Product? {
+        let preferredIDs = [
+            "dg-chicken-rightsize-1lb",
+            "dg-penne-value-16oz",
+            "dg-parmesan-value-6oz"
+        ]
+        return preferredIDs.lazy.compactMap { preferredID in
+            products.first(where: { $0.id == preferredID })
+        }.first
     }
 
     private static func baseQuantity(_ value: Double, unit: SolariEvidenceUnit) -> Double {

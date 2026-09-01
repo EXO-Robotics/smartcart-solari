@@ -1,13 +1,16 @@
 {
-  "catalogVersion": "smartcart.demo-grocer.v1",
-  "catalogLabel": "SmartCart Demo Grocer — synthetic test catalog",
+  "catalogVersion": "smartcart.demo-grocer.v3",
+  "catalogLabel": "SmartCart Demo Grocer V3 — current synthetic test catalog",
   "synthetic": true,
+  "current": true,
+  "historical": false,
+  "priceProvenance": "synthetic-test-data",
   "products": [
-    { "id": "10414680", "name": "Demo Boneless Skinless Chicken Breasts", "brand": "Demo Value", "packageDisplay": "3 lb frozen bag", "packageValue": 3, "packageUnit": "lb", "priceCents": 947, "currency": "USD" },
-    { "id": "10534084", "name": "Demo Penne Pasta", "brand": "Demo Value", "packageDisplay": "16 oz box", "packageValue": 16, "packageUnit": "oz", "priceCents": 124, "currency": "USD" },
-    { "id": "623835750", "name": "Demo Gluten Free Penne Pasta", "brand": "Demo Pantry", "packageDisplay": "2 × 12 oz", "packageValue": 24, "packageUnit": "oz", "priceCents": 1198, "currency": "USD" },
-    { "id": "10452414", "name": "Demo Finely Shredded Parmesan", "brand": "Demo Value", "packageDisplay": "6 oz bag", "packageValue": 6, "packageUnit": "oz", "priceCents": 208, "currency": "USD" },
-    { "id": "10307238", "name": "Demo Shredded Parmesan", "brand": "Demo Creamery", "packageDisplay": "5 oz cup", "packageValue": 5, "packageUnit": "oz", "priceCents": 328, "currency": "USD" },
-    { "id": "47088917", "name": "Demo Finely Shredded Parmesan Reserve", "brand": "Demo Creamery", "packageDisplay": "6 oz bag", "packageValue": 6, "packageUnit": "oz", "priceCents": 498, "currency": "USD" }
+    { "id": "dg-chicken-value-3lb", "name": "Demo Boneless Skinless Chicken Breasts — Value", "brand": "Demo Value", "packageDisplay": "3 lb frozen bag", "packageValue": 3, "packageUnit": "lb", "priceCents": 947, "currency": "USD", "syntheticPrice": true },
+    { "id": "dg-chicken-rightsize-1lb", "name": "Demo Boneless Skinless Chicken Breasts — Right Size", "brand": "Demo Right Size", "packageDisplay": "1 lb bag", "packageValue": 1, "packageUnit": "lb", "priceCents": 500, "currency": "USD", "syntheticPrice": true },
+    { "id": "dg-penne-value-16oz", "name": "Demo Penne Pasta — Value", "brand": "Demo Value", "packageDisplay": "16 oz box", "packageValue": 16, "packageUnit": "oz", "priceCents": 124, "currency": "USD", "syntheticPrice": true },
+    { "id": "dg-penne-rightsize-12oz", "name": "Demo Penne Pasta — Right Size", "brand": "Demo Right Size", "packageDisplay": "12 oz box", "packageValue": 12, "packageUnit": "oz", "priceCents": 165, "currency": "USD", "syntheticPrice": true },
+    { "id": "dg-parmesan-value-6oz", "name": "Demo Finely Shredded Parmesan — Value", "brand": "Demo Value", "packageDisplay": "6 oz bag", "packageValue": 6, "packageUnit": "oz", "priceCents": 208, "currency": "USD", "syntheticPrice": true },
+    { "id": "dg-parmesan-rightsize-3oz", "name": "Demo Finely Shredded Parmesan — Right Size", "brand": "Demo Right Size", "packageDisplay": "3 oz bag", "packageValue": 3, "packageUnit": "oz", "priceCents": 242, "currency": "USD", "syntheticPrice": true }
   ]
 }

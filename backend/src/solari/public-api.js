@@ -139,6 +139,13 @@ export function createPublicSolariApi(options = {}) {
       validatePreparsedJsonBody(request, payload, config.solariMaxBodyBytes);
       const validator = await validatorPromise;
       validator.assert(SOLARI_REQUEST_SCHEMA_ID, payload);
+      if (payload.executionMode === 'live' && config.solariBetaEnabled === true) {
+        throw new SolariResearchError(
+          'solari_execution_mode_conflict',
+          'V1 operator-live execution cannot run on an App Attest beta deployment.',
+          { status: 503 }
+        );
+      }
       if (payload.executionMode === 'live' && !(
         config.solariLiveExecutionEnabled === true
         && validOperatorToken(request, config.solariOperatorToken)

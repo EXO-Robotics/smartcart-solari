@@ -27,6 +27,9 @@ h1 { max-width: 16ch; margin: 0 0 1rem; font-size: clamp(2.5rem, 8vw, 5rem); lin
 .catalog-list a { padding: 1rem 0; border-bottom: 1px solid var(--line); color: var(--navy); font-weight: 800; text-decoration: none; }
 .catalog-list a:nth-child(odd) { padding-right: 1rem; }
 .catalog-list a:nth-child(even) { padding-left: 1rem; border-left: 1px solid var(--line); }
+.policy-note { margin-top: 2rem; padding: 1rem 0 1rem 1rem; border-left: 3px solid var(--green); }
+.policy-note strong { display: block; margin-bottom: .35rem; }
+.policy-note p { max-width: 46rem; margin: 0; color: var(--muted); font-size: .9rem; }
 footer { padding: 1.5rem 0 2.5rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .8rem; }
 @keyframes reveal { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @media (max-width: 600px) { .product { grid-template-columns: 1fr; } .price { text-align: left; } .catalog-list { grid-template-columns: 1fr; } .catalog-list a:nth-child(n) { padding: 1rem 0; border-left: 0; } }

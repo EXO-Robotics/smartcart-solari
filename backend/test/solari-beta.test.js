@@ -7,13 +7,14 @@ import { createContractValidator } from '../src/contracts/contract-validator.js'
 import { createSolariBetaApi } from '../src/solari/beta-api.js';
 import { InMemorySolariBetaStore, UpstashSolariBetaStore } from '../src/solari/beta-store.js';
 import { AppleAppAttestVerifier, assertionClientData } from '../src/solari/app-attest-verifier.js';
-import { createSolariBetaResearchService } from '../src/solari/beta-research-service.js';
 import { SolariResearchError } from '../src/solari/errors.js';
-import { SolariSandboxOptimizer } from '../src/solari/sandbox-provider.js';
+import { createSolariV3ResearchService } from '../src/solari/v3-research-service.js';
+import { SolariV3SandboxOptimizer } from '../src/solari/v3-sandbox-provider.js';
 
-const root = new URL('../../contracts/v2/solari/examples/', import.meta.url);
+const root = new URL('../../contracts/v3/solari/examples/', import.meta.url);
 const requestExample = JSON.parse(await readFile(new URL('basket-research-request.example.json', root), 'utf8'));
 const resultExample = JSON.parse(await readFile(new URL('basket-research-result.example.json', root), 'utf8'));
+const v2RequestExample = JSON.parse(await readFile(new URL('../../contracts/v2/solari/examples/basket-research-request.example.json', import.meta.url), 'utf8'));
 const keyID = Buffer.alloc(32, 7).toString('base64');
 const baseConfig = {
   solariBetaEnabled: true, solariBetaRuntimeKey: 'test:enabled', solariAppAttestChallengeTtlSeconds: 120,
@@ -37,13 +38,18 @@ async function issue(api,operation){return(await api.challenge({schemaVersion:'s
 async function register(api){const challenge=await issue(api,'attest');await api.attestation({schemaVersion:'solari-app-attestation-request-v1',challengeID:challenge.challengeID,keyID,attestationObject:Buffer.from('fake').toString('base64')});return challenge;}
 function envelope(challenge,payload=requestExample,counter=1){const bytes=Buffer.from(JSON.stringify(payload));return{schemaVersion:'solari-app-attest-research-envelope-v1',challengeID:challenge.challengeID,keyID,assertionObject:Buffer.from([counter,0,0,0]).toString('base64'),payloadBase64:bytes.toString('base64')};}
 
-test('V2 schemas and all canonical examples compile under the shared AJV registry',async()=>{
+test('V3 schemas and all canonical examples compile under the shared AJV registry',async()=>{
   const validator=await createContractValidator();
-  const files=['app-attest-challenge-request','app-attest-challenge-result','app-attest-research-envelope','app-attestation-request','app-attestation-result','basket-decision','basket-research-request','basket-research-result','retailer-observation'];
-  for(const name of files){const example=JSON.parse(await readFile(new URL(`${name}.example.json`,root),'utf8'));assert.equal(validator.validate(`https://schemas.smartcart.app/v2/solari/${name}.schema.json`,example).valid,true,name);}
-  const requestSchema='https://schemas.smartcart.app/v2/solari/basket-research-request.schema.json';
+  const files=['basket-decision','basket-research-request','basket-research-result','retailer-observation'];
+  for(const name of files){const example=JSON.parse(await readFile(new URL(`${name}.example.json`,root),'utf8'));assert.equal(validator.validate(`https://schemas.smartcart.app/v3/solari/${name}.schema.json`,example).valid,true,name);}
+  const requestSchema='https://schemas.smartcart.app/v3/solari/basket-research-request.schema.json';
   assert.equal(validator.validate(requestSchema,{...requestExample,requestID:'id.with-dot'}).valid,false);
-  assert.equal(validator.validate(requestSchema,{...requestExample,requirements:[{...requestExample.requirements[0],requiredQuantity:101}]}).valid,false);
+  assert.equal(validator.validate(requestSchema,{...requestExample,optimizationPolicy:{...requestExample.optimizationPolicy,maxPremiumOverCheapest:1}}).valid,false);
+  const resultSchema='https://schemas.smartcart.app/v3/solari/basket-research-result.schema.json';
+  assert.equal(validator.validate(resultSchema,{...resultExample,requestID:'qualification-prefixed-id'}).valid,false);
+  const observationSchema='https://schemas.smartcart.app/v3/solari/retailer-observation.schema.json';
+  assert.equal('rawText' in resultExample.observations[0],false);
+  assert.equal(validator.validate(observationSchema,{...resultExample.observations[0],rawText:'page body must not cross the V3 boundary'}).valid,false);
 });
 
 test('beta fails closed when deployment enablement or Redis runtime switch is absent',async()=>{
@@ -53,6 +59,16 @@ test('beta fails closed when deployment enablement or Redis runtime switch is ab
   await assert.rejects(()=>issue(killed,'attest'),{code:'solari_beta_killed',status:503});
   const noStore=createSolariBetaApi({config:{...baseConfig},verifier:new FakeVerifier(),researchService:{research:async()=>resultExample}});
   await assert.rejects(()=>issue(noStore,'attest'),{code:'solari_beta_store_unavailable',status:503});
+});
+
+test('App Attest beta refuses any deployment configured for V1 operator-live execution',async()=>{
+  for(const config of [
+    {solariLiveExecutionEnabled:true},
+    {solariOperatorToken:'operator-only-token-1234567890abcdef'}
+  ]){
+    const{api}=harness({config});
+    await assert.rejects(()=>issue(api,'attest'),{code:'solari_execution_mode_conflict',status:503});
+  }
 });
 
 test('attestation challenge is atomically burned and replay is rejected',async()=>{
@@ -68,39 +84,97 @@ test('assertion counter is durable, strictly increasing, and body/request bindin
   const changed={...requestExample,submittedAt:'2026-09-01T14:01:00Z'};const conflictChallenge=await issue(api,'research');await assert.rejects(()=>api.researchEnvelope(envelope(conflictChallenge,changed,3)),{code:'idempotency_conflict',status:409});
 });
 
+test('App Attest research envelope admits V3 payloads and rejects the former V2 payload contract',async()=>{
+  const{api}=harness();await register(api);
+  const v2Challenge=await issue(api,'research');
+  await assert.rejects(()=>api.researchEnvelope(envelope(v2Challenge,v2RequestExample,1)),{name:'ContractValidationError'});
+  const accepted=await api.researchEnvelope(envelope(await issue(api,'research'),requestExample,1));
+  assert.equal(accepted.payload.schemaVersion,'solari-shopping-research-result-v3');
+});
+
 test('per-key quotas and distributed concurrency admission fail before provider execution',async()=>{
   const quota=harness({config:{solariBetaPerKeyHourlyLimit:1}});await register(quota.api);
   await quota.api.researchEnvelope(envelope(await issue(quota.api,'research'),requestExample,1));
-  const changed={...requestExample,requestID:'request-two'},quotaChallenge=await issue(quota.api,'research');await assert.rejects(()=>quota.api.researchEnvelope(envelope(quotaChallenge,changed,2)),{code:'beta_quota_exceeded',status:429});
+  const changed={...requestExample,requestID:'60000000-0000-4000-8000-000000000002'},quotaChallenge=await issue(quota.api,'research');await assert.rejects(()=>quota.api.researchEnvelope(envelope(quotaChallenge,changed,2)),{code:'beta_quota_exceeded',status:429});
   let release;const blocked=new Promise((resolve)=>{release=resolve;});const busy=harness({config:{solariBetaConcurrencyLimit:1},research:{research:async(request)=>{await blocked;return{...structuredClone(resultExample),requestID:request.requestID};}}});await register(busy.api);
   const running=busy.api.researchEnvelope(envelope(await issue(busy.api,'research'),requestExample,1));await new Promise((resolve)=>setImmediate(resolve));
-  const second={...requestExample,requestID:'request-concurrent'},busyChallenge=await issue(busy.api,'research');await assert.rejects(()=>busy.api.researchEnvelope(envelope(busyChallenge,second,2)),{code:'beta_busy',status:503});release();await running;
+  const second={...requestExample,requestID:'60000000-0000-4000-8000-000000000003'},busyChallenge=await issue(busy.api,'research');await assert.rejects(()=>busy.api.researchEnvelope(envelope(busyChallenge,second,2)),{code:'beta_busy',status:503});release();await running;
 });
 
-test('owned Demo Grocer V2 contract rejects other retailers before Browser or Sandbox',async()=>{
+test('owned Demo Grocer V3 contract rejects other retailers before Browser or Sandbox',async()=>{
   const validator=await createContractValidator(),bad={...requestExample,retailerID:'walmart'};
-  assert.equal(validator.validate('https://schemas.smartcart.app/v2/solari/basket-research-request.schema.json',bad).valid,false);
+  assert.equal(validator.validate('https://schemas.smartcart.app/v3/solari/basket-research-request.schema.json',bad).valid,false);
 });
 
-test('V2 binds each candidate group to ingredient semantics and unit before Browser',async()=>{
-  let browserCalls=0;const service=createSolariBetaResearchService({config:{solariApiKey:'server-only',solariDemoRetailerBaseUrl:'https://demo.example/solari-demo',solariRequestTimeoutMs:45_000},demoHostLookup:async()=>[{address:'93.184.216.34',family:4}],browserProvider:{observe:async()=>{browserCalls+=1;return[];}},sandboxOptimizer:{optimize:async()=>({})}});
-  await assert.rejects(()=>service.research({...requestExample,requirements:[{...requestExample.requirements[0],name:'Penne pasta'}]}),{code:'beta_candidate_semantics_mismatch',status:400});assert.equal(browserCalls,0);
+test('V3 binds each candidate group to ingredient semantics and unit before Browser',async()=>{
+  let browserCalls=0;const service=createSolariV3ResearchService({config:{solariApiKey:'server-only',solariDemoRetailerBaseUrl:'https://demo.example/solari-demo',solariRequestTimeoutMs:45_000},demoHostLookup:async()=>[{address:'93.184.216.34',family:4}],browserProvider:{observe:async()=>{browserCalls+=1;return[];}},sandboxOptimizer:{optimize:async()=>({})}});
+  const bad=structuredClone(requestExample);bad.requirements[0].name='Penne pasta';
+  await assert.rejects(()=>service.research(bad),{code:'v3_candidate_semantics_mismatch',status:400});assert.equal(browserCalls,0);
 });
 
-test('V2 derives exact owned candidate URLs and returns verified Browser/Sandbox math',async()=>{
+test('V3 derives six exact URLs and returns the expected Sandbox-authoritative basket',async()=>{
   let admitted;
-  const observation={...structuredClone(resultExample.observations[0]),schemaVersion:'retailer-observation-v1'};
-  const sandboxOptimizer=new SolariSandboxOptimizer({apiKey:'server-only',clientFactory:()=>({create:async()=>({commands:{run:async()=>({exitCode:0,stderr:'',stdout:JSON.stringify({selections:[{requirementID:requestExample.requirements[0].id,observationID:observation.observationID,packageCount:1,lineTotal:9.47}],basket:resultExample.basket})})},kill:async()=>{}})})});
-  const service=createSolariBetaResearchService({
+  const remote={
+    selections:[
+      {requirementID:requestExample.requirements[0].id,observationID:resultExample.observations[1].observationID,retailerProductID:'dg-chicken-rightsize-1lb',packageCount:2,lineTotal:10},
+      {requirementID:requestExample.requirements[1].id,observationID:resultExample.observations[2].observationID,retailerProductID:'dg-penne-value-16oz',packageCount:1,lineTotal:1.24},
+      {requirementID:requestExample.requirements[2].id,observationID:resultExample.observations[4].observationID,retailerProductID:'dg-parmesan-value-6oz',packageCount:1,lineTotal:2.08}
+    ],
+    cheapestReferenceSelections:[
+      {requirementID:requestExample.requirements[0].id,observationID:resultExample.observations[0].observationID,retailerProductID:'dg-chicken-value-3lb',packageCount:1,lineTotal:9.47},
+      {requirementID:requestExample.requirements[1].id,observationID:resultExample.observations[2].observationID,retailerProductID:'dg-penne-value-16oz',packageCount:1,lineTotal:1.24},
+      {requirementID:requestExample.requirements[2].id,observationID:resultExample.observations[4].observationID,retailerProductID:'dg-parmesan-value-6oz',packageCount:1,lineTotal:2.08}
+    ],
+    comparison:resultExample.comparison
+  };
+  const sandboxOptimizer=new SolariV3SandboxOptimizer({apiKey:'server-only',clientFactory:()=>({create:async()=>({commands:{run:async()=>({exitCode:0,stderr:'',stdout:JSON.stringify(remote)})},kill:async()=>{}})})});
+  const service=createSolariV3ResearchService({
     config:{solariApiKey:'server-only',solariDemoRetailerBaseUrl:'https://demo.example/solari-demo',solariRequestTimeoutMs:45_000},
-    now:()=>Date.parse('2026-09-01T14:00:30Z'),demoHostLookup:async()=>[{address:'93.184.216.34',family:4}],
-    browserProvider:{observe:async(request)=>{admitted=request;return[{...observation,sourceURL:request.requirements[0].candidates[0].sourceURL}];}},
+    now:()=>Date.parse('2026-09-01T15:00:30Z'),demoHostLookup:async()=>[{address:'93.184.216.34',family:4}],
+    browserProvider:{observe:async(request)=>{admitted=request;return resultExample.observations.map((observation)=>({...observation,schemaVersion:'retailer-observation-v1',sourceURL:request.requirements.flatMap(({candidates})=>candidates).find(({retailerProductID})=>retailerProductID===observation.retailerProductID).sourceURL}));}},
     sandboxOptimizer
   });
   const result=await service.research(requestExample);
-  assert.equal(admitted.requirements[0].candidates[0].sourceURL,'https://demo.example/solari-demo/retailer/product/10414680.html');
-  assert.equal(result.optimizer.algorithmVersion,'smallest-sufficient-package-v1');
-  assert.equal(result.basket.observedSubtotal,9.47);assert.equal(result.provenance.accessBoundary,'apple-app-attest');
+  assert.equal(admitted.requirements[0].candidates[0].sourceURL,'https://demo.example/solari-demo/retailer/product/dg-chicken-value-3lb.html');
+  assert.equal(result.optimizer.authority,'solari-sandbox');assert.equal(result.basket.observedSubtotal,13.32);
+  assert.deepEqual(result.comparison,resultExample.comparison);assert.equal(result.provenance.accessBoundary,'apple-app-attest');
+});
+
+test('V3 Browser boundary and result admit structured evidence only',async()=>{
+  let browserOptions,sandboxObservations;
+  const browserObservations=resultExample.observations.map((observation)=>({...structuredClone(observation),schemaVersion:'retailer-observation-v1',rawText:'sensitive page body that must be dropped',pageBody:'unexpected provider field that must be dropped'}));
+  const service=createSolariV3ResearchService({
+    config:{solariApiKey:'server-only',solariDemoRetailerBaseUrl:'https://demo.example/solari-demo',solariRequestTimeoutMs:45_000},
+    now:()=>Date.parse('2026-09-01T15:00:30Z'),demoHostLookup:async()=>[{address:'93.184.216.34',family:4}],
+    browserProvider:{observe:async(request,options)=>{browserOptions=options;const urls=new Map(request.requirements.flatMap(({candidates})=>candidates).map((candidate)=>[candidate.retailerProductID,candidate.sourceURL]));return browserObservations.map((observation)=>({...observation,sourceURL:urls.get(observation.retailerProductID)}));}},
+    sandboxOptimizer:{optimize:async(_requirements,observations)=>{sandboxObservations=observations;return{decisions:resultExample.decisions,basket:resultExample.basket,comparison:resultExample.comparison,optimizer:resultExample.optimizer};}}
+  });
+  const result=await service.research(requestExample);
+  assert.equal(browserOptions.evidenceVersion,'v3');
+  assert.equal(JSON.stringify(sandboxObservations).includes('sensitive page body'),false);
+  assert.equal(JSON.stringify(result).includes('sensitive page body'),false);
+  assert.equal('rawText' in result.observations[0],false);
+  assert.equal('pageBody' in result.observations[0],false);
+});
+
+test('V3 service rejects stale, non-admitted, or incorrectly marked Browser evidence before Sandbox',async()=>{
+  for(const mutate of [
+    (observations)=>{observations[0].freshness.status='stale';},
+    (observations)=>{observations[0].sourceURL='https://demo.example/solari-demo/retailer/product/dg-chicken-rightsize-1lb.html';},
+    (observations)=>{delete observations[0].catalogEra;},
+    (observations)=>{delete observations[0].syntheticPrice;},
+    (observations)=>{observations[0].syntheticPrice=false;},
+    (observations)=>{observations[0].catalogEra='historical-v1';}
+  ]){
+    let sandboxCalls=0;
+    const service=createSolariV3ResearchService({
+      config:{solariApiKey:'server-only',solariDemoRetailerBaseUrl:'https://demo.example/solari-demo',solariRequestTimeoutMs:45_000},
+      demoHostLookup:async()=>[{address:'93.184.216.34',family:4}],
+      browserProvider:{observe:async(request)=>{const urls=new Map(request.requirements.flatMap(({candidates})=>candidates).map((candidate)=>[candidate.retailerProductID,candidate.sourceURL]));const observations=resultExample.observations.map((observation)=>({...structuredClone(observation),sourceURL:urls.get(observation.retailerProductID)}));mutate(observations);return observations;}},
+      sandboxOptimizer:{optimize:async()=>{sandboxCalls+=1;return{};}}
+    });
+    await assert.rejects(()=>service.research(requestExample));assert.equal(sandboxCalls,0);
+  }
 });
 
 test('cancellation abandons idempotency and releases the distributed execution lease',async()=>{

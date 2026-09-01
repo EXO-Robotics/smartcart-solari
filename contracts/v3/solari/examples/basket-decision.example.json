@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "basket-decision-v3",
+  "requirementID": "40000000-0000-4000-8000-000000000001",
+  "observationID": "obs-60000000-0000-4000-8000-000000000001-dg-chicken-rightsize-1lb",
+  "packageCount": 2,
+  "requiredQuantity": 1.5,
+  "coveredQuantity": 2,
+  "quantityUnit": "pound",
+  "surplusQuantity": 0.5,
+  "surplusOunces": 8,
+  "lineTotal": 10,
+  "currency": "USD",
+  "proteinGramsPerDollar": null,
+  "substitutionNote": null,
+  "rationale": ["2 packages cover the reviewed requirement.", "Solari Sandbox selected this line under the bounded surplus-within-price-cap policy."],
+  "confidence": "high",
+  "ambiguityReasons": []
+}

@@ -92,7 +92,7 @@ export class SolariBrowserProvider {
     this.solariFactory = solariFactory;
   }
 
-  async observe(request, { deadlineAt, clock = Date.now, signal } = {}) {
+  async observe(request, { deadlineAt, clock = Date.now, signal, evidenceVersion = 'v1' } = {}) {
     if (!this.apiKey) {
       throw new SolariResearchError('solari_unavailable', 'Solari is unavailable because the server-side API key is not configured.', { status: 503 });
     }
@@ -143,7 +143,7 @@ export class SolariBrowserProvider {
                 { configuredTimeoutMs: this.timeoutMs, deadlineAt, clock, signal }
               );
             }
-            const data = await runWithinDeadline(() => page.evaluate(() => {
+            const data = await runWithinDeadline(() => page.evaluate((includeRawText) => {
               const root = document.querySelector('[data-solari-product="true"]');
               const meta = (selector) => document.querySelector(selector)?.getAttribute('content') ?? null;
               const jsonLd = [...document.querySelectorAll('script[type="application/ld+json"]')]
@@ -158,9 +158,11 @@ export class SolariBrowserProvider {
                 priceCents: root?.dataset.priceCents ?? null,
                 price: jsonLd?.offers?.price ?? meta('meta[itemprop="price"]'),
                 currency: root?.dataset.currency ?? jsonLd?.offers?.priceCurrency ?? meta('meta[itemprop="priceCurrency"]'),
-                rawText: document.body?.innerText ?? ''
+                catalogEra: root?.dataset.catalogEra ?? null,
+                syntheticPrice: root?.dataset.syntheticPrice ?? null,
+                ...(includeRawText ? { rawText: document.body?.innerText ?? '' } : {})
               };
-            }), { configuredTimeoutMs: this.timeoutMs, deadlineAt, clock, signal });
+            }, evidenceVersion === 'v1'), { configuredTimeoutMs: this.timeoutMs, deadlineAt, clock, signal });
             if (typeof page.url !== 'function' || new URL(page.url()).href !== new URL(candidate.sourceURL).href) {
               throw new SolariResearchError('retailer_redirect_not_allowed', 'The admitted page redirected outside its exact candidate URL after rendering.', { status: 502 });
             }
@@ -197,7 +199,11 @@ export class SolariBrowserProvider {
               location: request.retailerID === 'smartcart-demo-grocer'
                 ? { kind: 'controlled-demo', label: 'SmartCart Demo Grocer synthetic catalog' }
                 : { kind: 'online-unspecified-store', label: request.storeReference },
-              rawText: boundedRawText(data.rawText),
+              ...(evidenceVersion === 'v3' ? {
+                catalogEra: data.catalogEra,
+                syntheticPrice: data.syntheticPrice === 'true'
+              } : {}),
+              ...(evidenceVersion === 'v1' ? { rawText: boundedRawText(data.rawText) } : {}),
               freshness: freshness(observedAt, this.now)
             });
           } finally {

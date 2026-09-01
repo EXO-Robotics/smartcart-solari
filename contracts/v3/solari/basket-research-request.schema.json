@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.smartcart.app/v3/solari/basket-research-request.schema.json",
+  "title": "BasketResearchRequestV3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "requestID", "demoID", "submittedAt", "retailerID", "executionMode", "storeReference", "optimizationPolicy", "requirements"],
+  "properties": {
+    "schemaVersion": { "const": "solari-shopping-research-request-v3" },
+    "requestID": { "type": "string", "format": "uuid" },
+    "demoID": { "const": "owned-demo-grocer-basket-v3" },
+    "submittedAt": { "type": "string", "format": "date-time" },
+    "retailerID": { "const": "smartcart-demo-grocer" },
+    "executionMode": { "const": "live" },
+    "storeReference": { "const": "smartcart-demo-grocer-owned-catalog-v2" },
+    "optimizationPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["objective", "maxPremiumOverCheapest", "currency", "tieBreak"],
+      "properties": {
+        "objective": { "const": "minimize-package-surplus" },
+        "maxPremiumOverCheapest": { "const": 0.75 },
+        "currency": { "const": "USD" },
+        "tieBreak": { "const": ["observed-subtotal", "retailer-product-id"] }
+      }
+    },
+    "requirements": {
+      "type": "array", "minItems": 3, "maxItems": 3, "uniqueItems": true,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "ingredientID", "name", "requestedQuantityText", "requiredQuantity", "unit", "candidateProductIDs"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "ingredientID": { "type": "string", "format": "uuid" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 160 },
+          "requestedQuantityText": { "type": "string", "minLength": 1, "maxLength": 160 },
+          "requiredQuantity": { "type": "number", "exclusiveMinimum": 0, "maximum": 100 },
+          "unit": { "enum": ["oz", "lb", "count"] },
+          "candidateProductIDs": {
+            "type": "array", "minItems": 2, "maxItems": 2, "uniqueItems": true,
+            "items": { "enum": ["dg-chicken-value-3lb", "dg-chicken-rightsize-1lb", "dg-penne-value-16oz", "dg-penne-rightsize-12oz", "dg-parmesan-value-6oz", "dg-parmesan-rightsize-3oz"] }
+          }
+        }
+      }
+    }
+  }
+}

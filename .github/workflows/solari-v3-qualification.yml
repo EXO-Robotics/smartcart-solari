@@ -1,0 +1,51 @@
+name: Solari V3 owned-demo qualification
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: solari-v3-qualification
+  cancel-in-progress: false
+
+jobs:
+  qualify-owned-demo-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install pinned backend dependencies
+        run: npm ci --prefix backend
+
+      - name: Run direct credentialed V3 qualification
+        env:
+          SOLARI_API_KEY: ${{ secrets.SOLARI_API_KEY }}
+          SOLARI_DEMO_RETAILER_BASE_URL: https://exo-robotics.github.io/smartcart-solari/website/solari-demo
+          SOLARI_BROWSER_TIMEOUT_MS: "20000"
+          SOLARI_SANDBOX_TIMEOUT_MS: "20000"
+          SOLARI_REQUEST_TIMEOUT_MS: "90000"
+          SOLARI_V3_QUALIFICATION_OUTPUT: ${{ runner.temp }}/smartcart-solari-v3-qualification.json
+        run: |
+          if [ -z "$SOLARI_API_KEY" ]; then
+            echo "SOLARI_API_KEY repository secret is required" >&2
+            exit 1
+          fi
+          npm run --prefix backend qualify:solari-v3
+
+      - name: Upload sanitized V3 receipt
+        if: success()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: smartcart-solari-v3-qualification-${{ github.sha }}
+          path: ${{ runner.temp }}/smartcart-solari-v3-qualification.json
+          if-no-files-found: error
+          retention-days: 90

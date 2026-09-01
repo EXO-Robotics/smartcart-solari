@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "solari-shopping-research-request-v3",
+  "requestID": "60000000-0000-4000-8000-000000000001",
+  "demoID": "owned-demo-grocer-basket-v3",
+  "submittedAt": "2026-09-01T15:00:00Z",
+  "retailerID": "smartcart-demo-grocer",
+  "executionMode": "live",
+  "storeReference": "smartcart-demo-grocer-owned-catalog-v2",
+  "optimizationPolicy": {
+    "objective": "minimize-package-surplus",
+    "maxPremiumOverCheapest": 0.75,
+    "currency": "USD",
+    "tieBreak": ["observed-subtotal", "retailer-product-id"]
+  },
+  "requirements": [
+    { "id": "40000000-0000-4000-8000-000000000001", "ingredientID": "50000000-0000-4000-8000-000000000001", "name": "Chicken breast", "requestedQuantityText": "1.5 lb", "requiredQuantity": 1.5, "unit": "lb", "candidateProductIDs": ["dg-chicken-value-3lb", "dg-chicken-rightsize-1lb"] },
+    { "id": "40000000-0000-4000-8000-000000000002", "ingredientID": "50000000-0000-4000-8000-000000000002", "name": "Penne pasta", "requestedQuantityText": "12 oz", "requiredQuantity": 12, "unit": "oz", "candidateProductIDs": ["dg-penne-value-16oz", "dg-penne-rightsize-12oz"] },
+    { "id": "40000000-0000-4000-8000-000000000003", "ingredientID": "50000000-0000-4000-8000-000000000003", "name": "Finely shredded Parmesan", "requestedQuantityText": "3 oz", "requiredQuantity": 3, "unit": "oz", "candidateProductIDs": ["dg-parmesan-value-6oz", "dg-parmesan-rightsize-3oz"] }
+  ]
+}

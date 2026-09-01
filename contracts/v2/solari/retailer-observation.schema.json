@@ -7,7 +7,7 @@
   "required": [
     "schemaVersion", "observationID", "requirementID", "retailerProductID", "sourceURL", "title",
     "packageDescription", "packageQuantity", "packageUnit", "visiblePrice", "currency", "observedAt",
-    "confidence", "ambiguityReasons", "proteinGramsPerPackage", "collectionMethod", "location", "rawText", "freshness"
+    "confidence", "ambiguityReasons", "proteinGramsPerPackage", "collectionMethod", "location", "freshness"
   ],
   "properties": {
     "schemaVersion": { "const": "retailer-observation-v2" },
@@ -45,7 +45,6 @@
         "label": { "const": "SmartCart Demo Grocer synthetic catalog" }
       }
     },
-    "rawText": { "type": "string", "minLength": 1, "maxLength": 12000 },
     "freshness": {
       "type": "object",
       "additionalProperties": false,

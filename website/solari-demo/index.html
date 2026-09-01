@@ -38,7 +38,7 @@
 
     <aside class="live-proof-ribbon" aria-label="Credentialed Solari execution proof">
       <span class="live-proof-mark" aria-hidden="true">✓</span>
-      <p><strong>Credentialed first-party Solari proof is current.</strong> Run <a data-live-run-link data-run-id="33519606791" target="_blank" rel="noreferrer noopener">33519606791</a> observed six JavaScript-rendered products on the owned synthetic Demo Grocer, then selected three packages in Sandbox. <a data-live-receipt-link data-receipt-path="evidence/live/smartcart-solari-live-proof-33519606791.json" target="_blank" rel="noreferrer noopener">Inspect the sanitized execution receipt</a>. This proves Browser + Sandbox execution on the controlled surface only—not signed native App Attest, physical-device/TestFlight success, or current third-party retail data.</p>
+      <p><strong>Prior V1 credentialed proof remains valid.</strong> Run <a data-live-run-link data-run-id="33519606791" target="_blank" rel="noreferrer noopener">33519606791</a> observed six JavaScript-rendered V1 products on the owned synthetic Demo Grocer, then selected three packages in Sandbox. <a data-live-receipt-link data-receipt-path="evidence/live/smartcart-solari-live-proof-33519606791.json" target="_blank" rel="noreferrer noopener">Inspect the sanitized V1 execution receipt</a>. It does not cover the current V3 IDs or low-waste policy, and it does not prove signed native App Attest, physical-device/TestFlight success, or current third-party retail data.</p>
     </aside>
 
     <aside class="truth-ribbon" aria-label="Demo evidence limitation">
@@ -130,21 +130,27 @@
 
       <div class="research-progress" aria-live="polite">
         <div class="research-meter"><span data-research-meter></span></div>
-        <p data-research-status>Ready to replay the receipt-backed execution sequence.</p>
-        <button class="text-button" type="button" data-replay-events>Replay proof sequence</button>
+        <p data-research-status>Ready to replay the prior V1 receipt-backed sequence.</p>
+        <button class="text-button" type="button" data-replay-events>Replay prior V1 proof</button>
       </div>
 
       <aside class="browser-boundary">
       <div>
         <p class="comparison-label accent">Executable Browser target</p>
-        <h3>SmartCart Demo Grocer</h3>
-          <p>Six synthetic product pages render only after JavaScript runs, giving Browser a necessary, authorized extraction job with no account, cart, or checkout surface. The credentialed path completed in run 33519606791; the historical Walmart cards below are separate.</p>
+        <h3>SmartCart Demo Grocer V3</h3>
+          <p>Six current synthetic pages render only after JavaScript runs: value and right-size candidates for chicken, penne, and Parmesan. There is no credentialed V3 run yet; run 33519606791 remains prior V1 proof, and the historical Walmart cards below are separate.</p>
         </div>
         <a class="secondary-button demo-grocer-link" href="retailer/index.html">Open synthetic catalog</a>
         <p class="terms-note">Live Walmart Browser execution is disabled absent written authorization. See the <a data-walmart-terms target="_blank" rel="noreferrer noopener">official Walmart Terms of Use</a>.</p>
       </aside>
 
-      <ol class="event-log" aria-label="Receipt-backed execution sequence">
+      <aside class="v3-policy">
+        <p class="comparison-label accent">Expected V3 policy result · qualification pending</p>
+        <h3>Spend at most $0.75 more to reduce the most overbuy.</h3>
+        <p>The cap applies to the whole basket. Starting from the $12.79 minimum-cost combination, the expected optimizer result is $13.32: two 1 lb chicken packages plus the value penne and Parmesan. That $0.53 premium avoids 16 oz of chicken overbuy. This is deterministic test math, not a new credentialed Solari run.</p>
+      </aside>
+
+      <ol class="event-log" aria-label="Prior V1 receipt-backed execution sequence">
         <li data-event><span>01</span><strong>Scope</strong><p>Owned Demo Grocer only · no sign-in</p></li>
         <li data-event><span>02</span><strong>Browser</strong><p>Observe six JS-rendered synthetic products</p></li>
         <li data-event><span>03</span><strong>Sandbox</strong><p>Normalize and select three sufficient packages</p></li>
@@ -192,7 +198,7 @@
 
       <aside class="sandbox-provenance">
         <strong>Proof and replay stay distinct.</strong>
-        <span>Run 33519606791 proves Browser + Sandbox on Demo Grocer. The receipt UI below uses historical Walmart fixture data and does not claim another provider run.</span>
+        <span>Run 33519606791 proves the prior V1 Browser + Sandbox path. V3’s expected $13.32 low-waste result is test math pending a new credentialed run; the receipt UI below remains historical Walmart fixture data.</span>
       </aside>
 
       <div class="decision-layout">
@@ -253,7 +259,7 @@
         <div>
           <p class="step-label">Native boundary preserved</p>
           <h2 id="handoff-title">You decide whether to leave SmartCart.</h2>
-          <p>The native flow stops at an explicit retailer handoff. These links belong to the historical Walmart replay, so verify the current product, package, price, and availability before taking any retailer action.</p>
+          <p>The native flow stops at an explicit retailer handoff. This expected V3 preview uses only owned synthetic Demo Grocer candidates; it is test math pending a new credentialed run, not execution evidence.</p>
         </div>
         <span class="state-chip state-user">User controlled</span>
       </div>
@@ -261,7 +267,7 @@
       <div class="handoff-layout">
         <div class="handoff-list" data-handoff-list></div>
         <aside class="handoff-boundary">
-          <p class="boundary-kicker">Before you leave</p>
+          <p class="boundary-kicker">Expected V3 handoff · qualification pending</p>
           <h3>SmartCart will not:</h3>
           <ul>
             <li>sign in or reuse a retailer session</li>
@@ -269,7 +275,7 @@
             <li>select substitutions or fulfillment</li>
             <li>submit checkout or payment</li>
           </ul>
-          <p>Retailer pages may differ from this replay. Walmart owns every product, price, availability, account, cart, and checkout action.</p>
+          <p>These are synthetic test pages, not retailer offers. A future qualified native result would still require the shopper to choose every external action.</p>
         </aside>
       </div>
 
@@ -287,7 +293,7 @@
 
   <footer>
     <p><strong>SmartCart × Solari</strong> · internship experiment · one bounded retailer research workflow</p>
-    <p>Run 33519606791 proves owned-surface Browser + Sandbox execution. Signed native App Attest, physical-device/TestFlight, and distribution proof remain pending; historical Walmart cards are replay-only.</p>
+    <p>Run 33519606791 is prior V1 owned-surface Browser + Sandbox proof. V3 qualification, signed native App Attest, physical-device/TestFlight, and distribution proof remain pending; historical Walmart cards are replay-only.</p>
   </footer>
 </body>
 </html>
