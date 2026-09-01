@@ -51,6 +51,13 @@ class ReplayFixtureValidationTests(unittest.TestCase):
             errors.append("controlled catalog must be marked synthetic")
         self.assertIn("controlled catalog must be marked synthetic", errors)
 
+    def test_public_demo_has_no_numeric_confidence_or_selection_reset(self) -> None:
+        errors = validate.inspect_demo()
+        self.assertNotIn("main replay must not invent numeric decision confidence", errors)
+        self.assertNotIn("stage navigation must not discard selected product alternatives", errors)
+        self.assertNotIn("what-if preview must keep incomplete totals nullable", errors)
+        self.assertNotIn("what-if preview must normalize compatible weight units", errors)
+
 
 if __name__ == "__main__":
     unittest.main()

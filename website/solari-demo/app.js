@@ -15,6 +15,7 @@
   };
 
   const unitLabels = { pound: "lb", ounce: "oz", count: "count" };
+  const weightScale = { pound: 16, ounce: 1 };
 
   const money = new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -36,10 +37,6 @@
 
   function showStage(stageName, { focus = true } = {}) {
     if (state.fixture && (stageName === "decision" || stageName === "handoff")) {
-      state.selectedByRequirement.clear();
-      state.fixture.decisions.forEach((decision) => {
-        state.selectedByRequirement.set(decision.requirementID, decision.observationID);
-      });
       renderCandidates();
       renderDecision();
       renderHandoff();
@@ -81,9 +78,21 @@
     return requirements[id];
   }
 
-  function packageCount(observation) {
+  function packageMath(observation) {
     const required = requirementFor(observation.requirementID);
-    return Math.ceil(required.quantity / observation.packageQuantity);
+    if (!required || observation.packageQuantity === null || observation.packageUnit === null) return null;
+    if ((required.unit === "count") !== (observation.packageUnit === "count")) return null;
+    const requiredScale = required.unit === "count" ? 1 : weightScale[required.unit];
+    const packageScale = observation.packageUnit === "count" ? 1 : weightScale[observation.packageUnit];
+    if (!requiredScale || !packageScale) return null;
+    const requiredBase = required.quantity * requiredScale;
+    const packageBase = observation.packageQuantity * packageScale;
+    const count = Math.ceil(requiredBase / packageBase);
+    return {
+      count,
+      surplus: Number(((count * packageBase - requiredBase) / requiredScale).toFixed(3)),
+      surplusUnit: required.unit,
+    };
   }
 
   function selectedObservations() {
@@ -207,20 +216,35 @@
   }
 
   function derivedDecision() {
-    const lines = selectedObservations().map((observation) => {
-      const required = requirementFor(observation.requirementID);
-      const count = packageCount(observation);
+    const selected = selectedObservations();
+    const lines = selected.flatMap((observation) => {
+      const math = packageMath(observation);
+      if (!math) return [];
       return {
         observationID: observation.observationID,
         retailerProductID: observation.retailerProductID,
         requirementID: observation.requirementID,
-        packageCount: count,
+        packageCount: math.count,
         package: observation.packageDescription,
-        lineEstimate: observation.visiblePrice === null ? null : Number((observation.visiblePrice * count).toFixed(2)),
-        surplus: Number((observation.packageQuantity * count - required.quantity).toFixed(3)),
-        surplusUnit: required.unit,
+        lineEstimate: observation.visiblePrice === null ? null : Number((observation.visiblePrice * math.count).toFixed(2)),
+        surplus: math.surplus,
+        surplusUnit: math.surplusUnit,
+        confidence: observation.confidence,
+        ambiguityReasons: observation.ambiguityReasons,
       };
     });
+    const hasMissingPrice = lines.some((line) => line.lineEstimate === null);
+    const complete = lines.length === Object.keys(requirements).length && !hasMissingPrice;
+    const confidenceCounts = selected.reduce((counts, observation) => {
+      counts[observation.confidence] = (counts[observation.confidence] ?? 0) + 1;
+      return counts;
+    }, {});
+    const confidenceSummary = confidenceCounts.high === selected.length
+      ? "High on all selected lines"
+      : ["high", "medium", "low"]
+          .filter((level) => confidenceCounts[level])
+          .map((level) => `${confidenceCounts[level]} ${level}`)
+          .join(" · ");
 
     return {
       displayMode: "non-evidence what-if preview",
@@ -230,7 +254,11 @@
       browserProvenance: state.fixture.provenance.browser,
       sandboxProvenance: state.fixture.provenance.sandbox,
       lines,
-      checkoutEstimate: Number(lines.reduce((sum, line) => sum + (line.lineEstimate ?? 0), 0).toFixed(2)),
+      completeness: complete ? "complete" : "partial",
+      checkoutEstimate: complete
+        ? Number(lines.reduce((sum, line) => sum + line.lineEstimate, 0).toFixed(2))
+        : null,
+      confidenceSummary,
       proteinPerDollar: null,
       proteinPerDollarReason: state.fixture.trust.limitations.find((item) => item.includes("protein")) ?? "No reviewed nutrition evidence.",
     };
@@ -242,7 +270,10 @@
     const linesHost = document.querySelector("[data-receipt-lines]");
     const total = document.querySelector("[data-basket-total]");
     const json = document.querySelector("[data-decision-json]");
-    if (!linesHost || !total || !json) return;
+    const confidence = document.querySelector("[data-decision-confidence]");
+    const packageTotal = document.querySelector("[data-package-count]");
+    const finePrint = document.querySelector("[data-receipt-fine]");
+    if (!linesHost || !total || !json || !confidence || !packageTotal || !finePrint) return;
     clear(linesHost);
 
     decision.lines.forEach((line) => {
@@ -257,14 +288,15 @@
       linesHost.append(row);
     });
 
-    total.textContent = money.format(decision.checkoutEstimate);
+    total.textContent = decision.checkoutEstimate === null ? "Incomplete" : money.format(decision.checkoutEstimate);
+    confidence.textContent = decision.confidenceSummary || "Unavailable";
+    packageTotal.textContent = String(decision.lines.reduce((sum, line) => sum + line.packageCount, 0));
+    finePrint.textContent = decision.checkoutEstimate === null
+      ? "No complete estimate: at least one selected line lacks compatible package or visible-price evidence."
+      : "Fixture-based preview before tax, fees, fulfillment, or substitutions. Current price and availability unknown.";
     json.textContent = JSON.stringify({
-      schemaVersion: state.fixture.schemaVersion,
-      decisions: state.fixture.decisions,
-      basket: state.fixture.basket,
-      optimizer: state.fixture.optimizer,
-      provenance: state.fixture.provenance,
-      trust: state.fixture.trust,
+      ...decision,
+      notice: "Locally recalculated preview from immutable fixture observations; not a new evidence receipt or live Solari result.",
     }, null, 2);
   }
 
@@ -276,10 +308,10 @@
     selectedObservations().forEach((observation, index) => {
       const item = element("div", "handoff-item");
       const copy = element("span");
-      const count = packageCount(observation);
+      const count = packageMath(observation)?.count;
       copy.append(
         element("strong", "", observation.title ?? "Product title unavailable"),
-        element("small", "", `${count} package${count === 1 ? "" : "s"} suggested · recorded ${observation.visiblePrice === null ? "price unavailable" : money.format(observation.visiblePrice)} each · current price unknown`)
+        element("small", "", `${count ?? "No compatible"} package${count === 1 ? "" : "s"} suggested · recorded ${observation.visiblePrice === null ? "price unavailable" : money.format(observation.visiblePrice)} each · current price unknown`)
       );
 
       const link = element("a", "retailer-link", "Open source page ↗");

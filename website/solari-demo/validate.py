@@ -176,6 +176,19 @@ def inspect_demo(root: Path = ROOT) -> list[str]:
     for marker in required_markers:
         if marker.casefold() not in main_text.casefold():
             errors.append(f"main replay missing trust marker: {marker}")
+    if "96%" in main_text:
+        errors.append("main replay must not invent numeric decision confidence")
+    for marker in ("data-decision-confidence", "data-package-count", "data-receipt-fine"):
+        if marker not in main_text:
+            errors.append(f"main replay missing derived decision marker: {marker}")
+
+    app_text = (root / "app.js").read_text(encoding="utf-8")
+    if "selectedByRequirement.clear()" in app_text:
+        errors.append("stage navigation must not discard selected product alternatives")
+    if "checkoutEstimate: complete" not in app_text:
+        errors.append("what-if preview must keep incomplete totals nullable")
+    if "weightScale" not in app_text:
+        errors.append("what-if preview must normalize compatible weight units")
     return sorted(set(errors))
 
 

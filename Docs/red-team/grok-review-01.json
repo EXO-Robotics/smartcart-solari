@@ -1,0 +1,65 @@
+{
+  "artifactKind": "normalized-structured-review",
+  "reviewer": "Grok 4.6",
+  "sessionID": "01a05c74-c85f-73c0-a189-582b7f8b1a9e",
+  "reviewedCommit": "a2a5167278eef44d5513c613cae9973fbf537df9",
+  "reviewID": "redteam-a2a5167278eef44d",
+  "score": 8.8,
+  "counts": {
+    "critical": 0,
+    "high": 0,
+    "medium": 1,
+    "low": 5
+  },
+  "agreements": {
+    "solariMateriallyImprovesSmartCart": true,
+    "userTrustModelDefensible": true,
+    "claimsEvidenceBacked": true,
+    "effectivelyTenOfTen": false
+  },
+  "findings": [
+    {
+      "id": "M-01",
+      "severity": "Medium",
+      "summary": "The public replay hard-coded a 96% decision-confidence value that was not present in the evidence contract.",
+      "disposition": "accepted-fixed",
+      "resolution": "Numeric confidence was removed. The UI now derives only qualitative per-line confidence counts from selected observations."
+    },
+    {
+      "id": "L-01",
+      "severity": "Low",
+      "summary": "Alternative selection was reset across stages; public what-if math lacked compatible-unit normalization and treated missing price as zero in the displayed total.",
+      "disposition": "accepted-fixed",
+      "resolution": "Selections now persist, pound/ounce math normalizes through a shared base unit, and incomplete price evidence produces a nullable/incomplete estimate."
+    },
+    {
+      "id": "L-02",
+      "severity": "Low",
+      "summary": "Native evidence types are stricter than the wire schema and native surplus handling is less general than backend normalization.",
+      "disposition": "accepted-residual",
+      "resolution": "The frozen demo contract is compatible, but broader nullable/mixed-unit native ingestion remains a documented follow-up."
+    },
+    {
+      "id": "L-03",
+      "severity": "Low",
+      "summary": "A live request has bounded individual Browser and Sandbox operations but no single end-to-end deadline across sequential candidate research.",
+      "disposition": "accepted-residual",
+      "resolution": "Candidate count, per-operation timeouts, rate limiting, and default-off operator admission bound the current demo; an aggregate deadline remains a production-hardening follow-up."
+    },
+    {
+      "id": "L-04",
+      "severity": "Low",
+      "summary": "Remote DNS cannot be pinned through the current Browser SDK and the in-memory limiter uses forwarded address metadata.",
+      "disposition": "accepted-residual",
+      "resolution": "Admission and final-URL checks, exact owned-host allowlisting, operator authentication, and default-off live mode reduce current exposure; production deployment still needs trusted-proxy and DNS controls."
+    },
+    {
+      "id": "L-05",
+      "severity": "Low",
+      "summary": "The reviewer suggested explicitly closing the Solari Sandbox client after killing the sandbox.",
+      "disposition": "rejected-sdk-mismatch",
+      "resolution": "The installed @solarisdk/sandbox 0.1.2 SandboxClient exposes no close or dispose method. The created Sandbox is killed in finally, which is the available lifecycle primitive."
+    }
+  ],
+  "note": "This file is a normalized record of Grok's structured verdict. It excludes model reasoning and does not claim to be a verbatim transcript."
+}

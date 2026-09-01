@@ -138,6 +138,8 @@ npm test
 
 Run the focused contract/API/Demo Grocer/fixture commands and repository claim/secret checks listed in [the demo runbook](Docs/SOLARI_DEMO_RUNBOOK.md), then the targeted native tests/build for the recommendation UI seam. The dependency-free submission UI can be served from the repository root at [`/website/solari-demo/`](website/solari-demo/README.md). Preserve test output separately from live evidence: deterministic fixtures prove replay behavior only.
 
+The skeptical-review method, accepted fixes, residual Low findings, and justified SDK-specific rejection are recorded in [the Solari red-team record](Docs/SOLARI_RED_TEAM.md). A score is attributable only to the exact commit named in its review receipt.
+
 ## Submission provenance
 
 This is the separate submission repository `EXO-Robotics/smartcart-solari`; it does not redirect or modify the production SmartCart remote. The fork started from clean `upstream/main` commit [`fe6589b1bd811a7ca8afa9824deba9d3cbde7ab9`](https://github.com/EXO-Robotics/smartcart-ios/commit/fe6589b1bd811a7ca8afa9824deba9d3cbde7ab9). `upstream` remains `EXO-Robotics/smartcart-ios`; `origin` is the submission repository.

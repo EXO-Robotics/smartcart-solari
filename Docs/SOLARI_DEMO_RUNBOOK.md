@@ -57,7 +57,7 @@ npm run test:solari
 npm test
 ```
 
-`npm run test:solari` runs `backend/test/solari*.test.js`, covering the four AJV schemas, canonical fixtures, bounded live-request generator, URL/policy admission, fixture provider, optimizer, API, Browser/Sandbox lifecycle adapters, and authorization boundary. The current focused suite has 21 tests; report only a count from a fresh run. `npm test` is the broader Node regression milestone.
+`npm run test:solari` runs `backend/test/solari*.test.js`, covering the four AJV schemas, canonical fixtures, bounded live-request generator, URL/policy admission, fixture provider, optimizer, API, Browser/Sandbox lifecycle adapters, and authorization boundary. Report only a count from a fresh run; do not preserve a count here because the suite can grow. `npm test` is the broader Node regression milestone.
 
 From repository root, validate the dependency-free submission UI and synthetic Demo Grocer catalog:
 
