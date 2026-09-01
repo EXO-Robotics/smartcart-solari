@@ -14,14 +14,15 @@ struct SolariBasketComparisonPresentation: Equatable {
             headline = "Selected basket is the cheapest adequate option for this trip."
         } else {
             headline =
-                "Spend \(Self.currencyText(comparison.premiumOverCheapest)) above the cheapest adequate basket " +
-                "to reduce the package-overage score by \(Self.scoreText(comparison.relativeSurplusAvoided))."
+                "Selected a lower-overage basket for " +
+                "\(Self.currencyText(comparison.premiumOverCheapest)) above the cheapest adequate option."
         }
 
         detail =
             "Selected: \(selectedSubtotal), package-overage score \(Self.scoreText(comparison.selectedAggregateRelativeSurplus)) · " +
             "Cheapest: \(cheapestSubtotal), package-overage score \(Self.scoreText(comparison.cheapestAggregateRelativeSurplus)) · " +
-            "Premium cap: \(premiumCap)"
+            "Score reduction: \(Self.scoreText(comparison.relativeSurplusAvoided)) · " +
+            "Premium cap: \(premiumCap). Review line items for exact leftover quantities."
     }
 
     private static func currencyText(_ value: Decimal) -> String {

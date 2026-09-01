@@ -11,7 +11,7 @@ const product = (group, dimension, title, packageQuantity, packageUnit, visibleP
 // This is an owned synthetic catalog. The identifiers deliberately do not reuse
 // or expose identifiers from any external retailer.
 export const V4_PRODUCT_CATALOG = Object.freeze({
-  'dg4-chicken-value-3lb': product('chicken', 'mass', 'Demo Chicken Breasts — Value', 3, 'lb', 9.47),
+  'dg4-chicken-value-3lb': product('chicken', 'mass', 'Demo Chicken Breasts — Value', 3, 'lb', 8.13),
   'dg4-chicken-organic-1-5lb': product('chicken', 'mass', 'Demo Chicken Breasts — Organic', 1.5, 'lb', 8.76),
   'dg4-chicken-free-range-3lb': product('chicken', 'mass', 'Demo Chicken Breasts — Free Range', 3, 'lb', 13.92),
   'dg4-penne-value-16oz': product('pasta', 'mass', 'Demo Penne Pasta — Value', 16, 'oz', 1.24),

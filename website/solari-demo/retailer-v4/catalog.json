@@ -6,7 +6,7 @@
   "historical": false,
   "priceProvenance": "synthetic-test-data",
   "products": [
-    { "id": "dg4-chicken-value-3lb", "name": "Demo Chicken Breasts — Value", "brand": "Demo Value", "packageDisplay": "3 lb bag", "packageValue": 3, "packageUnit": "lb", "priceCents": 947, "currency": "USD", "syntheticPrice": true },
+    { "id": "dg4-chicken-value-3lb", "name": "Demo Chicken Breasts — Value", "brand": "Demo Value", "packageDisplay": "3 lb bag", "packageValue": 3, "packageUnit": "lb", "priceCents": 813, "currency": "USD", "syntheticPrice": true },
     { "id": "dg4-chicken-organic-1-5lb", "name": "Demo Chicken Breasts — Organic", "brand": "Demo Organic", "packageDisplay": "1.5 lb tray", "packageValue": 1.5, "packageUnit": "lb", "priceCents": 876, "currency": "USD", "syntheticPrice": true },
     { "id": "dg4-chicken-free-range-3lb", "name": "Demo Chicken Breasts — Free Range", "brand": "Demo Free Range", "packageDisplay": "3 lb tray", "packageValue": 3, "packageUnit": "lb", "priceCents": 1392, "currency": "USD", "syntheticPrice": true },
     { "id": "dg4-penne-value-16oz", "name": "Demo Penne Pasta — Value", "brand": "Demo Value", "packageDisplay": "16 oz box", "packageValue": 16, "packageUnit": "oz", "priceCents": 124, "currency": "USD", "syntheticPrice": true },

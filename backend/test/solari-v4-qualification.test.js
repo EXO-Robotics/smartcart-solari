@@ -52,12 +52,17 @@ async function qualifiedResult() {
 const result = await qualifiedResult();
 
 test('V4 qualification trip exercises a real bounded low-waste tradeoff', () => {
-  assert.ok(result.decisions.some(({ retailerProductID }) => retailerProductID === 'dg4-olive-oil-smooth-16floz'));
-  assert.equal(result.comparison.cheapestAdequateSubtotal, 24.2);
-  assert.equal(result.comparison.selectedSubtotal, 24.83);
+  assert.ok(result.decisions.some(({ retailerProductID }) => retailerProductID === 'dg4-chicken-organic-1-5lb'));
+  assert.ok(result.decisions.some(({ retailerProductID }) => retailerProductID === 'dg4-olive-oil-value-17floz'));
+  assert.equal(result.comparison.cheapestAdequateSubtotal, 23.57);
+  assert.equal(result.comparison.selectedSubtotal, 24.2);
   assert.equal(result.comparison.premiumOverCheapest, 0.63);
-  assert.ok(result.comparison.relativeSurplusAvoided > 0.98);
-  assert.ok(result.comparison.relativeSurplusAvoided < 0.99);
+  assert.ok(result.comparison.relativeSurplusAvoided > 1);
+  assert.ok(result.comparison.relativeSurplusAvoided < 1.01);
+  const selectedChicken = result.decisions.find(({ retailerProductID }) => retailerProductID === 'dg4-chicken-organic-1-5lb');
+  assert.ok(selectedChicken.surplusQuantity < 1);
+  const cheapChicken = V4_PRODUCT_CATALOG['dg4-chicken-value-3lb'];
+  assert.equal(cheapChicken.visiblePrice, 8.13);
 });
 
 test('V4 qualification receipt is sanitized, exact-request-bound, and truthfully operator-qualified', async () => {

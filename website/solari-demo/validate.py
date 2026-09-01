@@ -27,7 +27,7 @@ CURRENT_PRODUCT_SPECS = {
     "dg-parmesan-rightsize-3oz": (3, "oz", 242),
 }
 V4_PRODUCT_SPECS = {
-    "dg4-chicken-value-3lb": (3, "lb", 947), "dg4-chicken-organic-1-5lb": (1.5, "lb", 876), "dg4-chicken-free-range-3lb": (3, "lb", 1392),
+    "dg4-chicken-value-3lb": (3, "lb", 813), "dg4-chicken-organic-1-5lb": (1.5, "lb", 876), "dg4-chicken-free-range-3lb": (3, "lb", 1392),
     "dg4-penne-value-16oz": (16, "oz", 124), "dg4-penne-glutenfree-24oz": (24, "oz", 1198),
     "dg4-olive-oil-value-17floz": (17, "fl oz", 612), "dg4-olive-oil-organic-17floz": (17, "fl oz", 736), "dg4-olive-oil-smooth-16floz": (16, "fl oz", 675),
     "dg4-heavy-cream-value-16floz": (16, "fl oz", 296), "dg4-heavy-cream-organic-16floz": (16, "fl oz", 587),

@@ -148,7 +148,7 @@ export class SolariV4SandboxOptimizer {
           quantityUnit: observation.packageUnit, surplusQuantity: facts.surplusQuantity, relativeSurplus: facts.relativeSurplus,
           lineTotal: facts.lineTotal, currency: 'USD', proteinGramsPerDollar: null,
           substitutionNote: observation.ambiguityReasons.length ? observation.ambiguityReasons[0] : null,
-          rationale: [`${facts.packageCount} package${facts.packageCount === 1 ? '' : 's'} cover the reviewed requirement.`, 'Solari Sandbox selected this line under the bounded relative-surplus-within-price-cap policy.'],
+          rationale: [`${facts.packageCount} package${facts.packageCount === 1 ? ' covers' : 's cover'} the reviewed requirement.`, 'Solari Sandbox selected this line under the bounded relative-surplus-within-price-cap policy.'],
           confidence: observation.confidence, ambiguityReasons: [...observation.ambiguityReasons]
         });
       }

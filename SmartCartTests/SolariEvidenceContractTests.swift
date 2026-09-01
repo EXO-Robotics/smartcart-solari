@@ -11,8 +11,10 @@ final class SolariEvidenceContractTests: XCTestCase {
             relativeSurplusAvoided: 0.985811, maxPremiumOverCheapest: 0.75, currency: "USD"
         )
         let presentation = SolariBasketComparisonPresentation(tradeoff)
-        XCTAssertTrue(presentation.headline.contains("package-overage score by 0.99"))
+        XCTAssertTrue(presentation.headline.contains("Selected a lower-overage basket"))
+        XCTAssertFalse(presentation.headline.contains("score"))
         XCTAssertTrue(presentation.detail.contains("package-overage score"))
+        XCTAssertTrue(presentation.detail.contains("Review line items for exact leftover quantities"))
         XCTAssertFalse(presentation.headline.contains("%"))
         XCTAssertFalse(presentation.detail.contains("%"))
 
@@ -459,7 +461,7 @@ final class SolariEvidenceContractTests: XCTestCase {
     private struct DemoProduct { let title: String; let quantity: Double; let unit: SolariEvidenceUnit; let price: Decimal }
     private func demoProduct(_ id: String) -> DemoProduct {
         switch id {
-        case "dg4-chicken-value-3lb": .init(title: "Chicken value", quantity: 1_360.777_11, unit: .gram, price: 9.47)
+        case "dg4-chicken-value-3lb": .init(title: "Chicken value", quantity: 1_360.777_11, unit: .gram, price: 8.13)
         case "dg4-chicken-organic-1-5lb": .init(title: "Chicken organic", quantity: 680.388_555, unit: .gram, price: 8.76)
         case "dg4-chicken-free-range-3lb": .init(title: "Chicken free range", quantity: 1_360.777_11, unit: .gram, price: 13.92)
         case "dg4-penne-value-16oz": .init(title: "Penne value", quantity: 453.592_37, unit: .gram, price: 1.24)

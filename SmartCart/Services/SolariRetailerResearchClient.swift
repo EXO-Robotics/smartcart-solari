@@ -977,7 +977,7 @@ enum SolariDebugRecordedFixture {
     }
 
     private static let products: [String: Product] = [
-        "dg4-chicken-value-3lb": Product(id: "dg4-chicken-value-3lb", title: "Demo Chicken Breasts — Value", packageDescription: "3 lb synthetic package", packageQuantity: 1_360.777_11, packageUnit: .gram, price: 9.47),
+        "dg4-chicken-value-3lb": Product(id: "dg4-chicken-value-3lb", title: "Demo Chicken Breasts — Value", packageDescription: "3 lb synthetic package", packageQuantity: 1_360.777_11, packageUnit: .gram, price: 8.13),
         "dg4-chicken-organic-1-5lb": Product(id: "dg4-chicken-organic-1-5lb", title: "Demo Chicken Breasts — Organic", packageDescription: "1.5 lb synthetic package", packageQuantity: 680.388_555, packageUnit: .gram, price: 8.76),
         "dg4-chicken-free-range-3lb": Product(id: "dg4-chicken-free-range-3lb", title: "Demo Chicken Breasts — Free Range", packageDescription: "3 lb synthetic package", packageQuantity: 1_360.777_11, packageUnit: .gram, price: 13.92),
         "dg4-penne-value-16oz": Product(id: "dg4-penne-value-16oz", title: "Demo Penne Pasta — Value", packageDescription: "16 oz synthetic box", packageQuantity: 453.592_37, packageUnit: .gram, price: 1.24),
