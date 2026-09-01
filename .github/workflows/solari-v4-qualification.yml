@@ -44,8 +44,8 @@ jobs:
         env:
           SOLARI_API_KEY: ${{ secrets.SOLARI_API_KEY }}
           SOLARI_DEMO_RETAILER_BASE_URL: https://exo-robotics.github.io/smartcart-solari/website/solari-demo
-          SOLARI_BROWSER_TIMEOUT_MS: "25000"
-          SOLARI_SANDBOX_TIMEOUT_MS: "25000"
+          SOLARI_BROWSER_TIMEOUT_MS: "20000"
+          SOLARI_SANDBOX_TIMEOUT_MS: "20000"
           SOLARI_REQUEST_TIMEOUT_MS: "120000"
           SOLARI_V4_QUALIFICATION_OUTPUT: ${{ runner.temp }}/smartcart-solari-v4-qualification.json
         run: |
