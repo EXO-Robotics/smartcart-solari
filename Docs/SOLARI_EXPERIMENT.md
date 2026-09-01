@@ -48,7 +48,7 @@ Live Walmart research is disabled and fails closed without documented written au
 - Leaves live execution off by default and requires a separate server/operator Bearer token before any live provider work. Fixture replay remains public and rate-limited; iOS/web never receive the operator token.
 - Validates request size, quantities, source identifiers/URLs, evidence mode, and retailer authorization policy.
 - Permits live execution only on the owned Demo Grocer allowlist; rejects Target, and rejects Walmart unless both written-authorization gates are present; revalidates every redirect/final URL. Credentialed owned-surface runs are claimed only through their immutable sanitized receipts.
-- Starts short-lived Browser/Sandbox resources with bounded operation timeouts, one aggregate deadline, client-disconnect cancellation, and concurrency/rate controls.
+- Starts short-lived Browser/Sandbox resources with bounded operation timeouts, one aggregate deadline, request-abort cancellation, and concurrency/rate controls.
 - Converts page output to a retailer observation before Sandbox evaluation.
 - Validates all outputs and fails closed.
 - Closes every Browser page, the Browser session, and Solari Browser client, and kills Sandbox, in `finally` paths. Cleanup failure suppresses success rather than being silently ignored.

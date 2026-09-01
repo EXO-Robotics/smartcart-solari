@@ -85,3 +85,26 @@ The DNS residual is accepted and documented because the Solari Browser SDK expos
 The cancellation issue was legitimate and fixed in commit `25ab69b582e5f6d92053a2f42640736e92b5b8dc`. The API now turns client disconnect into an `AbortSignal`; the service passes one signal and deadline through Browser and Sandbox; every provider call, including Browser evaluation, is raced against its remaining time; aborted Browser work closes page/session/client; and an aborted Sandbox command kills the microVM. Regression tests cover the in-flight deadline, disconnect propagation, and both teardown paths. Credentialed run [`33505918379`](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33505918379) passed on that exact remediation commit.
 
 Because Iteration 4 did not review commit `25ab69b` or run `33505918379`, its 9.5 score is not final signoff. A fresh final review remains required.
+
+## Iteration 5 — final bounded-scope signoff
+
+- Reviewed public commit: `d8bc285886bfaa74bf3f3e9de9bb9840e671d506`
+- Live-qualified implementation: `25ab69b582e5f6d92053a2f42640736e92b5b8dc`
+- Credentialed run inspected: [`33505918379`](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33505918379)
+- Receipt Pages deployment: [`33506173772`](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33506173772)
+- Findings: **0 Critical, 0 High, 0 Medium, 2 Low**
+- Internal score: **9.6/10**
+- Bounded internship verdict: **SHIP**
+- Production/App Store/authorized-retailer verdict: **DO NOT SHIP**
+
+The fresh read-only reviewer verified the public commit/run/receipt identities, sequential Browser-shaped timestamps, exact basket, cancellation implementation, provider cleanup, native/fixture labels, and one owned JS-rendered product page with no product evidence in its initial static HTML. It explicitly agreed:
+
+- `solariMateriallyImprovesSmartCart: true`
+- `userTrustModelDefensible: true`
+- `claimsEvidenceBacked: true`
+- `realUseCaseNotJustWebsiteDemo: true`
+- `effectivelyTenOfTenWithinBoundedInternshipScope: true`
+
+Two legitimate Low issues remain. First, the Solari Browser SDK cannot pin navigation DNS to the address set checked during admission; the existing exact owned-host/path/product checks and default-off operator gate make this non-blocking for V1, while production still requires controlled egress. Second, Node request `aborted` and incomplete-body `close` events cancel work, but a socket hangup after a complete POST body may not emit either condition; that work remains bounded by the aggregate deadline. Production should also abort on response `close`/`error` while the response is unfinished.
+
+The 9.6 score and booleans answer the requested internal red-team loop. They are not external validation, production certification, or evidence that a consumer retailer authorized automation. The immutable Actions receipt—not the reviewer—is the proof that Solari Browser and Sandbox ran.
