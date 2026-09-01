@@ -1,95 +1,151 @@
-# SmartCart for iOS
+# SmartCart × Solari
 
-SmartCart turns a recipe or reviewed Meal Prep plan into a pantry-aware, retailer-matched Shopping Trip. **Recipe Ready** brings ingredient corrections, servings, pantry decisions, retailer settings, and shopping preferences onto one adaptive confirmation screen before opening retailer-owned pages in Safari.
+An experimental SmartCart fork that asks one bounded question:
 
-## Current shopping flow
+> Can Solari turn SmartCart’s retailer handoff into a useful agentic shopping workflow without violating user trust?
 
-Import a recipe → confirm it in Recipe Ready → start shopping → review only product exceptions → move through retailer pages in one continuous Shopping Trip → optionally update the pantry afterward.
+SmartCart already turns a reviewed recipe into pantry-aware quantities, computes conservative package counts when it has exact compatible package evidence, and then opens retailer-owned pages for the shopper. Its limitation is evidence freshness and comparison: package math relies on seeded or last-known product records, with no current retailer observation refresh and no evidence-backed checkout comparison across candidates. This fork adds that bounded comparison before the existing user-controlled handoff. It does not add autonomous purchasing.
 
-Meal Prep combines one to five reviewed saved recipes conservatively, keeps uncertain ingredients separate until resolved, and then converges into the same Recipe Ready, matching, Shopping Trip, and pantry-update flow as a single recipe.
+## The smallest legitimate experiment
 
-Home renders, in order: the header, **Start New Recipe**, one conditional **Shopping Trips** section, an optional **Shop Again** card, the preferred-store card, and the checkout trust strip. At standard Dynamic Type sizes, **Take Photo** and **Choose Photo** share the first compact row of a two-column grid, **Paste Link** and **More** share the second compact row, and **Meal Prep Mode** is a full-width action below the grid. Accessibility Dynamic Type sizes stack the four import actions vertically before the same full-width Meal Prep action. This describes rendered order and adaptation, not a guarantee that every action fits in the first viewport on every device.
+The product demo is **Chicken Parmesan Pasta**:
 
-Recipes is a saved-recipe library with search and a pull-up **Recent Recipes** drawer. Only importing or intentionally opening a whole recipe adds or reorders drawer entries; retailer pages, Shopping Trip resume, replacements, and pantry reconciliation do not. Removing Saved Recipes membership prunes that recipe from recency, but retains the underlying record for historical Shopping Trips and frozen Meal Prep provenance.
+1. SmartCart extracts and reviews the recipe ingredients.
+2. Pantry allocation excludes olive oil and garlic.
+3. The remaining need is 1.5 lb chicken, 12 oz penne, and 3 oz Parmesan.
+4. A Browser adapter turns allowed product pages into structured candidate/product/package/price observations.
+5. Solari Sandbox receives only structured observations and required quantities, then runs deterministic unit normalization, package math, and basket evaluation.
+6. SmartCart validates the versioned evidence and presents product, package count, observed price, source, timestamp, confidence, ambiguity, and total completeness.
+7. The shopper chooses whether to continue to the retailer. The retailer remains authoritative for location, availability, final price, cart, fulfillment, payment, and checkout.
 
-The app currently supports:
+The Walmart path is intentionally a **fixture replay**, not a live scrape. It preserves public exact-product source URLs for user handoff and provenance, but the experiment does not fetch those URLs automatically. Its observations were seeded in upstream SmartCart on `2026-07-16T12:00:00Z`:
 
-- Camera, photo-library, pasted-text, sample, and backend-mediated recipe-page imports.
-- Multi-page Vision OCR with reading-order reconstruction, instruction boundaries, retry, and separate OCR/layout/parser confidence. Raw observations retain page, normalized geometry, confidence, alternatives, and observation IDs independently from reconstructed layout text, accepted parser text, and ignored source lines.
-- Confirmed ingredient edits and deletions are routed through the parent model by stable ingredient ID. Deletion deterministically rebuilds finite shared pantry allocations, refreshes only affected editable pre-trip quantities while preserving eligible unchanged waiting matches for selective reuse, rejects any in-flight result invalidated by the deletion, and leaves an existing session-owned Shopping Trip frozen.
-- Inline Recipe Ready editing for ingredients, servings, optional items, alternatives, and uncertain quantities, plus compact pantry and trip-settings review.
-- Persistent pantry decisions, recipes, preferences, store choices, product matches, replacements, and Shopping Trip progress.
-- Organic and dietary preferences filter eligible matches; budget and store-brand preferences rank them.
-- Seeded exact Walmart and Target product links when an eligible record exists, and explicit unpriced retailer-search fallbacks otherwise.
-- Exception-only product review: high-confidence exact matches continue without another screen; fallbacks and lower-confidence choices require an explicit accept, replacement, manual search, or skip decision.
-- A continuous in-app Safari Shopping Trip. **Next Item** becomes available only after the page loads and records only that the shopper chose to advance after viewing it (`visited`); it is not evidence of any retailer, order, or purchase action.
-- Durable pause and resume at the current waiting item. Tapping **Pause** or dismissing the retailer page with native close pauses without advancing. A load failure keeps the item waiting and offers retry, external open, skip, or pause.
-- A post-trip pantry check-in whose purchase selections remain user-controlled. Home exposes a pantry-update-pending card inside the single **Shopping Trips** section. Opening it reaches the completion surface, where **Yes, update pantry**, **Not yet**, and **Archive without pantry update** remain explicit; archiving hides only the pending card and does not change the pantry, record an outcome, or remove the completed trip.
-- Pantry-first review with separate package count, package size/unit, and remaining amount/unit; full/partial/possible coverage uses remaining stock, with buy-remainder math and a buy-full override.
-- Persistent barcode/manual pantry inventory with checksum-valid EAN-8/UPC-A/EAN-13/GTIN-14 handling, leading-zero preservation, saved user naming, bundled fixtures, backend-mediated Open Food Facts identity, and explicit duplicate handling. Catalog names remain editable and unverified; no price or availability is inferred.
-- Privacy-limited on-device funnel instrumentation and an internal tester dashboard.
-- Walmart and Target matching, with Kroger and additional retailers clearly marked Coming Soon.
+| Need | Walmart fixture product | Package decision | Historical fixture price |
+| --- | --- | --- | ---: |
+| Chicken, 1.5 lb | `10414680` | 1 × 3 lb | $9.47 |
+| Penne, 12 oz | `10534084` | 1 × 16 oz | $1.24 |
+| Parmesan, 3 oz | `10452414` | 1 × 6 oz | $2.08 |
 
-The contextual ingredient classifier is a `DEBUG` shadow comparison only. The existing `RecipeParser` path remains authoritative for app output; the contextual result is not the production default and must not be described as one. Image-source shadow decisions apply stricter spatial checks: weak or context-rescued candidates without required evidence are rejected, while a strong ingredient candidate with missing spatial evidence may remain accepted at reduced confidence for review. Structured URL/Pinterest/list sources may use declared ingredient rows; pasted text is handled conservatively. Contextual rescue cannot cross page, column, section, instruction, or metadata boundaries. The labeled evaluation inventory is 144 cases: 120 fixed-corpus cases plus 24 independent development spatial cases. Development-focused gates are green, but the separately run frozen held-out aggregate gate failed on the latest frozen code candidate, so contextual-filter promotion is **NO-GO**. The closed-beta application gate is separate and is currently **NO-GO** because required live, physical-device, and VoiceOver validation remains incomplete.
+The fixture checkout estimate is **$12.79**. It is a replay of dated upstream seeded observations: it is not current or guaranteed pricing, not availability evidence, and not proof of a Solari Browser or Sandbox run.
 
-This stabilization boundary does not change the documented Recipe Ready, product-exception, Safari Shopping Trip, or user-confirmed pantry-update flow.
+## Why Solari has a necessary job
 
-The repository also includes a local reference backend in `backend/`, a local deploy-ready business website in `website/`, and explicit human validation gates in `Docs/`.
+**Solari Browser** is the live research boundary: it loads JavaScript-rendered product pages and captures the page that was actually seen as a structured observation. In this public build, the usable live demo is the repository’s owned/controlled **Demo Grocer** surface. Live Walmart fails closed unless both written-authorization gates are set; no such authorization is present. Live Target is not supported at all. The implementation does not enable profiles, recording, proxy routing, stealth, captcha solving, account access, cart control, or checkout.
 
-## Capability boundary
+That policy is deliberate. Walmart’s current [Terms of Use](https://www.walmart.com/help/article/walmart-com-terms-of-use/3b75080af40340d6bbd596f116fae5a0) (last updated June 23, 2026) prohibit automated retrieval/scraping without express prior written consent. Target’s [Terms & Conditions](https://www.target.com/c/terms-conditions/-/N-4sr7l) restrict automated agents and data extraction and recognize only Target-approved Agentic Commerce Agents. Respecting those boundaries is part of the trust experiment, not a hidden demo limitation.
 
-The active app path supports bounded seeded Walmart and Target catalog matching, exact public product links, clearly labeled searches, and user-driven Safari Shopping Trips. SmartCart does not expose delivery providers, pickup scheduling, multiple-store planning, account linkage, list automation, or native cart routes in this branch. Kroger is presentation-only and clearly labeled Coming Soon.
+**Solari Sandbox** does a distinct computation job: normalize compatible units, calculate required package counts, evaluate candidates, and return a deterministic decision plus completeness and ambiguity. Browser output—not browser control or raw HTML—is the Sandbox input. Sandbox network egress is not assumed to be blocked; the job is designed not to require network access or secrets, and the Sandbox is killed after use.
 
-SmartCart does **not**:
+**Solari Desktop is not used.** No GUI-only desktop application is necessary for controlled-page research or deterministic basket math.
 
-- Programmatically create, modify, or inspect a retailer cart, Wishlist, Shopping List, favorites collection, order, or purchase.
-- Link to a retailer account, read retailer cookies, or verify sign-in.
-- Detect what the shopper did on a retailer page; **Next Item** means only “visited and advanced.”
-- Reserve a pickup window, refresh live prices or inventory, or choose fulfillment.
-- Transfer a basket, submit substitutions, payment, or checkout.
+Official Solari references: [Quickstart](https://docs.getsolari.com/quickstart), [browser sessions and lifecycle](https://docs.getsolari.com/sessions), [profiles and stored login state](https://docs.getsolari.com/profiles), [sandboxes and teardown](https://docs.getsolari.com/sandboxes), and [API authentication/capability URLs](https://docs.getsolari.com/api-reference).
 
-The selected retailer owns live location confirmation, product availability, final price, substitutions, list and cart state, fulfillment, payment, checkout, and order status.
+## Trust boundary
 
-## Persistence
+- **Observed, not promised.** A price appears only with retailer/source, observation timestamp, evidence mode, and confidence. “Observed” never means live, guaranteed, location-correct, or checkout-final.
+- **Walmart is replay-only in this submission.** Its evidence is a dated deterministic fixture. The backend rejects live Walmart unless both authorization gates are present; this submission has neither authorization nor a live receipt. Target live research is outside the contract.
+- **Location is unresolved unless evidenced.** Walmart fixture data is not tied to the user’s current store or ZIP. Taxes, fees, promotions, memberships, inventory, and checkout total can differ.
+- **Partial stays partial.** A basket total is nullable when any included line lacks a trustworthy price or compatible package decision. A priced subtotal is never relabeled as a complete total.
+- **No account or purchase authority.** The experiment does not sign in, attach a retailer profile, read cookies, inspect/write a cart or order, choose fulfillment, submit payment, or check out.
+- **Server-only credentials.** `SOLARI_API_KEY` and the separate live `SOLARI_OPERATOR_TOKEN` belong only in the backend runtime/operator channel. Neither is compiled into the iOS app or web demo, returned by an API, committed, logged, or sent to a Sandbox job.
+- **Live is default-off and operator-gated.** Public, rate-limited `recorded_fixture` requests never invoke Solari. Every `live` request is rejected before provider work unless `SOLARI_LIVE_EXECUTION_ENABLED=true`, a 32–256 character operator token is configured, and the same token arrives as a Bearer credential.
+- **Minimal retention.** The durable artifact is normalized evidence/decision JSON. Raw HTML, screenshots, recordings, signed control URLs, cookies, and browser storage are not required or retained.
+- **Short-lived compute.** The Browser session closes and the Solari Browser client closes in `finally`; the Sandbox is killed in `finally`. Failure returns unavailable/partial, never invented evidence.
+- **User-controlled handoff.** The final action remains an explicit open of a retailer-owned page. “Visited” is not cart/order/purchase proof, and pantry updates remain explicit.
 
-State is stored as versioned JSON in Application Support. The current schema is v6. Its internal records preserve schema-v5 durable shopping trips and pantry reconciliation, the schema-v4 optional Walmart shared-Wishlist reference, and earlier shopping, pantry, and analytics state. Schema v6 adds Meal Prep scope/snapshots, the backward-compatible `visited` item status, an optional pantry-reminder archive timestamp, OCR source provenance, and optional `savedRecipeIDs` library membership.
+Persistent Solari profiles are intentionally not used. Solari documents a profile as Playwright `storageState` containing cookies and per-origin localStorage and warns that it represents a real login. Enabling one would create account authority and sensitive retained state without a legitimate need. Any future profile use requires new consent, retention, access-control, deletion, and retailer-policy design; it is not a configuration toggle for this experiment.
 
-For schema-v6 compatibility, an absent `savedRecipeIDs` field infers membership for valid retained non-sample recipes, while a present empty set means the library is intentionally empty; IDs that do not resolve to retained recipes are discarded. A newly imported non-sample recipe is saved by default. Fresh installs do not seed tester recipes; curated discovery comes from Weekly Meals, which uses validated static content with a last-known-good cache and bundled Week 1 fallback. Removing a recipe from Saved Recipes changes membership and prunes its Recent Recipes entry, while preserving retained recipe records, Shopping Trips, pantry, preferences, and frozen Meal Prep state. Missing optional fields otherwise decode to their prior behavior. A state file written by a newer app is preserved rather than quarantined or overwritten.
+See [the threat model](Docs/SOLARI_THREAT_MODEL.md) for SSRF, page-content injection, retailer policy/fragility, secrets, cost, retention, evidence expiry, and handoff controls.
 
-## Release notes and limitations
+## Architecture and product boundaries
 
-Photo-import safety thresholds and the required human corpus are documented in [`Docs/PHOTO_PARSER_RELEASE_GATES.md`](Docs/PHOTO_PARSER_RELEASE_GATES.md). The executable 25-recipe walkthrough is in [`Docs/OCR_PARSER_HUMAN_TEST_PLAN.md`](Docs/OCR_PARSER_HUMAN_TEST_PLAN.md). Automated development evidence does not replace the physical-device walkthrough. A failed frozen held-out gate blocks contextual-filter promotion; failed authoritative-path or human/device checks block the separate closed-beta application gate. The current Walmart Shopping Trip boundary and preserved legacy Wishlist details are in [`Docs/WALMART_WISHLIST_GUIDE.md`](Docs/WALMART_WISHLIST_GUIDE.md).
-
-See [CHANGELOG.md](CHANGELOG.md) for release history and [Docs/ROADMAP_STATUS.md](Docs/ROADMAP_STATUS.md) for the engineering/human boundary.
-
-## Build and test
-
-Open `SmartCart.xcodeproj`, select the `SmartCart` scheme, choose an iOS 17 or newer simulator, and run.
-
-From Terminal, run the eligible development suite while explicitly excluding the frozen held-out selector:
-
-```sh
-xcodebuild test \
-  -project SmartCart.xcodeproj \
-  -scheme SmartCart \
-  -destination 'platform=iOS Simulator,name=iPhone 17' \
-  -skip-testing:SmartCartTests/ContextualIngredientFilterTests/testFrozenHeldOutCorpusDoesNotRegressAgainstLegacy
+```text
+Recipe / reviewed Meal Prep
+  -> existing extraction and user correction
+  -> existing pantry allocation and shopping-list aggregation
+  -> SmartCart backend request with required quantities + server-approved sources
+  -> Browser observation
+       live Solari: owned Demo Grocer only
+       Walmart: dated fixture replay only
+  -> versioned retailer-observation evidence
+  -> Solari Sandbox (live) or deterministic local evaluator (fixture replay)
+  -> versioned basket decision
+  -> backend validation and evidence receipt
+  -> SmartCart comparison UI
+  -> user chooses retailer-owned handoff
 ```
 
-Then run the frozen held-out aggregate gate separately against the same frozen candidate. Record only its aggregate receipt; do not copy case content into release documentation or tune the frozen candidate from case-level results.
+The original SmartCart parser, ingredient identity, pantry allocation, Meal Prep aggregation, quantity engine, retailer matching, and Safari Shopping Trip remain authoritative for their existing responsibilities. The Solari path is an additive research/recommendation seam; it does not create a second recipe parser, pantry, cart, checkout, or purchase-history model. `AppModel` remains the native state owner, versioned persistence remains authoritative for historical trips, and the iOS client receives structured evidence only—it never talks to Solari directly.
+
+The backend is the only live Solari integration boundary. In the upstream baseline, the Release app’s configured remote services are limited and the wider Node application is explicitly local/demo; there is no production retailer-research route. This fork adds `/v1/solari/research` without redirecting production SmartCart. The new boundary applies default-off live admission/operator authentication, request/body/rate/candidate limits, an owned-host allowlist, redirect revalidation, timeouts, schema validation, and cleanup. Untrusted page text is data, never an instruction. The evaluator accepts a narrow JSON payload and fixed deterministic program, not raw HTML or free-form page instructions.
+
+More detail is in [the experiment design](Docs/SOLARI_EXPERIMENT.md). Original SmartCart material remains available in [the upstream documentation index](Docs/ROADMAP_STATUS.md), [trip-intelligence design](Docs/TRIP_INTELLIGENCE_MCP.md), and [backend README](backend/README.md).
+
+## Versioned evidence and provenance
+
+The fork separates two immutable, schema-validated concepts:
+
+- A **retailer observation** binds candidate identity, package, and visible price claims to an observation ID, source URL, observation timestamp, evidence mode, confidence, and ambiguity.
+- A **basket decision** binds recipe needs and exact observation IDs to package counts, line economics, substitutions/ambiguities, a nullable subtotal, and completeness.
+
+Unknown versions fail closed. Fixture replay and live Solari are separate evidence modes. Fixture replay retains the original observation time; replay time cannot refresh it. Missing price stays `null`, never `$0.00`. Protein-per-dollar is omitted unless separate attributable nutrition evidence exists. Contract paths and executable fixtures are listed in [the experiment design](Docs/SOLARI_EXPERIMENT.md).
+
+The wire authorities are [`basket-research-request.schema.json`](contracts/v1/solari/basket-research-request.schema.json) (`solari-shopping-research-request-v1`), [`retailer-observation.schema.json`](contracts/v1/solari/retailer-observation.schema.json) (`retailer-observation-v1`), [`basket-decision.schema.json`](contracts/v1/solari/basket-decision.schema.json) (`basket-decision-v1`), and [`basket-research-result.schema.json`](contracts/v1/solari/basket-research-result.schema.json) (`solari-shopping-research-result-v1`). The result also states optimizer method/version, whether Browser/Sandbox actually ran, fixture status, and fixed trust assertions such as no account/cart/checkout access.
+
+## What differs from normal SmartCart
+
+Normal SmartCart uses bounded seeded Walmart/Target matches or explicit unpriced search fallbacks, then moves the user through retailer pages. This fork adds a pre-handoff evidence and basket-decision layer. Its public V1 implements the full Solari Browser path for owned Demo Grocer pages and replays the Walmart product experience with dated fixtures. A credentialed receipt is still required to prove that path ran live. Target and broader real-retailer automation are intentionally outside V1.
+
+This experiment intentionally does **not** automate:
+
+- live Walmart without written authorization, and any live Target retrieval in V1;
+- retailer login, accounts, profiles, cookies/localStorage, carts, lists, orders, checkout, payment, fulfillment, or purchase verification;
+- arbitrary web search, nationwide/local inventory claims, or broad retailer coverage;
+- proxy, stealth, captcha solving, recording/replay, raw-page retention, or Desktop control;
+- nutrition inference or protein-per-dollar without separate evidence.
+
+## Setup
+
+Requirements: Node.js 20+, Xcode with an iOS 17+ simulator, and a Solari API key for a credentialed live Demo Grocer run only.
 
 ```sh
-xcodebuild test \
-  -project SmartCart.xcodeproj \
-  -scheme SmartCart \
-  -destination 'platform=iOS Simulator,name=iPhone 17' \
-  -only-testing:SmartCartTests/ContextualIngredientFilterTests/testFrozenHeldOutCorpusDoesNotRegressAgainstLegacy
+cd backend
+npm install
+cp .env.example .env
+npm start
 ```
 
-The eligible authoritative-path suite covers parsing, package conversion, preference constraints, retailer isolation, truthful fallbacks, persistence/relaunch/migration/corruption, Meal Prep, pantry state, product exceptions, Shopping Trip progress, and reconciliation. A closed-beta application `GO` requires the eligible suite, the legacy OCR contamination regression, and the documented human and physical-device walkthrough all to pass on one frozen candidate. Dynamic Type and VoiceOver remain required human-validation gates; follow [Docs/CLOSED_BETA_TEST_PLAN.md](Docs/CLOSED_BETA_TEST_PLAN.md). The closed-beta application remains **NO-GO** while those live checks are incomplete. The separately reported held-out failure keeps contextual-filter promotion **NO-GO** and must never be folded into an alleged complete-suite pass.
+Fixture replay needs neither Solari nor operator credentials. For an authorized live Demo Grocer operator run, set `SOLARI_API_KEY`, `SOLARI_LIVE_EXECUTION_ENABLED=true`, a random 32–256 character `SOLARI_OPERATOR_TOKEN`, and `SOLARI_DEMO_RETAILER_BASE_URL` to an owned, credential-free public HTTPS `/solari-demo` root. `backend/.env.example` documents the optional Browser base URL, Sandbox base URL, 6-second Browser/10-second Sandbox timeouts, 32 KB request limit, and five-request-per-minute limit. Never add either secret to Xcode, the iOS app, web demo, fixture, snapshot, GitHub commit, or logged command. Open `SmartCart.xcodeproj`, select `SmartCart`, choose an iOS 17+ simulator, and run. Follow [the demo runbook](Docs/SOLARI_DEMO_RUNBOOK.md) for fixture replay and the separately gated live Demo Grocer mode.
 
-Partner and public launch work is gated by [Docs/PARTNER_INTEGRATION_CHECKLIST.md](Docs/PARTNER_INTEGRATION_CHECKLIST.md) and [Docs/APP_STORE_RELEASE_CHECKLIST.md](Docs/APP_STORE_RELEASE_CHECKLIST.md).
+### Current evidence status
+
+This construction environment does **not** have `SOLARI_API_KEY`. The bundled fixture replay can prove contracts, validation, basket math, API/UI integration, and truthful labels, but it cannot prove a live Solari Browser/Sandbox run. No live Walmart run should occur even if a key is later set; retailer authorization is a separate required gate.
+
+## Deployment
+
+Deploy only the backend with `SOLARI_API_KEY` and `SOLARI_OPERATOR_TOKEN` in a server-side secret store; live execution remains disabled by default. Keep allowed origins, source hosts, and public endpoint rate limits narrow. Do not expose either credential, session WebSocket/CDP endpoints, profile IDs, Sandbox control URLs, signed upload/download URLs, or preview URLs to the iOS client/frontend. Live Browser targets remain owned Demo Grocer until a retailer-specific authorization record and allowlist change are reviewed. Even an operator-authenticated live Walmart request additionally requires both `SOLARI_RETAILER_RESEARCH_AUTHORIZED=true` and a nontrivial `SOLARI_WALMART_WRITTEN_AUTHORIZATION_REFERENCE`; never set those merely to make a demo pass.
+
+Production readiness additionally requires TLS, secret rotation, log/retention review, retailer-policy review, live cleanup receipts, cost controls, and existing SmartCart device/release gates. A local server, simulator build, public repository, or dated fixture is not production/App Store/live-retailer proof.
+
+## Test and evidence checks
+
+From `backend/`:
+
+```sh
+npm run test:solari
+npm test
+```
+
+Run the focused contract/API/Demo Grocer/fixture commands and repository claim/secret checks listed in [the demo runbook](Docs/SOLARI_DEMO_RUNBOOK.md), then the targeted native tests/build for the recommendation UI seam. The dependency-free submission UI can be served from the repository root at [`/website/solari-demo/`](website/solari-demo/README.md). Preserve test output separately from live evidence: deterministic fixtures prove replay behavior only.
+
+## Submission provenance
+
+This is the separate submission repository `EXO-Robotics/smartcart-solari`; it does not redirect or modify the production SmartCart remote. The fork started from clean `upstream/main` commit [`fe6589b1bd811a7ca8afa9824deba9d3cbde7ab9`](https://github.com/EXO-Robotics/smartcart-ios/commit/fe6589b1bd811a7ca8afa9824deba9d3cbde7ab9). `upstream` remains `EXO-Robotics/smartcart-ios`; `origin` is the submission repository.
+
+### Internship-brief mapping
+
+The source for this mapping is the internship brief supplied with the submission, summarized here rather than presented as a canonical public rubric. It asks for a real use case, legitimate Solari product usage, and a public GitHub build. This fork maps those to pantry-aware basket comparison; Browser evidence plus Sandbox optimization, each with a distinct necessary job; and this isolated submission repository. No canonical social-post URL, numeric score, or additional rubric is asserted.
 
 ## License
 
-SmartCart is private proprietary software. See [LICENSE](LICENSE).
+See [LICENSE](LICENSE). Public repository visibility does not alter its terms.
