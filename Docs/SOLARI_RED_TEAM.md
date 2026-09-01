@@ -66,3 +66,22 @@ The fresh reviewer explicitly agreed that Solari materially improves SmartCart, 
 Commit `a55c11fb35fa3b9f86ed2976053e97f6c8dbf61e` fixed every actionable part: native nullable/mixed-unit parity, one shared deadline, default-off forwarded-address trust, explicit result cleanup provenance, first-party receipt terminology, and exact output pinning with negative tests. Remote Browser DNS pinning is not exposed by the Solari SDK; the bounded owned host, exact source paths, public-address preflight, redirect checks, and production egress recommendation remain the defensible mitigation. Credentialed run [`33504222095`](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33504222095) then passed the hardened qualifier.
 
 A fresh reviewer must inspect that remediation and receipt before final signoff. Its conclusions will be recorded as another internal iteration, never as independent audit proof.
+
+## Iteration 4 — hardened live-receipt review
+
+- Reviewed public commit: `c469f70c3e8a4fffc19c50eab0e45535b6718931`
+- Live-qualified implementation: `a55c11fb35fa3b9f86ed2976053e97f6c8dbf61e`
+- Credentialed run inspected: [`33504222095`](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33504222095)
+- Findings: **0 Critical, 0 High, 0 Medium, 2 Low**
+- Internal score: **9.5/10**
+
+This fresh read-only review verified all four Iteration 3 remediations and again explicitly agreed that Solari materially improves SmartCart, the trust model is defensible, claims are evidence-backed, and this is a real backend use case rather than a decorative website integration. It retained two Low issues:
+
+1. Remote Browser DNS cannot be pinned by the current SDK, leaving a bounded DNS time-of-check/time-of-use residual.
+2. The aggregate deadline was checked before each provider operation, but `page.evaluate` and an already-running SDK call were not raced against the remaining deadline, and HTTP disconnect was not propagated.
+
+The DNS residual is accepted and documented because the Solari Browser SDK exposes no DNS pinning control. V1 is limited to an operator-gated owned GitHub Pages hostname, exact HTTPS paths, public-address preflight, final URL/product matching, and no proxy; any consumer source still requires a controlled egress boundary.
+
+The cancellation issue was legitimate and fixed in commit `25ab69b582e5f6d92053a2f42640736e92b5b8dc`. The API now turns client disconnect into an `AbortSignal`; the service passes one signal and deadline through Browser and Sandbox; every provider call, including Browser evaluation, is raced against its remaining time; aborted Browser work closes page/session/client; and an aborted Sandbox command kills the microVM. Regression tests cover the in-flight deadline, disconnect propagation, and both teardown paths. Credentialed run [`33505918379`](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33505918379) passed on that exact remediation commit.
+
+Because Iteration 4 did not review commit `25ab69b` or run `33505918379`, its 9.5 score is not final signoff. A fresh final review remains required.

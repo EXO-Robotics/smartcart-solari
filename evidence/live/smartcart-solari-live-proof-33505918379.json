@@ -1,0 +1,291 @@
+{
+  "receiptVersion": "smartcart-solari-live-qualification-v1",
+  "qualifiedAt": "2026-09-01T12:07:05.902Z",
+  "submission": {
+    "repository": "EXO-Robotics/smartcart-solari",
+    "commit": "25ab69b582e5f6d92053a2f42640736e92b5b8dc"
+  },
+  "workflow": {
+    "runID": "33505918379",
+    "runAttempt": "1"
+  },
+  "useCase": {
+    "meal": "Chicken Parmesan Pasta",
+    "pantryExcluded": [
+      "olive oil",
+      "garlic"
+    ],
+    "retailer": "SmartCart Demo Grocer synthetic catalog",
+    "retailerBaseURL": "https://exo-robotics.github.io/smartcart-solari/website/solari-demo",
+    "finalAuthority": "user-controlled-retailer-handoff"
+  },
+  "execution": {
+    "requestID": "219bd3e8-5779-4add-a412-e437a921a358",
+    "responseCompletedAt": "2026-09-01T12:07:05.869Z",
+    "dataMode": "live",
+    "responseSha256": "2e939bcb852a8608e0e45db881d5c725dedfae031e4239d7c0ce251a7819c59e",
+    "assuranceScope": "first-party-execution-receipt",
+    "browser": "solari-browser-provider-completed",
+    "sandbox": "solari-sandbox-provider-completed",
+    "fixtureReplay": false,
+    "resourceCleanup": {
+      "browserPagesSessionAndClient": "first-party-enforced-before-success-response",
+      "sandbox": "first-party-enforced-before-success-response"
+    }
+  },
+  "evidence": [
+    {
+      "schemaVersion": "retailer-observation-v1",
+      "observationID": "obs-219bd3e8-5779-4add-a412-e437a921a358-10414680",
+      "requirementID": "20000000-0000-0000-0000-000000000001",
+      "retailerProductID": "10414680",
+      "sourceURL": "https://exo-robotics.github.io/smartcart-solari/website/solari-demo/retailer/product/10414680.html",
+      "title": "Demo Boneless Skinless Chicken Breasts",
+      "packageDescription": "3 pound",
+      "packageQuantity": 3,
+      "packageUnit": "pound",
+      "visiblePrice": 9.47,
+      "currency": "USD",
+      "observedAt": "2026-09-01T12:06:59.656Z",
+      "confidence": "high",
+      "ambiguityReasons": [],
+      "proteinGramsPerPackage": null,
+      "collectionMethod": "solari-browser-controlled-demo",
+      "location": {
+        "kind": "controlled-demo",
+        "label": "SmartCart Demo Grocer synthetic catalog"
+      },
+      "freshness": {
+        "status": "fresh",
+        "ageSeconds": 0,
+        "maxAgeSeconds": 86400
+      }
+    },
+    {
+      "schemaVersion": "retailer-observation-v1",
+      "observationID": "obs-219bd3e8-5779-4add-a412-e437a921a358-10534084",
+      "requirementID": "20000000-0000-0000-0000-000000000002",
+      "retailerProductID": "10534084",
+      "sourceURL": "https://exo-robotics.github.io/smartcart-solari/website/solari-demo/retailer/product/10534084.html",
+      "title": "Demo Penne Pasta",
+      "packageDescription": "16 ounce",
+      "packageQuantity": 16,
+      "packageUnit": "ounce",
+      "visiblePrice": 1.24,
+      "currency": "USD",
+      "observedAt": "2026-09-01T12:07:00.715Z",
+      "confidence": "high",
+      "ambiguityReasons": [],
+      "proteinGramsPerPackage": null,
+      "collectionMethod": "solari-browser-controlled-demo",
+      "location": {
+        "kind": "controlled-demo",
+        "label": "SmartCart Demo Grocer synthetic catalog"
+      },
+      "freshness": {
+        "status": "fresh",
+        "ageSeconds": 0,
+        "maxAgeSeconds": 86400
+      }
+    },
+    {
+      "schemaVersion": "retailer-observation-v1",
+      "observationID": "obs-219bd3e8-5779-4add-a412-e437a921a358-623835750",
+      "requirementID": "20000000-0000-0000-0000-000000000002",
+      "retailerProductID": "623835750",
+      "sourceURL": "https://exo-robotics.github.io/smartcart-solari/website/solari-demo/retailer/product/623835750.html",
+      "title": "Demo Gluten Free Penne Pasta",
+      "packageDescription": "24 ounce",
+      "packageQuantity": 24,
+      "packageUnit": "ounce",
+      "visiblePrice": 11.98,
+      "currency": "USD",
+      "observedAt": "2026-09-01T12:07:01.787Z",
+      "confidence": "medium",
+      "ambiguityReasons": [
+        "Gluten-free attribute was not requested by this recipe."
+      ],
+      "proteinGramsPerPackage": null,
+      "collectionMethod": "solari-browser-controlled-demo",
+      "location": {
+        "kind": "controlled-demo",
+        "label": "SmartCart Demo Grocer synthetic catalog"
+      },
+      "freshness": {
+        "status": "fresh",
+        "ageSeconds": 0,
+        "maxAgeSeconds": 86400
+      }
+    },
+    {
+      "schemaVersion": "retailer-observation-v1",
+      "observationID": "obs-219bd3e8-5779-4add-a412-e437a921a358-10452414",
+      "requirementID": "20000000-0000-0000-0000-000000000003",
+      "retailerProductID": "10452414",
+      "sourceURL": "https://exo-robotics.github.io/smartcart-solari/website/solari-demo/retailer/product/10452414.html",
+      "title": "Demo Finely Shredded Parmesan",
+      "packageDescription": "6 ounce",
+      "packageQuantity": 6,
+      "packageUnit": "ounce",
+      "visiblePrice": 2.08,
+      "currency": "USD",
+      "observedAt": "2026-09-01T12:07:02.857Z",
+      "confidence": "high",
+      "ambiguityReasons": [],
+      "proteinGramsPerPackage": null,
+      "collectionMethod": "solari-browser-controlled-demo",
+      "location": {
+        "kind": "controlled-demo",
+        "label": "SmartCart Demo Grocer synthetic catalog"
+      },
+      "freshness": {
+        "status": "fresh",
+        "ageSeconds": 0,
+        "maxAgeSeconds": 86400
+      }
+    },
+    {
+      "schemaVersion": "retailer-observation-v1",
+      "observationID": "obs-219bd3e8-5779-4add-a412-e437a921a358-10307238",
+      "requirementID": "20000000-0000-0000-0000-000000000003",
+      "retailerProductID": "10307238",
+      "sourceURL": "https://exo-robotics.github.io/smartcart-solari/website/solari-demo/retailer/product/10307238.html",
+      "title": "Demo Shredded Parmesan",
+      "packageDescription": "5 ounce",
+      "packageQuantity": 5,
+      "packageUnit": "ounce",
+      "visiblePrice": 3.28,
+      "currency": "USD",
+      "observedAt": "2026-09-01T12:07:03.915Z",
+      "confidence": "medium",
+      "ambiguityReasons": [
+        "Shred size is not stated as finely shredded."
+      ],
+      "proteinGramsPerPackage": null,
+      "collectionMethod": "solari-browser-controlled-demo",
+      "location": {
+        "kind": "controlled-demo",
+        "label": "SmartCart Demo Grocer synthetic catalog"
+      },
+      "freshness": {
+        "status": "fresh",
+        "ageSeconds": 0,
+        "maxAgeSeconds": 86400
+      }
+    },
+    {
+      "schemaVersion": "retailer-observation-v1",
+      "observationID": "obs-219bd3e8-5779-4add-a412-e437a921a358-47088917",
+      "requirementID": "20000000-0000-0000-0000-000000000003",
+      "retailerProductID": "47088917",
+      "sourceURL": "https://exo-robotics.github.io/smartcart-solari/website/solari-demo/retailer/product/47088917.html",
+      "title": "Demo Finely Shredded Parmesan Reserve",
+      "packageDescription": "6 ounce",
+      "packageQuantity": 6,
+      "packageUnit": "ounce",
+      "visiblePrice": 4.98,
+      "currency": "USD",
+      "observedAt": "2026-09-01T12:07:04.981Z",
+      "confidence": "high",
+      "ambiguityReasons": [],
+      "proteinGramsPerPackage": null,
+      "collectionMethod": "solari-browser-controlled-demo",
+      "location": {
+        "kind": "controlled-demo",
+        "label": "SmartCart Demo Grocer synthetic catalog"
+      },
+      "freshness": {
+        "status": "fresh",
+        "ageSeconds": 0,
+        "maxAgeSeconds": 86400
+      }
+    }
+  ],
+  "decisions": [
+    {
+      "schemaVersion": "basket-decision-v1",
+      "requirementID": "20000000-0000-0000-0000-000000000001",
+      "observationID": "obs-219bd3e8-5779-4add-a412-e437a921a358-10414680",
+      "packageCount": 1,
+      "requiredQuantity": 1.5,
+      "coveredQuantity": 3,
+      "quantityUnit": "pound",
+      "surplusQuantity": 1.5,
+      "lineTotal": 9.47,
+      "currency": "USD",
+      "proteinGramsPerDollar": null,
+      "substitutionNote": null,
+      "rationale": [
+        "1 package covers the reviewed requirement.",
+        "Among admitted candidates with visible prices, this is the lowest observed adequate line total."
+      ],
+      "confidence": "high",
+      "ambiguityReasons": []
+    },
+    {
+      "schemaVersion": "basket-decision-v1",
+      "requirementID": "20000000-0000-0000-0000-000000000002",
+      "observationID": "obs-219bd3e8-5779-4add-a412-e437a921a358-10534084",
+      "packageCount": 1,
+      "requiredQuantity": 12,
+      "coveredQuantity": 16,
+      "quantityUnit": "ounce",
+      "surplusQuantity": 4,
+      "lineTotal": 1.24,
+      "currency": "USD",
+      "proteinGramsPerDollar": null,
+      "substitutionNote": null,
+      "rationale": [
+        "1 package covers the reviewed requirement.",
+        "Among admitted candidates with visible prices, this is the lowest observed adequate line total."
+      ],
+      "confidence": "high",
+      "ambiguityReasons": []
+    },
+    {
+      "schemaVersion": "basket-decision-v1",
+      "requirementID": "20000000-0000-0000-0000-000000000003",
+      "observationID": "obs-219bd3e8-5779-4add-a412-e437a921a358-10452414",
+      "packageCount": 1,
+      "requiredQuantity": 3,
+      "coveredQuantity": 6,
+      "quantityUnit": "ounce",
+      "surplusQuantity": 3,
+      "lineTotal": 2.08,
+      "currency": "USD",
+      "proteinGramsPerDollar": null,
+      "substitutionNote": null,
+      "rationale": [
+        "1 package covers the reviewed requirement.",
+        "Among admitted candidates with visible prices, this is the lowest observed adequate line total."
+      ],
+      "confidence": "high",
+      "ambiguityReasons": []
+    }
+  ],
+  "basket": {
+    "completeness": "complete",
+    "observedSubtotal": 12.79,
+    "currency": "USD",
+    "pricedLineCount": 3,
+    "missingPriceLineCount": 0,
+    "unmatchedRequirementCount": 0
+  },
+  "optimizer": {
+    "method": "solari-sandbox",
+    "algorithmVersion": "smallest-sufficient-package-v1",
+    "independentlyVerified": true
+  },
+  "trust": {
+    "priceClaim": "observed-visible-price-not-guaranteed",
+    "accountAccessed": false,
+    "cartModified": false,
+    "checkoutAutomated": false,
+    "userControlsHandoff": true,
+    "limitations": [
+      "Visible prices are timestamped observations, not guarantees or checkout quotes.",
+      "Availability, tax, fees, fulfillment, and checkout totals remain unknown.",
+      "No account, cart, or checkout action was performed."
+    ]
+  }
+}
