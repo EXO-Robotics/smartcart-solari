@@ -1,26 +1,19 @@
 {
-  "artifactKind": "normalized-structured-review",
+  "artifactKind": "internal-review-findings",
+  "evidenceStatus": "development-feedback-not-external-audit",
   "reviewer": "Grok 4.6",
-  "reviewStance": "fresh-independent-red-team",
+  "reviewStance": "fresh-internal-red-team",
   "sessionID": "01a05c83-e949-7243-ab59-7570237d3a31",
   "reviewID": "redteam-29ed080c495bdc39",
   "reviewedCommit": "29ed080c495bdc390ed997b3bef265411552e584",
   "repository": "https://github.com/EXO-Robotics/smartcart-solari",
   "liveStaticDemo": "https://exo-robotics.github.io/smartcart-solari/website/solari-demo/",
-  "score": 9.7,
   "counts": {
     "critical": 0,
     "high": 0,
     "medium": 0,
     "low": 3
   },
-  "agreements": {
-    "solariMateriallyImprovesSmartCart": true,
-    "userTrustModelDefensible": true,
-    "claimsEvidenceBacked": true,
-    "effectivelyTenOfTen": true
-  },
-  "hiringQuestionAnswer": "Yes, within the explicitly bounded V1 contract.",
   "verifiedPriorDispositions": [
     {
       "id": "M-01",
@@ -86,6 +79,6 @@
     "No credentialed live receipt is claimed without SOLARI_API_KEY",
     "No retailer account, cart, checkout, payment, or autonomous purchase authority exists"
   ],
-  "overallVerdict": "No legitimate Critical, High, or Medium findings remain. Solari materially improves SmartCart, the trust model is defensible, claims are evidence-backed, and the bounded submission is effectively 10/10 despite three disclosed Low production-hardening items.",
-  "note": "This file is a normalized record of Grok's final structured verdict. It excludes model reasoning and does not claim to be a verbatim transcript."
+  "qualificationLimit": "No credentialed live Solari Browser or Sandbox receipt exists. This artifact cannot establish that Solari ran or materially improved a shopping decision.",
+  "note": "Internal development feedback only. Finding descriptions and reproducible checks are retained; model scores and self-assessments are excluded because they are not external validation or live Solari evidence."
 }

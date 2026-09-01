@@ -1,21 +1,15 @@
 {
-  "artifactKind": "normalized-structured-review",
+  "artifactKind": "internal-review-findings",
+  "evidenceStatus": "development-feedback-not-external-audit",
   "reviewer": "Grok 4.6",
   "sessionID": "01a05c74-c85f-73c0-a189-582b7f8b1a9e",
   "reviewedCommit": "a2a5167278eef44d5513c613cae9973fbf537df9",
   "reviewID": "redteam-a2a5167278eef44d",
-  "score": 8.8,
   "counts": {
     "critical": 0,
     "high": 0,
     "medium": 1,
     "low": 5
-  },
-  "agreements": {
-    "solariMateriallyImprovesSmartCart": true,
-    "userTrustModelDefensible": true,
-    "claimsEvidenceBacked": true,
-    "effectivelyTenOfTen": false
   },
   "findings": [
     {
@@ -61,5 +55,5 @@
       "resolution": "The installed @solarisdk/sandbox 0.1.2 SandboxClient exposes no close or dispose method. The created Sandbox is killed in finally, which is the available lifecycle primitive."
     }
   ],
-  "note": "This file is a normalized record of Grok's structured verdict. It excludes model reasoning and does not claim to be a verbatim transcript."
+  "note": "Internal development feedback only. Finding descriptions and dispositions are retained; model scores and self-assessments are excluded because they are not external validation or live Solari evidence."
 }

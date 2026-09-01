@@ -47,7 +47,7 @@ Live Walmart research is disabled and fails closed without documented written au
 - Keeps `SOLARI_API_KEY` server-side.
 - Leaves live execution off by default and requires a separate server/operator Bearer token before any live provider work. Fixture replay remains public and rate-limited; iOS/web never receive the operator token.
 - Validates request size, quantities, source identifiers/URLs, evidence mode, and retailer authorization policy.
-- Permits the usable live demo only on the owned Demo Grocer allowlist; rejects Target, and rejects Walmart unless both written-authorization gates are present; revalidates every redirect/final URL.
+- Permits live execution only on the owned Demo Grocer allowlist; rejects Target, and rejects Walmart unless both written-authorization gates are present; revalidates every redirect/final URL. No credentialed live run is claimed.
 - Starts short-lived Browser/Sandbox resources with bounded timeouts and concurrency/rate controls.
 - Converts page output to a retailer observation before Sandbox evaluation.
 - Validates all outputs and fails closed.

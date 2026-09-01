@@ -6,6 +6,8 @@ An experimental SmartCart fork that asks one bounded question:
 
 SmartCart already turns a reviewed recipe into pantry-aware quantities, computes conservative package counts when it has exact compatible package evidence, and then opens retailer-owned pages for the shopper. Its limitation is evidence freshness and comparison: package math relies on seeded or last-known product records, with no current retailer observation refresh and no evidence-backed checkout comparison across candidates. This fork adds that bounded comparison before the existing user-controlled handoff. It does not add autonomous purchasing.
 
+> **Evidence status:** the public demo is a dated Walmart fixture replay with a local deterministic optimizer. Solari Browser and Sandbox are **not invoked** by the public replay. The live owned-Demo-Grocer path is implemented and default-off, but remains `PENDING` until a server-side key is available and a credentialed receipt is captured. This repository does not claim that Solari ran live or improved the displayed `$12.79` basket.
+
 ## The smallest legitimate experiment
 
 The product demo is **Chicken Parmesan Pasta**:
@@ -13,8 +15,8 @@ The product demo is **Chicken Parmesan Pasta**:
 1. SmartCart extracts and reviews the recipe ingredients.
 2. Pantry allocation excludes olive oil and garlic.
 3. The remaining need is 1.5 lb chicken, 12 oz penne, and 3 oz Parmesan.
-4. A Browser adapter turns allowed product pages into structured candidate/product/package/price observations.
-5. Solari Sandbox receives only structured observations and required quantities, then runs deterministic unit normalization, package math, and basket evaluation.
+4. In the credentialed live mode, a Browser adapter turns allowed product pages into structured candidate/product/package/price observations.
+5. In that live mode, Solari Sandbox receives only structured observations and required quantities, then runs deterministic unit normalization, package math, and basket evaluation.
 6. SmartCart validates the versioned evidence and presents product, package count, observed price, source, timestamp, confidence, ambiguity, and total completeness.
 7. The shopper chooses whether to continue to the retailer. The retailer remains authoritative for location, availability, final price, cart, fulfillment, payment, and checkout.
 
@@ -30,7 +32,7 @@ The fixture checkout estimate is **$12.79**. It is a replay of dated upstream se
 
 ## Why Solari has a necessary job
 
-**Solari Browser** is the live research boundary: it loads JavaScript-rendered product pages and captures the page that was actually seen as a structured observation. In this public build, the usable live demo is the repository’s owned/controlled **Demo Grocer** surface. Live Walmart fails closed unless both written-authorization gates are set; no such authorization is present. Live Target is not supported at all. The implementation does not enable profiles, recording, proxy routing, stealth, captcha solving, account access, cart control, or checkout.
+**Solari Browser** is the implemented live research boundary: it loads JavaScript-rendered product pages and captures the page that was actually seen as a structured observation. The only admitted live target is the repository’s owned/controlled **Demo Grocer** surface. That path has not been credentialed or run in this submission. Live Walmart fails closed unless both written-authorization gates are set; no such authorization is present. Live Target is not supported at all. The implementation does not enable profiles, recording, proxy routing, stealth, captcha solving, account access, cart control, or checkout.
 
 That policy is deliberate. Walmart’s current [Terms of Use](https://www.walmart.com/help/article/walmart-com-terms-of-use/3b75080af40340d6bbd596f116fae5a0) (last updated June 23, 2026) prohibit automated retrieval/scraping without express prior written consent. Target’s [Terms & Conditions](https://www.target.com/c/terms-conditions/-/N-4sr7l) restrict automated agents and data extraction and recognize only Target-approved Agentic Commerce Agents. Respecting those boundaries is part of the trust experiment, not a hidden demo limitation.
 
@@ -94,7 +96,7 @@ The wire authorities are [`basket-research-request.schema.json`](contracts/v1/so
 
 ## What differs from normal SmartCart
 
-Normal SmartCart uses bounded seeded Walmart/Target matches or explicit unpriced search fallbacks, then moves the user through retailer pages. This fork adds a pre-handoff evidence and basket-decision layer. Its public V1 implements the full Solari Browser path for owned Demo Grocer pages and replays the Walmart product experience with dated fixtures. A credentialed receipt is still required to prove that path ran live. Target and broader real-retailer automation are intentionally outside V1.
+Normal SmartCart uses bounded seeded Walmart/Target matches or explicit unpriced search fallbacks, then moves the user through retailer pages. This fork adds a pre-handoff evidence and basket-decision layer. Its public V1 contains an executable Solari Browser/Sandbox path for owned Demo Grocer pages and replays the Walmart product experience with dated fixtures. A credentialed receipt is still required to prove that path ran live or materially improved a shopping decision. Target and broader real-retailer automation are intentionally outside V1.
 
 This experiment intentionally does **not** automate:
 
@@ -138,7 +140,7 @@ npm test
 
 Run the focused contract/API/Demo Grocer/fixture commands and repository claim/secret checks listed in [the demo runbook](Docs/SOLARI_DEMO_RUNBOOK.md), then the targeted native tests/build for the recommendation UI seam. The dependency-free submission UI can be served from the repository root at [`/website/solari-demo/`](website/solari-demo/README.md). Preserve test output separately from live evidence: deterministic fixtures prove replay behavior only.
 
-The skeptical-review method, accepted fixes, residual Low findings, and justified SDK-specific rejection are recorded in [the Solari red-team record](Docs/SOLARI_RED_TEAM.md). Exact commands/results, deployment identity, environment-limited evidence, and final score are frozen in [the qualification receipt](Docs/SOLARI_QUALIFICATION.md). A score is attributable only to the exact commit named in its review receipt.
+Exact commands/results, deployment identity, environment-limited evidence, and unresolved qualification gaps are frozen in [the qualification receipt](Docs/SOLARI_QUALIFICATION.md). [The internal red-team work log](Docs/SOLARI_RED_TEAM.md) records issues found during development, but it is not an external audit, hiring score, or proof that Solari ran.
 
 ## Submission provenance
 
@@ -146,7 +148,7 @@ This is the separate submission repository `EXO-Robotics/smartcart-solari`; it d
 
 ### Internship-brief mapping
 
-The source for this mapping is the internship brief supplied with the submission, summarized here rather than presented as a canonical public rubric. It asks for a real use case, legitimate Solari product usage, and a public GitHub build. This fork maps those to pantry-aware basket comparison; Browser evidence plus Sandbox optimization, each with a distinct necessary job; and this isolated submission repository. No canonical social-post URL, numeric score, or additional rubric is asserted.
+The source for this mapping is the internship brief supplied with the submission, summarized here rather than presented as a canonical public rubric. It asks for a real use case, legitimate Solari product usage, and a public GitHub build. This fork maps those to pantry-aware basket comparison; an implemented Browser-evidence plus Sandbox-optimization path whose credentialed run is still `PENDING`; and this isolated submission repository. No numeric hiring score or live Solari success is asserted.
 
 ## License
 
