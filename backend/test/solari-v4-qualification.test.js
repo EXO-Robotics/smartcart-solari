@@ -61,8 +61,8 @@ test('V4 qualification receipt is sanitized, exact-request-bound, and truthfully
   assert.equal(receipt.execution.assuranceScope, 'server-side-direct-service-receipt');
   assert.equal(receipt.execution.requestSha256, createHash('sha256').update(JSON.stringify(request)).digest('hex'));
   assert.equal(receipt.execution.resultSha256, createHash('sha256').update(JSON.stringify(result)).digest('hex'));
-  assert.deepEqual(receipt.coverage, { researchedRequirementCount: 3, observationCount: 7 });
-  assert.equal(receipt.selectedProductIDs.length, 3);
+  assert.deepEqual(receipt.coverage, { researchedRequirementCount: 8, observationCount: 16 });
+  assert.equal(receipt.selectedProductIDs.length, 8);
   assert.equal(receipt.optimizer.authority, 'solari-sandbox');
   assert.doesNotMatch(JSON.stringify(receipt), /rawText|pageBody|apiKey|operatorToken|authorization|bearer/i);
 });
@@ -96,10 +96,11 @@ test('V4 qualification rejects mismatched requests, absent credentials, and inve
   assert.deepEqual(receipt.workflow, { runID: null, runAttempt: null });
 });
 
-test('V4 qualification request exercises mixed dimensions and the bounded DP policy', async () => {
+test('V4 qualification request proves an eight-line mixed-dimension trip and the bounded DP policy', async () => {
   assert.equal(request.schemaVersion, 'solari-shopping-research-request-v4');
-  assert.deepEqual(request.requirements.map(({ unit }) => unit), ['g', 'ml', 'count']);
-  assert.equal(request.requirements.flatMap(({ candidateProductIDs }) => candidateProductIDs).length, 7);
+  assert.deepEqual(request.requirements.map(({ unit }) => unit), ['g', 'ml', 'g', 'ml', 'g', 'count', 'count', 'count']);
+  assert.equal(request.requirements.length, 8);
+  assert.equal(request.requirements.flatMap(({ candidateProductIDs }) => candidateProductIDs).length, 16);
   assert.deepEqual(request.optimizationPolicy, { objective: 'minimize-aggregate-relative-surplus', maxPremiumOverCheapest: 0.75, currency: 'USD', tieBreak: ['observed-subtotal', 'retailer-product-id'] });
   const generated = await buildV4QualificationRequest({ now: fixedNow });
   assert.match(generated.requestID, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);

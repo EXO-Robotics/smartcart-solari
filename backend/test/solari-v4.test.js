@@ -147,8 +147,8 @@ test('V4 service returns schema-valid Browser evidence and Sandbox-authoritative
   });
   const result = await service.research(requestExample);
   assert.equal(result.schemaVersion, 'solari-shopping-research-result-v4');
-  assert.equal(result.observations.length, 7);
-  assert.equal(result.decisions.length, 3);
+  assert.equal(result.observations.length, requestExample.requirements.flatMap(({ candidateProductIDs }) => candidateProductIDs).length);
+  assert.equal(result.decisions.length, requestExample.requirements.length);
   assert.deepEqual(new Set(result.decisions.map(({ quantityUnit }) => quantityUnit)), new Set(['gram', 'milliliter', 'count']));
   assert.equal(result.optimizer.authority, 'solari-sandbox');
   assert.equal(result.provenance.fixtureReplay, false);
