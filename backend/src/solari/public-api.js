@@ -37,6 +37,7 @@ function validOperatorToken(request, configured) {
 }
 
 function send(response, status, payload, requestID, headers = {}) {
+  if (response.destroyed || response.writableEnded) return;
   const body = JSON.stringify(payload);
   response.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
@@ -72,6 +73,13 @@ export function createPublicSolariApi(options = {}) {
 
   async function handler(request, response) {
     const traceID = randomUUID();
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    const close = () => {
+      if (request.aborted === true || request.complete === false) abort();
+    };
+    request.once('aborted', abort);
+    request.once('close', close);
     try {
       const url = new URL(request.url ?? '/', 'https://smartcart.invalid');
       if (!routeForRequest(url) || request.method !== 'POST') {
@@ -105,7 +113,7 @@ export function createPublicSolariApi(options = {}) {
           { status: 403 }
         );
       }
-      const result = await service.research(payload);
+      const result = await service.research(payload, { signal: controller.signal });
       send(response, 200, result, traceID, rateHeaders);
     } catch (error) {
       const contract = error instanceof ContractValidationError;
@@ -123,6 +131,9 @@ export function createPublicSolariApi(options = {}) {
           ...(contract ? { issues: error.errors } : {})
         }
       }, traceID);
+    } finally {
+      request.removeListener('aborted', abort);
+      request.removeListener('close', close);
     }
   }
 

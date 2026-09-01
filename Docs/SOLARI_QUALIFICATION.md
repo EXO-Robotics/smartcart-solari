@@ -42,8 +42,8 @@ The public interactive Walmart flow still loads the dated `2026-07-16T12:00:00Z`
 | live decisions | 3 Sandbox decisions; `$12.79`; independently verified |
 | resource cleanup | Browser pages/session/client and Sandbox confirmed before success |
 | exact live qualifier | six product IDs; three selections/counts/totals; `$12.79`; cleanup assertions |
-| `npm run test:solari` | 34 passed, 0 failed |
-| `npm test` outside restricted sandbox | 164 passed, 0 failed |
+| `npm run test:solari` | 37 passed, 0 failed |
+| `npm test` outside restricted sandbox | 167 passed, 0 failed |
 | `python3 website/solari-demo/validate.py` | passed |
 | demo Python unit tests | 4 passed, 0 failed |
 | `node --check` for demo and retailer scripts | passed |
@@ -53,7 +53,7 @@ The public interactive Walmart flow still loads the dated `2026-07-16T12:00:00Z`
 | public Pages deployment | run `33504670215` passed |
 | public page/receipt HTTP verification | exact live-proof and trust markers returned |
 
-The restricted filesystem sandbox cannot bind localhost for the broad Node HTTP tests. The same suite passed 164/164 outside that sandbox. This is an execution-environment distinction, not a hidden test failure.
+The restricted filesystem sandbox cannot bind localhost for the broad Node HTTP tests. The same suite passed 167/167 outside that sandbox. This is an execution-environment distinction, not a hidden test failure.
 
 The current full native source typechecked for `arm64-apple-ios17.0`, including the nullable evidence and pound/ounce validation changes. A temporary testable SmartCart module was emitted and the targeted `SolariEvidenceContractTests.swift` typechecked against it. A full app build reached Swift compilation but failed in asset-catalog compilation because CoreSimulatorService reported no available simulator runtimes. Simulator/device runtime therefore remains `PENDING`; no physical-device, TestFlight, App Store, production backend, or Release-native live-flow claim is made.
 
@@ -82,6 +82,6 @@ The current full native source typechecked for `arm64-apple-ios17.0`, including 
 2. The Browser SDK cannot pin remote DNS; production should use locked owned DNS plus a trusted egress boundary. Forwarded client identity is now ignored by default and can be enabled only behind a proxy that overwrites it.
 3. A consumer rollout needs a legally authorized retailer partner/API/feed or written automation permission. A key alone never authorizes Walmart, and Target remains unsupported.
 
-The earlier aggregate-deadline issue is closed: Browser and Sandbox now share one 45-second server-side deadline (90 seconds in the qualification lane), while retaining narrower operation timeouts. The receipt also distinguishes first-party enforced cleanup from an independent external confirmation.
+The earlier aggregate-deadline issue is closed: Browser and Sandbox share one 45-second server-side deadline (90 seconds in the qualification lane), every in-flight provider call is raced against its remaining budget, and an HTTP client disconnect propagates cancellation into both providers. Aborted Browser evaluation closes its page/session/client; an aborted Sandbox command kills its microVM. The receipt also distinguishes first-party enforced cleanup from an independent external confirmation.
 
 These limitations prevent calling the fork a shipped SmartCart product. They do not negate the bounded internship result: actual Browser observation plus actual Sandbox optimization improved SmartCart's pre-handoff evidence while preserving the user's authority.

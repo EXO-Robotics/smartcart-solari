@@ -1,7 +1,7 @@
 import { Solari } from '@solarisdk/browser';
 import { freshness } from './fixture-provider.js';
 import { SolariResearchError } from './errors.js';
-import { timeoutWithinDeadline } from './deadline.js';
+import { runWithinDeadline, timeoutWithinDeadline } from './deadline.js';
 
 function normalizeUnit(value) {
   const unit = String(value ?? '').trim().toLowerCase();
@@ -92,7 +92,7 @@ export class SolariBrowserProvider {
     this.solariFactory = solariFactory;
   }
 
-  async observe(request, { deadlineAt, clock = Date.now } = {}) {
+  async observe(request, { deadlineAt, clock = Date.now, signal } = {}) {
     if (!this.apiKey) {
       throw new SolariResearchError('solari_unavailable', 'Solari is unavailable because the server-side API key is not configured.', { status: 503 });
     }
@@ -104,33 +104,42 @@ export class SolariBrowserProvider {
     let browser;
     let activePage;
     try {
-      browser = await client.launch({
+      browser = await runWithinDeadline(() => client.launch({
         stealth: false,
         recording: false,
         captcha: false,
         proxy: 'off',
         retries: 0,
         probe: false
-      });
+      }), { configuredTimeoutMs: this.timeoutMs, deadlineAt, clock, signal });
       const observations = [];
       for (const requirement of request.requirements) {
         for (const candidate of requirement.candidates) {
-          const page = await browser.newPage();
+          const page = await runWithinDeadline(
+            () => browser.newPage(),
+            { configuredTimeoutMs: this.timeoutMs, deadlineAt, clock, signal }
+          );
           activePage = page;
           try {
-            await page.goto(candidate.sourceURL, {
-              waitUntil: 'domcontentloaded',
-              timeout: timeoutWithinDeadline(this.timeoutMs, deadlineAt, clock)
-            });
+            await runWithinDeadline(
+              () => page.goto(candidate.sourceURL, {
+                waitUntil: 'domcontentloaded',
+                timeout: timeoutWithinDeadline(this.timeoutMs, deadlineAt, clock)
+              }),
+              { configuredTimeoutMs: this.timeoutMs, deadlineAt, clock, signal }
+            );
             if (typeof page.url !== 'function' || new URL(page.url()).href !== new URL(candidate.sourceURL).href) {
               throw new SolariResearchError('retailer_redirect_not_allowed', 'The admitted page redirected outside its exact candidate URL.', { status: 502 });
             }
             if (request.retailerID === 'smartcart-demo-grocer') {
-              await page.waitForSelector('[data-solari-product="true"]', {
-                timeout: timeoutWithinDeadline(this.timeoutMs, deadlineAt, clock)
-              });
+              await runWithinDeadline(
+                () => page.waitForSelector('[data-solari-product="true"]', {
+                  timeout: timeoutWithinDeadline(this.timeoutMs, deadlineAt, clock)
+                }),
+                { configuredTimeoutMs: this.timeoutMs, deadlineAt, clock, signal }
+              );
             }
-            const data = await page.evaluate(() => {
+            const data = await runWithinDeadline(() => page.evaluate(() => {
               const root = document.querySelector('[data-solari-product="true"]');
               const meta = (selector) => document.querySelector(selector)?.getAttribute('content') ?? null;
               const jsonLd = [...document.querySelectorAll('script[type="application/ld+json"]')]
@@ -147,7 +156,7 @@ export class SolariBrowserProvider {
                 currency: root?.dataset.currency ?? jsonLd?.offers?.priceCurrency ?? meta('meta[itemprop="priceCurrency"]'),
                 rawText: document.body?.innerText ?? ''
               };
-            });
+            }), { configuredTimeoutMs: this.timeoutMs, deadlineAt, clock, signal });
             if (typeof page.url !== 'function' || new URL(page.url()).href !== new URL(candidate.sourceURL).href) {
               throw new SolariResearchError('retailer_redirect_not_allowed', 'The admitted page redirected outside its exact candidate URL after rendering.', { status: 502 });
             }

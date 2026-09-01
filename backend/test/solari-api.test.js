@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { createLogger } from '../src/lib/logger.js';
 import { createPublicSolariApi } from '../src/solari/public-api.js';
 import { controlledDemoProductURL } from '../src/solari/constants.js';
+import { SolariResearchError } from '../src/solari/errors.js';
 
 const requestPath = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -113,6 +114,50 @@ test('untrusted forwarded addresses cannot bypass the Solari rate limit', async 
     const spoofed = await post(server.api, await fixture(), { 'x-forwarded-for': '203.0.113.20' });
     assert.equal(spoofed.response.status, 429);
   } finally { await server.close(); }
+});
+
+test('client disconnect aborts in-flight Solari work and suppresses a response write', async () => {
+  let startedResolve;
+  const started = new Promise((resolve) => { startedResolve = resolve; });
+  let admittedSignal;
+  const server = await listen({
+    service: {
+      async research(_payload, { signal }) {
+        admittedSignal = signal;
+        startedResolve();
+        return new Promise((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(new SolariResearchError(
+            'solari_request_aborted',
+            'The bounded Solari research request was cancelled.',
+            { status: 408, retryable: true }
+          )), { once: true });
+        });
+      }
+    }
+  });
+  const encoded = Buffer.from(JSON.stringify(await fixture()));
+  const request = Readable.from([encoded]);
+  request.method = 'POST';
+  request.url = '/v1/solari/research';
+  request.headers = { 'content-type': 'application/json', 'content-length': String(encoded.length) };
+  request.socket = { remoteAddress: '127.0.0.1' };
+  const response = {
+    status: null,
+    headers: {},
+    body: '',
+    destroyed: false,
+    writeHead(status, responseHeaders) { this.status = status; this.headers = responseHeaders; },
+    end(value = '') { this.body += value; }
+  };
+  const handling = server.api.handler(request, response);
+  await started;
+  response.destroyed = true;
+  request.aborted = true;
+  request.emit('aborted');
+  await handling;
+  assert.equal(admittedSignal.aborted, true);
+  assert.equal(response.status, null);
+  assert.equal(response.body, '');
 });
 
 test('server logs redact provider failures by construction and never serialize the Solari key', async () => {

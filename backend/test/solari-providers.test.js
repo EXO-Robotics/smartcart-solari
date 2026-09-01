@@ -7,6 +7,7 @@ import { SolariBrowserProvider } from '../src/solari/browser-provider.js';
 import { SolariSandboxOptimizer } from '../src/solari/sandbox-provider.js';
 import { createSolariResearchService } from '../src/solari/research-service.js';
 import { controlledDemoProductURL } from '../src/solari/constants.js';
+import { runWithinDeadline } from '../src/solari/deadline.js';
 import { assertAllowedCandidateURL, assertCanonicalDemoRequest, assertPublicDemoBaseURL } from '../src/solari/url-policy.js';
 import { deterministicOptimize, optimizerFingerprint } from '../src/solari/optimizer.js';
 import { WalmartFixtureReplayProvider } from '../src/solari/fixture-provider.js';
@@ -126,6 +127,14 @@ test('Browser and Sandbox reject work after the aggregate request deadline', asy
     { code: 'solari_request_timeout', status: 504, retryable: true }
   );
   assert.equal(sandboxFactories, 0);
+
+  await assert.rejects(
+    () => runWithinDeadline(
+      () => new Promise(() => {}),
+      { configuredTimeoutMs: 20, deadlineAt: Date.now() + 20 }
+    ),
+    { code: 'solari_request_timeout', status: 504, retryable: true }
+  );
 });
 
 test('research service shares one aggregate deadline across Browser and Sandbox', async () => {
@@ -135,6 +144,9 @@ test('research service shares one aggregate deadline across Browser and Sandbox'
   let deadlineNow = 1_000;
   let browserDeadline;
   let sandboxDeadline;
+  let browserSignal;
+  let sandboxSignal;
+  const controller = new AbortController();
   const service = createSolariResearchService({
     config: {
       solariDemoRetailerBaseUrl: 'https://demo.example/solari-demo',
@@ -146,6 +158,7 @@ test('research service shares one aggregate deadline across Browser and Sandbox'
     browserProvider: {
       async observe(_request, context) {
         browserDeadline = context.deadlineAt;
+        browserSignal = context.signal;
         deadlineNow = 30_000;
         return observations;
       }
@@ -153,14 +166,96 @@ test('research service shares one aggregate deadline across Browser and Sandbox'
     sandboxOptimizer: {
       async optimize(requirements, admittedObservations, context) {
         sandboxDeadline = context.deadlineAt;
+        sandboxSignal = context.signal;
         return deterministicOptimize(requirements, admittedObservations, { method: 'solari-sandbox' });
       }
     }
   });
-  const result = await service.research(request);
+  const result = await service.research(request, { signal: controller.signal });
   assert.equal(browserDeadline, 46_000);
   assert.equal(sandboxDeadline, browserDeadline);
+  assert.equal(browserSignal, controller.signal);
+  assert.equal(sandboxSignal, controller.signal);
   assert.equal(result.optimizer.method, 'solari-sandbox');
+});
+
+test('aborting an in-flight Browser evaluation closes page, session, and client', async () => {
+  const request = demoRequest(await fixtureRequest());
+  const controller = new AbortController();
+  let evaluationStarted;
+  const started = new Promise((resolve) => { evaluationStarted = resolve; });
+  let pageClosed = 0;
+  let browserClosed = 0;
+  let clientClosed = 0;
+  let currentURL;
+  const provider = new SolariBrowserProvider({
+    apiKey: 'server-only-test-key',
+    timeoutMs: 1_000,
+    solariFactory: () => ({
+      async launch() {
+        return {
+          async newPage() {
+            return {
+              async goto(url) { currentURL = url; },
+              url() { return currentURL; },
+              async waitForSelector() {},
+              async evaluate() {
+                evaluationStarted();
+                return new Promise(() => {});
+              },
+              async close() { pageClosed += 1; }
+            };
+          },
+          async close() { browserClosed += 1; }
+        };
+      },
+      async close() { clientClosed += 1; }
+    })
+  });
+  const work = provider.observe(request, {
+    deadlineAt: Date.now() + 5_000,
+    signal: controller.signal
+  });
+  await started;
+  controller.abort();
+  await assert.rejects(() => work, { code: 'solari_request_aborted', status: 408, retryable: true });
+  assert.equal(pageClosed, 1);
+  assert.equal(browserClosed, 1);
+  assert.equal(clientClosed, 1);
+});
+
+test('aborting an in-flight Sandbox command kills the microVM', async () => {
+  const request = await fixtureRequest();
+  const observations = await new WalmartFixtureReplayProvider({ now: () => Date.parse('2026-07-16T12:01:00Z') }).observe(request);
+  const controller = new AbortController();
+  let commandStarted;
+  const started = new Promise((resolve) => { commandStarted = resolve; });
+  let killed = 0;
+  const optimizer = new SolariSandboxOptimizer({
+    apiKey: 'server-only-test-key',
+    timeoutMs: 1_000,
+    clientFactory: () => ({
+      async create() {
+        return {
+          commands: {
+            async run() {
+              commandStarted();
+              return new Promise(() => {});
+            }
+          },
+          async kill() { killed += 1; }
+        };
+      }
+    })
+  });
+  const work = optimizer.optimize(request.requirements, observations, {
+    deadlineAt: Date.now() + 5_000,
+    signal: controller.signal
+  });
+  await started;
+  controller.abort();
+  await assert.rejects(() => work, { code: 'solari_request_aborted', status: 408, retryable: true });
+  assert.equal(killed, 1);
 });
 
 test('Browser success is withheld unless session and client cleanup are confirmed', async () => {

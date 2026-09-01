@@ -35,7 +35,7 @@ export function createSolariResearchService(options = {}) {
     }
   }
 
-  async function research(request) {
+  async function research(request, { signal } = {}) {
     const deadlineAt = request.executionMode === 'live'
       ? deadlineClock() + config.solariRequestTimeoutMs
       : undefined;
@@ -80,7 +80,7 @@ export function createSolariResearchService(options = {}) {
       if (request.retailerID === 'smartcart-demo-grocer' && !config.solariDemoRetailerBaseUrl) {
         throw new SolariResearchError('controlled_demo_unavailable', 'The controlled Demo Grocer base URL is not configured.', { status: 503 });
       }
-      observations = await browserProvider.observe(request, { deadlineAt, clock: deadlineClock });
+      observations = await browserProvider.observe(request, { deadlineAt, clock: deadlineClock, signal });
       for (const observation of observations) {
         const validation = validator.validate(SOLARI_OBSERVATION_SCHEMA_ID, observation);
         if (!validation.valid) {
@@ -91,7 +91,7 @@ export function createSolariResearchService(options = {}) {
           );
         }
       }
-      optimized = await sandboxOptimizer.optimize(request.requirements, observations, { deadlineAt, clock: deadlineClock });
+      optimized = await sandboxOptimizer.optimize(request.requirements, observations, { deadlineAt, clock: deadlineClock, signal });
       fixtureReplay = false;
     }
 

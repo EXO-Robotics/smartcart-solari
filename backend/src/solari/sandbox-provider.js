@@ -5,7 +5,7 @@ import {
   summarizeDecisions
 } from './optimizer.js';
 import { SolariResearchError } from './errors.js';
-import { timeoutWithinDeadline } from './deadline.js';
+import { runWithinDeadline, timeoutWithinDeadline } from './deadline.js';
 
 const PYTHON_OPTIMIZER = String.raw`
 import json, math, sys
@@ -58,7 +58,7 @@ export class SolariSandboxOptimizer {
     this.clientFactory = clientFactory;
   }
 
-  async optimize(requirements, observations, { deadlineAt, clock = Date.now } = {}) {
+  async optimize(requirements, observations, { deadlineAt, clock = Date.now, signal } = {}) {
     if (!this.apiKey) {
       throw new SolariResearchError('solari_unavailable', 'Solari is unavailable because the server-side API key is not configured.', { status: 503 });
     }
@@ -69,16 +69,19 @@ export class SolariSandboxOptimizer {
     });
     let sandbox;
     try {
-      sandbox = await client.create({
+      sandbox = await runWithinDeadline(() => client.create({
         template: 'base',
         timeoutMs: timeoutWithinDeadline(this.timeoutMs, deadlineAt, clock),
         lifecycle: { onTimeout: 'kill', autoResume: false },
         metadata: { purpose: 'smartcart-public-basket-optimization-v1' }
-      });
-      const result = await sandbox.commands.run('python3', {
-        args: ['-c', PYTHON_OPTIMIZER, JSON.stringify(publicPayload(requirements, observations))],
-        timeoutMs: timeoutWithinDeadline(this.timeoutMs, deadlineAt, clock)
-      });
+      }), { configuredTimeoutMs: this.timeoutMs, deadlineAt, clock, signal });
+      const result = await runWithinDeadline(
+        () => sandbox.commands.run('python3', {
+          args: ['-c', PYTHON_OPTIMIZER, JSON.stringify(publicPayload(requirements, observations))],
+          timeoutMs: timeoutWithinDeadline(this.timeoutMs, deadlineAt, clock)
+        }),
+        { configuredTimeoutMs: this.timeoutMs, deadlineAt, clock, signal }
+      );
       if (result.exitCode !== 0 || result.stderr.trim()) {
         throw new SolariResearchError('solari_sandbox_failed', 'Solari Sandbox could not complete the bounded optimizer.', { status: 502 });
       }
