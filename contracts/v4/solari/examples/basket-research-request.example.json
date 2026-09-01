@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "solari-shopping-research-request-v4",
+  "requestID": "70000000-0000-4000-8000-000000000001",
+  "demoID": "owned-demo-grocer-basket-v4",
+  "submittedAt": "2026-09-01T16:00:00Z",
+  "retailerID": "smartcart-demo-grocer",
+  "executionMode": "live",
+  "storeReference": "smartcart-demo-grocer-owned-catalog-v4",
+  "optimizationPolicy": {
+    "objective": "minimize-aggregate-relative-surplus",
+    "maxPremiumOverCheapest": 0.75,
+    "currency": "USD",
+    "tieBreak": ["observed-subtotal", "retailer-product-id"]
+  },
+  "requirements": [
+    { "id": "71000000-0000-4000-8000-000000000001", "ingredientID": "72000000-0000-4000-8000-000000000001", "name": "Chicken breast", "requestedQuantityText": "680 g", "requiredQuantity": 680, "unit": "g", "candidateProductIDs": ["dg4-chicken-value-3lb", "dg4-chicken-organic-1-5lb", "dg4-chicken-free-range-3lb"] },
+    { "id": "71000000-0000-4000-8000-000000000002", "ingredientID": "72000000-0000-4000-8000-000000000002", "name": "Olive oil", "requestedQuantityText": "30 ml", "requiredQuantity": 30, "unit": "ml", "candidateProductIDs": ["dg4-olive-oil-value-17floz", "dg4-olive-oil-organic-17floz", "dg4-olive-oil-smooth-16floz"] },
+    { "id": "71000000-0000-4000-8000-000000000003", "ingredientID": "72000000-0000-4000-8000-000000000003", "name": "Garlic cloves", "requestedQuantityText": "2 cloves", "requiredQuantity": 2, "unit": "count", "candidateProductIDs": ["dg4-garlic-bulb-8ct"] }
+  ]
+}

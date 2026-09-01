@@ -112,8 +112,12 @@ struct SolariRetailerReviewSheet: View {
 
     private func loadedContent(_ research: SolariValidatedResearch) -> some View {
         VStack(alignment: .leading, spacing: 18) {
+            coverageSummary
             basketSummary(research.result.basket)
             comparisonSummary(research.result.comparison)
+            if !activePlan.skippedLines.isEmpty {
+                skippedLinesSummary
+            }
             if !research.warnings.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Label("Limitations to review", systemImage: "exclamationmark.triangle.fill")
@@ -148,6 +152,47 @@ struct SolariRetailerReviewSheet: View {
         }
     }
 
+    private var coverageSummary: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Researched \(activePlan.request.requirements.count) of \(activePlan.totalWaitingCount) items", systemImage: "checklist")
+                .font(.system(.title3, design: .rounded, weight: .bold))
+                .foregroundStyle(SmartCartTheme.navy)
+            if activePlan.skippedLines.isEmpty {
+                Text("Every waiting item had an exact reviewed quantity and a compatible Demo Grocer catalog match.")
+            } else {
+                Text("The remaining \(activePlan.skippedLines.count) item\(activePlan.skippedLines.count == 1 ? "" : "s") stay unchanged and continue through normal SmartCart.")
+            }
+        }
+        .font(.subheadline)
+        .foregroundStyle(SmartCartTheme.secondaryInk)
+        .fixedSize(horizontal: false, vertical: true)
+        .smartCartCard()
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("solari-coverage-summary")
+    }
+
+    private var skippedLinesSummary: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Continuing through normal SmartCart", systemImage: "cart")
+                .font(.headline)
+                .foregroundStyle(SmartCartTheme.navy)
+            ForEach(activePlan.skippedLines) { line in
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(line.name)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(SmartCartTheme.navy)
+                    Text(line.reason.localizedDescription)
+                        .font(.caption)
+                        .foregroundStyle(SmartCartTheme.secondaryInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .accessibilityElement(children: .combine)
+            }
+        }
+        .smartCartCard()
+        .accessibilityIdentifier("solari-skipped-lines")
+    }
+
     private func comparisonSummary(_ comparison: SolariBasketComparison) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Label("Low-waste tradeoff", systemImage: "scale.3d")
@@ -155,16 +200,16 @@ struct SolariRetailerReviewSheet: View {
                 .foregroundStyle(SmartCartTheme.navy)
             Text(
                 "Spend \(currencyText(comparison.premiumOverCheapest)) above the cheapest adequate basket " +
-                "to avoid \(quantityText(comparison.surplusAvoidedOunces)) oz of package surplus."
+                "to reduce normalized package surplus by \(percentText(comparison.relativeSurplusAvoided))."
             )
                 .font(.system(.title3, design: .rounded, weight: .bold))
                 .foregroundStyle(SmartCartTheme.navy)
                 .fixedSize(horizontal: false, vertical: true)
             Text(
                 "Selected: \(currencyText(comparison.selectedSubtotal)), " +
-                "\(quantityText(comparison.selectedAggregateSurplusOunces)) oz surplus · " +
+                "\(percentText(comparison.selectedAggregateRelativeSurplus)) aggregate relative surplus · " +
                 "Cheapest: \(currencyText(comparison.cheapestAdequateSubtotal)), " +
-                "\(quantityText(comparison.cheapestAggregateSurplusOunces)) oz surplus · " +
+                "\(percentText(comparison.cheapestAggregateRelativeSurplus)) aggregate relative surplus · " +
                 "Premium cap: \(currencyText(comparison.maxPremiumOverCheapest))"
             )
                 .font(.caption.weight(.semibold))
@@ -479,10 +524,14 @@ struct SolariRetailerReviewSheet: View {
         value.formatted(.number.precision(.fractionLength(0...2)))
     }
 
+    private func percentText(_ value: Double) -> String {
+        value.formatted(.percent.precision(.fractionLength(0...1)))
+    }
+
     private func unitText(_ unit: SolariEvidenceUnit) -> String {
         switch unit {
-        case .ounce: "oz"
-        case .pound: "lb"
+        case .gram: "g"
+        case .milliliter: "ml"
         case .count: "count"
         }
     }

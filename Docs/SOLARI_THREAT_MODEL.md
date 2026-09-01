@@ -1,81 +1,77 @@
-# Solari threat model
+# Solari V4 threat model
 
-## Protected assets and trust boundaries
+## Boundaries and protected assets
 
-```text
-Release-SolariBeta app
-  -> Apple App Attest + exact V3 request bytes
-  -> Vercel beta API
-       Upstash challenges / keys / counters / quotas / leases / kill switch
-       server-only Solari credential
-  -> Solari Browser -> exact owned public product URLs
-  -> structured observations only
-  -> Solari Sandbox -> bounded optimizer
-  -> validated V3 result
-  -> native evidence sheet
-  -> unchanged original SmartCart retailer handoff
-```
+~~~text
+Release-SolariBeta
+  -> App Attest envelope binding exact V4 request bytes
+  -> protected beta API / Upstash controls / server-only Solari key
+  -> Browser exact owned V4 URLs
+  -> bounded structured observations
+  -> Sandbox relative-surplus DP
+  -> independently checked policy invariants
+  -> native researched-X-of-Y review
+  -> unchanged original SmartCart handoff
+~~~
 
-Protected assets include the Solari key, App Attest/Upstash control state, signed capability URLs, provider spend, evidence integrity, the shopper’s reviewed requirements, original SmartCart matches, and final handoff authority. The owned Demo Grocer contains synthetic public data; it does not justify relaxing the same boundaries needed for a future authorized source.
+Protected assets include provider credentials/spend, App Attest challenge/key/counter state, shopper requirements, skipped-line integrity, original SmartCart selections, evidence provenance, and user handoff authority.
 
 ## Threat register
 
-| Threat | Failure mode | Current control | Residual / required production work |
+| Threat | Failure mode | V4 control | Residual / release work |
 | --- | --- | --- | --- |
-| Unbounded SSRF | Caller turns Browser into a network pivot | V3 admits one owned retailer, exact HTTPS root, exact six IDs/paths, no credentials/query/fragment; public-address DNS preflight; URL checked before and after render; product ID checked | Remote Browser DNS cannot be pinned, leaving DNS TOCTOU. Keep the owned host and exact-path policy; require controlled egress for any consumer source. |
-| Redirect / JavaScript navigation | Page escapes after initial admission | Final `page.url()` must equal the exact candidate URL both before and after evaluation; mismatches fail closed | Provider/network compromise still warrants controlled egress and allowlisted DNS in production. |
-| Page-content or prompt injection | Retailer text manipulates an agent/evaluator | No LLM prompt is built from page prose. V3 reads bounded structured DOM/JSON-LD fields; raw text is not passed to current result/Sandbox; product/current/synthetic markers must match | Treat every rendered field as untrusted input; retain schema and semantic bounds. Historical V1 raw-text code is not the current path and should not expand. |
-| Retailer scraping / ToS violation | Unauthorized automation or fragile integration | Live source is owned Demo Grocer only. Walmart is replay-only; live Walmart requires explicit written-authorization gates. Target unsupported. Beta rejects coexistence with V1 operator-live mode | Before a real source, use an authorized API/feed or documented permission and review robots/terms/rate requirements. |
-| Retailer layout fragility | Selector changes produce false product/price | Exact marker, product ID, URL, package/price parsing, current/synthetic markers, freshness, and complete six-candidate set all required; ambiguity preserved | Source changes should fail closed and alert; add source-specific monitoring only after authorization. |
-| Misleading price/current claim | Shopper treats observation as guaranteed checkout price | Each observation has exact source/time/location, `syntheticPrice`, freshness, confidence/ambiguity; copy says observed/not guaranteed; tax, fees, inventory, fulfillment, checkout excluded | Demo Grocer offers no real-retailer value. Future retailer UI must carry store/location and expiry semantics backed by evidence. |
-| Stale/future evidence | Old price appears current | Backend computes observation time during Browser collection, then recomputes every age at result completion and revalidates the set; native verifies actual age, maximum age, future tolerance, and original timestamp; refresh bypasses cache | Never retimestamp cached evidence. Revisit TTL per authorized source and location behavior. |
-| Incomplete total laundering | Missing line price becomes `$0` or a complete subtotal | General evidence model keeps price/total nullable; incomplete cannot claim complete. Fixed V3 qualification requires all three priced lines | Tax/fees/checkout total remain unknown even when the observed product subtotal is complete. |
-| Unsupported match/substitution | Decision points to wrong product or arbitrary advice | Exact requirement/product/source membership, unique UUIDs, canonical ingredient/quantity/unit semantics, observation references, and substitution membership are validated | V3 is intentionally fixed. Broader matching requires a reviewed taxonomy and explicit ambiguity UX. |
-| Optimizer overclaim or tampering | Sandbox returns attractive but invalid basket | SmartCart recomputes coverage, package count, line totals, stable cheapest reference, comparison arithmetic, and `$0.75` cap; internally computed receipt digest binds accepted result | Sandbox is intentionally the global argmin authority; SmartCart does not independently prove global optimality. State this boundary instead of claiming independent verification. |
-| Secret exposure | Solari/Redis/operator credentials leak to client or artifacts | Secrets are environment-only; no client token; sanitized errors/receipts; capability/control URLs omitted; repository scans | Restrict deployment/provider access, rotate keys, and monitor logs/artifacts. Solari says bearer keys and signed capability URLs must be treated as secrets. |
-| App impersonation / request alteration | Untrusted caller spends Solari or swaps requirements | Beta default-off; one-use App Attest challenge; assertion binds exact request bytes; backend checks app identity/build/key/counter/signature before provider work; no client bearer fallback | Real signed vector is pending. Current personal-team/provisioning blockers must be fixed without weakening entitlements. |
-| Challenge replay / concurrency abuse | Repeated spend using valid device | Upstash challenge burn, monotonic counters, idempotency, per-key/global quotas, concurrency lease, body/candidate bounds | Configure alerts/budgets and named operator before testers. State-store outage fails closed. |
-| V1 operator-live bypass | Public/operator route coexists with protected beta | Configuration rejects V1 operator-live when App Attest beta is enabled | Maintain deployment separation and regression tests. Operator qualification remains server-side only. |
-| Kill-switch lag | Disabled feature continues provider work | Feature/runtime flags checked before admission; runtime key monitored during work; missing/store error aborts | Polling has finite delay; drill ownership and reconcile provider usage after infrastructure failure. |
-| Cancellation/resource leak | User leaves but remote work continues | Native task cancellation; 75-second request / 90-second resource timeouts; HTTP abort propagation; one aggregate deadline raced around provider calls/evaluation; page/session/client close and Sandbox kill in `finally`; cleanup failure suppresses success | A response-socket hangup after complete request body may run until deadline. Provider/infrastructure failure can outlive local cleanup; reconcile usage operationally. |
-| Browser profile/session privacy | Cookies or login authority persist | Fresh logged-out session; no profile/login/storage save; no recording/proxy/stealth/captcha; close before success | If profiles are ever enabled, they store Playwright cookies/localStorage and represent a real account. Require consent, access, retention, deletion, and retailer authorization first. |
-| Raw HTML/screenshot/log retention | Personalization or third-party content leaks | No screenshots/recording; current V3 path emits bounded structured fields; receipts omit raw HTML, page text, provider IDs, and capability URLs | Review provider retention, region, DPA, and log drains before consumer use. Remove historical V1 raw-text support if no longer needed. |
-| Excess app data | Recipe/pantry habits leak | Sends only three reviewed requirements and six admitted IDs; no name, address, account, full pantry, source image/text, retailer session, or payment data | Ingredient choices can be personal. Establish retention/deletion if server logging expands. |
-| Sandbox exfiltration | Optimizer leaks structured data or secrets | Sandbox receives no secrets, auth, capability URLs, cookies, or raw page content; fixed code/payload; output schema and invariants checked; Sandbox killed | No claim of blocked egress. Configure and prove no-egress if required. |
-| Native cache/refresh confusion | Result or idempotency identity is reused after explicit refresh | Cache fingerprint binds plan/servings/mode, holds max eight results for two minutes in memory, refresh evicts the fingerprint entry and rebuilds the same reviewed plan with a fresh request UUID/time, continuation revalidates original matches | Never persist or retimestamp. App suspension timing remains a test concern. |
-| Demo-to-retailer contamination | Synthetic IDs/prices enter Walmart/retailer handoff | Native success copy and continuation explicitly preserve the unchanged original SmartCart list; Demo IDs/prices are not transferred | Continue negative regression tests as UI evolves. |
-| Autonomous purchase escalation | Research becomes commerce authority | No account/cart/order/payment/checkout capability. Explicit user continuation only; `visited` is not purchase evidence; pantry update remains explicit | Retailer actions remain under user and retailer controls. |
+| SSRF / navigation escape | Browser becomes a network pivot | One owned HTTPS root; 19 exact IDs/paths; no credentials/query/fragment; public-address DNS preflight; exact URL checked after navigation/render | Remote-browser DNS is not pinned, leaving DNS TOCTOU. Controlled egress is required before consumer use. |
+| Page/prompt injection | Hostile prose manipulates research | No LLM prompt from page prose; only bounded structured fields; exact product/current/synthetic markers; raw text never enters Sandbox | Continue treating every rendered field as untrusted input. |
+| Unauthorized retailer automation | Research violates terms or authorization | V4 targets owned Demo Grocer only. Walmart is replay-only; Target unsupported; real sources fail closed absent documented authorization | Qualify an authorized API/feed or explicit permission separately. |
+| Layout/evidence fragility | Missing or changed field becomes a false claim | Exact source/product/marker/unit parsing, freshness, cardinality, and complete admitted-subset validation | Monitor owned pages; any future source needs source-specific failure telemetry. |
+| Misleading price | Synthetic subtotal appears like checkout price | Source/time/location/freshness/confidence/ambiguity and synthetic marker; UI says observed comparison, not checkout quote | Tax, fees, discounts, inventory, fulfillment, and location remain unknown. |
+| Partial-coverage laundering | Complete result implies every trip line was researched | Native plan binds total waiting count, admitted requirements, and explicit skipped lines; UI says Researched X of Y; skipped lines continue unchanged | Keep skip reasons visible and accessible as UI evolves. |
+| Unsupported semantic match | Wrong ingredient enters research | Exact SmartCart product link, seeded alias group, canonical dimension, allowlisted candidate membership, unique IDs | Eight groups are not arbitrary coverage; broader taxonomy requires review and ambiguity UX. |
+| Unbounded cost | Large trip multiplies provider spend | 1–12 requirements, 1–3 candidates each, <=24 observations; request/body bounds; quotas, concurrency lease, cache, cancellation, aggregate deadline, kill switch | Set budgets/alerts and named operator before testers. |
+| Optimizer tampering/overclaim | Sandbox emits attractive invalid basket | Backend recomputes coverage, packages, line totals, cheapest reference, comparison, and $0.75 cap | Sandbox is global DP authority; SmartCart does not prove the global argmin. Preserve that wording. |
+| App impersonation / body swap | Caller spends provider key or changes requirements | Default-off Release route; one-use App Attest challenge; assertion binds exact V4 bytes; app/build/key/counter/signature checks; no client bearer fallback | Signed physical-device vector remains PENDING. |
+| Challenge replay / race | Valid device repeats spend | Challenge burn, monotonic counter, idempotency, per-key/global quotas, concurrency lease, request identity refresh | State-store outage fails closed; drill replay and lease recovery on device. |
+| Secret/capability leakage | Key or signed URL reaches client/log | Environment-only secrets; sanitized errors/receipts; no provider/control URL in result; repository scans | Audit provider and deployment logs, rotate keys, restrict operators. |
+| Session/profile privacy | Cookies/login authority persist | Fresh logged-out Browser session; no persistent profile, login, recording, proxy, stealth, CAPTCHA, storage save | A future profile would contain cookies/localStorage and requires consent, authorization, retention and deletion controls. |
+| Raw-content retention | HTML/screenshots expose third-party or personal data | No screenshot/recording; bounded structured evidence only; receipts omit raw HTML/page text/provider capability URLs | Review provider retention/region/DPA before consumer use. |
+| Excess trip data | Recipe/pantry habits leak | Send only admitted line names, canonical quantities, exact candidate IDs; skipped lines/full pantry/account/address/payment stay client-side | Ingredient selections may still be personal; define retention/deletion before beta. |
+| Sandbox exfiltration | Structured inputs or secret leaks | Sandbox receives no secrets/auth/cookies/raw pages; fixed optimizer/payload; output validation; teardown in finally | No claim of blocked egress. Configure/prove no-egress if required. |
+| Cancellation/resource leak | User leaves while remote work continues | Native cancellation and 75/90-second timeouts; backend abort/deadline; Browser page/session/client close and Sandbox kill in finally; cleanup failure suppresses success | Socket hangup after body receipt may run to deadline; reconcile provider usage. |
+| Refresh/cache confusion | Old evidence is retimestamped or wrong plan reused | Fingerprint binds plan/selections/servings/mode; bounded short memory cache; refresh evicts and creates new UUID/time; freshness uses original observedAt | Retest suspension and concurrent refresh on signed device. |
+| Demo contamination | Synthetic selection reaches retailer | Continuation revalidates all original waiting selections and rejects Demo Grocer IDs/prices | Maintain negative regression tests. |
+| Autonomous commerce | Research gains purchase authority | No account, cart, order, payment, or checkout capability; explicit user action before and after research | Retailer action remains entirely under user/retailer controls. |
 
-## App Attest state and privacy
+## App Attest state
 
-The app stores its App Attest key identifier and accepted state; the Apple private key remains device-controlled. The backend stores public verification record, revocation/counter state, one-use challenges, bounded idempotency results, quotas, and short concurrency leases in Upstash. It does not store an Apple private key.
+The transport envelope remains **solari-app-attest-research-envelope-v1** while its payload is **solari-shopping-research-request-v4**. The app stores only its key identifier/accepted state; Apple's private key remains device-controlled. Backend state includes public verification data, counter/revocation state, one-use challenges, bounded idempotency results, quotas, and short leases.
 
-The transport envelope remains `solari-app-attest-research-envelope-v1` while `payloadBase64` contains exact `solari-shopping-research-request-v3` bytes. The server parses and validates V3 only after request binding and admission. A 401/403 clears the app’s local accepted-key reference and requires an explicit retry; there is no fallback bearer or Release fixture mode.
+Release-SolariBeta has no fixture or bearer fallback. A 401/403 clears the local accepted-key reference and requires an explicit retry. Provider work is rejected before Browser/Sandbox unless the live beta path, App Attest identity/build, state store, quotas, lease, and kill switch all admit it.
 
-The protected Vercel deployment has smoke evidence for health/challenge and fail-closed malformed V3 rejection. No successful physical-device attestation/assertion/research exists. Three signing identities are present, but the archive is blocked by unsupported Associated Domains/App Attest on the personal team, missing matching app profile, Share Extension app-group profile mismatch, and an offline physical phone.
+No signed V4 App Attest request has run. Three development identities exist, but archive remains blocked by unsupported personal-team capabilities, a missing matching app profile, a Share Extension application-groups mismatch, and an offline physical phone.
 
 ## Data minimization and retention
 
-Retain only version, request/observation IDs, exact source, original timestamps, package/price fields, confidence/ambiguity, decisions/comparison, provenance/trust, cleanup, and sanitized qualification identity.
+Retain only the versioned request/result IDs, admitted canonical requirements, exact sources, original observation timestamps, package/price/confidence/ambiguity fields, decisions/comparison, provider provenance, cleanup, and sanitized qualification identity.
 
-Do not retain Solari/Redis/operator secrets, auth headers, App Attest blobs beyond verification need, signed session/control/file URLs, cookies/localStorage, raw HTML/screenshots/recordings, retailer accounts, addresses, payment, carts, orders, or checkout data.
+Do not retain secrets, auth headers, attestation blobs beyond verification need, signed control URLs, cookies/localStorage, raw HTML, screenshots, recordings, accounts, address, payment, cart, order, checkout, full pantry, or skipped trip lines.
 
-Persistent Solari profiles are deliberately unused. [Solari profiles](https://docs.getsolari.com/profiles) use Playwright storage state containing cookies and per-origin localStorage and should be treated like login credentials. [Solari API docs](https://docs.getsolari.com/api-reference) describe bearer authentication and signed capability URLs. [Solari Sandbox docs](https://docs.getsolari.com/sandboxes) specify `kill()` teardown.
+Official references: [Solari profiles](https://docs.getsolari.com/profiles) describe Playwright storage state; [API docs](https://docs.getsolari.com/api-reference) describe bearer credentials and signed capability URLs; [Sandbox docs](https://docs.getsolari.com/sandboxes) describe teardown.
 
-## Operational release gate
+## Evidence and release gates
 
-Runtime security evidence is pinned to `772e65bac5cabfba8b5e8b6a9482191a715c616a` by credentialed run `33533170189` and deployment receipt `smartcart-solari-v3-deployment-772e65b-20260901.json`. Later documentation, receipt-file, or supporting-site publication commits are not runtime execution evidence and must remain separately identified.
+Historical V3 run [33533170189](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33533170189) at runtime **772e65b** proved the narrower owned-source Browser/Sandbox and cleanup path. Its [provider receipt](../evidence/live/smartcart-solari-v3-qualification-33533170189.json) and [deployment receipt](../evidence/live/smartcart-solari-v3-deployment-772e65b-20260901.json) do not qualify V4.
 
-Before any signed native beta or real-retailer claim:
+Before a V4 release claim:
 
-- obtain correct team capabilities and matching main-app/Share Extension provisioning profiles;
-- produce and install an allowlisted signed `Release-SolariBeta` build on a physical iPhone;
-- complete Apple initial attestation and an assertion bound to exact V3 bytes;
-- verify replay, quota, cancellation, kill-switch, and cleanup behavior on that path;
-- configure budgets/alerts and named kill-switch ownership;
-- scan client, deployment, logs, receipts, and artifacts for secrets/capability URLs;
-- inspect source/time/mode/ambiguity/overage and unchanged-handoff UX with Dynamic Type/VoiceOver;
-- obtain authorized retailer data access before replacing the owned synthetic source;
-- separately qualify TestFlight, App Store, and downloadable-app claims.
+- freeze and qualify one exact V4 commit;
+- run contract/backend/native/web/build/audit checks;
+- publish and verify all owned V4 pages;
+- obtain a credentialed V4 Browser+Sandbox receipt;
+- deploy that exact runtime and record a separate smoke receipt;
+- produce/install a correctly signed Release-SolariBeta build;
+- complete real App Attest registration/assertion/replay testing on iPhone;
+- test accessibility, cancellation, quotas, kill switch, coverage/skips, evidence, and unchanged handoff;
+- obtain documented retailer authorization before any non-owned source;
+- separately qualify TestFlight/App Store/downloadable availability.
 
-Those gates are PENDING. The current evidence supports the protected backend, native code/simulator behavior, owned Browser targets, and operator-qualified Browser/Sandbox run—not a signed consumer-native or real-retailer release.
+All V4 execution, deployment, signed-device, distribution, and authorized-retailer gates are **PENDING**.

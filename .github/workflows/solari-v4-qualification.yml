@@ -1,0 +1,65 @@
+name: Solari V4 generalized-trip qualification
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: solari-v4-qualification
+  cancel-in-progress: false
+
+jobs:
+  qualify-owned-demo-v4:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install pinned backend dependencies
+        run: npm ci --prefix backend
+
+      - name: Verify V4 contracts, qualification boundary, and owned catalog
+        run: |
+          node --test backend/test/solari-v4.test.js backend/test/solari-v4-qualification.test.js backend/test/solari-v3.test.js backend/test/solari-v3-qualification.test.js
+          python3 website/solari-demo/validate.py
+          python3 -m unittest discover -s website/solari-demo/tests -v
+          node --check website/solari-demo/retailer-v4/retailer.js
+
+      - name: Confirm the public owned V4 retailer surface
+        env:
+          DEMO_ROOT: https://exo-robotics.github.io/smartcart-solari/website/solari-demo
+        run: |
+          curl --fail --silent --show-error --location --max-time 20 "$DEMO_ROOT/retailer-v4/catalog.json" >/dev/null
+          curl --fail --silent --show-error --location --max-time 20 "$DEMO_ROOT/retailer-v4/product/dg4-chicken-value-3lb.html" >/dev/null
+
+      - name: Run direct credentialed V4 Browser and Sandbox qualification
+        env:
+          SOLARI_API_KEY: ${{ secrets.SOLARI_API_KEY }}
+          SOLARI_DEMO_RETAILER_BASE_URL: https://exo-robotics.github.io/smartcart-solari/website/solari-demo
+          SOLARI_BROWSER_TIMEOUT_MS: "25000"
+          SOLARI_SANDBOX_TIMEOUT_MS: "25000"
+          SOLARI_REQUEST_TIMEOUT_MS: "120000"
+          SOLARI_V4_QUALIFICATION_OUTPUT: ${{ runner.temp }}/smartcart-solari-v4-qualification.json
+        run: |
+          if [ -z "$SOLARI_API_KEY" ]; then
+            echo "SOLARI_API_KEY repository secret is required" >&2
+            exit 1
+          fi
+          npm run --prefix backend qualify:solari-v4
+
+      - name: Upload sanitized V4 qualification receipt
+        if: success()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: smartcart-solari-v4-qualification-${{ github.sha }}
+          path: ${{ runner.temp }}/smartcart-solari-v4-qualification.json
+          if-no-files-found: error
+          retention-days: 90

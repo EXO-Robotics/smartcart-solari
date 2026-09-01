@@ -8,9 +8,9 @@ import {
   V2_ENVELOPE_SCHEMA_ID
 } from './beta-research-service.js';
 import { SolariResearchError } from './errors.js';
-import { createSolariV3ResearchService, V3_REQUEST_SCHEMA_ID } from './v3-research-service.js';
+import { createSolariV4ResearchService, V4_REQUEST_SCHEMA_ID } from './v4-research-service.js';
 
-function payloadBytes(value,maxBytes){const bytes=appAttestEncoding.strictBase64(value,maxBytes,'payloadBase64');try{const parsed=JSON.parse(bytes.toString('utf8'));if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))throw new Error();return{bytes,parsed};}catch{throw new SolariResearchError('invalid_v3_payload','payloadBase64 must contain one UTF-8 JSON object for the V3 research contract.',{status:400});}}
+function payloadBytes(value,maxBytes){const bytes=appAttestEncoding.strictBase64(value,maxBytes,'payloadBase64');try{const parsed=JSON.parse(bytes.toString('utf8'));if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))throw new Error();return{bytes,parsed};}catch{throw new SolariResearchError('invalid_v4_payload','payloadBase64 must contain one UTF-8 JSON object for the V4 research contract.',{status:400});}}
 function requireBetaConfig(config,{injectedStore=false}={}){
   if(config.solariBetaEnabled!==true)throw new SolariResearchError('solari_beta_disabled','The private Solari beta is disabled.',{status:503});
   if(config.solariLiveExecutionEnabled===true||config.solariOperatorToken)throw new SolariResearchError('solari_execution_mode_conflict','App Attest beta execution cannot share a deployment with V1 operator-live execution.',{status:503});
@@ -20,7 +20,7 @@ function requireBetaConfig(config,{injectedStore=false}={}){
 export function createSolariBetaApi(options={}){
   const config=options.config??{},now=options.now??Date.now,validatorPromise=options.validator?Promise.resolve(options.validator):createContractValidator();
   let store=options.store??null,verifier=options.verifier??null;
-  const research=options.researchService??createSolariV3ResearchService({...options,config});
+  const research=options.researchService??createSolariV4ResearchService({...options,config});
   function getStore(){requireBetaConfig(config,{injectedStore:Boolean(store)});store??=new UpstashSolariBetaStore({url:config.solariBetaRedisUrl,token:config.solariBetaRedisToken});return store;}
   function getVerifier(){verifier??=new AppleAppAttestVerifier({teamID:config.solariAppAttestTeamId,bundleID:config.solariAppAttestBundleId,allowedBuilds:config.solariAppAttestAllowedBuilds,now});return verifier;}
   async function assertRuntimeEnabled(){if(!await getStore().runtimeEnabled(config.solariBetaRuntimeKey))throw new SolariResearchError('solari_beta_killed','Solari beta live execution is disabled by the runtime switch.',{status:503});}
@@ -41,7 +41,7 @@ export function createSolariBetaApi(options={}){
   }
   async function researchEnvelope(envelope,{signal}={}){
     await assertRuntimeEnabled();const validator=await validatorPromise;validator.assert(V2_ENVELOPE_SCHEMA_ID,envelope);
-    const decoded=payloadBytes(envelope.payloadBase64,config.solariMaxBodyBytes);validator.assert(V3_REQUEST_SCHEMA_ID,decoded.parsed);
+    const decoded=payloadBytes(envelope.payloadBase64,config.solariMaxBodyBytes);validator.assert(V4_REQUEST_SCHEMA_ID,decoded.parsed);
     const hash=keyIDHash(envelope.keyID),challenge=await getStore().consumeChallenge(envelope.challengeID);
     if(!challenge||challenge.operation!=='research'||challenge.keyIDHash!==hash||challenge.expiresAt<now())throw new SolariResearchError('app_attest_challenge_invalid','The App Attest challenge is absent, expired, mismatched, or already consumed.',{status:403});
     const keyRecord=await getStore().getAttestedKey(hash);if(!keyRecord||keyRecord.revokedAt)throw new SolariResearchError('app_attest_key_unknown','The App Attest key is unknown or revoked.',{status:403});

@@ -26,6 +26,15 @@ CURRENT_PRODUCT_SPECS = {
     "dg-parmesan-value-6oz": (6, "oz", 208),
     "dg-parmesan-rightsize-3oz": (3, "oz", 242),
 }
+V4_PRODUCT_SPECS = {
+    "dg4-chicken-value-3lb": (3, "lb", 947), "dg4-chicken-organic-1-5lb": (1.5, "lb", 876), "dg4-chicken-free-range-3lb": (3, "lb", 1392),
+    "dg4-penne-value-16oz": (16, "oz", 124), "dg4-penne-glutenfree-24oz": (24, "oz", 1198),
+    "dg4-olive-oil-value-17floz": (17, "fl oz", 612), "dg4-olive-oil-organic-17floz": (17, "fl oz", 736), "dg4-olive-oil-smooth-16floz": (16, "fl oz", 738),
+    "dg4-heavy-cream-value-16floz": (16, "fl oz", 296), "dg4-heavy-cream-organic-16floz": (16, "fl oz", 587),
+    "dg4-parmesan-value-6oz": (6, "oz", 208), "dg4-parmesan-frigo-5oz": (5, "oz", 328), "dg4-parmesan-kraft-6oz": (6, "oz", 498),
+    "dg4-garlic-bulb-8ct": (8, "count", 78), "dg4-garlic-peeled-6oz": (6, "oz", 307), "dg4-garlic-minced-8oz": (8, "oz", 312),
+    "dg4-lemon-each-1ct": (1, "count", 64), "dg4-lemon-organic-2lb": (2, "lb", 392), "dg4-parsley-bunch-1ct": (1, "count", 98),
+}
 ALLOWED_REMOTE_HOSTS = {"www.walmart.com", "github.com", "exo-robotics.github.io"}
 FORBIDDEN_STOCK_CLAIM_PATTERNS = (
     r"\bavailability\b",
@@ -209,6 +218,31 @@ def validate_current_product_output(renderer_path: Path, catalog_path: Path) -> 
     return errors
 
 
+def validate_v4_catalog(path: Path, renderer_path: Path) -> list[str]:
+    catalog = json.loads(path.read_text(encoding="utf-8"))
+    errors: list[str] = []
+    if catalog.get("catalogVersion") != "smartcart.demo-grocer.v4" or catalog.get("synthetic") is not True or catalog.get("current") is not True or catalog.get("historical") is not False:
+        errors.append("V4 catalog identity and synthetic-current markers must remain explicit")
+    products = catalog.get("products", [])
+    if {item.get("id") for item in products} != set(V4_PRODUCT_SPECS):
+        errors.append("V4 catalog must contain exactly the nineteen owned dg4 candidate IDs")
+    serialized = json.dumps(catalog).casefold()
+    if "walmart" in serialized or any(str(product_id) in serialized for product_id in LEGACY_PRODUCT_IDS):
+        errors.append("V4 catalog must not expose retailer names or legacy retailer product IDs")
+    for product in products:
+        expected = V4_PRODUCT_SPECS.get(product.get("id"))
+        actual = (product.get("packageValue"), product.get("packageUnit"), product.get("priceCents"))
+        if expected != actual:
+            errors.append(f"{product.get('id')}: V4 package or synthetic price data drifted")
+        if product.get("syntheticPrice") is not True:
+            errors.append(f"{product.get('id')}: V4 price must be explicitly synthetic")
+    renderer = renderer_path.read_text(encoding="utf-8")
+    for marker in ("solariProduct", "catalogEra", "productId", "packageValue", "packageUnit", "priceCents", "syntheticPrice", "current-v4"):
+        if marker not in renderer:
+            errors.append(f"V4 renderer missing required evidence marker {marker}")
+    return errors
+
+
 def validate_v3_policy_math(path: Path) -> list[str]:
     catalog = json.loads(path.read_text(encoding="utf-8"))
     grouped: dict[str, list[dict[str, object]]] = {"chicken": [], "penne": [], "parmesan": []}
@@ -339,6 +373,10 @@ def inspect_demo(root: Path = ROOT) -> list[str]:
         "retailer/catalog.json", "retailer/legacy-catalog.json",
     ]
     required.extend(f"retailer/product/{product_id}.html" for product_id in sorted(LEGACY_PRODUCT_IDS | set(CURRENT_PRODUCT_SPECS)))
+    required.extend([
+        "retailer-v4/index.html", "retailer-v4/styles.css", "retailer-v4/retailer.js", "retailer-v4/catalog.json",
+    ])
+    required.extend(f"retailer-v4/product/{product_id}.html" for product_id in sorted(V4_PRODUCT_SPECS))
     for relative in required:
         if not (root / relative).is_file():
             errors.append(f"missing required file: {relative}")
@@ -355,6 +393,7 @@ def inspect_demo(root: Path = ROOT) -> list[str]:
         root / "retailer" / "catalog.json",
     ))
     errors.extend(validate_v3_policy_math(root / "retailer" / "catalog.json"))
+    errors.extend(validate_v4_catalog(root / "retailer-v4" / "catalog.json", root / "retailer-v4" / "retailer.js"))
     errors.extend(validate_v1_receipt(V1_RECEIPT))
     errors.extend(validate_v3_receipt(V3_RECEIPT))
 
@@ -454,7 +493,7 @@ def main() -> int:
         for error in errors:
             print(f"- {error}")
         return 1
-    print("Solari demo validation passed: current V3 catalog, historical V1 routing, canonical replay, links, and trust markers checked.")
+    print("Solari demo validation passed: V3 qualification replay, V4 owned retailer catalog, historical V1 routing, links, and trust markers checked.")
     return 0
 
 

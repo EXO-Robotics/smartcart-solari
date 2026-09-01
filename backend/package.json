@@ -15,6 +15,7 @@
     "build:solari-demo-request": "node scripts/build-solari-demo-request.mjs",
     "qualify:solari-live": "node scripts/qualify-solari-live.mjs",
     "qualify:solari-v3": "node scripts/qualify-solari-v3.mjs",
+    "qualify:solari-v4": "node scripts/qualify-solari-v4.mjs",
     "mcp:stdio": "node src/mcp/stdio.js",
     "verify:mcp": "node scripts/verify-smartcart-mcp.mjs",
     "validate:weekly-meals": "node scripts/validate-weekly-meals.mjs"

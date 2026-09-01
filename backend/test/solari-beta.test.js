@@ -15,6 +15,7 @@ const root = new URL('../../contracts/v3/solari/examples/', import.meta.url);
 const requestExample = JSON.parse(await readFile(new URL('basket-research-request.example.json', root), 'utf8'));
 const resultExample = JSON.parse(await readFile(new URL('basket-research-result.example.json', root), 'utf8'));
 const v2RequestExample = JSON.parse(await readFile(new URL('../../contracts/v2/solari/examples/basket-research-request.example.json', import.meta.url), 'utf8'));
+const v4RequestExample = JSON.parse(await readFile(new URL('../../contracts/v4/solari/examples/basket-research-request.example.json', import.meta.url), 'utf8'));
 const keyID = Buffer.alloc(32, 7).toString('base64');
 const baseConfig = {
   solariBetaEnabled: true, solariBetaRuntimeKey: 'test:enabled', solariAppAttestChallengeTtlSeconds: 120,
@@ -30,13 +31,13 @@ class FakeVerifier {
 
 function harness({store=new InMemorySolariBetaStore(),config={},research,now=()=>Date.parse('2026-09-01T14:00:00Z')}={}) {
   let calls=0;
-  const researchService=research??{research:async(request)=>{calls+=1;return{...structuredClone(resultExample),requestID:request.requestID};}};
+  const researchService=research??{research:async(request)=>{calls+=1;return{...structuredClone(resultExample),schemaVersion:'solari-shopping-research-result-v4',demoID:'owned-demo-grocer-basket-v4',requestID:request.requestID};}};
   const api=createSolariBetaApi({config:{...baseConfig,...config},store,verifier:new FakeVerifier(),researchService,now});
   return{api,store,calls:()=>calls};
 }
 async function issue(api,operation){return(await api.challenge({schemaVersion:'solari-app-attest-challenge-request-v1',operation,keyID})).payload;}
 async function register(api){const challenge=await issue(api,'attest');await api.attestation({schemaVersion:'solari-app-attestation-request-v1',challengeID:challenge.challengeID,keyID,attestationObject:Buffer.from('fake').toString('base64')});return challenge;}
-function envelope(challenge,payload=requestExample,counter=1){const bytes=Buffer.from(JSON.stringify(payload));return{schemaVersion:'solari-app-attest-research-envelope-v1',challengeID:challenge.challengeID,keyID,assertionObject:Buffer.from([counter,0,0,0]).toString('base64'),payloadBase64:bytes.toString('base64')};}
+function envelope(challenge,payload=v4RequestExample,counter=1){const bytes=Buffer.from(JSON.stringify(payload));return{schemaVersion:'solari-app-attest-research-envelope-v1',challengeID:challenge.challengeID,keyID,assertionObject:Buffer.from([counter,0,0,0]).toString('base64'),payloadBase64:bytes.toString('base64')};}
 
 test('V3 schemas and all canonical examples compile under the shared AJV registry',async()=>{
   const validator=await createContractValidator();
@@ -78,27 +79,29 @@ test('attestation challenge is atomically burned and replay is rejected',async()
 
 test('assertion counter is durable, strictly increasing, and body/request binding drives idempotency',async()=>{
   const{api,calls}=harness();await register(api);
-  const firstChallenge=await issue(api,'research');const first=await api.researchEnvelope(envelope(firstChallenge,requestExample,1));assert.equal(first.headers['x-smartcart-idempotency'],'fresh');assert.equal(calls(),1);
-  const replayCounterChallenge=await issue(api,'research');await assert.rejects(()=>api.researchEnvelope(envelope(replayCounterChallenge,requestExample,1)),{code:'app_attest_replay',status:409});
-  const retryChallenge=await issue(api,'research');const retry=await api.researchEnvelope(envelope(retryChallenge,requestExample,2));assert.equal(retry.headers['x-smartcart-idempotency'],'replay');assert.equal(calls(),1);
-  const changed={...requestExample,submittedAt:'2026-09-01T14:01:00Z'};const conflictChallenge=await issue(api,'research');await assert.rejects(()=>api.researchEnvelope(envelope(conflictChallenge,changed,3)),{code:'idempotency_conflict',status:409});
+  const firstChallenge=await issue(api,'research');const first=await api.researchEnvelope(envelope(firstChallenge,v4RequestExample,1));assert.equal(first.headers['x-smartcart-idempotency'],'fresh');assert.equal(calls(),1);
+  const replayCounterChallenge=await issue(api,'research');await assert.rejects(()=>api.researchEnvelope(envelope(replayCounterChallenge,v4RequestExample,1)),{code:'app_attest_replay',status:409});
+  const retryChallenge=await issue(api,'research');const retry=await api.researchEnvelope(envelope(retryChallenge,v4RequestExample,2));assert.equal(retry.headers['x-smartcart-idempotency'],'replay');assert.equal(calls(),1);
+  const changed={...v4RequestExample,submittedAt:'2026-09-01T14:01:00Z'};const conflictChallenge=await issue(api,'research');await assert.rejects(()=>api.researchEnvelope(envelope(conflictChallenge,changed,3)),{code:'idempotency_conflict',status:409});
 });
 
-test('App Attest research envelope admits V3 payloads and rejects the former V2 payload contract',async()=>{
+test('App Attest research envelope admits V4 payloads and rejects the former V2 and V3 payload contracts',async()=>{
   const{api}=harness();await register(api);
   const v2Challenge=await issue(api,'research');
   await assert.rejects(()=>api.researchEnvelope(envelope(v2Challenge,v2RequestExample,1)),{name:'ContractValidationError'});
-  const accepted=await api.researchEnvelope(envelope(await issue(api,'research'),requestExample,1));
-  assert.equal(accepted.payload.schemaVersion,'solari-shopping-research-result-v3');
+  const v3Challenge=await issue(api,'research');
+  await assert.rejects(()=>api.researchEnvelope(envelope(v3Challenge,requestExample,1)),{name:'ContractValidationError'});
+  const accepted=await api.researchEnvelope(envelope(await issue(api,'research'),v4RequestExample,1));
+  assert.equal(accepted.payload.schemaVersion,'solari-shopping-research-result-v4');
 });
 
 test('per-key quotas and distributed concurrency admission fail before provider execution',async()=>{
   const quota=harness({config:{solariBetaPerKeyHourlyLimit:1}});await register(quota.api);
-  await quota.api.researchEnvelope(envelope(await issue(quota.api,'research'),requestExample,1));
-  const changed={...requestExample,requestID:'60000000-0000-4000-8000-000000000002'},quotaChallenge=await issue(quota.api,'research');await assert.rejects(()=>quota.api.researchEnvelope(envelope(quotaChallenge,changed,2)),{code:'beta_quota_exceeded',status:429});
+  await quota.api.researchEnvelope(envelope(await issue(quota.api,'research'),v4RequestExample,1));
+  const changed={...v4RequestExample,requestID:'70000000-0000-4000-8000-000000000002'},quotaChallenge=await issue(quota.api,'research');await assert.rejects(()=>quota.api.researchEnvelope(envelope(quotaChallenge,changed,2)),{code:'beta_quota_exceeded',status:429});
   let release;const blocked=new Promise((resolve)=>{release=resolve;});const busy=harness({config:{solariBetaConcurrencyLimit:1},research:{research:async(request)=>{await blocked;return{...structuredClone(resultExample),requestID:request.requestID};}}});await register(busy.api);
-  const running=busy.api.researchEnvelope(envelope(await issue(busy.api,'research'),requestExample,1));await new Promise((resolve)=>setImmediate(resolve));
-  const second={...requestExample,requestID:'60000000-0000-4000-8000-000000000003'},busyChallenge=await issue(busy.api,'research');await assert.rejects(()=>busy.api.researchEnvelope(envelope(busyChallenge,second,2)),{code:'beta_busy',status:503});release();await running;
+  const running=busy.api.researchEnvelope(envelope(await issue(busy.api,'research'),v4RequestExample,1));await new Promise((resolve)=>setImmediate(resolve));
+  const second={...v4RequestExample,requestID:'70000000-0000-4000-8000-000000000003'},busyChallenge=await issue(busy.api,'research');await assert.rejects(()=>busy.api.researchEnvelope(envelope(busyChallenge,second,2)),{code:'beta_busy',status:503});release();await running;
 });
 
 test('owned Demo Grocer V3 contract rejects other retailers before Browser or Sandbox',async()=>{
@@ -203,14 +206,14 @@ test('V3 service rejects stale, non-admitted, or incorrectly marked Browser evid
 test('cancellation abandons idempotency and releases the distributed execution lease',async()=>{
   let started;const began=new Promise((resolve)=>{started=resolve;});
   const store=new InMemorySolariBetaStore();const{api}=harness({store,research:{research:async(_request,{signal})=>new Promise((_resolve,reject)=>{started();signal.addEventListener('abort',()=>reject(new SolariResearchError('solari_request_aborted','aborted',{status:408})),{once:true});})}});
-  await register(api);const challenge=await issue(api,'research'),controller=new AbortController();const running=api.researchEnvelope(envelope(challenge,requestExample,1),{signal:controller.signal});await began;controller.abort();
+  await register(api);const challenge=await issue(api,'research'),controller=new AbortController();const running=api.researchEnvelope(envelope(challenge,v4RequestExample,1),{signal:controller.signal});await began;controller.abort();
   await assert.rejects(()=>running,{code:'solari_request_aborted'});assert.equal(store.leases.size,0);assert.equal(store.idempotency.size,0);
 });
 
 test('runtime kill switch aborts an admitted in-flight provider and clears admission state',async()=>{
   let started;const began=new Promise((resolve)=>{started=resolve;});const store=new InMemorySolariBetaStore();
   const{api}=harness({store,research:{research:async(_request,{signal})=>new Promise((_resolve,reject)=>{started();signal.addEventListener('abort',()=>reject(new SolariResearchError('solari_request_aborted','aborted',{status:408})),{once:true});})}});
-  await register(api);const running=api.researchEnvelope(envelope(await issue(api,'research'),requestExample,1));await began;store.enabled=false;
+  await register(api);const running=api.researchEnvelope(envelope(await issue(api,'research'),v4RequestExample,1));await began;store.enabled=false;
   await assert.rejects(()=>running,{code:'solari_beta_killed',status:503});assert.equal(store.leases.size,0);assert.equal(store.idempotency.size,0);
 });
 

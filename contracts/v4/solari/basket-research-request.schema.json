@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.smartcart.app/v4/solari/basket-research-request.schema.json",
+  "title": "BasketResearchRequestV4",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "requestID", "demoID", "submittedAt", "retailerID", "executionMode", "storeReference", "optimizationPolicy", "requirements"],
+  "properties": {
+    "schemaVersion": { "const": "solari-shopping-research-request-v4" },
+    "requestID": { "type": "string", "format": "uuid" },
+    "demoID": { "const": "owned-demo-grocer-basket-v4" },
+    "submittedAt": { "type": "string", "format": "date-time" },
+    "retailerID": { "const": "smartcart-demo-grocer" },
+    "executionMode": { "const": "live" },
+    "storeReference": { "const": "smartcart-demo-grocer-owned-catalog-v4" },
+    "optimizationPolicy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["objective", "maxPremiumOverCheapest", "currency", "tieBreak"],
+      "properties": {
+        "objective": { "const": "minimize-aggregate-relative-surplus" },
+        "maxPremiumOverCheapest": { "const": 0.75 },
+        "currency": { "const": "USD" },
+        "tieBreak": { "const": ["observed-subtotal", "retailer-product-id"] }
+      }
+    },
+    "requirements": {
+      "type": "array", "minItems": 1, "maxItems": 12, "uniqueItems": true,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "ingredientID", "name", "requestedQuantityText", "requiredQuantity", "unit", "candidateProductIDs"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "ingredientID": { "type": "string", "format": "uuid" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 160 },
+          "requestedQuantityText": { "type": "string", "minLength": 1, "maxLength": 160 },
+          "requiredQuantity": { "type": "number", "exclusiveMinimum": 0, "maximum": 10000000 },
+          "unit": { "enum": ["g", "ml", "count"] },
+          "candidateProductIDs": {
+            "type": "array", "minItems": 1, "maxItems": 3, "uniqueItems": true,
+            "items": { "$ref": "#/$defs/productID" }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "productID": { "enum": [
+      "dg4-chicken-value-3lb", "dg4-chicken-organic-1-5lb", "dg4-chicken-free-range-3lb",
+      "dg4-penne-value-16oz", "dg4-penne-glutenfree-24oz",
+      "dg4-olive-oil-value-17floz", "dg4-olive-oil-organic-17floz", "dg4-olive-oil-smooth-16floz",
+      "dg4-heavy-cream-value-16floz", "dg4-heavy-cream-organic-16floz",
+      "dg4-parmesan-value-6oz", "dg4-parmesan-frigo-5oz", "dg4-parmesan-kraft-6oz",
+      "dg4-garlic-bulb-8ct", "dg4-garlic-peeled-6oz", "dg4-garlic-minced-8oz",
+      "dg4-lemon-each-1ct", "dg4-lemon-organic-2lb", "dg4-parsley-bunch-1ct"
+    ] }
+  }
+}

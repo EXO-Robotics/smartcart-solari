@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.smartcart.app/v4/solari/retailer-observation.schema.json",
+  "title": "RetailerObservationV4",
+  "type": "object", "additionalProperties": false,
+  "required": ["schemaVersion", "observationID", "requirementID", "retailerProductID", "sourceURL", "title", "packageDescription", "packageQuantity", "packageUnit", "visiblePrice", "currency", "observedAt", "confidence", "ambiguityReasons", "proteinGramsPerPackage", "collectionMethod", "location", "catalogEra", "syntheticPrice", "freshness"],
+  "properties": {
+    "schemaVersion": { "const": "retailer-observation-v4" },
+    "observationID": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,119}$" },
+    "requirementID": { "type": "string", "format": "uuid" },
+    "retailerProductID": { "type": "string", "pattern": "^dg4-[a-z0-9-]{1,80}$" },
+    "sourceURL": { "type": "string", "format": "uri", "maxLength": 2048, "pattern": "^https://[^/@\\s]+(?::[0-9]{1,5})?/[^\\s]*$" },
+    "title": { "type": ["string", "null"], "minLength": 1, "maxLength": 500 },
+    "packageDescription": { "type": ["string", "null"], "minLength": 1, "maxLength": 160 },
+    "packageQuantity": { "type": ["number", "null"], "exclusiveMinimum": 0, "maximum": 10000000 },
+    "packageUnit": { "type": ["string", "null"], "enum": ["gram", "milliliter", "count", null] },
+    "visiblePrice": { "type": ["number", "null"], "minimum": 0, "maximum": 100000 },
+    "currency": { "type": ["string", "null"], "enum": ["USD", null] },
+    "observedAt": { "type": "string", "format": "date-time" },
+    "confidence": { "enum": ["high", "medium", "low"] },
+    "ambiguityReasons": { "type": "array", "maxItems": 8, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 300 } },
+    "proteinGramsPerPackage": { "type": "null" },
+    "collectionMethod": { "const": "solari-browser-controlled-demo" },
+    "location": { "type": "object", "additionalProperties": false, "required": ["kind", "label"], "properties": { "kind": { "const": "controlled-demo" }, "label": { "const": "SmartCart Demo Grocer synthetic catalog" } } },
+    "catalogEra": { "const": "current-v4" },
+    "syntheticPrice": { "const": true },
+    "freshness": { "type": "object", "additionalProperties": false, "required": ["status", "ageSeconds", "maxAgeSeconds"], "properties": { "status": { "enum": ["fresh", "stale", "future", "unknown"] }, "ageSeconds": { "type": ["integer", "null"], "minimum": 0 }, "maxAgeSeconds": { "type": "integer", "minimum": 60, "maximum": 604800 } } }
+  },
+  "allOf": [{ "if": { "properties": { "visiblePrice": { "type": "number" } }, "required": ["visiblePrice"] }, "then": { "properties": { "currency": { "const": "USD" } } }, "else": { "properties": { "currency": { "type": "null" } } } }]
+}

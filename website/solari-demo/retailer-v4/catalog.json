@@ -1,0 +1,29 @@
+{
+  "catalogVersion": "smartcart.demo-grocer.v4",
+  "catalogLabel": "SmartCart Demo Grocer V4 — current synthetic test catalog",
+  "synthetic": true,
+  "current": true,
+  "historical": false,
+  "priceProvenance": "synthetic-test-data",
+  "products": [
+    { "id": "dg4-chicken-value-3lb", "name": "Demo Chicken Breasts — Value", "brand": "Demo Value", "packageDisplay": "3 lb bag", "packageValue": 3, "packageUnit": "lb", "priceCents": 947, "currency": "USD", "syntheticPrice": true },
+    { "id": "dg4-chicken-organic-1-5lb", "name": "Demo Chicken Breasts — Organic", "brand": "Demo Organic", "packageDisplay": "1.5 lb tray", "packageValue": 1.5, "packageUnit": "lb", "priceCents": 876, "currency": "USD", "syntheticPrice": true },
+    { "id": "dg4-chicken-free-range-3lb", "name": "Demo Chicken Breasts — Free Range", "brand": "Demo Free Range", "packageDisplay": "3 lb tray", "packageValue": 3, "packageUnit": "lb", "priceCents": 1392, "currency": "USD", "syntheticPrice": true },
+    { "id": "dg4-penne-value-16oz", "name": "Demo Penne Pasta — Value", "brand": "Demo Value", "packageDisplay": "16 oz box", "packageValue": 16, "packageUnit": "oz", "priceCents": 124, "currency": "USD", "syntheticPrice": true },
+    { "id": "dg4-penne-glutenfree-24oz", "name": "Demo Penne Pasta — Gluten Free", "brand": "Demo Gluten Free", "packageDisplay": "24 oz multipack", "packageValue": 24, "packageUnit": "oz", "priceCents": 1198, "currency": "USD", "syntheticPrice": true },
+    { "id": "dg4-olive-oil-value-17floz", "name": "Demo Extra Virgin Olive Oil — Value", "brand": "Demo Value", "packageDisplay": "17 fl oz bottle", "packageValue": 17, "packageUnit": "fl oz", "priceCents": 612, "currency": "USD", "syntheticPrice": true },
+    { "id": "dg4-olive-oil-organic-17floz", "name": "Demo Extra Virgin Olive Oil — Organic", "brand": "Demo Organic", "packageDisplay": "17 fl oz bottle", "packageValue": 17, "packageUnit": "fl oz", "priceCents": 736, "currency": "USD", "syntheticPrice": true },
+    { "id": "dg4-olive-oil-smooth-16floz", "name": "Demo Extra Virgin Olive Oil — Smooth", "brand": "Demo Smooth", "packageDisplay": "16 fl oz bottle", "packageValue": 16, "packageUnit": "fl oz", "priceCents": 738, "currency": "USD", "syntheticPrice": true },
+    { "id": "dg4-heavy-cream-value-16floz", "name": "Demo Heavy Whipping Cream — Value", "brand": "Demo Value", "packageDisplay": "16 fl oz carton", "packageValue": 16, "packageUnit": "fl oz", "priceCents": 296, "currency": "USD", "syntheticPrice": true },
+    { "id": "dg4-heavy-cream-organic-16floz", "name": "Demo Heavy Whipping Cream — Organic", "brand": "Demo Organic", "packageDisplay": "16 fl oz carton", "packageValue": 16, "packageUnit": "fl oz", "priceCents": 587, "currency": "USD", "syntheticPrice": true },
+    { "id": "dg4-parmesan-value-6oz", "name": "Demo Finely Shredded Parmesan — Value", "brand": "Demo Value", "packageDisplay": "6 oz bag", "packageValue": 6, "packageUnit": "oz", "priceCents": 208, "currency": "USD", "syntheticPrice": true },
+    { "id": "dg4-parmesan-frigo-5oz", "name": "Demo Shredded Parmesan — Cup", "brand": "Demo Cup", "packageDisplay": "5 oz cup", "packageValue": 5, "packageUnit": "oz", "priceCents": 328, "currency": "USD", "syntheticPrice": true },
+    { "id": "dg4-parmesan-kraft-6oz", "name": "Demo Finely Shredded Parmesan — Premium", "brand": "Demo Premium", "packageDisplay": "6 oz bag", "packageValue": 6, "packageUnit": "oz", "priceCents": 498, "currency": "USD", "syntheticPrice": true },
+    { "id": "dg4-garlic-bulb-8ct", "name": "Demo Fresh Whole Garlic Bulb", "brand": "Demo Produce", "packageDisplay": "approximately 8 cloves", "packageValue": 8, "packageUnit": "count", "priceCents": 78, "currency": "USD", "syntheticPrice": true },
+    { "id": "dg4-garlic-peeled-6oz", "name": "Demo Fresh Peeled Garlic", "brand": "Demo Produce", "packageDisplay": "6 oz pouch", "packageValue": 6, "packageUnit": "oz", "priceCents": 307, "currency": "USD", "syntheticPrice": true },
+    { "id": "dg4-garlic-minced-8oz", "name": "Demo Minced Garlic in Olive Oil", "brand": "Demo Value", "packageDisplay": "8 oz jar", "packageValue": 8, "packageUnit": "oz", "priceCents": 312, "currency": "USD", "syntheticPrice": true },
+    { "id": "dg4-lemon-each-1ct", "name": "Demo Fresh Lemon", "brand": "Demo Produce", "packageDisplay": "1 each", "packageValue": 1, "packageUnit": "count", "priceCents": 64, "currency": "USD", "syntheticPrice": true },
+    { "id": "dg4-lemon-organic-2lb", "name": "Demo Organic Lemons", "brand": "Demo Organic", "packageDisplay": "2 lb bag", "packageValue": 2, "packageUnit": "lb", "priceCents": 392, "currency": "USD", "syntheticPrice": true },
+    { "id": "dg4-parsley-bunch-1ct", "name": "Demo Fresh Cut Parsley", "brand": "Demo Produce", "packageDisplay": "1 bunch", "packageValue": 1, "packageUnit": "count", "priceCents": 98, "currency": "USD", "syntheticPrice": true }
+  ]
+}

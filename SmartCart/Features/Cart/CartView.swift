@@ -166,7 +166,7 @@ struct RecipeReadyView: View {
             Button("Cancel", role: .cancel) { pendingIngredientDeletion = nil }
         }
         .alert(
-            "Solari research unavailable",
+            "No supported options to research",
             isPresented: Binding(
                 get: { researchUnavailableMessage != nil },
                 set: { if !$0 { researchUnavailableMessage = nil } }
@@ -178,7 +178,7 @@ struct RecipeReadyView: View {
             }
             Button("Edit", role: .cancel) { researchUnavailableMessage = nil }
         } message: {
-            Text(researchUnavailableMessage ?? "This plan is not eligible for the bounded Solari beta.")
+            Text(researchUnavailableMessage ?? "Review product matches and exact quantities, then try option research again.")
         }
         .overlay {
             if isPreparingProducts {

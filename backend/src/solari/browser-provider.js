@@ -11,6 +11,27 @@ function normalizeUnit(value) {
   return null;
 }
 
+function normalizeV4Package(quantityValue, unitValue) {
+  const quantity = finitePositive(quantityValue);
+  const unit = String(unitValue ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+  if (quantity === null) return { packageQuantity: null, packageUnit: null };
+  const mass = new Map([
+    ['oz', 28.349523125], ['ounce', 28.349523125], ['ounces', 28.349523125],
+    ['lb', 453.59237], ['lbs', 453.59237], ['pound', 453.59237], ['pounds', 453.59237],
+    ['g', 1], ['gram', 1], ['grams', 1], ['kg', 1000], ['kilogram', 1000], ['kilograms', 1000]
+  ]);
+  const volume = new Map([
+    ['fl oz', 29.5735295625], ['fl. oz.', 29.5735295625], ['fluid ounce', 29.5735295625], ['fluid ounces', 29.5735295625],
+    ['ml', 1], ['milliliter', 1], ['milliliters', 1], ['l', 1000], ['liter', 1000], ['liters', 1000],
+    ['cup', 236.5882365], ['cups', 236.5882365], ['tbsp', 14.78676478125], ['tablespoon', 14.78676478125], ['tablespoons', 14.78676478125],
+    ['tsp', 4.92892159375], ['teaspoon', 4.92892159375], ['teaspoons', 4.92892159375]
+  ]);
+  if (mass.has(unit)) return { packageQuantity: quantity * mass.get(unit), packageUnit: 'gram' };
+  if (volume.has(unit)) return { packageQuantity: quantity * volume.get(unit), packageUnit: 'milliliter' };
+  if (['count', 'ct', 'each'].includes(unit)) return { packageQuantity: quantity, packageUnit: 'count' };
+  return { packageQuantity: null, packageUnit: null };
+}
+
 function finitePositive(value) {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : null;
@@ -169,14 +190,20 @@ export class SolariBrowserProvider {
             if (typeof data.productID !== 'string' || data.productID !== candidate.retailerProductID) {
               throw new SolariResearchError('retailer_product_mismatch', 'The admitted page did not match its expected product ID.', { status: 502 });
             }
-            const packageQuantity = finitePositive(data.packageQuantity);
-            const packageUnit = normalizeUnit(data.packageUnit);
+            const normalizedPackage = evidenceVersion === 'v4'
+              ? normalizeV4Package(data.packageQuantity, data.packageUnit)
+              : { packageQuantity: finitePositive(data.packageQuantity), packageUnit: normalizeUnit(data.packageUnit) };
+            const { packageQuantity, packageUnit } = normalizedPackage;
             const visiblePrice = data.priceCents !== null ? dollarsFromCents(data.priceCents) : finitePositive(data.price);
             const currency = visiblePrice === null || data.currency !== 'USD' ? null : 'USD';
             const normalizedPrice = currency === 'USD' ? visiblePrice : null;
             const extracted = { title: data.title ? String(data.title).trim().slice(0, 500) : null, packageQuantity, packageUnit, visiblePrice: normalizedPrice };
             const ambiguityReasons = ambiguitiesFor(extracted, requirement);
             const observedAt = new Date(this.now()).toISOString();
+            const sourcePackageQuantity = finitePositive(data.packageQuantity);
+            const packageDescription = evidenceVersion === 'v4' && sourcePackageQuantity && packageUnit
+              ? `${sourcePackageQuantity} ${String(data.packageUnit).trim().slice(0, 40)}`
+              : packageQuantity && packageUnit ? `${packageQuantity} ${packageUnit}` : null;
             observations.push({
               schemaVersion: 'retailer-observation-v1',
               observationID: `obs-${request.requestID.toLowerCase()}-${candidate.retailerProductID}`,
@@ -184,7 +211,7 @@ export class SolariBrowserProvider {
               retailerProductID: candidate.retailerProductID,
               sourceURL: candidate.sourceURL,
               title: extracted.title,
-              packageDescription: packageQuantity && packageUnit ? `${packageQuantity} ${packageUnit}` : null,
+              packageDescription,
               packageQuantity,
               packageUnit,
               visiblePrice: normalizedPrice,
@@ -199,7 +226,7 @@ export class SolariBrowserProvider {
               location: request.retailerID === 'smartcart-demo-grocer'
                 ? { kind: 'controlled-demo', label: 'SmartCart Demo Grocer synthetic catalog' }
                 : { kind: 'online-unspecified-store', label: request.storeReference },
-              ...(evidenceVersion === 'v3' ? {
+              ...(['v3', 'v4'].includes(evidenceVersion) ? {
                 catalogEra: data.catalogEra,
                 syntheticPrice: data.syntheticPrice === 'true'
               } : {}),

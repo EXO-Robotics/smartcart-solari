@@ -1,16 +1,16 @@
 import Foundation
 
 enum SolariRetailerEvidenceSchema {
-    static let requestVersion = "solari-shopping-research-request-v3"
-    static let resultVersion = "solari-shopping-research-result-v3"
-    static let observationVersion = "retailer-observation-v3"
-    static let decisionVersion = "basket-decision-v3"
-    static let demoID = "owned-demo-grocer-basket-v3"
+    static let requestVersion = "solari-shopping-research-request-v4"
+    static let resultVersion = "solari-shopping-research-result-v4"
+    static let observationVersion = "retailer-observation-v4"
+    static let decisionVersion = "basket-decision-v4"
+    static let demoID = "owned-demo-grocer-basket-v4"
     static let retailerID = "smartcart-demo-grocer"
-    static let storeReference = "smartcart-demo-grocer-owned-catalog-v2"
-    static let requiredRequirementCount = 3
-    static let maximumRequirements = 3
+    static let storeReference = "smartcart-demo-grocer-owned-catalog-v4"
+    static let maximumRequirements = 12
     static let maximumCandidatesPerRequirement = 3
+    static let maximumObservations = 24
     static let maximumResponseBytes = 256 * 1_024
 }
 
@@ -52,7 +52,7 @@ struct SolariResearchRequest: Codable, Hashable {
 }
 
 enum SolariOptimizationObjective: String, Codable, Hashable {
-    case minimizePackageSurplus = "minimize-package-surplus"
+    case minimizeAggregateRelativeSurplus = "minimize-aggregate-relative-surplus"
 }
 
 enum SolariOptimizationTieBreak: String, Codable, Hashable {
@@ -66,8 +66,8 @@ struct SolariOptimizationPolicy: Codable, Hashable {
     let currency: String
     let tieBreak: [SolariOptimizationTieBreak]
 
-    static let fixedV3 = SolariOptimizationPolicy(
-        objective: .minimizePackageSurplus,
+    static let fixedV4 = SolariOptimizationPolicy(
+        objective: .minimizeAggregateRelativeSurplus,
         maxPremiumOverCheapest: Decimal(string: "0.75")!,
         currency: "USD",
         tieBreak: [.observedSubtotal, .retailerProductID]
@@ -85,22 +85,22 @@ struct SolariShoppingRequirement: Codable, Identifiable, Hashable {
 }
 
 enum SolariRequirementUnit: String, Codable, Hashable {
-    case ounce = "oz"
-    case pound = "lb"
+    case gram = "g"
+    case milliliter = "ml"
     case count
 
     var evidenceUnit: SolariEvidenceUnit {
         switch self {
-        case .ounce: .ounce
-        case .pound: .pound
+        case .gram: .gram
+        case .milliliter: .milliliter
         case .count: .count
         }
     }
 }
 
 enum SolariEvidenceUnit: String, Codable, Hashable {
-    case ounce
-    case pound
+    case gram
+    case milliliter
     case count
 }
 
@@ -196,12 +196,13 @@ struct SolariBasketDecision: Codable, Identifiable, Hashable {
     let schemaVersion: String
     let requirementID: UUID
     let observationID: String
+    let retailerProductID: String
     let packageCount: Int
     let requiredQuantity: Double
     let coveredQuantity: Double
     let quantityUnit: SolariEvidenceUnit
     let surplusQuantity: Double
-    let surplusOunces: Double
+    let relativeSurplus: Double
     let lineTotal: Decimal?
     let currency: String?
     let proteinGramsPerDollar: Double?
@@ -231,9 +232,9 @@ struct SolariBasketComparison: Codable, Hashable {
     let cheapestAdequateSubtotal: Decimal
     let selectedSubtotal: Decimal
     let premiumOverCheapest: Decimal
-    let cheapestAggregateSurplusOunces: Double
-    let selectedAggregateSurplusOunces: Double
-    let surplusAvoidedOunces: Double
+    let cheapestAggregateRelativeSurplus: Double
+    let selectedAggregateRelativeSurplus: Double
+    let relativeSurplusAvoided: Double
     let maxPremiumOverCheapest: Decimal
     let currency: String
 }
@@ -322,13 +323,27 @@ struct SolariResearchPlan: Hashable {
     let fingerprint: String
     let sourceURLsByProductID: [String: URL]
     let originalSmartCartSelections: [SolariOriginalSmartCartSelection]
+    let skippedLines: [SolariSkippedResearchLine]
+    let totalWaitingCount: Int
     let servingCount: Int
 }
 
 struct SolariOriginalSmartCartSelection: Codable, Hashable {
     let requirementID: UUID
+    let ingredientID: UUID
+    let ingredientName: String
+    let ingredientUnit: String
+    let requestedQuantity: String
+    let requestedAmount: Double?
     let retailerID: String
     let retailerProductID: String
+}
+
+struct SolariSkippedResearchLine: Codable, Identifiable, Hashable {
+    let id: UUID
+    let ingredientID: UUID
+    let name: String
+    let reason: SolariResearchIneligibilityReason
 }
 
 struct SolariReviewContext: Identifiable, Hashable {
@@ -350,16 +365,17 @@ struct SolariEvidenceHandoff: Equatable, Hashable {
     }
 }
 
-enum SolariResearchIneligibilityReason: LocalizedError, Equatable, Hashable {
+enum SolariResearchIneligibilityReason: Codable, LocalizedError, Equatable, Hashable {
     case configurationUnavailable
     case noWaitingItems
-    case tooManyWaitingItems(Int)
-    case requiresCompleteDemoTrip(Int)
     case unsupportedProduct(String)
     case missingExactCandidate(String)
     case invalidQuantity(String)
-    case canonicalRequirementMismatch(name: String, expected: String)
-    case unsupportedUnit(String)
+    case unsupportedUnit(name: String, unit: String)
+    case incompatiblePackageDimension(String)
+    case overlappingCatalogCoverage(String)
+    case requirementLimitReached(Int)
+    case observationLimitReached(Int)
     case duplicateRequirement
     case duplicateCandidate
 
@@ -369,20 +385,22 @@ enum SolariResearchIneligibilityReason: LocalizedError, Equatable, Hashable {
             "Solari beta research is not configured in this build. Normal SmartCart shopping is still available."
         case .noWaitingItems:
             "There are no waiting shopping items to research."
-        case .tooManyWaitingItems(let count):
-            "The V3 low-waste comparison requires exactly three waiting items; the current plan has \(count)."
-        case .requiresCompleteDemoTrip(let count):
-            "The V3 low-waste comparison requires the complete three-item Demo Grocer trip; the current plan has \(count)."
         case .unsupportedProduct(let name):
-            "\(name) has no candidate in the owned Demo Grocer catalog."
+            "\(name) is not in the current Demo Grocer catalog and will continue through normal SmartCart."
         case .missingExactCandidate(let name):
             "\(name) does not have an exact reviewed product candidate."
         case .invalidQuantity(let name):
             "\(name) needs a positive, reviewed quantity before research."
-        case .canonicalRequirementMismatch(let name, let expected):
-            "\(name) is outside the fixed V3 Demo Grocer comparison. Expected \(expected)."
-        case .unsupportedUnit(let unit):
-            "The Demo Grocer beta cannot normalize the unit “\(unit)”."
+        case .unsupportedUnit(let name, let unit):
+            "\(name) uses “\(unit)”, which cannot be converted exactly to grams, milliliters, or count. Review its numeric quantity to research it."
+        case .incompatiblePackageDimension(let name):
+            "\(name) has no reviewed package in the same quantity dimension. SmartCart will not invent a density or package conversion."
+        case .overlappingCatalogCoverage(let name):
+            "\(name) shares the same Demo Grocer candidates as another researched line. Review or combine the duplicate need; this line will continue through normal SmartCart."
+        case .requirementLimitReached(let limit):
+            "This request is limited to \(limit) researched items. This line will continue through normal SmartCart."
+        case .observationLimitReached(let limit):
+            "This request is limited to \(limit) retailer observations. This line will continue through normal SmartCart."
         case .duplicateRequirement:
             "The current plan contains duplicate requirement identities and cannot be researched safely."
         case .duplicateCandidate:
