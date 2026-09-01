@@ -79,7 +79,9 @@ Official provider references: [Solari SDK](https://docs.getsolari.com/sdk), [ses
 
 ## Evidence status
 
-V4 source/contracts/native behavior are present in the current working implementation, but an immutable V4 runtime commit, credentialed Browser+Sandbox run, V4 deployment receipt, signed App Attest device request, and physical-device demo are **PENDING**. Do not reuse V3 evidence as V4 proof.
+V4 is frozen and credential-qualified at runtime **aee4429f2246518b935005f0bae068e170b2db64**. [GitHub Actions run 33542014049](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33542014049) executed the real Solari Browser and Sandbox providers against an eight-line mass/volume/count trip: 16 fresh observations, eight decisions, a complete synthetic $24.20 basket, and confirmed cleanup. The [sanitized V4 receipt](evidence/live/smartcart-solari-v4-qualification-33542014049.json) binds the request/result digests and exact runtime commit.
+
+That provider receipt is server-side operator qualification. It is not signed native App Attest, real-retailer, device, TestFlight, App Store, or downloadable-app proof. Those gates remain **PENDING**.
 
 Historical V3 evidence is preserved because it proves the narrower predecessor actually ran:
 
@@ -115,7 +117,7 @@ xcodebuild \
   CODE_SIGNING_ALLOWED=NO build
 ~~~
 
-Current V4 qualification counts are **PENDING** until the concurrent implementation is frozen and rerun. See [qualification](Docs/SOLARI_QUALIFICATION.md) and the [demo runbook](Docs/SOLARI_DEMO_RUNBOOK.md) for claim gates.
+At qualified V4 source state: focused V3/V4 qualification tests **20/20**, full backend **213/213**, focused native **27/27** on iPhone 17 Pro / iOS 26.5 Simulator, web **7/7**, dependency audit **0 vulnerabilities**, and unsigned **Release-SolariBeta BUILD SUCCEEDED**. The broader native suite retains two pre-existing baseline-failing test methods; V4-focused tests are green. See [qualification](Docs/SOLARI_QUALIFICATION.md) and the [demo runbook](Docs/SOLARI_DEMO_RUNBOOK.md) for claim gates.
 
 ## Deployment
 

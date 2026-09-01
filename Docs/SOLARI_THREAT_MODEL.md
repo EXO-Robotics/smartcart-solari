@@ -59,14 +59,15 @@ Official references: [Solari profiles](https://docs.getsolari.com/profiles) desc
 
 ## Evidence and release gates
 
-Historical V3 run [33533170189](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33533170189) at runtime **772e65b** proved the narrower owned-source Browser/Sandbox and cleanup path. Its [provider receipt](../evidence/live/smartcart-solari-v3-qualification-33533170189.json) and [deployment receipt](../evidence/live/smartcart-solari-v3-deployment-772e65b-20260901.json) do not qualify V4.
+V4 run [33542014049](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33542014049) at runtime **aee4429f2246518b935005f0bae068e170b2db64** qualified the owned-source Browser/Sandbox path for eight requirements, 16 observations, mass/volume/count decisions, and cleanup. Its [provider receipt](../evidence/live/smartcart-solari-v4-qualification-33542014049.json) is operator qualification, not signed App Attest/device proof.
 
-Before a V4 release claim:
+Historical V3 [provider](../evidence/live/smartcart-solari-v3-qualification-33533170189.json) and [deployment](../evidence/live/smartcart-solari-v3-deployment-772e65b-20260901.json) receipts remain scoped to the narrower predecessor.
 
-- freeze and qualify one exact V4 commit;
-- run contract/backend/native/web/build/audit checks;
-- publish and verify all owned V4 pages;
-- obtain a credentialed V4 Browser+Sandbox receipt;
+Before a V4 release claim, preserve the completed provider checks and finish the remaining product gates:
+
+- preserve runtime `aee4429` and its credentialed Browser+Sandbox receipt;
+- keep contract/backend/native/web/build/audit checks green;
+- keep all owned V4 pages published and verified;
 - deploy that exact runtime and record a separate smoke receipt;
 - produce/install a correctly signed Release-SolariBeta build;
 - complete real App Attest registration/assertion/replay testing on iPhone;
@@ -74,4 +75,4 @@ Before a V4 release claim:
 - obtain documented retailer authorization before any non-owned source;
 - separately qualify TestFlight/App Store/downloadable availability.
 
-All V4 execution, deployment, signed-device, distribution, and authorized-retailer gates are **PENDING**.
+V4 credentialed provider execution is complete. Exact backend deployment identity, signed-device App Attest, distribution, and authorized-retailer gates remain **PENDING**.

@@ -109,18 +109,26 @@ Persistent Browser profiles are deliberately unused. If enabled, they would stor
 
 ## Evidence status
 
-The current V4 implementation is not yet frozen or qualified. The following are **PENDING**:
+The V4 provider path is frozen and credential-qualified:
 
-- immutable V4 runtime identity;
-- V4 test and build qualification counts;
-- public V4 owned-page deployment;
-- credentialed V4 Browser+Sandbox run and receipt;
-- V4 beta deployment receipt;
+- runtime **aee4429f2246518b935005f0bae068e170b2db64**;
+- [run 33542014049](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33542014049);
+- [sanitized receipt](../evidence/live/smartcart-solari-v4-qualification-33542014049.json);
+- eight researched requirements spanning mass, volume, and count;
+- 16 fresh Browser observations and eight Sandbox decisions;
+- complete $24.20 synthetic basket;
+- Browser and Sandbox cleanup enforced before receipt;
+- focused provider/qualification tests 20/20, full backend 213/213, focused native 27/27, web 7/7, npm audit 0, unsigned Release-SolariBeta build PASS;
+- public V4 owned catalog and Pages deployment [33541494887](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33541494887).
+
+The following remain **PENDING**:
+
+- V4 beta deployment receipt tied to the current publication commit;
 - signed Release-SolariBeta archive and physical-iPhone App Attest flow;
 - TestFlight/App Store/downloadable app;
 - any authorized real-retailer source.
 
-Historical V3 run [33533170189](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33533170189) and its [receipt](../evidence/live/smartcart-solari-v3-qualification-33533170189.json) prove real Browser/Sandbox execution for the narrower six-page Chicken Parmesan prototype at runtime **772e65b**. The V3 [deployment receipt](../evidence/live/smartcart-solari-v3-deployment-772e65b-20260901.json) proves that predecessor's deployed beta boundary. Neither qualifies V4.
+Historical V3 run [33533170189](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33533170189) and its [receipt](../evidence/live/smartcart-solari-v3-qualification-33533170189.json) prove real Browser/Sandbox execution for the narrower six-page Chicken Parmesan predecessor at runtime **772e65b**. The V3 [deployment receipt](../evidence/live/smartcart-solari-v3-deployment-772e65b-20260901.json) proves that predecessor's deployed beta boundary; it is not reused as V4 proof.
 
 ## Intentionally not automated
 
