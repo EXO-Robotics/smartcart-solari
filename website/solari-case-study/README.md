@@ -5,6 +5,7 @@ This dependency-free static site is the public presentation layer for the SmartC
 It intentionally separates three kinds of evidence:
 
 - the root case study explains the product transformation and replaceable-frontend architecture;
+- `assets/smartcart-solari-native-replay.mp4` is the hash-bound, three-item DEBUG native UX replay and is not provider-execution proof;
 - `website/solari-demo/` remains the explicit replay and controlled retailer surface;
 - `evidence/live/smartcart-solari-v4-qualification-33546912947.json` remains the immutable provider-execution receipt.
 

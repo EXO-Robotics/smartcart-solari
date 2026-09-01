@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sys
@@ -14,6 +15,7 @@ from urllib.parse import urlsplit
 ROOT = Path(__file__).resolve().parent
 REPO_ROOT = ROOT.parents[1]
 RECEIPT = REPO_ROOT / "evidence" / "live" / "smartcart-solari-v4-qualification-33546912947.json"
+NATIVE_REPLAY_SHA256 = "bc8707dc41dc08895daa948b0c217c7e72044b31d22e803ea80a6e323268b699"
 ALLOWED_REMOTE_HOSTS = {"github.com", "docs.getsolari.com"}
 REQUIRED_PHRASES = {
     "The frontend is replaceable",
@@ -71,6 +73,15 @@ class LandingParser(HTMLParser):
             src = values.get("src", "")
             if src:
                 self.references.append((tag, src))
+        elif tag == "video":
+            for attribute in ("poster", "src"):
+                reference = values.get(attribute, "")
+                if reference:
+                    self.references.append((tag, reference))
+        elif tag == "source":
+            src = values.get("src", "")
+            if src:
+                self.references.append((tag, src))
 
 
 def inspect_case_study(root: Path = ROOT, receipt_path: Path = RECEIPT) -> list[str]:
@@ -85,6 +96,8 @@ def inspect_case_study(root: Path = ROOT, receipt_path: Path = RECEIPT) -> list[
         root / "assets" / "smartcart-food-stage.jpg",
         root / "assets" / "social-preview.jpg",
         root / "assets" / "favicon.svg",
+        root / "assets" / "smartcart-solari-native-replay.mp4",
+        root / "assets" / "smartcart-solari-native-replay-poster.jpg",
     ):
         if not path.is_file():
             errors.append(f"missing required case-study file: {path.relative_to(root)}")
@@ -111,6 +124,16 @@ def inspect_case_study(root: Path = ROOT, receipt_path: Path = RECEIPT) -> list[
     for social_marker in ("og:title", "og:description", "og:image", "twitter:card"):
         if social_marker not in source:
             errors.append(f"index.html: missing social preview marker {social_marker}")
+    for replay_marker in (
+        "DEBUG RECORDED REPLAY · NOT LIVE",
+        "Solari Browser and Sandbox do not run inside this clip",
+        "predecessor three-item native replay",
+        "Credentialed V4 Browser + Sandbox execution over eight requirements",
+    ):
+        if replay_marker.casefold() not in source.casefold():
+            errors.append(f"index.html: missing native/provider separation marker {replay_marker!r}")
+    if "<video controls playsinline" not in source or "autoplay" in source.casefold():
+        errors.append("index.html: native replay must be user-controlled, inline, and never autoplay")
     for pattern in FORBIDDEN_CLAIMS:
         if re.search(pattern, source, flags=re.IGNORECASE):
             errors.append(f"index.html: forbidden overclaim matched {pattern!r}")
@@ -122,7 +145,7 @@ def inspect_case_study(root: Path = ROOT, receipt_path: Path = RECEIPT) -> list[
     for tag, reference in parser.references:
         parsed = urlsplit(reference)
         if parsed.scheme or parsed.netloc:
-            if tag in {"link", "script"}:
+            if tag in {"link", "script", "video", "source"}:
                 errors.append(f"index.html: remote assets are forbidden: {reference}")
             elif parsed.hostname not in ALLOWED_REMOTE_HOSTS:
                 errors.append(f"index.html: unapproved remote link: {reference}")
@@ -141,6 +164,12 @@ def inspect_case_study(root: Path = ROOT, receipt_path: Path = RECEIPT) -> list[
             errors.append(f"script.js: missing replaceable frontend model {key}")
     if "prefers-reduced-motion" not in javascript or "prefers-reduced-motion" not in styles.read_text(encoding="utf-8"):
         errors.append("case study must honor prefers-reduced-motion in CSS and JavaScript")
+
+    replay_path = root / "assets" / "smartcart-solari-native-replay.mp4"
+    if replay_path.is_file():
+        replay_hash = hashlib.sha256(replay_path.read_bytes()).hexdigest()
+        if replay_hash != NATIVE_REPLAY_SHA256:
+            errors.append(f"native replay bytes drifted: {replay_hash}")
 
     try:
         receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
