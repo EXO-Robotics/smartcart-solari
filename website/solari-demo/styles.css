@@ -192,6 +192,30 @@ h3 { margin-bottom: 0.65rem; font-size: 1.15rem; letter-spacing: -0.025em; }
   font-size: 0.86rem;
 }
 
+.live-proof-ribbon {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.9rem;
+  align-items: start;
+  margin-top: 2rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid #6f9270;
+  background: var(--green-pale);
+}
+
+.live-proof-ribbon p { margin: 0; }
+.live-proof-ribbon a { color: var(--green-deep); font-weight: 800; }
+.live-proof-mark {
+  display: grid;
+  width: 1.65rem;
+  aspect-ratio: 1;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--green-deep);
+  color: white;
+  font-weight: 900;
+}
+
 .truth-ribbon p { margin: 0; }
 .truth-ribbon strong { color: var(--navy); }
 .truth-ribbon a { font-weight: 850; white-space: nowrap; }

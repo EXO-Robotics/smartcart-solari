@@ -36,6 +36,11 @@
       </dl>
     </section>
 
+    <aside class="live-proof-ribbon" aria-label="Credentialed Solari execution proof">
+      <span class="live-proof-mark" aria-hidden="true">✓</span>
+      <p><strong>Solari Browser + Sandbox ran successfully.</strong> Credentialed run <a href="https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33501521988" target="_blank" rel="noreferrer noopener">33501521988</a> observed six JavaScript-rendered products on the owned synthetic Demo Grocer, then selected three packages in Sandbox. <a href="https://exo-robotics.github.io/smartcart-solari/evidence/live/smartcart-solari-live-proof-33501521988.json">Inspect the sanitized live receipt</a>. This proves Solari execution, not current third-party retailer pricing.</p>
+    </aside>
+
     <aside class="truth-ribbon" aria-label="Demo evidence limitation">
       <span class="truth-dot" aria-hidden="true"></span>
       <p><strong>Fixture replay — SmartCart seeded observations, not a Solari live run.</strong> Prices were recorded in an upstream fixture at <time datetime="2026-07-16T12:00:00Z">July 16, 2026 at 12:00 UTC</time>. They are not current retail evidence.</p>
@@ -130,10 +135,10 @@
       </div>
 
       <aside class="browser-boundary">
-        <div>
-          <p class="comparison-label accent">Executable Browser target</p>
-          <h3>SmartCart Demo Grocer</h3>
-          <p>Six synthetic product pages render only after JavaScript runs, giving Browser a necessary, authorized extraction job with no account, cart, or checkout surface.</p>
+      <div>
+        <p class="comparison-label accent">Executable Browser target</p>
+        <h3>SmartCart Demo Grocer</h3>
+          <p>Six synthetic product pages render only after JavaScript runs, giving Browser a necessary, authorized extraction job with no account, cart, or checkout surface. The credentialed path completed in run 33501521988; the candidate cards below remain the Walmart fixture replay.</p>
         </div>
         <a class="secondary-button demo-grocer-link" href="retailer/index.html">Open synthetic catalog</a>
         <p class="terms-note">Walmart automation remains off absent authorization. See the <a data-walmart-terms target="_blank" rel="noreferrer noopener">official Walmart Terms of Use</a>.</p>
@@ -279,7 +284,7 @@
 
   <footer>
     <p><strong>SmartCart × Solari</strong> · internship experiment · one bounded retailer research workflow</p>
-    <p>Replay validates UI behavior and a user-controlled retailer handoff only. It is not evidence of a current retailer observation or Solari execution.</p>
+    <p>The replay validates UI behavior and a user-controlled retailer handoff; the separate credentialed receipt proves owned-surface Solari execution. Neither is current third-party retailer evidence.</p>
   </footer>
 </body>
 </html>

@@ -13,7 +13,7 @@ from urllib.parse import urlsplit
 ROOT = Path(__file__).resolve().parent
 CANONICAL_FIXTURE = ROOT.parents[1] / "contracts" / "fixtures" / "v1" / "solari" / "chicken-parmesan-walmart-result.json"
 PRODUCT_IDS = {"10414680", "10534084", "623835750", "10452414", "10307238", "47088917"}
-ALLOWED_REMOTE_HOSTS = {"www.walmart.com"}
+ALLOWED_REMOTE_HOSTS = {"www.walmart.com", "github.com", "exo-robotics.github.io"}
 
 
 class ReplayHTMLParser(HTMLParser):
@@ -169,6 +169,8 @@ def inspect_demo(root: Path = ROOT) -> list[str]:
     required_markers = [
         "Recorded demo evidence · not live",
         "not a Solari live run",
+        "Solari Browser + Sandbox ran successfully",
+        "This proves Solari execution, not current third-party retailer pricing",
         "Live Walmart Browser execution is disabled",
         "user-controlled retailer handoff",
         "protein/$ is omitted",

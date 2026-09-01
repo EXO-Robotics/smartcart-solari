@@ -6,7 +6,7 @@ An experimental SmartCart fork that asks one bounded question:
 
 SmartCart already turns a reviewed recipe into pantry-aware quantities, computes conservative package counts when it has exact compatible package evidence, and then opens retailer-owned pages for the shopper. Its limitation is evidence freshness and comparison: package math relies on seeded or last-known product records, with no current retailer observation refresh and no evidence-backed checkout comparison across candidates. This fork adds that bounded comparison before the existing user-controlled handoff. It does not add autonomous purchasing.
 
-> **Evidence status:** the public demo is a dated Walmart fixture replay with a local deterministic optimizer. Solari Browser and Sandbox are **not invoked** by the public replay. The live owned-Demo-Grocer path is implemented and default-off, but remains `PENDING` until a server-side key is available and a credentialed receipt is captured. This repository does not claim that Solari ran live or improved the displayed `$12.79` basket.
+> **Evidence status:** the interactive public demo remains a clearly labeled dated Walmart fixture replay; that replay does not invoke Solari. Separately, [credentialed run `33501521988`](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33501521988) proves the bounded owned-Demo-Grocer workflow ran Solari Browser and Solari Sandbox on implementation commit `8d592fa`. Its [sanitized receipt](evidence/live/smartcart-solari-live-proof-33501521988.json) records six timestamped Browser observations, three independently verified Sandbox decisions, enforced resource cleanup, and a `$12.79` synthetic-catalog basket. It is real Solari execution—not real-retailer pricing.
 
 ## The smallest legitimate experiment
 
@@ -32,7 +32,7 @@ The fixture checkout estimate is **$12.79**. It is a replay of dated upstream se
 
 ## Why Solari has a necessary job
 
-**Solari Browser** is the implemented live research boundary: it loads JavaScript-rendered product pages and captures the page that was actually seen as a structured observation. The only admitted live target is the repository’s owned/controlled **Demo Grocer** surface. That path has not been credentialed or run in this submission. Live Walmart fails closed unless both written-authorization gates are set; no such authorization is present. Live Target is not supported at all. The implementation does not enable profiles, recording, proxy routing, stealth, captcha solving, account access, cart control, or checkout.
+**Solari Browser** is the live research boundary: it loads JavaScript-rendered product pages and captures the page that was actually seen as a structured observation. The only admitted live target is the repository’s owned/controlled **Demo Grocer** surface. That path completed in credentialed run `33501521988`; Browser observed all six admitted candidates and the receipt preserves exact source URLs and per-page timestamps. Live Walmart still fails closed unless both written-authorization gates are set; no such authorization is present. Live Target is not supported at all. The implementation does not enable profiles, recording, proxy routing, stealth, captcha solving, account access, cart control, or checkout.
 
 That policy is deliberate. Walmart’s current [Terms of Use](https://www.walmart.com/help/article/walmart-com-terms-of-use/3b75080af40340d6bbd596f116fae5a0) (last updated June 23, 2026) prohibit automated retrieval/scraping without express prior written consent. Target’s [Terms & Conditions](https://www.target.com/c/terms-conditions/-/N-4sr7l) restrict automated agents and data extraction and recognize only Target-approved Agentic Commerce Agents. Respecting those boundaries is part of the trust experiment, not a hidden demo limitation.
 
@@ -96,7 +96,7 @@ The wire authorities are [`basket-research-request.schema.json`](contracts/v1/so
 
 ## What differs from normal SmartCart
 
-Normal SmartCart uses bounded seeded Walmart/Target matches or explicit unpriced search fallbacks, then moves the user through retailer pages. This fork adds a pre-handoff evidence and basket-decision layer. Its public V1 contains an executable Solari Browser/Sandbox path for owned Demo Grocer pages and replays the Walmart product experience with dated fixtures. A credentialed receipt is still required to prove that path ran live or materially improved a shopping decision. Target and broader real-retailer automation are intentionally outside V1.
+Normal SmartCart uses bounded seeded Walmart/Target matches or explicit unpriced search fallbacks, then moves the user through retailer pages. This fork adds a pre-handoff evidence and basket-decision layer. Its public V1 ran the Solari Browser/Sandbox path against owned Demo Grocer pages and preserves the exact credentialed receipt, while the interactive Walmart product experience remains a dated fixture replay. Target and broader real-retailer automation are intentionally outside V1.
 
 This experiment intentionally does **not** automate:
 
@@ -123,7 +123,7 @@ The public repository includes a manually dispatched [live qualification workflo
 
 ### Current evidence status
 
-This construction environment does **not** have `SOLARI_API_KEY`. The bundled fixture replay can prove contracts, validation, basket math, API/UI integration, and truthful labels, but it cannot prove a live Solari Browser/Sandbox run. No live Walmart run should occur even if a key is later set; retailer authorization is a separate required gate.
+The key is stored only as the encrypted `SOLARI_API_KEY` Actions secret; its value is not retrievable from the repository or included in any receipt. Credentialed run `33501521988` proves the owned Demo Grocer Browser/Sandbox path. The bundled Walmart fixture still proves only replay contracts, validation, basket math, API/UI integration, and truthful labels. No live Walmart run occurred; retailer authorization remains a separate required gate.
 
 ## Deployment
 
@@ -150,7 +150,7 @@ This is the separate submission repository `EXO-Robotics/smartcart-solari`; it d
 
 ### Internship-brief mapping
 
-The source for this mapping is the internship brief supplied with the submission, summarized here rather than presented as a canonical public rubric. It asks for a real use case, legitimate Solari product usage, and a public GitHub build. This fork maps those to pantry-aware basket comparison; an implemented Browser-evidence plus Sandbox-optimization path whose credentialed run is still `PENDING`; and this isolated submission repository. No numeric hiring score or live Solari success is asserted.
+The source for this mapping is the internship brief supplied with the submission, summarized here rather than presented as a canonical public rubric. It asks for a real use case, legitimate Solari product usage, and a public GitHub build. This fork maps those to pantry-aware basket comparison; credentialed Browser evidence plus Sandbox optimization on an owned dynamic retailer surface; and this isolated submission repository. The exact live run and receipt are cited above. No numeric hiring score, real-retailer price, or production-shipping claim is asserted.
 
 ## License
 
