@@ -75,4 +75,4 @@ Before a V4 release claim, preserve the completed provider checks and finish the
 - obtain documented retailer authorization before any non-owned source;
 - separately qualify TestFlight/App Store/downloadable availability.
 
-V4 credentialed provider execution is complete. Exact backend deployment identity, signed-device App Attest, distribution, and authorized-retailer gates remain **PENDING**.
+V4 credentialed provider execution and exact backend deployment identity are complete. Signed-device App Attest, distribution, and authorized-retailer gates remain **PENDING**.

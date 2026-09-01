@@ -38,13 +38,15 @@ Solari Browser must observe exact **current-v4** / synthetic owned pages. Solari
 | Web/owned catalog | **PASS** | 19 pages / 8 groups; 7/7 web tests; Pages run `33541494887` |
 | Unsigned Release-SolariBeta build | **PASS** | generic iOS Simulator, signing disabled |
 | Credentialed V4 Browser+Sandbox | **PASS** | run `33542014049`; 8 requirements, 16 observations, 8 decisions; sanitized receipt |
-| V4 beta deployment | **PENDING** | READY deployment receipt and sanitized health/challenge smoke |
+| V4 beta deployment | **PASS** | `dpl_8pdJYo4v3kjUiosFfNHDcfQh2v2s`; publication `0decb99`; READY; health 200; challenge 201 |
 | Signed archive | **PENDING** | matching team capabilities/profiles |
 | Signed App Attest request | **PENDING** | physical-device registration, assertion, request, replay rejection |
 | TestFlight / App Store / downloadable app | **PENDING** | distribution evidence |
 | Authorized real retailer | **PENDING** | API/feed or documented automation permission plus retailer-specific qualification |
 
 The V4 provider receipt is [smartcart-solari-v4-qualification-33542014049.json](../evidence/live/smartcart-solari-v4-qualification-33542014049.json). It records a complete $24.20 synthetic basket, request/result digests, operator-only access boundary, exact commit, timestamps, provider provenance, and enforced cleanup. It does not claim signed App Attest or device execution.
+
+The V4 [deployment receipt](../evidence/live/smartcart-solari-v4-deployment-0decb99-20260901.json) records production deployment **dpl_8pdJYo4v3kjUiosFfNHDcfQh2v2s** from clean publication commit **0decb999531d7faad44e7e1a74ecd84de01932ac**. READY, health 200, and challenge 201 prove the protected boundary is deployed; they do not prove a signed iPhone request or provider execution through that route.
 
 ## Required V4 checks
 
@@ -115,4 +117,4 @@ The owned Demo Grocer is synthetic and provides no real-retailer value. Walmart 
 
 The defensible current statement is:
 
-> V4 expands the product boundary from one fixed three-line prototype to a bounded eligible subset of any waiting trip, with explicit skipped-line preservation and versioned evidence. A real credentialed eight-line Solari Browser+Sandbox run passed at `aee4429`; deployment identity, signed-device App Attest, distribution, and real-retailer qualification remain PENDING.
+> V4 expands the product boundary from one fixed three-line prototype to a bounded eligible subset of any waiting trip, with explicit skipped-line preservation and versioned evidence. A real credentialed eight-line Solari Browser+Sandbox run passed at `aee4429`, and the protected V4 beta boundary is deployed from publication commit `0decb99`; signed-device App Attest, distribution, and real-retailer qualification remain PENDING.
