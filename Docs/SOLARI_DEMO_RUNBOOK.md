@@ -35,7 +35,7 @@ git merge-base --is-ancestor fe6589b1bd811a7ca8afa9824deba9d3cbde7ab9 HEAD
 git remote -v
 ```
 
-Qualified code identity is `ced1154e76a376a7d630900f7c5f4b4317a3932d`. `origin` must be the submission repository and upstream must remain production SmartCart. If deployment files are dirty, create a clean worktree at the exact commit; do not deploy from the production checkout.
+Qualified runtime identity is `772e65bac5cabfba8b5e8b6a9482191a715c616a`. `origin` must be the submission repository and upstream must remain production SmartCart. Later docs/evidence/supporting-site publication changes are not runtime qualification. If deployment files are dirty, create a clean worktree at the intended runtime commit; do not deploy from the production checkout.
 
 ## 2. Run deterministic qualification
 
@@ -50,14 +50,14 @@ node --check website/solari-demo/app.js
 node --check website/solari-demo/retailer/retailer.js
 ```
 
-Frozen evidence at commit `ced1154`:
+Frozen evidence for runtime `772e65b`:
 
-- focused Solari backend 71/71;
-- full backend 201/201;
-- web tests 6/6;
+- focused Solari backend 72/72;
+- full backend 202/202;
+- web tests 7/7;
 - npm audit 0 vulnerabilities.
 
-Report counts only from the exact code under qualification.
+Report counts only against the runtime SHA actually qualified; do not roll later publication-only changes into those counts.
 
 ## 3. Inspect the native product
 
@@ -71,7 +71,7 @@ xcodebuild test \
   -only-testing:SmartCartTests/SolariEvidenceContractTests
 ```
 
-Current result: 20/20 PASS.
+Current result: 22/22 PASS. The focused tests include explicit refresh generating a new request UUID/time while preserving the reviewed fingerprint, evicting/bypassing the old cache entry, and the native 75-second request / 90-second resource timeout policy.
 
 Generic unsigned beta build:
 
@@ -96,7 +96,7 @@ Current result: PASS. This is not signing, App Attest, device, TestFlight, or Ap
 6. Verify the V3 sheet explains the synthetic owned source and low-surplus-within-`$0.75` policy.
 7. Inspect exact source/time, confidence/ambiguity, required/covered/package quantities, line totals, selected `$13.32`, cheapest `$12.79`, premium `$0.53`, and 16 oz surplus avoided.
 8. Verify overage is explicit; no per-serving or “smallest sufficient” shortcut obscures package surplus.
-9. Verify refresh bypasses cache and edit/done does not finalize or mutate the original list.
+9. Verify refresh evicts/bypasses cache, creates a new request identity, and edit/done does not finalize or mutate the original list.
 10. Change the plan and confirm continuation fails revalidation.
 11. Tap **Continue with original SmartCart list** and verify only original SmartCart retailer matches are finalized. No `dg-*` ID or price appears in the retailer queue/cart.
 12. Confirm no account, cart, purchase, checkout, inventory, or pantry-update claim.
@@ -108,7 +108,7 @@ The website can support explanation, but the demo narrative must begin with this
 Use the Pages run and exact public pages:
 
 ```sh
-gh run view 33528975472 \
+gh run view 33533099042 \
   --repo EXO-Robotics/smartcart-solari \
   --json databaseId,headSha,status,conclusion,url,workflowName
 ```
@@ -124,26 +124,26 @@ Check HTTP 200 for each URL under:
 - `dg-parmesan-value-6oz.html`
 - `dg-parmesan-rightsize-3oz.html`
 
-The initial page is deliberately JavaScript-rendered. After render, the product element must carry the exact product ID plus `data-catalog-era="current-v3"` and `data-synthetic-price="true"`. HTTP reachability alone is not Browser evidence; the credentialed receipt supplies that claim.
+The initial page is deliberately JavaScript-rendered. After render, the product element must carry the exact product ID plus `data-catalog-era="current-v3"` and `data-synthetic-price="true"`. HTTP reachability alone is not Browser evidence; the credentialed receipt supplies that claim. Run `33533099042` is the Pages deployment associated with runtime qualification. If corrected explanatory copy is published later, record that new Pages run separately rather than relabeling the runtime.
 
 ## 5. Verify credentialed V3 Browser + Sandbox
 
 Do not infer execution from the web artifact. Inspect the immutable Actions identity and receipt:
 
 ```sh
-gh run view 33529059284 \
+gh run view 33533170189 \
   --repo EXO-Robotics/smartcart-solari \
   --json databaseId,headSha,status,conclusion,url,workflowName
 
 jq '{receiptVersion,qualifiedAt,submission,workflow,execution,selectedProductIDs,basket,comparison,optimizer,trust}' \
-  evidence/live/smartcart-solari-v3-qualification-33529059284.json
+  evidence/live/smartcart-solari-v3-qualification-33533170189.json
 ```
 
 Require:
 
-- conclusion `success` and head SHA exactly `ced1154e76a376a7d630900f7c5f4b4317a3932d`;
+- conclusion `success` and runtime head SHA exactly `772e65bac5cabfba8b5e8b6a9482191a715c616a`;
 - access boundary `operator-qualification`, never App Attest;
-- six exact V3 observations with unique IDs/URLs, fresh timestamps, `current-v3`, and `syntheticPrice: true`;
+- six exact V3 observations with unique IDs/URLs, `current-v3`, and `syntheticPrice: true`; freshness ages must be recomputed at result completion and the completed set revalidated;
 - selected IDs `dg-chicken-rightsize-1lb`, `dg-penne-value-16oz`, `dg-parmesan-value-6oz`;
 - selected `$13.32`, cheapest `$12.79`, premium `$0.53`, cap `$0.75`;
 - surplus 31 → 15 oz, 16 oz avoided;
@@ -168,18 +168,18 @@ The historical V1 run `33519606791` is prior proof only. Its `$12.79` selected b
 The authority is:
 
 ```sh
-jq . evidence/live/smartcart-solari-v3-deployment-20260901.json
+jq . evidence/live/smartcart-solari-v3-deployment-772e65b-20260901.json
 ```
 
 Confirm:
 
-- deployment `dpl_6DgqhKjWN4fm1CHpL6cWcZnWks2x`;
-- immutable `https://smartcart-solari-beta-cipegeumf-blake23.vercel.app`;
+- deployment `dpl_7DdE2hNBKjzfgDFdvi4Zgdtfct4r`;
+- immutable `https://smartcart-solari-beta-iifvcowlq-blake23.vercel.app` (deployment protection observed);
 - alias `https://smartcart-solari-beta.vercel.app`;
-- READY / production / exact `ced1154` commit;
-- health 200 and challenge 201;
-- malformed V3 envelope 400 / `contract_validation_failed`;
-- V3 request contract selected and provider execution false for the rejection;
+- READY / production / qualified runtime `772e65b`;
+- public-alias health 200 and challenge 201;
+- immutable-host health 302 and challenge 401 due Vercel protection;
+- provider execution not claimed by the deployment smoke;
 - runtime kill switch and Upstash state configured;
 - V1 operator-live co-deployment rejected by configuration.
 
@@ -190,7 +190,7 @@ curl --fail-with-body --silent --show-error \
   https://smartcart-solari-beta.vercel.app/health
 ```
 
-Do not casually create production challenges; they write short-lived Upstash state. Use the receipt or an authorized smoke plan. The recorded malformed request deliberately proves rejection, not a valid signed native flow.
+Do not casually create production challenges; they write short-lived Upstash state. Use the receipt or an authorized smoke plan. The deployment smoke proves alias reachability/challenge issuance and immutable-host protection, not provider work or a valid signed native flow. Provider proof remains run `33533170189`.
 
 ## 7. Exercise historical Walmart replay
 
@@ -286,7 +286,7 @@ Configure names in Vercel without putting values in source/docs:
 
 Operator-only `SOLARI_OPERATOR_TOKEN` / `SOLARI_LIVE_EXECUTION_ENABLED` do not belong in the native beta path or any client. Walmart authorization variables stay unset/false without actual written authorization.
 
-After deployment, write a sanitized immutable receipt recording exact commit, deployment ID/immutable URL/alias, READY state, non-secret app/build configuration, state-store class, and smoke outcomes. Do not include secret values.
+After deployment, write a sanitized immutable receipt recording exact runtime commit, deployment ID/immutable URL/alias, READY state, non-secret app/build configuration, state-store class, and smoke outcomes. Do not include secret values. If docs, receipts, or supporting-site copy are published afterward, record that publication separately; do not pretend the publication commit executed the already-qualified runtime.
 
 ## 10. Claim, secret, and link checks
 
@@ -302,4 +302,4 @@ git diff --check
 
 Expected matches are negations, environment-name documentation, tests/canaries, or provider field names—not actual credentials or unsupported claims.
 
-Final submission evidence must name the exact commit; V3 run/receipt; Pages run; deployment/receipt; backend/native/web counts; unsigned versus signed build state; physical-device status; synthetic source; historical Walmart replay; Browser/Sandbox authority and cleanup; unchanged handoff; and every remaining PENDING gate.
+Final submission evidence must name qualified runtime `772e65b`; V3 run/receipt; Pages runtime deployment and any later publication deployment separately; Vercel deployment/receipt; backend/native/web counts; unsigned versus signed build state; physical-device status; synthetic source; historical Walmart replay; Browser/Sandbox authority and cleanup; unchanged handoff; and every remaining PENDING gate. Do not invent a self-referential final publication SHA.

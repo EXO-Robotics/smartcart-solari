@@ -6,7 +6,7 @@ This is an internal development ledger, not an external audit, certification, hi
 
 The skeptical review was asked to examine the normal native recipe/pantry/research/handoff flow, V3 schemas, Browser extraction, Sandbox optimizer, App Attest/Upstash admission, owned public catalog, deployment, tests, evidence receipts, and trust copy. It specifically targeted unnecessary Solari usage, unsupported product matches, misleading price claims, synthetic/retailer contamination, secrets/session privacy, unsafe commerce automation, weak provenance, basket math, UX, SmartCart contract divergence, and overengineering.
 
-The first fresh V3 review began against commit `3d39dbb`. Its findings were treated as an engineering queue rather than a release verdict. A second fresh review is not yet recorded here; no score or signoff is invented.
+The first fresh V3 review began against commit `3d39dbb`. Its findings were treated as an engineering queue rather than a release verdict. A second fresh terminal review was later run against the pre-fix publication state; its reproduced findings and dispositions are recorded below. A fresh **post-fix** review is still pending, so no final signoff is invented.
 
 ## Fresh V3 review 1 — reproduced findings and dispositions
 
@@ -74,7 +74,43 @@ The final trust pass reported no reproduced Critical or High finding. It identif
    - Disposition: **fixed**. The receipt generator now computes SHA-256 internally from the accepted result, with regression coverage.
 
 2. **Submission documentation described the superseded pre-V3 state.**
-   - Disposition: **fixed in this documentation update**. README, experiment design, qualification, threat model, and runbook now cite exact commit `ced1154`, runs `33528975472` / `33529059284`, the `$13.32`/`$12.79` comparison, V3 deployment receipt, current test counts, and signed-device blockers.
+   - Disposition: **fixed in the first documentation refresh**, then superseded by the fresh runtime described below.
+
+## Fresh V3 review 2 — pre-fix score and dispositions
+
+The second terminal Grok session assigned the pre-fix state an internal `7.0/10`. That number is preserved only as historical reviewer feedback required by the work log; it is not SmartCart’s self-score, an external audit, a current score, or release evidence. The session reported one legitimate High and four legitimate Medium findings:
+
+### High 1 — qualification freshness and current execution
+
+**Finding:** observation freshness was calculated during sequential Browser collection but not recomputed after Sandbox work at result completion, and the latest fixes lacked a fresh credentialed receipt.
+
+**Disposition: fixed.** The runtime recomputes every observation’s age at `completedAt`, revalidates the completed evidence set, and fails closed if the set is no longer fresh. Credentialed run [`33533170189`](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33533170189) passed against runtime `772e65bac5cabfba8b5e8b6a9482191a715c616a`; its receipt records completion freshness, six current observations, Browser/Sandbox cleanup, and the existing `$13.32` / 16 oz decision.
+
+### Medium 1 — explicit refresh reused request identity/cache state
+
+**Finding:** bypassing the cache did not by itself guarantee a fresh request UUID/submission time and clean eviction of the old plan entry.
+
+**Disposition: fixed.** Explicit refresh evicts the fingerprint entry, rebuilds the unchanged reviewed plan with a new request UUID and timestamp, and then refetches. Native regression tests verify new identities across consecutive refreshes while preserving requirements, original SmartCart selections, and plan fingerprint.
+
+### Medium 2 — native timeout budget was shorter than the backend path
+
+**Finding:** client timing could fail before the bounded provider/backend flow had a reasonable chance to return, creating misleading native failures.
+
+**Disposition: fixed.** The ephemeral native session now uses a 75-second per-request timeout and 90-second resource timeout. Tests pin cookies/cache disabled and those exact values. Backend/provider aggregate deadlines and cancellation remain authoritative server-side bounds.
+
+### Medium 3 — public Pages copy contradicted current evidence
+
+**Finding:** supporting-site copy still described V3 as pending a new credentialed run and could lead reviewers to stale evidence.
+
+**Disposition: fixed in the supporting-site publication layer.** Pages runtime deployment [`33533099042`](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33533099042) is the deployed source associated with the qualified runtime. Updated explanatory copy cites run `33533170189` and its receipt; a later publication-only Pages deployment may follow and must be recorded separately when it exists.
+
+### Medium 4 — runtime and publication provenance were conflated
+
+**Finding:** calling a later repository head the “exact” qualified code would incorrectly imply that documentation, evidence-file, or supporting-site publication commits themselves ran Browser/Sandbox and Vercel qualification.
+
+**Disposition: fixed.** Exact runtime identity is `772e65bac5cabfba8b5e8b6a9482191a715c616a`, pinned by run `33533170189` and deployment `dpl_7DdE2hNBKjzfgDFdvi4Zgdtfct4r`. Later docs/evidence/site commits are explicitly publication-only. This log does not invent a self-referential final publication SHA.
+
+The second session’s pre-fix score is not carried forward as a post-fix score. A new skeptical review must inspect the fixes and immutable runtime receipts before any further reviewer conclusion is recorded.
 
 ## Rejected finding
 
@@ -92,12 +128,12 @@ These are disclosed constraints, not permission to broaden automation. Walmart s
 
 ## Evidence after remediation
 
-- exact code: `ced1154e76a376a7d630900f7c5f4b4317a3932d`;
-- Pages: run `33528975472`, six V3 `dg-*` pages HTTP 200;
-- credentialed V3 Browser/Sandbox: run [`33529059284`](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33529059284), [receipt](../evidence/live/smartcart-solari-v3-qualification-33529059284.json);
-- protected production deployment: [receipt](../evidence/live/smartcart-solari-v3-deployment-20260901.json);
-- deterministic checks: 71/71 focused backend, 201/201 full backend, 20/20 native, 6/6 web, npm audit 0;
+- qualified runtime: `772e65bac5cabfba8b5e8b6a9482191a715c616a`;
+- Pages runtime deployment: run `33533099042`; later supporting-copy publication, if any, remains a separate identity;
+- credentialed V3 Browser/Sandbox: run [`33533170189`](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33533170189), [receipt](../evidence/live/smartcart-solari-v3-qualification-33533170189.json);
+- protected production deployment: [receipt](../evidence/live/smartcart-solari-v3-deployment-772e65b-20260901.json);
+- deterministic checks: 72/72 focused backend, 202/202 full backend, 22/22 native, 7/7 web, npm audit 0;
 - generic unsigned Release-SolariBeta build: PASS;
 - signed archive / physical App Attest / TestFlight / App Store / downloadable app: PENDING.
 
-A future fresh review should inspect this exact post-documentation state and its immutable receipts. Until that happens, this log makes no final reviewer-score or independent-signoff claim.
+A future fresh review should inspect the post-fix code and immutable runtime receipts while keeping later publication-only changes separate. Until that happens, this log makes no final reviewer-score or independent-signoff claim.

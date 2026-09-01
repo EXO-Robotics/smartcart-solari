@@ -321,7 +321,7 @@
       const lineTotal = money.format((product.priceCents * selection.packageCount) / 100);
       copy.append(
         element("strong", "", product.name),
-        element("small", "", `${selection.packageCount} package${selection.packageCount === 1 ? "" : "s"} selected · ${lineTotal} synthetic line total · V3 qualification run 33529059284`)
+        element("small", "", `${selection.packageCount} package${selection.packageCount === 1 ? "" : "s"} selected · ${lineTotal} synthetic line total · V3 qualification run 33533170189`)
       );
 
       const link = element("a", "retailer-link", "Open synthetic page ↗");
@@ -402,12 +402,12 @@
 
   const liveRunLink = document.querySelector("[data-live-run-link]");
   if (liveRunLink) {
-    liveRunLink.href = "https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33529059284";
+    liveRunLink.href = "https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33533170189";
   }
 
   const liveReceiptLink = document.querySelector("[data-live-receipt-link]");
   if (liveReceiptLink) {
-    liveReceiptLink.href = "https://exo-robotics.github.io/smartcart-solari/evidence/live/smartcart-solari-v3-qualification-33529059284.json";
+    liveReceiptLink.href = "https://exo-robotics.github.io/smartcart-solari/evidence/live/smartcart-solari-v3-qualification-33533170189.json";
   }
 
   const v1RunLink = document.querySelector("[data-v1-run-link]");

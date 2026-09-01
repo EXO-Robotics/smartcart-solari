@@ -47,9 +47,9 @@ Persistent Browser profiles are intentionally not used. Solari profiles contain 
 
 ## Evidence status
 
-- **Credentialed V3 Browser + Sandbox:** GitHub Actions run [`33529059284`](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33529059284) passed at exact commit `ced1154e76a376a7d630900f7c5f4b4317a3932d`. The [V3 qualification receipt](evidence/live/smartcart-solari-v3-qualification-33529059284.json) records six fresh Browser observations, the Sandbox optimizer result, first-party result digest, and cleanup. Its access boundary was server-side operator qualification, not a signed iPhone request.
-- **Owned pages:** Pages run [`33528975472`](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33528975472) deployed all six `dg-*` product pages; each returned HTTP 200.
-- **Beta backend:** Vercel production deployment `dpl_6DgqhKjWN4fm1CHpL6cWcZnWks2x` is READY at immutable host `https://smartcart-solari-beta-cipegeumf-blake23.vercel.app`, with alias `https://smartcart-solari-beta.vercel.app`. The [deployment receipt](evidence/live/smartcart-solari-v3-deployment-20260901.json) records health 200, challenge 201, malformed V3 envelope rejection 400, no provider execution for that rejection, App Attest/Upstash configuration, and fail-closed V1/live coexistence policy.
+- **Credentialed V3 Browser + Sandbox:** GitHub Actions run [`33533170189`](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33533170189) passed against qualified runtime SHA `772e65bac5cabfba8b5e8b6a9482191a715c616a`. The [V3 qualification receipt](evidence/live/smartcart-solari-v3-qualification-33533170189.json) records six fresh Browser observations, freshness recomputed at result completion, the Sandbox optimizer result, internally computed result digest, and cleanup. Its access boundary was server-side operator qualification, not a signed iPhone request.
+- **Owned pages:** Pages runtime deployment [`33533099042`](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33533099042) published the six `dg-*` Browser targets for runtime qualification. A later publication-only Pages deployment may publish refreshed explanatory copy; it must not be presented as a different runtime qualification.
+- **Beta backend:** Vercel production deployment `dpl_7DdE2hNBKjzfgDFdvi4Zgdtfct4r` is READY at alias `https://smartcart-solari-beta.vercel.app`. The immutable host `https://smartcart-solari-beta-iifvcowlq-blake23.vercel.app` was deployment-protected (302/401), while the public alias returned health 200 and challenge 201. The [deployment receipt](evidence/live/smartcart-solari-v3-deployment-772e65b-20260901.json) records those outcomes, App Attest/Upstash configuration, and fail-closed V1/live coexistence policy; it does not claim provider execution through the smoke request.
 - **Signed native flow:** **PENDING.** Three Apple Development identities are visible, but archive signing failed: the personal team does not support Associated Domains and App Attest for `com.blakestudio.smartcart.solari-beta`, no matching iOS App Development provisioning profile exists, and the Share Extension profile has an application-groups mismatch. The physical iPhone is offline. There is no signed App Attest request, TestFlight build, App Store build, or downloadable-app claim.
 - **Historical V1 proof:** run [`33519606791`](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33519606791) and its `$12.79` receipt remain prior integration evidence only. They do not prove the V3 catalog or optimizer policy.
 - **Walmart:** replay only. The dated Walmart fixture was observed `2026-07-16T12:00:00Z`; it is not current, location-specific, guaranteed, or proof of a Solari run.
@@ -100,7 +100,7 @@ Unknown versions, non-UUID or duplicate identities, unadmitted products/sources,
 - The retailer handoff is explicit. Research never silently changes original retailer matches; a visited page is not purchase evidence.
 - `SOLARI_API_KEY`, Upstash credentials, and control-plane secrets are server only. Signed capability URLs are treated as secrets and never returned in evidence. [Solari API authentication and capability URLs](https://docs.getsolari.com/api-reference) document why.
 - Release-SolariBeta has no fixture bypass. Debug replay is clearly labeled and never claimed as Browser, Sandbox, or App Attest execution.
-- Runtime kill switch, per-key/global quotas, concurrency lease, bounded request/body/candidate sizes, one aggregate deadline, client-cancellation propagation, and a two-minute/maximum-eight-entry memory cache limit spend and stale reuse.
+- Runtime kill switch, per-key/global quotas, concurrency lease, bounded request/body/candidate sizes, one aggregate deadline, client-cancellation propagation, 75-second native request / 90-second resource timeouts, and a two-minute/maximum-eight-entry memory cache limit spend and stale reuse. Explicit refresh creates a fresh request identity and evicts the prior plan entry before refetching.
 - Cleanup failure suppresses success. Sandbox receives structured public evidence, not credentials, raw pages, cookies, or capability URLs; no claim is made that Sandbox egress is blocked.
 
 Live Walmart research is disabled without documented written authorization. Walmart’s [Terms of Use](https://www.walmart.com/help/article/walmart-com-terms-of-use/3b75080af40340d6bbd596f116fae5a0) restrict automated retrieval; Target’s [Terms & Conditions](https://www.target.com/c/terms-conditions/-/N-4sr7l) restrict unauthorized agents and extraction. V1 fails closed unless retailer authorization gates are explicitly configured, and the beta configuration rejects co-deployment with the operator-live route.
@@ -140,7 +140,7 @@ xcodebuild build \
   CODE_SIGNING_ALLOWED=NO
 ```
 
-Current evidence at commit `ced1154`: focused Solari backend 71/71, full backend 201/201, focused native 20/20 on iPhone 17 Pro / iOS 26.5 Simulator, web 6/6, generic unsigned Release-SolariBeta build PASS, and `npm audit` 0 vulnerabilities.
+Current evidence for qualified runtime `772e65b`: focused Solari backend 72/72, full backend 202/202, focused native 22/22 on iPhone 17 Pro / iOS 26.5 Simulator, web 7/7, generic unsigned Release-SolariBeta build PASS, and `npm audit` 0 vulnerabilities.
 
 ## Deployment
 
@@ -164,20 +164,22 @@ Do not `cd backend`, use `--cwd backend`, or change the configured Root Director
 
 | Evidence | Result |
 | --- | --- |
-| Exact code | `ced1154e76a376a7d630900f7c5f4b4317a3932d` |
-| Focused / full backend | 71/71; 201/201 |
-| Native / web | 20/20; 6/6 |
+| Qualified runtime | `772e65bac5cabfba8b5e8b6a9482191a715c616a` |
+| Focused / full backend | 72/72; 202/202 |
+| Native / web | 22/22; 7/7 |
 | npm audit | 0 vulnerabilities |
 | Generic unsigned Release-SolariBeta build | PASS |
-| Owned product Pages | run `33528975472`; six `dg-*` pages HTTP 200 |
-| Credentialed V3 Browser + Sandbox | run `33529059284`; PASS |
-| Vercel production | `dpl_6DgqhKjWN4fm1CHpL6cWcZnWks2x`; READY |
+| Owned product Pages at runtime qualification | run `33533099042` |
+| Credentialed V3 Browser + Sandbox | run `33533170189`; PASS |
+| Vercel production | `dpl_7DdE2hNBKjzfgDFdvi4Zgdtfct4r`; READY |
 | Physical signed archive / signed App Attest | **PENDING — entitlement/profile blockers; phone offline** |
 | TestFlight / App Store / downloadable app | **PENDING** |
 
 ## Repository provenance
 
 This public submission is [`EXO-Robotics/smartcart-solari`](https://github.com/EXO-Robotics/smartcart-solari), isolated from production [`EXO-Robotics/smartcart-ios`](https://github.com/EXO-Robotics/smartcart-ios). It started from clean upstream commit [`fe6589b1bd811a7ca8afa9824deba9d3cbde7ab9`](https://github.com/EXO-Robotics/smartcart-ios/commit/fe6589b1bd811a7ca8afa9824deba9d3cbde7ab9). Production SmartCart was not redirected or modified by deployment work.
+
+Runtime provenance is pinned to `772e65bac5cabfba8b5e8b6a9482191a715c616a` by the credentialed qualification and Vercel receipts. Documentation, evidence publication, and supporting-site copy may be committed later; those publication-only changes do not retroactively become the runtime SHA. This README intentionally does not invent a self-referential “final publication commit.”
 
 For upstream SmartCart context, see [Roadmap Status](Docs/ROADMAP_STATUS.md), [Trip Intelligence](Docs/TRIP_INTELLIGENCE_MCP.md), and the [backend README](backend/README.md).
 

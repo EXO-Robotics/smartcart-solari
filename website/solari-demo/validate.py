@@ -16,7 +16,7 @@ from urllib.parse import urlsplit
 ROOT = Path(__file__).resolve().parent
 CANONICAL_FIXTURE = ROOT.parents[1] / "contracts" / "fixtures" / "v1" / "solari" / "chicken-parmesan-walmart-result.json"
 V1_RECEIPT = ROOT.parents[1] / "evidence" / "live" / "smartcart-solari-live-proof-33519606791.json"
-V3_RECEIPT = ROOT.parents[1] / "evidence" / "live" / "smartcart-solari-v3-qualification-33529059284.json"
+V3_RECEIPT = ROOT.parents[1] / "evidence" / "live" / "smartcart-solari-v3-qualification-33533170189.json"
 LEGACY_PRODUCT_IDS = {"10414680", "10534084", "623835750", "10452414", "10307238", "47088917"}
 CURRENT_PRODUCT_SPECS = {
     "dg-chicken-value-3lb": (3, "lb", 947),
@@ -289,8 +289,8 @@ def validate_v3_receipt(path: Path) -> list[str]:
     errors: list[str] = []
     if receipt.get("receiptVersion") != "smartcart-solari-v3-qualification-v1":
         errors.append("V3 qualification receipt version drifted")
-    if receipt.get("workflow", {}).get("runID") != "33529059284":
-        errors.append("V3 qualification receipt must bind run 33529059284")
+    if receipt.get("workflow", {}).get("runID") != "33533170189":
+        errors.append("V3 qualification receipt must bind run 33533170189")
 
     execution = receipt.get("execution", {})
     expected_execution = {
@@ -381,8 +381,8 @@ def inspect_demo(root: Path = ROOT) -> list[str]:
     required_markers = [
         "Research current options",
         "V3 Browser + Sandbox qualification complete",
-        "33529059284",
-        "smartcart-solari-v3-qualification-33529059284.json",
+        "33533170189",
+        "smartcart-solari-v3-qualification-33533170189.json",
         "33519606791",
         "smartcart-solari-live-proof-33519606791.json",
         "Historical UI replay only",
@@ -405,7 +405,7 @@ def inspect_demo(root: Path = ROOT) -> list[str]:
     handoff_section = main_text.split('id="stage-handoff"', 1)[-1].split("</section>", 1)[0]
     if "walmart" in handoff_section.casefold() or any(product_id in handoff_section for product_id in LEGACY_PRODUCT_IDS):
         errors.append("current Demo handoff must not expose Walmart or legacy V1 identity")
-    for marker in ("supporting V3 preview", "owned synthetic Demo Grocer candidates qualified by run 33529059284", "not the product frontend"):
+    for marker in ("supporting V3 preview", "owned synthetic Demo Grocer candidates qualified by run 33533170189", "not the product frontend"):
         if marker.casefold() not in handoff_section.casefold():
             errors.append(f"current Demo handoff missing qualification marker: {marker}")
     stale_v3_copy = ("There is no credentialed V3 run yet", "qualification pending", "pending a new credentialed run")
@@ -442,7 +442,7 @@ def inspect_demo(root: Path = ROOT) -> list[str]:
         errors.append("current Demo handoff renderer must not use Walmart or legacy V1 data")
     if "synthetic line total" not in render_handoff:
         errors.append("current Demo handoff prices must remain explicitly synthetic")
-    if "V3 qualification run 33529059284" not in render_handoff:
+    if "V3 qualification run 33533170189" not in render_handoff:
         errors.append("current Demo handoff must cite the V3 qualification run")
     return sorted(set(errors))
 

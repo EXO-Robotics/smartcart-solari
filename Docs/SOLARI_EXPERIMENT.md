@@ -28,7 +28,7 @@ The `SmartCart-SolariBeta` flow is user triggered:
 3. Research accepts only the canonical three post-pantry Chicken Parmesan Pasta requirements and two owned Demo Grocer candidates per requirement.
 4. Apple App Attest is designed to bind a one-use challenge to the exact V3 request bytes. The transport schema remains `solari-app-attest-research-envelope-v1`; V3 identifies the current research product contract.
 5. The native review sheet validates and displays the evidence; it never silently replaces the shopping plan.
-6. Refresh bypasses a two-minute in-memory cache. Edit/done leaves the retailer list unchanged.
+6. Refresh evicts the prior plan cache entry, creates a new request UUID/submission time, and bypasses the two-minute in-memory cache. Edit/done leaves the retailer list unchanged.
 7. **Continue with original SmartCart list** recomputes plan identity and finalizes only the original retailer matches. Demo product IDs, package selections, and synthetic prices are never transferred.
 8. Failure offers retry or the normal SmartCart path. No failure authorizes automatic fallback commerce.
 
@@ -136,8 +136,8 @@ Missing prices remain `null`; a partial result cannot masquerade as a complete t
 - No profile, recording, screenshot, raw HTML in the current structured path, proxy, stealth, captcha, login, cookies/localStorage, retailer session, cart/list/order, payment, or checkout.
 - `SOLARI_API_KEY`, Upstash credentials, operator tokens, and signed provider capability URLs are server-only.
 - Persistent profiles are not used; if enabled they would retain cookies/localStorage and real login authority.
-- The beta feature and runtime kill switch fail closed. Quotas, concurrency lease, body/candidate limits, aggregate deadline, cancellation, and cleanup constrain spend.
-- Native cache is memory-only, maximum eight entries, two-minute TTL, request/plan keyed, and bypassed by refresh.
+- The beta feature and runtime kill switch fail closed. Quotas, concurrency lease, body/candidate limits, aggregate deadline, cancellation, 75-second native request / 90-second resource timeouts, and cleanup constrain spend.
+- Native cache is memory-only, maximum eight entries, two-minute TTL, request/plan keyed, and bypassed by refresh. Refresh evicts the prior fingerprint entry and rebuilds the same reviewed plan with a new request identity so App Attest/idempotency cannot replay the old request.
 - Resource cleanup is part of success: Browser page/session/client close and Sandbox kill are confirmed before response/receipt.
 - SmartCart’s original retailer handoff and pantry reconciliation remain explicit user decisions.
 
@@ -152,10 +152,12 @@ Missing prices remain `null`; a partial result cannot masquerade as a complete t
 
 ## Current evidence
 
-- code: `ced1154e76a376a7d630900f7c5f4b4317a3932d`;
-- Pages: run `33528975472`, six current `dg-*` pages HTTP 200;
-- V3 Browser/Sandbox: run `33529059284`, [receipt](../evidence/live/smartcart-solari-v3-qualification-33529059284.json);
-- production backend: `dpl_6DgqhKjWN4fm1CHpL6cWcZnWks2x`, [deployment receipt](../evidence/live/smartcart-solari-v3-deployment-20260901.json);
-- tests: 71/71 focused backend, 201/201 full backend, 20/20 focused native, 6/6 web, `npm audit` 0;
+- qualified runtime: `772e65bac5cabfba8b5e8b6a9482191a715c616a`;
+- Pages runtime deployment: run `33533099042`; a later publication-only deployment may refresh explanatory copy without changing the qualified runtime;
+- V3 Browser/Sandbox: run `33533170189`, [receipt](../evidence/live/smartcart-solari-v3-qualification-33533170189.json); completion-time freshness was recomputed before result acceptance;
+- production backend: `dpl_7DdE2hNBKjzfgDFdvi4Zgdtfct4r`, [deployment receipt](../evidence/live/smartcart-solari-v3-deployment-772e65b-20260901.json);
+- tests: 72/72 focused backend, 202/202 full backend, 22/22 focused native, 7/7 web, `npm audit` 0;
 - generic unsigned Release-SolariBeta build: PASS;
 - signed iPhone/App Attest/TestFlight/App Store: PENDING.
+
+The runtime receipts pin `772e65b`. Later documentation, evidence-file publication, or supporting-site copy is a publication layer, not a new Browser/Sandbox/runtime qualification. No self-referential final publication SHA is claimed here.

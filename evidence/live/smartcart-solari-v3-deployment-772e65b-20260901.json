@@ -1,0 +1,57 @@
+{
+  "receiptVersion": "smartcart-solari-v3-deployment-v2",
+  "observedAt": "2026-09-01T16:42:36Z",
+  "submission": {
+    "repository": "EXO-Robotics/smartcart-solari",
+    "branch": "main",
+    "commit": "772e65bac5cabfba8b5e8b6a9482191a715c616a"
+  },
+  "deployment": {
+    "provider": "vercel",
+    "project": "smartcart-solari-beta",
+    "deploymentID": "dpl_7DdE2hNBKjzfgDFdvi4Zgdtfct4r",
+    "immutableURL": "https://smartcart-solari-beta-iifvcowlq-blake23.vercel.app",
+    "applicationURL": "https://smartcart-solari-beta.vercel.app",
+    "target": "production",
+    "readyState": "READY",
+    "immutableURLProtection": "vercel-auth-redirect-observed",
+    "publicApplicationAlias": "reachable"
+  },
+  "accessBoundary": {
+    "scheme": "apple-app-attest",
+    "teamID": "WCNJVRP99K",
+    "bundleID": "com.blakestudio.smartcart.solari-beta",
+    "allowedBuilds": [
+      "4"
+    ],
+    "stateStore": "vercel-marketplace-upstash-redis",
+    "runtimeKillSwitch": "enabled",
+    "solariCredential": "server-side-secret-not-inspected",
+    "v1OperatorLiveCoDeployment": "rejected-by-configuration"
+  },
+  "smoke": {
+    "publicAliasHealthStatus": 200,
+    "publicAliasChallengeStatus": 201,
+    "immutableURLHealthStatus": 302,
+    "immutableURLChallengeStatus": 401,
+    "providerExecutionClaimed": false
+  },
+  "credentialedV3Qualification": {
+    "workflowRunID": "33533170189",
+    "commit": "772e65bac5cabfba8b5e8b6a9482191a715c616a",
+    "browser": "solari-browser-provider-completed",
+    "sandbox": "solari-sandbox-provider-completed",
+    "fixtureReplay": false,
+    "selectedSubtotal": 13.32,
+    "premiumOverCheapest": 0.53,
+    "surplusAvoidedOunces": 16,
+    "completionFreshnessRecomputed": true
+  },
+  "limitations": [
+    "The protected production alias, Upstash challenge admission, and current deployment were observed; the immutable deployment URL required Vercel authentication.",
+    "The credentialed Browser and Sandbox qualification used the owned SmartCart Demo Grocer synthetic catalog, not a third-party retailer.",
+    "The qualification access boundary was direct server-side operator qualification; it does not claim a signed native App Attest request.",
+    "A physical iPhone is currently offline, so signed-device App Attest, TestFlight, App Store, and downloadable-app proof remain pending.",
+    "No retailer account, cart, purchase, or checkout action was performed or claimed."
+  ]
+}
