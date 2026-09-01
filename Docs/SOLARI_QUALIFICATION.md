@@ -4,13 +4,13 @@
 
 - Public repository: `https://github.com/EXO-Robotics/smartcart-solari`
 - Live-qualified implementation commit: `25ab69b582e5f6d92053a2f42640736e92b5b8dc`
-- Sanitized-receipt publication commit: pending this evidence commit
+- Sanitized-receipt publication commit: `292b58804e662c1156b1bd312869d5c07dcf4f86`
 - Clean upstream base: `fe6589b1bd811a7ca8afa9824deba9d3cbde7ab9`
 - Credentialed Solari run: [`33505918379`](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33505918379) — successful
 - Versioned live receipt: [`smartcart-solari-live-proof-33505918379.json`](../evidence/live/smartcart-solari-live-proof-33505918379.json)
 - Public artifact: `https://exo-robotics.github.io/smartcart-solari/website/solari-demo/`
-- Public receipt after Pages publishes this evidence commit: `https://exo-robotics.github.io/smartcart-solari/evidence/live/smartcart-solari-live-proof-33505918379.json`
-- Pages deployment run: pending this evidence commit
+- Public receipt: `https://exo-robotics.github.io/smartcart-solari/evidence/live/smartcart-solari-live-proof-33505918379.json`
+- Pages deployment run: [`33506173772`](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33506173772) — successful for receipt commit `292b588`
 - Internal review log: [`SOLARI_RED_TEAM.md`](SOLARI_RED_TEAM.md)
 
 This qualification keeps three claims separate: the interactive Walmart replay, actual credentialed Solari execution against the owned synthetic Demo Grocer, and production/native release status. Internal model reviews remain development feedback, not external validation.
@@ -50,7 +50,7 @@ The public interactive Walmart flow still loads the dated `2026-07-16T12:00:00Z`
 | `npm audit --omit=dev --audit-level=high` | 0 vulnerabilities |
 | `git diff --check` | passed |
 | secret-pattern scan | documented placeholders/test canaries only; live receipt clean |
-| public Pages deployment | pending this evidence commit |
+| public Pages deployment | run `33506173772` passed |
 | public page/receipt HTTP verification | exact live-proof and trust markers returned |
 
 The restricted filesystem sandbox cannot bind localhost for the broad Node HTTP tests. The same suite passed 167/167 outside that sandbox. This is an execution-environment distinction, not a hidden test failure.
