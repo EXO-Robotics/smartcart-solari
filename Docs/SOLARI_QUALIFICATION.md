@@ -72,7 +72,7 @@ Pages runtime deployment [`33533099042`](https://github.com/EXO-Robotics/smartca
 - `dg-parmesan-value-6oz.html`
 - `dg-parmesan-rightsize-3oz.html`
 
-The Browser qualification—not Pages deployment alone—proves the rendered evidence markers were observed. A later Pages deployment may publish corrected explanatory copy after runtime qualification. That later publication identity should be recorded when it exists, but it does not replace or relabel runtime SHA `772e65b`.
+The Browser qualification—not Pages deployment alone—proves the rendered evidence markers were observed. Publication-only Pages run [`33534199401`](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33534199401) later published corrected explanatory copy at public head `bc083d6`. That run does not replace or relabel runtime SHA `772e65b`.
 
 ## Production deployment proof
 

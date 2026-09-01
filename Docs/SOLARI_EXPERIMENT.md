@@ -153,7 +153,7 @@ Missing prices remain `null`; a partial result cannot masquerade as a complete t
 ## Current evidence
 
 - qualified runtime: `772e65bac5cabfba8b5e8b6a9482191a715c616a`;
-- Pages runtime deployment: run `33533099042`; a later publication-only deployment may refresh explanatory copy without changing the qualified runtime;
+- Pages runtime deployment: run `33533099042`; publication-only run `33534199401` refreshed explanatory copy at public head `bc083d6` without changing the qualified runtime;
 - V3 Browser/Sandbox: run `33533170189`, [receipt](../evidence/live/smartcart-solari-v3-qualification-33533170189.json); completion-time freshness was recomputed before result acceptance;
 - production backend: `dpl_7DdE2hNBKjzfgDFdvi4Zgdtfct4r`, [deployment receipt](../evidence/live/smartcart-solari-v3-deployment-772e65b-20260901.json);
 - tests: 72/72 focused backend, 202/202 full backend, 22/22 focused native, 7/7 web, `npm audit` 0;

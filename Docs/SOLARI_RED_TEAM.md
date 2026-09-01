@@ -6,7 +6,7 @@ This is an internal development ledger, not an external audit, certification, hi
 
 The skeptical review was asked to examine the normal native recipe/pantry/research/handoff flow, V3 schemas, Browser extraction, Sandbox optimizer, App Attest/Upstash admission, owned public catalog, deployment, tests, evidence receipts, and trust copy. It specifically targeted unnecessary Solari usage, unsupported product matches, misleading price claims, synthetic/retailer contamination, secrets/session privacy, unsafe commerce automation, weak provenance, basket math, UX, SmartCart contract divergence, and overengineering.
 
-The first fresh V3 review began against commit `3d39dbb`. Its findings were treated as an engineering queue rather than a release verdict. A second fresh terminal review was later run against the pre-fix publication state; its reproduced findings and dispositions are recorded below. A fresh **post-fix** review is still pending, so no final signoff is invented.
+The first fresh V3 review began against commit `3d39dbb`. Its findings were treated as an engineering queue rather than a release verdict. A second fresh terminal review was later run against the pre-fix publication state; its reproduced findings and dispositions are recorded below. A third fresh terminal review inspected post-fix public head `bc083d6` and qualified runtime `772e65b`; its conclusion is recorded as internal feedback, not external proof.
 
 ## Fresh V3 review 1 — reproduced findings and dispositions
 
@@ -102,7 +102,7 @@ The second terminal Grok session assigned the pre-fix state an internal `7.0/10`
 
 **Finding:** supporting-site copy still described V3 as pending a new credentialed run and could lead reviewers to stale evidence.
 
-**Disposition: fixed in the supporting-site publication layer.** Pages runtime deployment [`33533099042`](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33533099042) is the deployed source associated with the qualified runtime. Updated explanatory copy cites run `33533170189` and its receipt; a later publication-only Pages deployment may follow and must be recorded separately when it exists.
+**Disposition: fixed in the supporting-site publication layer.** Pages runtime deployment [`33533099042`](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33533099042) is the deployed source associated with the qualified runtime. Publication-only Pages run [`33534199401`](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33534199401) published corrected explanatory copy at public head `bc083d6`, citing run `33533170189` and its receipt.
 
 ### Medium 4 — runtime and publication provenance were conflated
 
@@ -110,7 +110,29 @@ The second terminal Grok session assigned the pre-fix state an internal `7.0/10`
 
 **Disposition: fixed.** Exact runtime identity is `772e65bac5cabfba8b5e8b6a9482191a715c616a`, pinned by run `33533170189` and deployment `dpl_7DdE2hNBKjzfgDFdvi4Zgdtfct4r`. Later docs/evidence/site commits are explicitly publication-only. This log does not invent a self-referential final publication SHA.
 
-The second session’s pre-fix score is not carried forward as a post-fix score. A new skeptical review must inspect the fixes and immutable runtime receipts before any further reviewer conclusion is recorded.
+The second session’s pre-fix score is not carried forward as a post-fix score. The fresh post-fix session below inspected the fixes and immutable runtime receipts before reaching its own conclusion.
+
+## Fresh V3 review 3 — post-fix internal verdict
+
+The third fresh terminal Grok process used a new public checkout at publication head `bc083d6` and read-only repository tools. It verified the runtime-to-publication boundary, the current receipts, and the five review-2 fixes from implementation and tests rather than trusting their documentation.
+
+Its exact severity conclusion was: **“There are no legitimate Critical, High, or Medium findings.”** It scored the bounded internship artifact `9.4/10`, answered **Yes** that Solari materially improves SmartCart, **Yes** that the user-trust model remains defensible, **Yes** that claims are evidence-backed and accurately scoped, and **Yes** that the submission is effectively 10/10 within its honest bounded internship scope. Its separate verdicts were **Ship** for the internship artifact and **No-ship** for TestFlight/App Store/downloadable distribution while those gates remain PENDING.
+
+Those answers are skeptical internal feedback, not an external audit, certification, execution receipt, or product-market-fit evidence. The credentialed Actions receipt and deterministic tests remain the authorities for runtime claims.
+
+The reviewer retained only Low issues:
+
+- remote Browser DNS cannot be pinned with the current SDK, leaving bounded TOCTOU risk;
+- a client hangup after a complete request body can run until the aggregate deadline/kill switch;
+- the unauthenticated, rate-limited historical V1 recorded-fixture route remains on the beta host, but cannot spend live Solari;
+- native package-count verification relies on backend ceil verification plus coverage/surplus/premium checks rather than independently asserting the exact ceil count;
+- requirement/ingredient UUID casing is consistent with UUID schemas and decoding but not normalized like `requestID`;
+- unused `V3_PRODUCT_CATALOG` creates future drift risk;
+- production should keep backend timeout configuration below native 75/90-second budgets;
+- shared health naming remains legacy;
+- signed distribution, authorized retailer evidence, and consumer PMF remain PENDING product gaps rather than defects in the bounded claim.
+
+The reviewer also noted that the publication-only Pages run was not yet in the tree it inspected; run `33534199401` is now recorded above without changing the reviewed runtime or website implementation.
 
 ## Rejected finding
 
@@ -129,11 +151,11 @@ These are disclosed constraints, not permission to broaden automation. Walmart s
 ## Evidence after remediation
 
 - qualified runtime: `772e65bac5cabfba8b5e8b6a9482191a715c616a`;
-- Pages runtime deployment: run `33533099042`; later supporting-copy publication, if any, remains a separate identity;
+- Pages runtime deployment: run `33533099042`; publication-only supporting-copy run `33534199401` remains a separate identity;
 - credentialed V3 Browser/Sandbox: run [`33533170189`](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33533170189), [receipt](../evidence/live/smartcart-solari-v3-qualification-33533170189.json);
 - protected production deployment: [receipt](../evidence/live/smartcart-solari-v3-deployment-772e65b-20260901.json);
 - deterministic checks: 72/72 focused backend, 202/202 full backend, 22/22 native, 7/7 web, npm audit 0;
 - generic unsigned Release-SolariBeta build: PASS;
 - signed archive / physical App Attest / TestFlight / App Store / downloadable app: PENDING.
 
-A future fresh review should inspect the post-fix code and immutable runtime receipts while keeping later publication-only changes separate. Until that happens, this log makes no final reviewer-score or independent-signoff claim.
+The post-fix review inspected public head `bc083d6` and runtime `772e65b`. This log records that internal conclusion while continuing to treat runtime receipts, tests, and explicit PENDING gates as the authoritative evidence.
