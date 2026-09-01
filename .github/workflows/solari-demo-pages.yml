@@ -1,9 +1,10 @@
-name: Deploy Solari submission demo
+name: Deploy Solari submission case study
 
 on:
   push:
     branches: [main]
     paths:
+      - "website/solari-case-study/**"
       - "website/solari-demo/**"
       - "contracts/fixtures/v1/solari/**"
       - "evidence/live/**"
@@ -25,16 +26,23 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Validate the replay UI and controlled retailer surface
+      - name: Validate the case study, replay UI, and controlled retailer surface
         run: |
+          python3 website/solari-case-study/validate.py
+          python3 -m unittest discover -s website/solari-case-study/tests -v
+          node --check website/solari-case-study/script.js
           python3 website/solari-demo/validate.py
           python3 -m unittest discover -s website/solari-demo/tests -v
           node --check website/solari-demo/app.js
           node --check website/solari-demo/retailer/retailer.js
 
-      - name: Build a minimal Pages artifact
+      - name: Build the Pages case-study artifact
         run: |
           mkdir -p _site/website _site/contracts/fixtures/v1 _site/evidence
+          cp website/solari-case-study/index.html _site/index.html
+          cp website/solari-case-study/styles.css _site/styles.css
+          cp website/solari-case-study/script.js _site/script.js
+          cp -R website/solari-case-study/assets _site/assets
           cp -R website/solari-demo _site/website/solari-demo
           cp -R contracts/fixtures/v1/solari _site/contracts/fixtures/v1/solari
           cp -R evidence/live _site/evidence/live
@@ -47,7 +55,7 @@ jobs:
   deploy:
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}website/solari-demo/
+      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     needs: verify-and-package
     steps:

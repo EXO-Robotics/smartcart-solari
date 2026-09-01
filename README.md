@@ -1,5 +1,7 @@
 # SmartCart Solari
 
+**Start with the product transformation:** [open the SmartCart × Solari interactive case study](https://exo-robotics.github.io/smartcart-solari/). It shows the native before/after flow, why Browser and Sandbox have necessary jobs, and how the same Solari execution layer can upgrade frontends beyond grocery planning. The older [evidence replay](https://exo-robotics.github.io/smartcart-solari/website/solari-demo/) remains available as a separate, explicitly labeled artifact.
+
 SmartCart Solari is an experimental, isolated fork of [SmartCart](https://github.com/EXO-Robotics/smartcart-ios) asking:
 
 > Can Solari turn SmartCart's retailer handoff into a useful agentic shopping workflow without violating user trust?
