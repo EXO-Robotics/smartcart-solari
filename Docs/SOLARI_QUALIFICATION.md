@@ -38,7 +38,7 @@ Solari Browser must observe exact **current-v4** / synthetic owned pages. Solari
 | Web/owned catalog | **PASS** | 19 pages / 8 groups; 7/7 web tests; Pages run `33545270825` |
 | Unsigned Release-SolariBeta build | **PASS** | generic iOS Simulator, signing disabled |
 | Credentialed V4 Browser+Sandbox | **PASS** | run `33545361427`; 8 requirements, 16 observations, 8 decisions; $0.63 bounded low-waste tradeoff; sanitized receipt |
-| V4 beta deployment | **PASS** | `dpl_8pdJYo4v3kjUiosFfNHDcfQh2v2s`; publication `0decb99`; READY; health 200; challenge 201 |
+| V4 beta deployment | **PASS** | `dpl_2ucnyzesiFFFf7bU7bFraDaVerPh`; publication `5164426`; READY; health 200; challenge 201 |
 | Signed archive | **PENDING** | matching team capabilities/profiles |
 | Signed App Attest request | **PENDING** | physical-device registration, assertion, request, replay rejection |
 | TestFlight / App Store / downloadable app | **PENDING** | distribution evidence |
@@ -46,7 +46,7 @@ Solari Browser must observe exact **current-v4** / synthetic owned pages. Solari
 
 The V4 provider receipt is [smartcart-solari-v4-qualification-33545361427.json](../evidence/live/smartcart-solari-v4-qualification-33545361427.json). It records a complete $24.83 synthetic basket versus the $24.20 cheapest adequate basket, a $0.63 bounded premium, a 0.985784 reduction in the dimensionless package-overage score, request/result digests, operator-only access boundary, exact commit, timestamps, provider provenance, and enforced cleanup. It does not claim signed App Attest or device execution.
 
-The V4 [deployment receipt](../evidence/live/smartcart-solari-v4-deployment-0decb99-20260901.json) records production deployment **dpl_8pdJYo4v3kjUiosFfNHDcfQh2v2s** from clean publication commit **0decb999531d7faad44e7e1a74ecd84de01932ac**. READY, health 200, and challenge 201 prove the protected boundary is deployed; they do not prove a signed iPhone request or provider execution through that route.
+The V4 [deployment receipt](../evidence/live/smartcart-solari-v4-deployment-5164426-20260901.json) records production deployment **dpl_2ucnyzesiFFFf7bU7bFraDaVerPh** from clean publication commit **5164426e39ec5c5524135e82e6689a9fce923387**. READY, health 200, and challenge 201 prove the protected boundary is deployed; they do not prove a signed iPhone request or provider execution through that route.
 
 ## Required V4 checks
 

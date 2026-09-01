@@ -83,7 +83,7 @@ V4 is frozen and credential-qualified at runtime **931e03468b1556e42a61e68d6c4e2
 
 That provider receipt is server-side operator qualification. It is not signed native App Attest, real-retailer, device, TestFlight, App Store, or downloadable-app proof. Those gates remain **PENDING**.
 
-Publication commit **0decb999531d7faad44e7e1a74ecd84de01932ac** is deployed to the protected beta alias. Vercel deployment **dpl_8pdJYo4v3kjUiosFfNHDcfQh2v2s** reached READY; `/health` returned 200 and the App Attest challenge route returned 201. The [deployment receipt](evidence/live/smartcart-solari-v4-deployment-0decb99-20260901.json) intentionally does not call that smoke a signed native or provider execution.
+Publication commit **5164426e39ec5c5524135e82e6689a9fce923387** is deployed to the protected beta alias. Vercel deployment **dpl_2ucnyzesiFFFf7bU7bFraDaVerPh** reached READY; `/health` returned 200 and the App Attest challenge route returned 201. The [deployment receipt](evidence/live/smartcart-solari-v4-deployment-5164426-20260901.json) intentionally does not call that smoke a signed native or provider execution.
 
 Historical V3 evidence is preserved because it proves the narrower predecessor actually ran:
 

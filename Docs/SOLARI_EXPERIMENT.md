@@ -121,7 +121,7 @@ The V4 provider path is frozen and credential-qualified:
 - focused provider/qualification tests 21/21, full backend 214/214, focused native 28/28, web 7/7, npm audit 0, unsigned Release-SolariBeta build PASS;
 - public V4 owned catalog and Pages deployment [33545270825](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33545270825).
 
-V4 beta deployment is also complete at publication commit **0decb99**: deployment **dpl_8pdJYo4v3kjUiosFfNHDcfQh2v2s** is READY and the [sanitized deployment receipt](../evidence/live/smartcart-solari-v4-deployment-0decb99-20260901.json) records health 200 and challenge 201 without claiming signed-device execution.
+V4 beta deployment is also complete at publication commit **5164426**: deployment **dpl_2ucnyzesiFFFf7bU7bFraDaVerPh** is READY and the [sanitized deployment receipt](../evidence/live/smartcart-solari-v4-deployment-5164426-20260901.json) records health 200 and challenge 201 without claiming signed-device execution.
 
 The following remain **PENDING**:
 
