@@ -1,0 +1,91 @@
+{
+  "artifactKind": "normalized-structured-review",
+  "reviewer": "Grok 4.6",
+  "reviewStance": "fresh-independent-red-team",
+  "sessionID": "01a05c83-e949-7243-ab59-7570237d3a31",
+  "reviewID": "redteam-29ed080c495bdc39",
+  "reviewedCommit": "29ed080c495bdc390ed997b3bef265411552e584",
+  "repository": "https://github.com/EXO-Robotics/smartcart-solari",
+  "liveStaticDemo": "https://exo-robotics.github.io/smartcart-solari/website/solari-demo/",
+  "score": 9.7,
+  "counts": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 3
+  },
+  "agreements": {
+    "solariMateriallyImprovesSmartCart": true,
+    "userTrustModelDefensible": true,
+    "claimsEvidenceBacked": true,
+    "effectivelyTenOfTen": true
+  },
+  "hiringQuestionAnswer": "Yes, within the explicitly bounded V1 contract.",
+  "verifiedPriorDispositions": [
+    {
+      "id": "M-01",
+      "status": "fixed",
+      "evidence": "The public demo has no 96% claim; qualitative confidence is derived from selected observation evidence and guarded by validation."
+    },
+    {
+      "id": "L-01",
+      "status": "fixed",
+      "evidence": "Alternative selection persists, pound/ounce math normalizes, and incomplete what-if estimates are null/incomplete."
+    },
+    {
+      "id": "L-02",
+      "status": "accepted-residual",
+      "evidence": "Native types and surplus validation are narrower than the general wire/backend contract but fail closed and remain compatible with the frozen V1 demo."
+    },
+    {
+      "id": "L-03",
+      "status": "accepted-residual",
+      "evidence": "Per-operation timeouts and a six-candidate cap exist, but no one request-scoped deadline covers Browser plus Sandbox."
+    },
+    {
+      "id": "L-04",
+      "status": "accepted-residual",
+      "evidence": "The Browser SDK has no DNS-pin API; the application still enforces exact owned URLs, public DNS admission, final URL checks, default-off live mode, and operator auth."
+    },
+    {
+      "id": "L-05",
+      "status": "rejected-not-actionable",
+      "evidence": "Installed @solarisdk/sandbox 0.1.2 exposes no SandboxClient close/dispose API; the created Sandbox is killed in finally."
+    }
+  ],
+  "findings": [
+    {
+      "id": "L-02",
+      "severity": "Low",
+      "summary": "Native Codable types and surplus checks are narrower than the general wire schema and backend mixed-unit math.",
+      "whyNotHigher": "Frozen demo observations are non-null and same-unit; native rejects unsupported mixed-unit decisions rather than computing a wrong basket.",
+      "recommendation": "Before native live Demo Grocer ingestion, decode nullable observation fields and share ounce-base normalization semantics."
+    },
+    {
+      "id": "L-03",
+      "severity": "Low",
+      "summary": "Live research has per-operation timeouts and a six-candidate cap but no single aggregate deadline.",
+      "whyNotHigher": "Live mode is default-off, operator-gated, candidate-capped, and rate-limited.",
+      "recommendation": "Add a request-scoped deadline or AbortSignal before production live enablement."
+    },
+    {
+      "id": "L-04",
+      "severity": "Low",
+      "summary": "Remote Browser DNS cannot be pinned through the current SDK, and the limiter keys on forwarded client-address metadata.",
+      "whyNotHigher": "Exact HTTPS URL admission, public-DNS checks, post-navigation URL validation, owned-host scope, and operator authentication bound the current demo.",
+      "recommendation": "Use locked owned DNS and a trusted proxy/client-address boundary in production."
+    }
+  ],
+  "verifiedEvidence": [
+    "HEAD and public commit match 29ed080c495bdc390ed997b3bef265411552e584",
+    "Public Pages demo is reachable and serves the remediated code",
+    "Focused Solari suite passes 25 of 25",
+    "Demo validation and unit tests pass",
+    "Browser and Sandbox providers are executable, distinct, and non-cosmetic",
+    "Fixture replay explicitly states Browser and Sandbox were not run",
+    "No credentialed live receipt is claimed without SOLARI_API_KEY",
+    "No retailer account, cart, checkout, payment, or autonomous purchase authority exists"
+  ],
+  "overallVerdict": "No legitimate Critical, High, or Medium findings remain. Solari materially improves SmartCart, the trust model is defensible, claims are evidence-backed, and the bounded submission is effectively 10/10 despite three disclosed Low production-hardening items.",
+  "note": "This file is a normalized record of Grok's final structured verdict. It excludes model reasoning and does not claim to be a verbatim transcript."
+}

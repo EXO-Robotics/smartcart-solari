@@ -138,7 +138,7 @@ npm test
 
 Run the focused contract/API/Demo Grocer/fixture commands and repository claim/secret checks listed in [the demo runbook](Docs/SOLARI_DEMO_RUNBOOK.md), then the targeted native tests/build for the recommendation UI seam. The dependency-free submission UI can be served from the repository root at [`/website/solari-demo/`](website/solari-demo/README.md). Preserve test output separately from live evidence: deterministic fixtures prove replay behavior only.
 
-The skeptical-review method, accepted fixes, residual Low findings, and justified SDK-specific rejection are recorded in [the Solari red-team record](Docs/SOLARI_RED_TEAM.md). A score is attributable only to the exact commit named in its review receipt.
+The skeptical-review method, accepted fixes, residual Low findings, and justified SDK-specific rejection are recorded in [the Solari red-team record](Docs/SOLARI_RED_TEAM.md). Exact commands/results, deployment identity, environment-limited evidence, and final score are frozen in [the qualification receipt](Docs/SOLARI_QUALIFICATION.md). A score is attributable only to the exact commit named in its review receipt.
 
 ## Submission provenance
 
