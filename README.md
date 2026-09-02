@@ -12,26 +12,18 @@ The shopper still makes the final decision.
 
 ## The problem before Solari
 
-SmartCart already knew how to:
-
-- turn recipes into ingredients
-- remove items the shopper already has
-- combine quantities across a meal
-- prepare a shopping list
-- hand the shopper off to a retailer
-
-But that handoff still left real work to do. A recipe might need 1.5 lb of chicken, 12 oz of pasta, and 3 oz of Parmesan, while the store sells different package sizes at different prices. The shopper had to search each item, compare packages, and work out how much food they would actually be buying.
+SmartCart already turned recipes into ingredients, removed pantry items, combined quantities, and prepared the retailer handoff. But a recipe might need 1.5 lb of chicken while a store sells several package sizes at different prices. The shopper still had to search every item and decide which packages made sense.
 
 ## What Solari changed
 
-SmartCart now offers an optional **Research current options** step before the normal retailer handoff.
+SmartCart now offers an optional **Research current options** step:
 
 - **Solari Browser** opens approved rendered product pages and records the product, package size, visible price, source, and observation time.
 - **Solari Sandbox** considers those observations together and chooses a complete basket under SmartCart's cost and overbuying rules.
 - **SmartCart** verifies the evidence and arithmetic, then explains the recommendation in its native interface.
-- **The shopper** can accept the research, edit the list, refresh it, or continue with the original SmartCart flow.
+- **The shopper** accepts the research, edits the list, or continues with normal SmartCart.
 
-SmartCart still owns the recipe, pantry, quantities, user experience, and final action. Solari adds the research and decision layer that was missing.
+SmartCart still owns the recipe, pantry, quantities, interface, and final action. Solari adds the missing research and decision layer.
 
 ## A real decision, not just a price scrape
 
@@ -68,7 +60,7 @@ If SmartCart cannot safely research an item, that item stays on the original sho
 
 ## Try it
 
-The fastest path is the **[public case study](https://exo-robotics.github.io/smartcart-solari/)**. Press **Research this meal** to request the fixed eight-item Demo Grocer run. A fresh request may execute Solari Browser and Sandbox and provide a short-lived Browser replay. Rate-limited visitors receive the last verified result, clearly labeled as cached rather than live.
+The fastest path is the **[public case study](https://exo-robotics.github.io/smartcart-solari/)**. Press **Research this meal** to request the fixed eight-item Demo Grocer run. A fresh request may run Browser and Sandbox; rate-limited visitors receive the last verified result, clearly labeled as cached.
 
 You can also:
 
@@ -77,32 +69,32 @@ You can also:
 - inspect the [credentialed GitHub Actions run](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33546912947); or
 - run the small [Solari Cookbook example](https://github.com/EXO-Robotics/solari-cookbook/tree/main/examples/smartcart-basket-research-ts).
 
-The native recordings are labeled **DEBUG RECORDED REPLAY · NOT LIVE**. They show the iPhone experience; the receipts above prove the separate credentialed provider runs.
+The native recordings are labeled **DEBUG RECORDED REPLAY · NOT LIVE**. They show the iPhone experience; the receipts prove the separate provider runs.
 
 ## Why Browser and Sandbox?
 
 ### Browser gathers the evidence
 
-Product pages are rendered web interfaces, not stable rows in SmartCart's database. Browser gives the backend a controlled way to observe the package identity, quantity, visible synthetic price, source, and time from an approved page. The qualified catalog intentionally puts price data in rendered JavaScript so a static page download is not enough.
+Product pages are rendered web interfaces, not stable database rows. Browser records package identity, quantity, visible synthetic price, source, and time from approved pages. The qualified catalog renders prices with JavaScript, so a static download is not enough.
 
 ### Sandbox makes the basket decision
 
-Choosing a package on each line independently can create a cheap but wasteful basket. Sandbox evaluates the allowed combinations across the trip, finds the cheapest adequate reference, and then looks for less overbuying within the shopper's small premium limit. SmartCart verifies coverage, prices, evidence membership, and policy limits before it displays the result.
+Sandbox compares complete baskets, not isolated products. It finds the cheapest basket that buys enough of every ingredient, then may spend up to $0.75 more when another basket meaningfully reduces leftovers. SmartCart checks the evidence and arithmetic before showing the result.
 
 ### Why no Desktop?
 
-Desktop is intentionally absent because Browser and Sandbox already perform the two jobs this workflow needs; adding another surface would not improve the shopper's result.
+Desktop is intentionally absent because it has no necessary job in this workflow.
 
 ## Trust boundaries
 
-- The qualified catalog is **SmartCart's owned synthetic Demo Grocer**, not a commercial retailer. No current Walmart, Target, or other commercial-retailer pricing is claimed.
-- Historical Walmart data in the repository is fixture replay only.
-- Solari never receives a retailer login and never changes a cart, places an order, submits payment, or checks out.
-- Solari and backend credentials remain server-side; no permanent provider or operator secret ships in the app or web page.
-- SmartCart rejects missing, stale, mismatched, or incomplete evidence instead of inventing a price.
+- Demo Grocer is synthetic; no current commercial-retailer pricing is claimed. Historical Walmart data is fixture replay only.
+- No retailer login, cart change, payment, purchase, or checkout occurs.
+- Browser sessions are fresh and logged out.
+- Credentials stay server-side.
+- If evidence is missing, stale, ambiguous, or mismatched, SmartCart does not invent a result.
 - The shopper controls the final retailer handoff.
 
-The public route is fixed to one owned meal and one allowlisted catalog. It has quotas, cancellation, cleanup, and a server-side kill switch. The app's protected beta routes remain separate from that public demonstration.
+The public route accepts one owned meal and one allowlisted catalog. Full boundaries are in the [threat model](Docs/SOLARI_THREAT_MODEL.md).
 
 ## Proof
 
@@ -123,21 +115,20 @@ The provider receipt proves server-side Solari execution. It does not prove a si
 
 ## Architecture and detailed evidence
 
-The implementation uses versioned request, observation, decision, and result contracts shared by the backend and native client. Deep implementation and qualification details live outside this README:
+The backend and native client share versioned evidence contracts. The exact rules and receipts live here:
 
 - [Experiment and responsibility split](Docs/SOLARI_EXPERIMENT.md)
 - [Qualification matrix](Docs/SOLARI_QUALIFICATION.md)
 - [Threat model](Docs/SOLARI_THREAT_MODEL.md)
 - [Demo and provider runbook](Docs/SOLARI_DEMO_RUNBOOK.md)
-- [Development-only App Attest lane](Docs/SOLARI_DEVELOPMENT_LANE.md)
 - [Submission evidence packet](Docs/SOLARI_SUBMISSION_PACKET.md)
 - [V4 contracts](contracts/v4/solari/)
 
-The frozen provider-qualified runtime is commit [`2dd4e6f`](https://github.com/EXO-Robotics/smartcart-solari/commit/2dd4e6f30be8286a3a8f465c92a56427828a60e2). Its [sanitized receipt](evidence/live/smartcart-solari-v4-qualification-33546912947.json) binds the request and result to that exact run. Later commits add the public route, presentation, and documentation without rewriting the frozen receipt.
+The frozen provider-qualified runtime is commit [`2dd4e6f`](https://github.com/EXO-Robotics/smartcart-solari/commit/2dd4e6f30be8286a3a8f465c92a56427828a60e2). Its [sanitized receipt](evidence/live/smartcart-solari-v4-qualification-33546912947.json) binds the request and result to that run.
 
 ## Run it locally
 
-Requirements: Xcode, Node.js, npm, and Python 3. Solari credentials are only needed for an authorized provider run and belong on the backend.
+Requirements: Xcode, Node.js, npm, and Python 3. Solari credentials are only needed for an authorized provider run and stay on the backend.
 
 ~~~bash
 git clone https://github.com/EXO-Robotics/smartcart-solari.git
@@ -148,7 +139,7 @@ npm --prefix backend test
 python3 website/solari-demo/validate.py
 ~~~
 
-For the native recorded-replay path, open `SmartCart.xcodeproj`, choose the `SmartCart` scheme and an iPhone Simulator, then run Debug. From Home, tap **Open Solari Demo Meal**, continue through **Recipe Review**, and tap **Research current options**.
+To see the native replay, open `SmartCart.xcodeproj`, run the `SmartCart` scheme in an iPhone Simulator, and choose **Open Solari Demo Meal** from Home.
 
 For deployment or a real provider qualification, use the [runbook](Docs/SOLARI_DEMO_RUNBOOK.md). A passing health check is not provider proof, and a Simulator build is not device or App Store proof.
 
