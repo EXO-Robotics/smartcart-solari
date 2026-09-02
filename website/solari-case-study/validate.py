@@ -32,6 +32,8 @@ REQUIRED_PHRASES = {
 }
 FORBIDDEN_SECTION_MARKERS = (
     'class="hero-proof-line',
+    'class="frontend-selector',
+    'data-frontend=',
     'class="transformation section"',
     'class="execution section"',
     'class="proof section"',
@@ -196,9 +198,6 @@ def inspect_case_study(root: Path = ROOT, receipt_path: Path = RECEIPT) -> list[
         if not target.exists():
             errors.append(f"index.html: broken local/deployment reference: {reference}")
 
-    for key in ("smartcart", "procurement", "travel", '"field-service"'):
-        if key not in javascript:
-            errors.append(f"script.js: missing replaceable frontend model {key}")
     for accessibility_key in ('"ArrowRight"', '"ArrowLeft"', "setHeroVideoMode", "heroVideo.load()"):
         if accessibility_key not in javascript:
             errors.append(f"script.js: missing accessible comparison behavior {accessibility_key}")

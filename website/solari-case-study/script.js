@@ -123,54 +123,6 @@
     });
   });
 
-  const frontends = {
-    smartcart: {
-      name: "SmartCart",
-      intent: "The recipe, pantry items, serving count, and how much of each ingredient is needed.",
-      outcome: "A shopping plan",
-      result: "Suggested products, package counts, estimated total, and the source behind each price."
-    },
-    procurement: {
-      name: "Procurement",
-      intent: "The parts list, quantities, approved suppliers, and available budget.",
-      outcome: "A supplier plan",
-      result: "Comparable offers, the right quantities, policy checks, total cost, and links back to each source."
-    },
-    travel: {
-      name: "Travel planner",
-      intent: "The travel dates, route, accessibility needs, preferences, and budget.",
-      outcome: "A travel plan",
-      result: "Options that fit the trip, when they were found, what is unclear, and links for the traveler to decide."
-    },
-    "field-service": {
-      name: "Field service",
-      intent: "The service problem, compatible parts, needed quantities, and approved suppliers.",
-      outcome: "A parts plan",
-      result: "Compatible options, the evidence behind each match, the needed quantities, total cost, and supplier links."
-    }
-  };
-
-  const frontendButtons = Array.from(document.querySelectorAll("[data-frontend]"));
-  const frontendName = document.querySelector("[data-frontend-name]");
-  const frontendIntent = document.querySelector("[data-frontend-intent]");
-  const frontendOutcome = document.querySelector("[data-frontend-outcome]");
-  const frontendResult = document.querySelector("[data-frontend-result]");
-
-  frontendButtons.forEach((button) => {
-    button.addEventListener("click", () => {
-      const key = button.dataset.frontend;
-      const model = key ? frontends[key] : null;
-      if (!model) return;
-      if (frontendName) frontendName.textContent = model.name;
-      if (frontendIntent) frontendIntent.textContent = model.intent;
-      if (frontendOutcome) frontendOutcome.textContent = model.outcome;
-      if (frontendResult) frontendResult.textContent = model.result;
-      frontendButtons.forEach((candidate) => {
-        candidate.setAttribute("aria-selected", String(candidate === button));
-      });
-    });
-  });
-
   const heroSystem = document.querySelector(".hero-system");
   const allowsMotion = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   if (heroSystem && allowsMotion && window.matchMedia("(pointer: fine)").matches) {

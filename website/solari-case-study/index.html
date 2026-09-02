@@ -69,18 +69,11 @@
           <p>SmartCart sends the shopping list to Solari. Browser gathers product and package details from an approved source. Sandbox compares the options. SmartCart brings the answer back to the shopper.</p>
         </div>
 
-        <div class="frontend-selector reveal" role="tablist" aria-label="See how Solari can support different products">
-          <button type="button" role="tab" aria-selected="true" data-frontend="smartcart">SmartCart</button>
-          <button type="button" role="tab" aria-selected="false" data-frontend="procurement">Procurement</button>
-          <button type="button" role="tab" aria-selected="false" data-frontend="travel">Travel</button>
-          <button type="button" role="tab" aria-selected="false" data-frontend="field-service">Field service</button>
-        </div>
-
-        <div class="architecture-canvas reveal" aria-live="polite">
+        <div class="architecture-canvas reveal">
           <div class="architecture-column architecture-input">
             <span class="architecture-index">01 / WHAT THE PRODUCT KNOWS</span>
-            <strong data-frontend-name>SmartCart</strong>
-            <p data-frontend-intent>The recipe, pantry items, serving count, and how much of each ingredient is needed.</p>
+            <strong>SmartCart</strong>
+            <p>The recipe, pantry items, serving count, and how much of each ingredient is needed.</p>
             <div class="payload-lines" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
           </div>
 
@@ -99,12 +92,12 @@
 
           <div class="architecture-column architecture-output">
             <span class="architecture-index">03 / WHAT THE USER GETS</span>
-            <strong data-frontend-outcome>A shopping plan</strong>
-            <p data-frontend-result>Suggested products, package counts, estimated total, and the source behind each price.</p>
+            <strong>A shopping plan</strong>
+            <p>Suggested products, package counts, estimated total, and the source behind each price.</p>
             <div class="decision-signal"><i></i><span>Checked again by SmartCart</span></div>
           </div>
         </div>
-        <p class="pattern-boundary">SmartCart is the working use case and uses an owned demo retailer for this submission. Procurement, travel, and field service show where the same Solari workflow could be applied next.</p>
+        <p class="pattern-boundary">This SmartCart submission uses an owned demo retailer so the Solari workflow can be shown without claiming commercial-retailer prices.</p>
       </div>
     </section>
 

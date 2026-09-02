@@ -425,13 +425,7 @@ h1 em, h2 em { color: var(--gold); font-style: normal; font-weight: 600; }
 .platform-heading { position: relative; max-width: 900px; }
 .platform-heading > p:not(.kicker) { max-width: 700px; color: #989c95; font-size: 18px; }
 
-.frontend-selector { position: relative; display: flex; flex-wrap: wrap; gap: 0; margin: 62px 0 24px; border-bottom: 1px solid var(--line); }
-.frontend-selector button { position: relative; min-height: 52px; padding: 0 22px; border: 0; background: none; color: #676c66; cursor: pointer; font-family: ui-monospace, Menlo, monospace; font-size: 10px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
-.frontend-selector button::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--gold); transform: scaleX(0); transition: transform 220ms var(--ease); }
-.frontend-selector button[aria-selected="true"] { color: var(--ink); }
-.frontend-selector button[aria-selected="true"]::after { transform: scaleX(1); }
-
-.architecture-canvas { position: relative; display: grid; grid-template-columns: 1fr 100px 1fr 100px 1fr; align-items: stretch; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.architecture-canvas { position: relative; display: grid; grid-template-columns: 1fr 100px 1fr 100px 1fr; align-items: stretch; margin-top: 62px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .architecture-column { min-height: 350px; padding: 34px 28px; }
 .architecture-column strong { display: block; margin-bottom: 14px; font-size: clamp(25px, 2.5vw, 38px); letter-spacing: -.04em; }
 .architecture-column p { max-width: 330px; color: #81867f; font-size: 13px; }
@@ -557,9 +551,7 @@ footer > div a:hover { color: var(--gold); }
   .proof-separation > div { grid-template-columns: 1fr; gap: 7px; }
   .native-film-stage { padding: 32px 18px 22px; }
   .native-film-stage video { max-height: 72svh; }
-  .frontend-selector { display: grid; grid-template-columns: 1fr 1fr; }
-  .frontend-selector button { border-bottom: 1px solid var(--line); }
-  .architecture-canvas { grid-template-columns: 1fr; }
+  .architecture-canvas { grid-template-columns: 1fr; margin-top: 42px; }
   .architecture-column { min-height: auto; padding: 30px 22px; }
   .architecture-transfer { min-height: 54px; }
   .architecture-transfer span { width: 1px; height: 100%; background: linear-gradient(var(--line), rgba(245,181,27,.6), var(--line)); }
