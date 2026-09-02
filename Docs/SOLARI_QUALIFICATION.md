@@ -31,11 +31,12 @@ Solari Browser must observe exact **current-v4** / synthetic owned pages. Solari
 | Surface | Status | Required proof |
 | --- | --- | --- |
 | Frozen V4 commit | **PASS** | `2dd4e6f30be8286a3a8f465c92a56427828a60e2` |
-| Focused backend | **PASS** | 21/21 V3/V4 qualification/provider/DP checks |
-| Full backend | **PASS** | 214/214 |
+| Solari-focused backend | **PASS** | 87/87 Solari API, trust-boundary, qualification, provider, and DP checks |
+| Full backend | **PASS** | 217/217 |
 | Dependency audit | **PASS** | 0 vulnerabilities |
-| Focused native | **PASS** | 28/28 on iPhone 17 Pro / iOS 26.5 Simulator |
-| Web/owned catalog | **PASS** | 19 pages / 8 groups; 7/7 web tests; Pages run `33546848706` |
+| Focused native | **PASS** | 29/29 on iPhone 17 Pro / iOS 26.5 Simulator, including complete eight-line demo admission |
+| Case study | **PASS** | 3/3 receipt-bound presentation tests; desktop and 390 px responsive interaction verified |
+| Replay/owned catalog | **PASS** | 19 pages / 8 groups; 7/7 replay tests; Pages run `33546848706` |
 | Unsigned Release-SolariBeta build | **PASS** | generic iOS Simulator, signing disabled |
 | Credentialed V4 Browser+Sandbox | **PASS** | run `33546912947`; 8 requirements, 16 observations, 8 decisions; $0.63 premium avoids about 680 g excess chicken; sanitized receipt |
 | V4 beta deployment | **PASS** | `dpl_AkwuZcEt7N6WdFmR6Tye4BrqasbR`; publication `8f749e3`; READY; health 200; challenge 201 |
@@ -47,6 +48,19 @@ Solari Browser must observe exact **current-v4** / synthetic owned pages. Solari
 The V4 provider receipt is [smartcart-solari-v4-qualification-33546912947.json](../evidence/live/smartcart-solari-v4-qualification-33546912947.json). It records a complete $24.20 synthetic basket versus the $23.57 cheapest adequate basket and a $0.63 bounded premium to select 1.5 lb instead of 3 lb of chicken, avoiding about 680 g / 1.5 lb of excess. It also binds request/result digests, operator-only access boundary, exact commit, timestamps, provider provenance, and enforced cleanup. It does not claim signed App Attest or device execution.
 
 The V4 [deployment receipt](../evidence/live/smartcart-solari-v4-deployment-8f749e3-20260901.json) records production deployment **dpl_AkwuZcEt7N6WdFmR6Tye4BrqasbR** from clean publication commit **8f749e33808119ee403142929da5b757ed934e35**. READY, health 200, and challenge 201 prove the protected boundary is deployed; they do not prove a signed iPhone request or provider execution through that route.
+
+## Presentation release gate
+
+The 2026-09-01 presentation candidate adds a development-only eight-ingredient entry point and two hash-bound before/after recordings without changing the frozen V4 Browser/Sandbox runtime. A fresh iPhone 17 Pro / iOS 26.5 Simulator exercise completed:
+
+1. **Open Solari Demo Meal** from Home;
+2. verify eight reviewed mass, volume, and count requirements;
+3. tap **Research current options**;
+4. reach **8 of 8 prices found**, synthetic **$26.21** total, and **$6.55 per serving** in the explicit Debug replay;
+5. choose **Looks good — continue shopping**;
+6. return to SmartCart's original in-app retailer setup without transferring Demo Grocer products or prices.
+
+This UI exercise proves the recorded-fixture native path. The separate immutable V4 receipt remains the provider-execution proof.
 
 ## Required V4 checks
 

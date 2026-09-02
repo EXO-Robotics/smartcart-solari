@@ -1,14 +1,26 @@
-# SmartCart Solari
+# SmartCart × Solari
 
-**Start with the product transformation:** [open the SmartCart × Solari interactive case study](https://exo-robotics.github.io/smartcart-solari/). It shows the native before/after flow, why Browser and Sandbox have necessary jobs, and how the same Solari execution layer can upgrade frontends beyond grocery planning. The older [evidence replay](https://exo-robotics.github.io/smartcart-solari/website/solari-demo/) remains available as a separate, explicitly labeled artifact.
+> SmartCart already knew what the shopper needed. Solari lets it research and evaluate which observed packages sensibly satisfy the trip—without taking control away from the shopper.
 
-SmartCart Solari is an experimental, isolated fork of [SmartCart](https://github.com/EXO-Robotics/smartcart-ios) asking:
+[![SmartCart learned to see the shelf with Solari](website/solari-case-study/assets/social-preview.jpg)](https://exo-robotics.github.io/smartcart-solari/)
+
+**[Watch the before/after case study](https://exo-robotics.github.io/smartcart-solari/)** · **[Inspect the credentialed Browser + Sandbox receipt](evidence/live/smartcart-solari-v4-qualification-33546912947.json)** · **[Run the native replay](#run-the-native-replay)**
+
+This isolated public fork of [SmartCart](https://github.com/EXO-Robotics/smartcart-ios) answers one bounded product question:
 
 > Can Solari turn SmartCart's retailer handoff into a useful agentic shopping workflow without violating user trust?
 
-The V4 product path starts inside native SmartCart. Any trip with waiting items may offer **Research current options** after recipe extraction, pantry exclusion, shopping-list aggregation, and SmartCart's existing product preparation. SmartCart admits only eligible exact matches from the owned Demo Grocer catalog, researches those lines, and reports **Researched X of Y items**. Every skipped line remains visible with a reason and continues unchanged through the normal SmartCart retailer handoff.
+| Before Solari | After Solari |
+| --- | --- |
+| SmartCart extracts the recipe, applies pantry exclusions, aggregates the list, and opens a retailer. The shopper still has to search and compare packages. | The shopper requests research. Solari Browser observes approved product evidence, Solari Sandbox evaluates complete baskets, SmartCart verifies the result, and the shopper keeps the final handoff. |
 
-This is not arbitrary ingredient coverage. V4 supports 19 owned synthetic candidates in eight seeded groups: chicken, pasta, olive oil, heavy cream, Parmesan, garlic, lemon, and parsley. A request may contain 1–12 eligible requirements, at most three candidates per requirement, and at most 24 observations. Quantities are normalized as mass, volume, or count.
+The frozen V4 qualification researched **8 requirements** from **16 fresh Browser observations**. Sandbox selected a synthetic **$24.20** basket instead of the **$23.57** cheapest adequate basket—spending **$0.63** within a $0.75 cap to avoid about **680 g / 1.5 lb of excess chicken**.
+
+**Evidence boundary:** this proves real Solari Browser and Sandbox execution against SmartCart's owned synthetic Demo Grocer. The native before/after videos are recorded app flows, not provider-execution proof. Authorized commercial-retailer coverage, signed App Attest on a physical device, TestFlight, App Store distribution, and current consumer pricing remain **PENDING**.
+
+The V4 product path starts inside native SmartCart. Any trip with waiting items may offer **Research current options** after recipe extraction, pantry exclusion, shopping-list aggregation, and SmartCart's existing product preparation. SmartCart admits only eligible exact matches, researches those lines, and reports **Researched X of Y items**. Every skipped line remains visible with a reason and continues unchanged through the normal SmartCart retailer handoff.
+
+V4 supports 19 owned synthetic candidates in eight seeded groups: chicken, pasta, olive oil, heavy cream, Parmesan, garlic, lemon, and parsley. A request may contain 1–12 eligible requirements, at most three candidates per requirement, and at most 24 observations. Quantities are normalized as mass, volume, or count.
 
 ## Why Solari is necessary
 
@@ -113,6 +125,19 @@ npm --prefix backend test
 python3 website/solari-demo/validate.py
 ~~~
 
+### Run the native replay
+
+The fastest reviewer path requires no Solari credential and makes no live-provider claim:
+
+1. Open `SmartCart.xcodeproj` in Xcode.
+2. Select the `SmartCart` scheme and an iPhone Simulator.
+3. Run the Debug configuration.
+4. On Home, tap **Open Solari Demo Meal**.
+5. Continue through **Recipe Review** and tap **Research current options**.
+6. Inspect the eight-item price check, then choose **Looks good — continue shopping** or **Edit my list**.
+
+The screen is labeled **DEBUG RECORDED REPLAY · NOT LIVE**. Real credentialed Browser + Sandbox execution is proven separately by the immutable V4 receipt linked above.
+
 Exercise focused native contract tests with the SmartCart scheme, then build the beta configuration without implying signing:
 
 ~~~bash
@@ -126,7 +151,7 @@ xcodebuild \
 
 For a real Xcode-installed development-device run, select `SmartCart-SolariDevelopment`. Its Run action points at `/dev`; its Archive action intentionally uses `Release-SolariBeta` so a distribution archive cannot inherit the development endpoint.
 
-At qualified V4 source state: focused V3/V4 qualification tests **21/21**, full backend **214/214**, focused native **28/28** on iPhone 17 Pro / iOS 26.5 Simulator, web **7/7**, dependency audit **0 vulnerabilities**, and unsigned **Release-SolariBeta BUILD SUCCEEDED**. The broader native suite retains two pre-existing baseline-failing test methods; V4-focused tests are green. See [qualification](Docs/SOLARI_QUALIFICATION.md) and the [demo runbook](Docs/SOLARI_DEMO_RUNBOOK.md) for claim gates.
+At the presentation release gate: Solari-focused backend **87/87**, full backend **217/217**, focused native **29/29** on iPhone 17 Pro / iOS 26.5 Simulator, case-study **3/3**, replay/owned-catalog **7/7**, dependency audit **0 vulnerabilities**, and unsigned **Release-SolariBeta BUILD SUCCEEDED**. The complete native demo route also passed a fresh UI exercise from Home through the eight-of-eight price check and back into SmartCart's original in-app retailer setup. See [qualification](Docs/SOLARI_QUALIFICATION.md) and the [demo runbook](Docs/SOLARI_DEMO_RUNBOOK.md) for claim boundaries.
 
 ## Deployment
 
