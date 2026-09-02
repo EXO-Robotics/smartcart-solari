@@ -673,24 +673,38 @@ footer > div a:hover { color: var(--gold); }
 }
 .hero-play {
   display: inline-flex;
-  min-height: 34px;
+  min-height: 54px;
   align-items: center;
-  gap: 8px;
-  padding: 0 11px;
-  border: 1px solid rgba(245,181,27,.34);
-  border-radius: 9px;
-  background: rgba(245,181,27,.07);
-  color: var(--gold-soft);
+  justify-content: center;
+  gap: 11px;
+  padding: 0 20px;
+  border: 1px solid var(--gold);
+  border-radius: 14px;
+  background: var(--gold);
+  box-shadow: 0 10px 30px rgba(245,181,27,.2);
+  color: #11130f;
   cursor: pointer;
   font-family: inherit;
-  font-size: 10px;
-  font-weight: 780;
-  letter-spacing: .06em;
+  font-size: 12px;
+  font-weight: 820;
+  letter-spacing: .07em;
   text-transform: uppercase;
-  transition: color 180ms ease, background 180ms ease, border-color 180ms ease;
+  transition: transform 180ms ease, background 180ms ease, box-shadow 180ms ease;
 }
-.hero-play:hover { border-color: rgba(245,181,27,.7); background: rgba(245,181,27,.13); color: var(--gold); }
-.hero-play i { font-size: 8px; font-style: normal; }
+.hero-play:hover { background: var(--gold-soft); box-shadow: 0 14px 34px rgba(245,181,27,.28); transform: translateY(-2px); }
+.hero-play:focus-visible { outline: 3px solid rgba(255,215,104,.55); outline-offset: 4px; }
+.hero-play i {
+  width: 25px;
+  height: 25px;
+  display: grid;
+  place-items: center;
+  padding-left: 2px;
+  border-radius: 50%;
+  background: #11130f;
+  color: var(--gold);
+  font-size: 9px;
+  font-style: normal;
+}
 .hero-play[hidden] { display: none; }
 
 .hero-video-panel {
@@ -832,8 +846,9 @@ footer > div a:hover { color: var(--gold); }
   .hero-media-switch { width: min(100%, 360px); }
   .hero-media-switch button { min-width: 0; flex: 1; padding-inline: 12px; }
   .hero-reel { gap: 11px; padding: 0; }
-  .reel-meta { width: min(100%, 360px); }
-  .hero-play { min-height: 32px; padding-inline: 9px; }
+  .reel-meta { width: min(100%, 360px); flex-direction: column; align-items: stretch; gap: 10px; }
+  .reel-meta > span { text-align: center; }
+  .hero-play { width: 100%; min-height: 52px; padding-inline: 16px; }
   .hero-video-panel, .video-pending { min-height: min(68svh, 660px); }
   .hero-reel video { height: min(68svh, 660px); }
   .hero-reel figcaption { flex-direction: column; gap: 3px; }

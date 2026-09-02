@@ -36,7 +36,7 @@
       src: "assets/smartcart-before-solari.mp4",
       poster: "assets/smartcart-before-solari-poster.jpg",
       label: "Before Solari · Original SmartCart",
-      duration: "Play 00:40",
+      duration: "Play video · 00:40",
       playLabel: "Play the 40 second Before Solari recording",
       badge: "BEFORE SOLARI · RECORDED APP FLOW · NOT LIVE.",
       caption: "Recorded SmartCart walkthrough. SmartCart prepares the recipe and shopping list, then opens the retailer. The shopper still has to compare products, packages, and prices. The retailer screen is recorded context, not a current price or availability claim."
@@ -45,7 +45,7 @@
       src: "assets/smartcart-after-solari.mp4",
       poster: "assets/smartcart-after-solari-poster.jpg",
       label: "After Solari · Pricing research",
-      duration: "Play 00:25",
+      duration: "Play video · 00:25",
       playLabel: "Play the 25 second After Solari recording",
       badge: "AFTER SOLARI · DEBUG RECORDED REPLAY · NOT LIVE.",
       caption: "Recorded SmartCart walkthrough. The app shows product options, package counts, and an estimated total. Solari does not run inside the video; the separate receipt proves the real eight-item Browser and Sandbox run."
