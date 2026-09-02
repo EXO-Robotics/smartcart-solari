@@ -31,6 +31,7 @@ REQUIRED_PHRASES = {
     "You decide what to buy",
 }
 FORBIDDEN_SECTION_MARKERS = (
+    'class="hero-proof-line',
     'class="transformation section"',
     'class="execution section"',
     'class="proof section"',
