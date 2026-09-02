@@ -224,6 +224,7 @@ def inspect_case_study(root: Path = ROOT, receipt_path: Path = RECEIPT) -> list[
         "approvedReplayURL",
         'parsed.protocol === "https:"',
         'host.endsWith(".getsolari.com")',
+        'host === "pinetree-browser-replays.s3.us-west-1.amazonaws.com"',
     ):
         if implementation_marker not in javascript:
             errors.append(f"script.js: missing bounded live-demo behavior {implementation_marker!r}")

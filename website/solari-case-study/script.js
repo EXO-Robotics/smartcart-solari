@@ -250,7 +250,9 @@
     try {
       const parsed = new URL(value);
       const host = parsed.hostname.toLowerCase();
-      const approvedHost = host === "getsolari.com" || host.endsWith(".getsolari.com");
+      const approvedHost = host === "getsolari.com"
+        || host.endsWith(".getsolari.com")
+        || host === "pinetree-browser-replays.s3.us-west-1.amazonaws.com";
       return parsed.protocol === "https:" && approvedHost ? parsed.href : null;
     } catch {
       return null;

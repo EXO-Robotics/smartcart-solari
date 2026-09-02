@@ -46,6 +46,7 @@ class CaseStudyValidationTests(unittest.TestCase):
         self.assertIn("replaceChildren", script)
         self.assertIn('parsed.protocol === "https:"', script)
         self.assertIn('host.endsWith(".getsolari.com")', script)
+        self.assertIn('host === "pinetree-browser-replays.s3.us-west-1.amazonaws.com"', script)
         self.assertIn('payload.schemaVersion !== "smartcart-solari-public-demo-response-v1"', script)
         self.assertIn('payload.deliveryMode === "cached-verified-run"', script)
         self.assertIn('payload.deliveryMode === "live" ? approvedReplayURL', script)
