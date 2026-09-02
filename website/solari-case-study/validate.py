@@ -18,7 +18,7 @@ RECEIPT = REPO_ROOT / "evidence" / "live" / "smartcart-solari-v4-qualification-3
 NATIVE_REPLAY_SHA256 = "bc8707dc41dc08895daa948b0c217c7e72044b31d22e803ea80a6e323268b699"
 ALLOWED_REMOTE_HOSTS = {"github.com", "docs.getsolari.com"}
 REQUIRED_PHRASES = {
-    "Solving real production issues",
+    "SmartCart learned to see the shelf",
     "Solari Browser",
     "Solari Sandbox",
     "The frontend is replaceable",
@@ -133,6 +133,9 @@ def inspect_case_study(root: Path = ROOT, receipt_path: Path = RECEIPT) -> list[
         'tabindex="-1" data-mode="before"',
         'aria-hidden="true" inert data-process="before"',
         'aria-hidden="true" inert data-panel="before"',
+        'aria-selected="true" tabindex="0" data-video-mode="after"',
+        'data-hero-video',
+        'data-video-pending',
     ):
         if comparison_marker not in source:
             errors.append(f"index.html: missing accessible comparison state marker {comparison_marker!r}")
@@ -144,8 +147,15 @@ def inspect_case_study(root: Path = ROOT, receipt_path: Path = RECEIPT) -> list[
     ):
         if replay_marker.casefold() not in source.casefold():
             errors.append(f"index.html: missing native/provider separation marker {replay_marker!r}")
-    if "<video controls playsinline" not in source or "autoplay" in source.casefold():
-        errors.append("index.html: native replay must be user-controlled, inline, and never autoplay")
+    video_tag = re.search(r"<video\b[^>]*>", source, flags=re.IGNORECASE)
+    if (
+        video_tag is None
+        or "playsinline" not in video_tag.group(0).casefold()
+        or "controls" in video_tag.group(0).casefold()
+        or "data-video-play" not in source
+        or "autoplay" in source.casefold()
+    ):
+        errors.append("index.html: native replay must use the authored play control, remain inline, and never autoplay")
     for pattern in FORBIDDEN_CLAIMS:
         if re.search(pattern, source, flags=re.IGNORECASE):
             errors.append(f"index.html: forbidden overclaim matched {pattern!r}")
@@ -174,7 +184,7 @@ def inspect_case_study(root: Path = ROOT, receipt_path: Path = RECEIPT) -> list[
     for key in ("smartcart", "procurement", "travel", '"field-service"'):
         if key not in javascript:
             errors.append(f"script.js: missing replaceable frontend model {key}")
-    for accessibility_key in ("panel.inert = hidden", '"ArrowRight"', '"ArrowLeft"'):
+    for accessibility_key in ("panel.inert = hidden", '"ArrowRight"', '"ArrowLeft"', "setHeroVideoMode", "heroVideo.load()"):
         if accessibility_key not in javascript:
             errors.append(f"script.js: missing accessible comparison behavior {accessibility_key}")
     if "prefers-reduced-motion" not in javascript or "prefers-reduced-motion" not in styles.read_text(encoding="utf-8"):

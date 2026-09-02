@@ -21,6 +21,88 @@
     else element.classList.add("is-visible");
   });
 
+  const heroVideoTabs = Array.from(document.querySelectorAll("[data-video-mode]"));
+  const heroReel = document.querySelector("[data-video-state]");
+  const heroVideoPanel = document.querySelector(".hero-video-panel");
+  const heroVideo = document.querySelector("[data-hero-video]");
+  const heroVideoSource = document.querySelector("[data-hero-video-source]");
+  const heroVideoPending = document.querySelector("[data-video-pending]");
+  const heroVideoLabel = document.querySelector("[data-video-label]");
+  const heroVideoDuration = document.querySelector("[data-video-duration]");
+  const heroVideoPlay = document.querySelector("[data-video-play]");
+  const heroVideoBadge = document.querySelector("[data-video-badge]");
+  const heroVideoCaption = document.querySelector("[data-video-caption]");
+  const heroVideos = {
+    before: {
+      src: "",
+      poster: "",
+      label: "Original SmartCart",
+      duration: "VIDEO PENDING",
+      badge: "BEFORE SOLARI · VIDEO PENDING",
+      caption: "The original SmartCart footage slot is ready and will be populated when the before video is supplied."
+    },
+    after: {
+      src: "assets/smartcart-solari-native-replay.mp4",
+      poster: "assets/smartcart-solari-native-replay-poster.jpg",
+      label: "Native SmartCart",
+      duration: "Play 01:04",
+      badge: "AFTER SOLARI · DEBUG RECORDED REPLAY · NOT LIVE.",
+      caption: "This predecessor three-item native replay proves the native UX and user-controlled handoff. Solari Browser and Sandbox do not run inside this clip. Credentialed V4 Browser + Sandbox execution over eight requirements is proven separately by the immutable receipt."
+    }
+  };
+
+  const setHeroVideoMode = (mode) => {
+    const model = heroVideos[mode];
+    if (!model) return;
+    heroVideo?.pause();
+    if (heroVideo) {
+      heroVideo.controls = false;
+      heroVideo.currentTime = 0;
+    }
+    heroVideoTabs.forEach((candidate) => {
+      const selected = candidate.dataset.videoMode === mode;
+      candidate.setAttribute("aria-selected", String(selected));
+      candidate.tabIndex = selected ? 0 : -1;
+      if (selected) heroVideoPanel?.setAttribute("aria-labelledby", candidate.id);
+    });
+    if (heroReel) heroReel.dataset.videoState = mode;
+    if (heroVideoLabel) heroVideoLabel.textContent = model.label;
+    if (heroVideoDuration) heroVideoDuration.textContent = model.duration;
+    if (heroVideoBadge) heroVideoBadge.textContent = model.badge;
+    if (heroVideoCaption) heroVideoCaption.textContent = model.caption;
+
+    const pending = !model.src;
+    if (heroVideoPlay) heroVideoPlay.hidden = pending;
+    if (heroVideo) heroVideo.hidden = pending;
+    if (heroVideoPending) heroVideoPending.hidden = !pending;
+    if (!heroVideo || !heroVideoSource) return;
+    if (pending) {
+      heroVideoSource.removeAttribute("src");
+      heroVideo.removeAttribute("poster");
+    } else {
+      heroVideoSource.setAttribute("src", model.src);
+      heroVideo.setAttribute("poster", model.poster);
+    }
+    heroVideo.load();
+  };
+
+  heroVideoPlay?.addEventListener("click", async () => {
+    if (!heroVideo || heroVideo.hidden) return;
+    heroVideo.controls = true;
+    try {
+      await heroVideo.play();
+      heroVideoPlay.hidden = true;
+    } catch {
+      heroVideo.controls = false;
+      heroVideoPlay.hidden = false;
+    }
+  });
+
+  heroVideo?.addEventListener("play", () => {
+    heroVideo.controls = true;
+    if (heroVideoPlay) heroVideoPlay.hidden = true;
+  });
+
   const comparison = document.querySelector("[data-comparison-state]");
   const modeButtons = Array.from(document.querySelectorAll("[data-mode]"));
   const modePanels = Array.from(document.querySelectorAll("[data-process], [data-panel]"));
@@ -40,7 +122,27 @@
       panel.setAttribute("aria-hidden", String(hidden));
       panel.inert = hidden;
     });
+    setHeroVideoMode(mode);
   };
+
+  heroVideoTabs.forEach((button) => {
+    button.addEventListener("click", () => {
+      setComparisonMode(button.dataset.videoMode);
+    });
+    button.addEventListener("keydown", (event) => {
+      const currentIndex = heroVideoTabs.indexOf(button);
+      let nextIndex = currentIndex;
+      if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % heroVideoTabs.length;
+      else if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + heroVideoTabs.length) % heroVideoTabs.length;
+      else if (event.key === "Home") nextIndex = 0;
+      else if (event.key === "End") nextIndex = heroVideoTabs.length - 1;
+      else return;
+      event.preventDefault();
+      const nextButton = heroVideoTabs[nextIndex];
+      setComparisonMode(nextButton?.dataset.videoMode);
+      nextButton?.focus();
+    });
+  });
 
   modeButtons.forEach((button) => {
     button.addEventListener("click", () => {
