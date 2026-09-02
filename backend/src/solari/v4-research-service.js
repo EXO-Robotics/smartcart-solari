@@ -126,18 +126,23 @@ function assertObservationSet(bounded, observations, validator) {
 
 export function createSolariV4ResearchService(options = {}) {
   const config = options.config ?? {}, now = options.now ?? Date.now, clock = options.deadlineClock ?? Date.now;
+  const runtimeClock = options.runtimeClock ?? Date.now;
   const accessBoundary = options.accessBoundary ?? 'apple-app-attest';
-  if (!['apple-app-attest', 'operator-qualification'].includes(accessBoundary)) throw new Error('Unsupported V4 access boundary.');
+  if (!['apple-app-attest', 'operator-qualification', 'public-demo'].includes(accessBoundary)) throw new Error('Unsupported V4 access boundary.');
   const validatorPromise = options.validator ? Promise.resolve(options.validator) : createContractValidator();
   const browser = options.browserProvider ?? new SolariBrowserProvider({ apiKey: config.solariApiKey, baseURL: config.solariBrowserBaseUrl, timeoutMs: config.solariBrowserTimeoutMs, now });
   const sandbox = options.sandboxOptimizer ?? new SolariV4SandboxOptimizer({ apiKey: config.solariApiKey, baseURL: config.solariSandboxBaseUrl, timeoutMs: config.solariSandboxTimeoutMs });
   async function research(request, { signal } = {}) {
+    const startedAt = runtimeClock();
     if (!config.solariApiKey) throw new SolariResearchError('solari_unavailable', 'Solari is unavailable because the server-side API key is not configured.', { status: 503 });
     if (!config.solariDemoRetailerBaseUrl) throw new SolariResearchError('controlled_demo_unavailable', 'The owned Demo Grocer base URL is not configured.', { status: 503 });
     await assertPublicDemoBaseURL(config.solariDemoRetailerBaseUrl, { lookup: options.demoHostLookup });
     const bounded = assertBoundedV4Request(request, config.solariDemoRetailerBaseUrl);
     const deadlineAt = clock() + config.solariRequestTimeoutMs;
-    const browserObservations = await browser.observe(bounded, { deadlineAt, clock, signal, evidenceVersion: 'v4' });
+    const browserResult = accessBoundary === 'public-demo'
+      ? await browser.observeRecorded(bounded, { deadlineAt, clock, signal, evidenceVersion: 'v4' })
+      : { observations: await browser.observe(bounded, { deadlineAt, clock, signal, evidenceVersion: 'v4' }), replay: null };
+    const browserObservations = browserResult.observations;
     const observations = browserObservations.map(structuredObservation);
     const validator = await validatorPromise;
     assertObservationSet(bounded, observations, validator);
@@ -150,7 +155,22 @@ export function createSolariV4ResearchService(options = {}) {
       retailerID: 'smartcart-demo-grocer', completedAt: new Date(completedAtMilliseconds).toISOString(), executionMode: 'live', status: optimized.basket.completeness,
       observations: completedObservations, decisions: optimized.decisions, basket: optimized.basket,
       comparison: optimized.comparison, optimizer: optimized.optimizer,
-      provenance: { browser: 'solari-browser', sandbox: 'solari-sandbox', fixtureReplay: false, accessBoundary, resourceCleanup: { browser: 'enforced-before-response', sandbox: 'enforced-before-response' } },
+      provenance: {
+        browser: 'solari-browser', sandbox: 'solari-sandbox', fixtureReplay: false, accessBoundary,
+        resourceCleanup: { browser: 'enforced-before-response', sandbox: 'enforced-before-response' },
+        ...(accessBoundary === 'public-demo' ? {
+          browserReplay: { status: 'available', url: browserResult.replay.url, expiresAt: browserResult.replay.expiresAt }
+        } : {})
+      },
+      ...(accessBoundary === 'public-demo' ? {
+        runtimeStats: {
+          wallTimeMs: Math.max(0, Math.round(runtimeClock() - startedAt)),
+          browserObservationCount: completedObservations.length,
+          sandboxDecisionCount: optimized.decisions.length,
+          skippedRequirementCount: Math.max(0, bounded.requirements.length - optimized.decisions.length),
+          costTelemetry: { status: 'unavailable' }
+        }
+      } : {}),
       trust: { priceClaim: 'observed-visible-price-not-guaranteed', accountAccessed: false, cartModified: false, checkoutAutomated: false, userControlsHandoff: true, limitations: ['Visible Demo Grocer prices are timestamped synthetic observations, not guarantees or checkout quotes.', 'Availability, tax, fees, fulfillment, and checkout totals remain unknown.', 'No account, cart, or checkout action was performed.'] }
     };
     validator.assert(V4_RESULT_SCHEMA_ID, result);
