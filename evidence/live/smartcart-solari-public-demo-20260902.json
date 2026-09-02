@@ -1,6 +1,6 @@
 {
   "receiptVersion": "smartcart-solari-public-demo-deployment-v1",
-  "recordedAt": "2026-09-02T13:43:35Z",
+  "recordedAt": "2026-09-02T14:11:02Z",
   "repository": "EXO-Robotics/smartcart-solari",
   "providerExecution": {
     "sourceTreeCommit": "50653aa5a122f7c271ed709a0a4d720c21daa8c5",
@@ -45,10 +45,10 @@
     "resultWithoutReplaySHA256": "1388fec208c92580372d29deb82021fa4180e89ab7746268b62b57aa0af8fb28"
   },
   "promotedDeployment": {
-    "sourceTreeCommit": "b452596ddb6734c463fa1fd359b7c7c88c4a225f",
+    "sourceTreeCommit": "0e92f408f4884343391d95ce9ee7b2acd260e188",
     "deploymentProvider": "vercel",
-    "deploymentID": "dpl_5DAHDV4jdbXjnzUg9osmz6bp6sWY",
-    "immutableURL": "https://smartcart-solari-beta-pjf6usldn-blake23.vercel.app",
+    "deploymentID": "dpl_3yES3rNrcH1UVoHcL4wqUcNah5JY",
+    "immutableURL": "https://smartcart-solari-beta-6p8l4984h-blake23.vercel.app",
     "alias": "https://smartcart-solari-beta.vercel.app",
     "readyState": "READY",
     "healthStatus": 200,
@@ -59,7 +59,15 @@
       "deliveryMode": "cached-verified-run",
       "fallbackReason": "visitor-daily",
       "browserReplayPresent": false
-    }
+    },
+    "recordingPolicy": "optional-research-survives-replay-unavailable",
+    "publicProgressPolicy": "neutral-pending-state-until-live-or-cache-response"
+  },
+  "pagesPublication": {
+    "sourceTreeCommit": "0e92f408f4884343391d95ce9ee7b2acd260e188",
+    "workflowRun": 33639922712,
+    "status": "success",
+    "url": "https://exo-robotics.github.io/smartcart-solari/"
   },
   "claimBoundary": {
     "proves": [
@@ -68,7 +76,8 @@
       "the Sandbox returned the verified 24.20 USD basket tradeoff",
       "Browser and Sandbox cleanup completed before the response",
       "a short-lived Browser replay was created without retaining its capability URL or session ID",
-      "the promoted deployment removes replay capability URLs from cached responses"
+      "the promoted deployment removes replay capability URLs from cached responses",
+      "the public page labels cached responses directly instead of simulating Browser or Sandbox progress"
     ],
     "doesNotProve": [
       "current or authorized commercial-retailer pricing",
