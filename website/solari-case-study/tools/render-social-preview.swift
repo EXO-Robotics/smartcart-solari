@@ -54,7 +54,7 @@ let ivory = NSColor(calibratedRed: 0.97, green: 0.96, blue: 0.91, alpha: 1)
 
 // A quiet Solari signal line gives the card energy without turning it into a tech diagram.
 amber.withAlphaComponent(0.82).setFill()
-NSBezierPath(roundedRect: NSRect(x: 82, y: 564, width: 54, height: 5), xRadius: 2.5, yRadius: 2.5).fill()
+NSBezierPath(roundedRect: NSRect(x: 82, y: 550, width: 66, height: 7), xRadius: 3.5, yRadius: 3.5).fill()
 
 func drawText(_ text: String, in rect: NSRect, font: NSFont, color: NSColor, tracking: CGFloat = 0) {
   let style = NSMutableParagraphStyle()
@@ -70,20 +70,20 @@ func drawText(_ text: String, in rect: NSRect, font: NSFont, color: NSColor, tra
 }
 
 drawText("SMARTCART  ×  SOLARI",
-         in: NSRect(x: 154, y: 546, width: 520, height: 34),
-         font: NSFont.monospacedSystemFont(ofSize: 21, weight: .semibold),
+         in: NSRect(x: 171, y: 518, width: 600, height: 60),
+         font: NSFont.monospacedSystemFont(ofSize: 42, weight: .semibold),
          color: ivory,
-         tracking: 2.2)
+         tracking: 0.8)
 
-drawText("From recipe to",
-         in: NSRect(x: 80, y: 358, width: 700, height: 102),
-         font: NSFont.systemFont(ofSize: 80, weight: .bold),
+drawText("From Recipe To",
+         in: NSRect(x: 80, y: 342, width: 700, height: 116),
+         font: NSFont.systemFont(ofSize: 92, weight: .bold),
          color: ivory,
          tracking: -2.2)
 
-drawText("priced basket.",
-         in: NSRect(x: 80, y: 260, width: 700, height: 102),
-         font: NSFont.systemFont(ofSize: 80, weight: .bold),
+drawText("Priced Basket.",
+         in: NSRect(x: 80, y: 230, width: 700, height: 116),
+         font: NSFont.systemFont(ofSize: 92, weight: .bold),
          color: amber,
          tracking: -2.2)
 
