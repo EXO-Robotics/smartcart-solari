@@ -159,7 +159,9 @@ export function createSolariV4ResearchService(options = {}) {
         browser: 'solari-browser', sandbox: 'solari-sandbox', fixtureReplay: false, accessBoundary,
         resourceCleanup: { browser: 'enforced-before-response', sandbox: 'enforced-before-response' },
         ...(accessBoundary === 'public-demo' ? {
-          browserReplay: { status: 'available', url: browserResult.replay.url, expiresAt: browserResult.replay.expiresAt }
+          browserReplay: browserResult.replay
+            ? { status: 'available', url: browserResult.replay.url, expiresAt: browserResult.replay.expiresAt }
+            : { status: 'unavailable' }
         } : {})
       },
       ...(accessBoundary === 'public-demo' ? {

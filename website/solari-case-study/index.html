@@ -58,9 +58,9 @@
     <section class="live-research section" id="live-research" aria-labelledby="live-title" data-live-research data-live-state="idle">
       <div class="section-shell live-shell">
         <div class="live-heading reveal">
-          <p class="kicker"><span></span> Live public proof</p>
-          <h2 id="live-title">Watch Solari solve<br><em>the missing step.</em></h2>
-          <p>SmartCart already knows the eight ingredients. Start one live, bounded run to see Solari research the packages and choose a complete basket.</p>
+          <p class="kicker"><span></span> Public research path</p>
+          <h2 id="live-title">Run the<br><em>missing step.</em></h2>
+          <p>SmartCart already knows the eight ingredients. Request a bounded Browser and Sandbox run. When the live allowance is unavailable, the page clearly returns the last verified result instead.</p>
         </div>
 
         <div class="live-workspace reveal" aria-live="polite" aria-busy="false" data-live-workspace>
@@ -85,11 +85,13 @@
           </div>
 
           <div class="live-state live-running" data-live-panel="running" hidden>
-            <ol class="live-progress" aria-label="Solari research progress">
-              <li data-live-step="browser"><i aria-hidden="true"></i><span><strong>Solari Browser</strong><small>Opening approved Demo Grocer product pages</small></span></li>
-              <li data-live-step="sandbox"><i aria-hidden="true"></i><span><strong>Solari Sandbox</strong><small>Comparing complete baskets for price and leftovers</small></span></li>
-              <li data-live-step="smartcart"><i aria-hidden="true"></i><span><strong>SmartCart</strong><small>Checking coverage, totals, and provenance</small></span></li>
-            </ol>
+            <div class="live-requesting" role="status">
+              <i aria-hidden="true"></i>
+              <div>
+                <strong>Request sent</strong>
+                <p>A bounded server request is running. The result will identify whether this was a fresh Solari execution or a cached verified run.</p>
+              </div>
+            </div>
             <button class="live-cancel" type="button" data-research-cancel>Cancel run</button>
           </div>
 

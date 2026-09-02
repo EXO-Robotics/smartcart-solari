@@ -128,8 +128,8 @@
     schemaVersion: "smartcart-solari-public-demo-request-v1",
     mealID: "chicken-pasta-eight-item-v1"
   });
-  const PUBLIC_DEMO_SESSION_KEY = "smartcart-solari-public-demo-v1-used";
   const PUBLIC_DEMO_TIMEOUT_MS = 60000;
+  const CHICKEN_REQUIREMENT_ID = "71000000-0000-4000-8000-000000000001";
   const liveResearch = document.querySelector("[data-live-research]");
   const liveWorkspace = document.querySelector("[data-live-workspace]");
   const livePanels = Array.from(document.querySelectorAll("[data-live-panel]"));
@@ -137,7 +137,6 @@
   const liveTimer = document.querySelector("[data-live-timer]");
   const researchStart = document.querySelector("[data-research-start]");
   const researchCancel = document.querySelector("[data-research-cancel]");
-  const liveProgressSteps = Array.from(document.querySelectorAll("[data-live-step]"));
   const liveTotal = document.querySelector("[data-live-total]");
   const liveCompleted = document.querySelector("[data-live-completed]");
   const liveTradeoff = document.querySelector("[data-live-tradeoff]");
@@ -152,9 +151,7 @@
 
   let liveAbortController = null;
   let liveTimerInterval = null;
-  let liveStepTimers = [];
   let runStartedAt = 0;
-  let consumedInPage = false;
 
   const setLiveState = (state, status) => {
     if (!liveResearch) return;
@@ -176,8 +173,6 @@
   const stopLiveTimers = () => {
     if (liveTimerInterval) window.clearInterval(liveTimerInterval);
     liveTimerInterval = null;
-    liveStepTimers.forEach((timer) => window.clearTimeout(timer));
-    liveStepTimers = [];
   };
 
   const startLiveTimers = () => {
@@ -187,20 +182,6 @@
       liveTimer.textContent = "00:00";
       liveTimer.setAttribute("datetime", "PT0S");
     }
-    liveProgressSteps.forEach((step) => step.classList.remove("is-active", "is-complete"));
-    liveProgressSteps[0]?.classList.add("is-active");
-    liveStepTimers = [
-      window.setTimeout(() => {
-        liveProgressSteps[0]?.classList.remove("is-active");
-        liveProgressSteps[0]?.classList.add("is-complete");
-        liveProgressSteps[1]?.classList.add("is-active");
-      }, 4500),
-      window.setTimeout(() => {
-        liveProgressSteps[1]?.classList.remove("is-active");
-        liveProgressSteps[1]?.classList.add("is-complete");
-        liveProgressSteps[2]?.classList.add("is-active");
-      }, 9000)
-    ];
     liveTimerInterval = window.setInterval(() => {
       const elapsed = performance.now() - runStartedAt;
       if (liveTimer) {
@@ -208,24 +189,6 @@
         liveTimer.setAttribute("datetime", `PT${Math.floor(elapsed / 1000)}S`);
       }
     }, 250);
-  };
-
-  const sessionRunWasUsed = () => {
-    if (consumedInPage) return true;
-    try {
-      return window.sessionStorage.getItem(PUBLIC_DEMO_SESSION_KEY) === "true";
-    } catch {
-      return false;
-    }
-  };
-
-  const markSessionRunUsed = () => {
-    consumedInPage = true;
-    try {
-      window.sessionStorage.setItem(PUBLIC_DEMO_SESSION_KEY, "true");
-    } catch {
-      // The in-memory guard still prevents a second run when storage is unavailable.
-    }
   };
 
   const finiteNumber = (value) => typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -296,17 +259,49 @@
     });
   };
 
-  const tradeoffSentence = (basket, comparison) => {
+  const selectedChickenSurplus = (decisions) => {
+    const decision = Array.isArray(decisions)
+      ? decisions.find((value) => value?.requirementID === CHICKEN_REQUIREMENT_ID)
+      : null;
+    return finiteNumber(decision?.surplusQuantity);
+  };
+
+  const cheapestChickenSurplus = (decisions, observations) => {
+    const decision = Array.isArray(decisions)
+      ? decisions.find((value) => value?.requirementID === CHICKEN_REQUIREMENT_ID)
+      : null;
+    const required = finiteNumber(decision?.requiredQuantity);
+    if (required === null || required <= 0 || decision?.quantityUnit !== "gram") return null;
+    const candidates = Array.isArray(observations)
+      ? observations.filter((value) => value?.requirementID === CHICKEN_REQUIREMENT_ID)
+      : [];
+    const adequate = candidates.flatMap((candidate) => {
+      const packageQuantity = finiteNumber(candidate?.packageQuantity);
+      const visiblePrice = finiteNumber(candidate?.visiblePrice);
+      if (candidate?.packageUnit !== "gram" || packageQuantity === null || packageQuantity <= 0 || visiblePrice === null) return [];
+      const packageCount = Math.ceil(required / packageQuantity);
+      return [{
+        lineTotal: Math.round(visiblePrice * packageCount * 100) / 100,
+        surplus: packageQuantity * packageCount - required,
+        id: String(candidate.retailerProductID || "")
+      }];
+    });
+    adequate.sort((left, right) => left.lineTotal - right.lineTotal || left.id.localeCompare(right.id));
+    return adequate[0]?.surplus ?? null;
+  };
+
+  const tradeoffSentence = (basket, comparison, decisions, observations) => {
     const currency = basket?.currency || comparison?.currency || "USD";
     const selected = finiteNumber(basket?.observedSubtotal) ?? finiteNumber(comparison?.selectedSubtotal);
     const cheapest = finiteNumber(comparison?.cheapestAdequateSubtotal);
     const premium = finiteNumber(comparison?.premiumOverCheapest);
-    const avoidedOunces = finiteNumber(comparison?.surplusAvoidedOunces);
-    const avoidedPounds = finiteNumber(comparison?.surplusAvoidedPounds) ?? (avoidedOunces === null ? null : avoidedOunces / 16);
-    const knownVerifiedTradeoff = selected === 24.2 && cheapest === 23.57 && premium === 0.63;
-    if (selected !== null && cheapest !== null && premium !== null && (avoidedPounds !== null || knownVerifiedTradeoff)) {
-      const pounds = avoidedPounds ?? 1.5;
-      return `The cheapest basket was ${formatCurrency(cheapest, currency)}. Spending ${formatCurrency(premium, currency)} more avoided about ${pounds.toFixed(1)} lb of extra chicken.`;
+    const selectedSurplus = selectedChickenSurplus(decisions);
+    const cheapestSurplus = cheapestChickenSurplus(decisions, observations);
+    const avoidedPounds = selectedSurplus !== null && cheapestSurplus !== null
+      ? Math.max(0, cheapestSurplus - selectedSurplus) / 453.59237
+      : null;
+    if (selected !== null && cheapest !== null && premium !== null && avoidedPounds !== null && avoidedPounds > 0) {
+      return `The cheapest basket was ${formatCurrency(cheapest, currency)}. Spending ${formatCurrency(premium, currency)} more avoided about ${avoidedPounds.toFixed(1)} lb of extra chicken.`;
     }
     if (cheapest !== null && premium !== null) {
       return `The cheapest complete basket was ${formatCurrency(cheapest, currency)}. Solari spent ${formatCurrency(premium, currency)} more within SmartCart's cap to reduce package overage.`;
@@ -334,7 +329,7 @@
 
     if (liveTotal) liveTotal.textContent = formatCurrency(basket.observedSubtotal, currency);
     if (liveCompleted) liveCompleted.textContent = formatRunDate(run.completedAt || payload.servedAt);
-    if (liveTradeoff) liveTradeoff.textContent = tradeoffSentence(basket, comparison);
+    if (liveTradeoff) liveTradeoff.textContent = tradeoffSentence(basket, comparison, run.decisions, run.observations);
     if (liveRuntime) liveRuntime.textContent = runtime === null ? "Not reported" : `${(runtime / 1000).toFixed(1)} seconds`;
     if (liveCoverage) {
       const coverageParts = [];
@@ -355,7 +350,10 @@
     }
     if (liveSource) {
       const mode = payload.deliveryMode === "cached-verified-run" ? "Cached verified result" : "Fresh bounded result";
-      liveSource.textContent = `${mode} from SmartCart's owned synthetic Demo Grocer. This is not a commercial-retailer price quote.`;
+      const replayStatus = provenance.browserReplay?.status === "unavailable"
+        ? " A Browser recording was not available for this run."
+        : "";
+      liveSource.textContent = `${mode} from SmartCart's owned synthetic Demo Grocer. This is not a commercial-retailer price quote.${replayStatus}`;
     }
     renderBasket(run.decisions, run.observations, currency);
 
@@ -378,12 +376,7 @@
   };
 
   const runPublicDemo = async () => {
-    if (sessionRunWasUsed()) {
-      showLiveFallback("This browser has already used its one live public run. The dated, immutable result remains available below.");
-      return;
-    }
-    markSessionRunUsed();
-    setLiveState("running", "Solari is researching");
+    setLiveState("running", "Bounded request in progress");
     startLiveTimers();
     liveAbortController = new AbortController();
     const timeout = window.setTimeout(() => liveAbortController?.abort("timeout"), PUBLIC_DEMO_TIMEOUT_MS);
@@ -400,14 +393,15 @@
       const payload = await response.json();
       renderLiveResult(payload);
       stopLiveTimers();
-      liveProgressSteps.forEach((step) => {
-        step.classList.remove("is-active");
-        step.classList.add("is-complete");
-      });
       const elapsed = finiteNumber(payload.result?.runtimeStats?.wallTimeMs) ?? performance.now() - runStartedAt;
       if (liveTimer) {
-        liveTimer.textContent = formatElapsed(elapsed);
-        liveTimer.setAttribute("datetime", `PT${Math.floor(elapsed / 1000)}S`);
+        if (payload.deliveryMode === "cached-verified-run") {
+          liveTimer.textContent = "CACHED";
+          liveTimer.removeAttribute("datetime");
+        } else {
+          liveTimer.textContent = formatElapsed(elapsed);
+          liveTimer.setAttribute("datetime", `PT${Math.floor(elapsed / 1000)}S`);
+        }
       }
       setLiveState("complete", payload.deliveryMode === "cached-verified-run" ? "Cached verified result" : "Solari run complete");
     } catch (error) {
@@ -423,10 +417,6 @@
 
   researchStart?.addEventListener("click", runPublicDemo);
   researchCancel?.addEventListener("click", () => liveAbortController?.abort("user"));
-
-  if (liveResearch && sessionRunWasUsed()) {
-    showLiveFallback("This browser has already used its one live public run. Open the dated, immutable result below.");
-  }
 
   const heroSystem = document.querySelector(".hero-system");
   const allowsMotion = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;

@@ -218,7 +218,7 @@ export function createSolariPublicDemoApi(options = {}) {
       validator.assert(V4_RESULT_SCHEMA_ID, result);
       if (result.provenance?.accessBoundary !== 'public-demo' || !result.provenance?.browserReplay
         || result.runtimeStats?.costTelemetry?.status !== 'unavailable') {
-        throw new SolariResearchError('solari_public_demo_result_invalid', 'The public demo result omitted required recording or runtime provenance.', { status: 502 });
+        throw new SolariResearchError('solari_public_demo_result_invalid', 'The public demo result omitted required recording status or runtime provenance.', { status: 502 });
       }
       await getStore().putCachedResult({ storedAt: new Date(now()).toISOString(), result }, config.solariPublicDemoCacheTtlSeconds);
       send(response, 200, publicResponse(result, 'live', null, now()), traceID, {

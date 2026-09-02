@@ -32,8 +32,8 @@ REQUIRED_PHRASES = {
 }
 REQUIRED_LIVE_DEMO_MARKERS = {
     "Research this meal",
-    "Live public proof",
-    "Solari is researching",
+    "Public research path",
+    "Bounded request in progress",
     "smartcart-solari-public-demo-request-v1",
     "chicken-pasta-eight-item-v1",
     "smartcart-solari-public-demo-response-v1",
@@ -217,7 +217,6 @@ def inspect_case_study(root: Path = ROOT, receipt_path: Path = RECEIPT) -> list[
         'method: "POST"',
         "AbortController",
         "PUBLIC_DEMO_TIMEOUT_MS",
-        "sessionStorage",
         "credentials: \"omit\"",
         "textContent",
         "replaceChildren",

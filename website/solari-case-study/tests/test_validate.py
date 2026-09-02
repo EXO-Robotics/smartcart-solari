@@ -24,15 +24,16 @@ class CaseStudyValidationTests(unittest.TestCase):
         self.assertNotIn("evidence/live/smartcart-solari-v4-qualification-33546912947.json", landing)
         self.assertIn("View raw JSON", readable)
 
-    def test_live_public_run_is_fixed_bounded_and_one_per_session(self) -> None:
+    def test_live_public_run_is_fixed_bounded_and_server_rate_limited(self) -> None:
         landing = (validate.ROOT / "index.html").read_text(encoding="utf-8")
         script = (validate.ROOT / "script.js").read_text(encoding="utf-8")
         self.assertIn("Research this meal", landing)
         self.assertIn('https://smartcart-solari-beta.vercel.app/public-demo/v1/solari/research', script)
         self.assertIn('schemaVersion: "smartcart-solari-public-demo-request-v1"', script)
         self.assertIn('mealID: "chicken-pasta-eight-item-v1"', script)
-        self.assertIn("PUBLIC_DEMO_SESSION_KEY", script)
-        self.assertIn("window.sessionStorage.setItem", script)
+        self.assertNotIn("sessionStorage", script)
+        self.assertNotIn("setTimeout(() => {\n        liveProgressSteps", script)
+        self.assertIn('payload.deliveryMode === "cached-verified-run"', script)
         self.assertIn("AbortController", script)
         self.assertIn('credentials: "omit"', script)
 

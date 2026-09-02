@@ -902,6 +902,10 @@ footer > div a:hover { color: var(--gold); }
 .live-progress strong, .live-progress small { display: block; }
 .live-progress strong { color: #e7e8e1; font-size: 17px; }
 .live-progress small { margin-top: 3px; color: #737970; font-size: 12px; }
+.live-requesting { display: grid; grid-template-columns: 18px 1fr; gap: 18px; align-items: start; padding: 26px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.live-requesting > i { width: 11px; height: 11px; margin-top: 6px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 20px rgba(245,181,27,.65); animation: livePulse 1.2s ease-in-out infinite; }
+.live-requesting strong { color: #e7e8e1; font-size: 17px; }
+.live-requesting p { max-width: 640px; margin: 6px 0 0; color: #8a9086; font-size: 14px; line-height: 1.6; }
 .live-cancel { margin-top: 24px; padding: 0 0 4px; border: 0; border-bottom: 1px solid var(--line-strong); background: transparent; color: #91968e; cursor: pointer; font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 9px; font-weight: 760; letter-spacing: .09em; text-transform: uppercase; }
 .live-cancel:hover { color: var(--ink); border-color: var(--ink); }
 

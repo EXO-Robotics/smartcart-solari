@@ -197,3 +197,30 @@ test('V4 public-demo service requires recorded Browser provenance and emits hone
   const validator = await createContractValidator();
   assert.equal(validator.validate('https://schemas.smartcart.app/v4/solari/basket-research-result.schema.json', cachedAfterReplayExpiry).valid, true);
 });
+
+test('V4 public-demo service reports unavailable recording without discarding completed research', async () => {
+  const toCanonical = (value, unit) => unit === 'lb' ? [value * 453.59237, 'gram']
+    : unit === 'oz' ? [value * 28.349523125, 'gram']
+      : unit === 'fl oz' ? [value * 29.5735295625, 'milliliter'] : [value, 'count'];
+  const sandbox = new SolariV4SandboxOptimizer({ apiKey: 'server-only', clientFactory: () => ({ create: async () => ({ commands: { run: async (command, { args }) => { const { stdout, stderr } = await execFileAsync(command, args); return { exitCode: 0, stdout, stderr }; } }, kill: async () => {} }) }) });
+  const service = createSolariV4ResearchService({
+    accessBoundary: 'public-demo',
+    config: { solariApiKey: 'server-only', solariDemoRetailerBaseUrl: baseURL, solariRequestTimeoutMs: 45_000 },
+    now: () => Date.parse('2026-09-02T14:00:00Z'),
+    demoHostLookup: async () => [{ address: '93.184.216.34', family: 4 }],
+    browserProvider: { observeRecorded: async (bounded) => ({
+      observations: bounded.requirements.flatMap((requirementValue) => requirementValue.candidates.map((candidate) => {
+        const catalog = V4_PRODUCT_CATALOG[candidate.retailerProductID];
+        const [packageQuantity, packageUnit] = toCanonical(catalog.packageQuantity, catalog.packageUnit);
+        return observation(requirementValue, candidate.retailerProductID, packageQuantity, packageUnit, catalog.visiblePrice);
+      })),
+      replay: null
+    }) },
+    sandboxOptimizer: sandbox
+  });
+  const result = await service.research(requestExample);
+  assert.deepEqual(result.provenance.browserReplay, { status: 'unavailable' });
+  assert.equal(result.decisions.length, 8);
+  const validator = await createContractValidator();
+  assert.equal(validator.validate('https://schemas.smartcart.app/v4/solari/basket-research-result.schema.json', result).valid, true);
+});

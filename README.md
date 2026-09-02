@@ -28,7 +28,7 @@ Normal SmartCart already extracts ingredients, excludes pantry items, aggregates
 
 **Solari Browser** renders only exact allowlisted pages on the repository-owned Demo Grocer. It observes product identity, package quantity/unit, visible synthetic price, source URL, timestamp, and required V4 provenance markers. Static links or replay data cannot prove that a JavaScript-rendered page was observed during a provider run.
 
-**Solari Sandbox** receives only bounded structured requirements and Browser observations. It runs the **relative-surplus-premium-dp-v1** dynamic program: establish the cheapest adequate basket, then minimize aggregate relative surplus among baskets no more than $0.75 above that baseline. The UI calls this dimensionless sum of each line's `(covered - required) / required` ratio the **package-overage score**; it is not presented as a percentage. Sandbox is the global-selection authority. SmartCart independently verifies evidence membership, coverage, package and price arithmetic, cheapest reference, and premium cap, but does not recompute the global argmin.
+**Solari Sandbox** receives only bounded structured requirements and Browser observations. It runs the **relative-surplus-premium-dp-v1** dynamic program: establish the cheapest adequate basket, then minimize aggregate relative surplus among baskets no more than $0.75 above that baseline. The UI calls this dimensionless sum of each line's `(covered - required) / required` ratio the **package-overage score**; it is not presented as a percentage. Sandbox performs the cross-line global search. SmartCart independently verifies evidence membership, coverage, package and price arithmetic, cheapest reference, and premium cap, but intentionally does not run a second global optimizer or silently replace Sandbox's selection.
 
 Desktop is intentionally absent; it has no necessary job.
 
@@ -75,6 +75,8 @@ V4 contracts live in [contracts/v4/solari/](contracts/v4/solari/):
 - [decision](contracts/v4/solari/basket-decision.schema.json): required and covered quantity, package count, surplus, relative surplus, observed line total, evidence reference, and rationale.
 - [result](contracts/v4/solari/basket-research-result.schema.json): complete admitted subset, cheapest comparison, Sandbox authority, Browser/Sandbox cleanup, and trust assertions.
 
+V4 is the only current submission contract. V1–V3 remain in the repository as clearly historical migration and receipt lineage; they are not alternate public-demo paths.
+
 Observed product subtotals exclude tax, fees, fulfillment, inventory, discounts, and checkout totals. They are not live or guaranteed retailer prices. Missing evidence cannot become zero; a complete V4 result requires a valid decision for every admitted requirement. Skipped SmartCart lines sit outside that admitted subset and are called out separately in native UI.
 
 ## Trust boundaries
@@ -86,7 +88,7 @@ Observed product subtotals exclude tax, fees, fulfillment, inventory, discounts,
 - Solari, App Attest/Redis, and operator credentials remain server-side. No provider or operator bearer secret ships to iOS or web.
 - The protected live route is default-off and bound to App Attest, allowlisted app identity/build, one-use challenges, counters, quotas, leases, cancellation, and a runtime kill switch.
 - Local-device testing uses a distinct default-off route and Redis namespace. It accepts category 3 only; the existing TestFlight endpoint remains category 2 only. Neither lane accepts a client bearer or fixture fallback.
-- Raw HTML, screenshots, recordings, cookies, and signed capability URLs are not retained in immutable result evidence. A fresh public-demo response may include a short-lived HTTPS replay link for that caller only; the Browser session ID is never stored, and cached responses never return replay links.
+- Raw HTML, screenshots, recordings, cookies, and signed capability URLs are not retained in immutable result evidence. A fresh public-demo response may include a short-lived HTTPS replay link for that caller only; delayed or unavailable recording does not invalidate completed research. The Browser session ID is never stored, and cached responses never return replay links.
 - Browser/session/client cleanup and Sandbox teardown run on success and failure paths; cleanup failure suppresses success.
 - The user always controls final handoff.
 
@@ -153,7 +155,7 @@ xcodebuild \
 
 For a real Xcode-installed development-device run, select `SmartCart-SolariDevelopment`. Its Run action points at `/dev`; its Archive action intentionally uses `Release-SolariBeta` so a distribution archive cannot inherit the development endpoint.
 
-At the presentation release gate: Solari-focused backend **98/98**, full backend **228/228**, focused native **29/29** on iPhone 17 Pro / iOS 26.5 Simulator, case-study **6/6**, replay/owned-catalog **7/7**, dependency audit **0 vulnerabilities**, and unsigned **Release-SolariBeta BUILD SUCCEEDED**. The complete native demo route also passed a fresh UI exercise from Home through the eight-of-eight price check and back into SmartCart's original in-app retailer setup. See [qualification](Docs/SOLARI_QUALIFICATION.md) and the [demo runbook](Docs/SOLARI_DEMO_RUNBOOK.md) for claim boundaries.
+At the presentation release gate: Solari-focused backend **100/100**, full backend **230/230**, focused native **29/29** on iPhone 17 Pro / iOS 26.5 Simulator, case-study **6/6**, replay/owned-catalog **7/7**, dependency audit **0 vulnerabilities**, and unsigned **Release-SolariBeta BUILD SUCCEEDED**. The complete native demo route also passed a fresh UI exercise from Home through the eight-of-eight price check and back into SmartCart's original in-app retailer setup. See [qualification](Docs/SOLARI_QUALIFICATION.md) and the [demo runbook](Docs/SOLARI_DEMO_RUNBOOK.md) for claim boundaries.
 
 ## Deployment
 

@@ -310,10 +310,16 @@ export class SolariBrowserProvider {
       try {
         await closeBrowserResources(activePage, browser, { close: async () => {} });
         if (completed && recording) {
-          replay = await recordedReplay(client, browser.id, {
-            deadlineAt, clock, signal, timeoutMs: this.timeoutMs, now: this.now,
-            attempts: this.replayAttempts, pollIntervalMs: this.replayPollIntervalMs
-          });
+          try {
+            replay = await recordedReplay(client, browser.id, {
+              deadlineAt: Math.min(deadlineAt ?? Number.POSITIVE_INFINITY, clock() + 3_000),
+              clock, signal, timeoutMs: Math.min(this.timeoutMs, 3_000), now: this.now,
+              attempts: this.replayAttempts, pollIntervalMs: this.replayPollIntervalMs
+            });
+          } catch (error) {
+            if (error?.code === 'solari_request_aborted') throw error;
+            replay = null;
+          }
         }
       } finally {
         await closeBrowserResources(null, null, clientClosedEarly ? { close: async () => {} } : client);
