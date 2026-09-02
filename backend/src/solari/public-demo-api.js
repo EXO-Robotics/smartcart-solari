@@ -73,10 +73,10 @@ function requireConfig(config, { injectedStore = false } = {}) {
   }
 }
 
-function withoutExpiredReplay(result, now) {
+function publicResult(result, now, { includeReplay = false } = {}) {
   const copy = structuredClone(result);
   const replay = copy?.provenance?.browserReplay;
-  if (replay && Date.parse(replay.expiresAt) <= now) delete copy.provenance.browserReplay;
+  if (replay && (!includeReplay || Date.parse(replay.expiresAt) <= now)) delete copy.provenance.browserReplay;
   return copy;
 }
 
@@ -86,7 +86,7 @@ function publicResponse(result, deliveryMode, fallbackReason, now) {
     deliveryMode,
     generatedAt: new Date(now).toISOString(),
     ...(fallbackReason ? { fallbackReason } : {}),
-    result: withoutExpiredReplay(result, now)
+    result: publicResult(result, now, { includeReplay: deliveryMode === 'live' })
   };
 }
 
@@ -116,7 +116,7 @@ export function createSolariPublicDemoApi(options = {}) {
     const record = await getStore().getCachedResult();
     if (!record?.result) return null;
     const validator = await validatorPromise;
-    validator.assert(V4_RESULT_SCHEMA_ID, withoutExpiredReplay(record.result, now()));
+    validator.assert(V4_RESULT_SCHEMA_ID, publicResult(record.result, now()));
     return publicResponse(record.result, 'cached-verified-run', fallbackReason, now());
   }
 

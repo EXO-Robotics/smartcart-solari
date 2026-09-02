@@ -151,6 +151,7 @@ test('one HMAC-IP-admitted live run is cached; a repeat visitor receives the ver
   assert.equal(repeated.status, 200);
   assert.equal(repeated.body.deliveryMode, 'cached-verified-run');
   assert.equal(repeated.body.fallbackReason, 'visitor-daily');
+  assert.equal('browserReplay' in repeated.body.result.provenance, false);
   assert.equal(calls, 1);
   assert.equal([...store.quotas.keys()].some((key) => key.includes('198.51.100.10')), false);
   assert.equal(JSON.stringify(fresh.body).includes('sessionId'), false);
@@ -178,10 +179,9 @@ test('provider failure degrades to the last verified result without relabeling i
   assert.doesNotMatch(JSON.stringify(response.body), /provider detail/);
 });
 
-test('expired replay URLs are removed from cached public responses', async () => {
+test('replay capability URLs are never returned from cached public responses', async () => {
   const store = new InMemorySolariPublicDemoStore({ now: () => fixedNow, runtimeEnabled: false });
   const expired = result();
-  expired.provenance.browserReplay.expiresAt = '2026-09-02T13:59:59.000Z';
   await store.putCachedResult({ storedAt: new Date(fixedNow).toISOString(), result: expired });
   const response = await request(api({ store }).handler);
   assert.equal(response.status, 200);

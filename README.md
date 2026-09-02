@@ -86,7 +86,7 @@ Observed product subtotals exclude tax, fees, fulfillment, inventory, discounts,
 - Solari, App Attest/Redis, and operator credentials remain server-side. No provider or operator bearer secret ships to iOS or web.
 - The protected live route is default-off and bound to App Attest, allowlisted app identity/build, one-use challenges, counters, quotas, leases, cancellation, and a runtime kill switch.
 - Local-device testing uses a distinct default-off route and Redis namespace. It accepts category 3 only; the existing TestFlight endpoint remains category 2 only. Neither lane accepts a client bearer or fixture fallback.
-- Raw HTML, screenshots, recordings, cookies, and signed capability URLs are not retained in immutable result evidence. A fresh public-demo response may include a short-lived HTTPS replay link; the Browser session ID is never stored, and cached responses drop expired replay links.
+- Raw HTML, screenshots, recordings, cookies, and signed capability URLs are not retained in immutable result evidence. A fresh public-demo response may include a short-lived HTTPS replay link for that caller only; the Browser session ID is never stored, and cached responses never return replay links.
 - Browser/session/client cleanup and Sandbox teardown run on success and failure paths; cleanup failure suppresses success.
 - The user always controls final handoff.
 
@@ -157,7 +157,7 @@ At the presentation release gate: Solari-focused backend **98/98**, full backend
 
 Deploy from a clean worktree of the intended immutable submission commit. Run the Vercel CLI from the monorepo root; configure the Vercel project's **Root Directory** as **backend** so shared contracts are packaged through the backend include rules. Configure environment-variable names without committing values; the required names and admission checks are documented in [backend/.env.example](backend/.env.example) and [the runbook](Docs/SOLARI_DEMO_RUNBOOK.md).
 
-The public case study calls a separate default-off route that accepts only one fixed owned eight-item meal. It is isolated from both App Attest routes and is bounded by exact-origin checks, HMAC-pseudonymous per-visitor limits, global quotas, a concurrency lease, a conservative run-unit allowance, cancellation, a runtime kill switch, and a validated cached fallback. It cannot accept arbitrary retailer URLs. A one-time atomic bootstrap may initialize a missing runtime key for a new deployment; a durable marker prevents deletion from silently re-enabling a killed lane. A fresh response may include a short-lived Solari Browser replay; cached responses never expose an expired replay capability.
+The public case study calls a separate default-off route that accepts only one fixed owned eight-item meal. It is isolated from both App Attest routes and is bounded by exact-origin checks, HMAC-pseudonymous per-visitor limits, global quotas, a concurrency lease, a conservative run-unit allowance, cancellation, a runtime kill switch, and a validated cached fallback. It cannot accept arbitrary retailer URLs. A one-time atomic bootstrap may initialize a missing runtime key for a new deployment; a durable marker prevents deletion from silently re-enabling a killed lane. Only the fresh caller may receive the short-lived Solari Browser replay; cached responses never expose it.
 
 A successful health/challenge smoke does not prove a provider run. A provider receipt does not prove signed native App Attest. A simulator build does not prove physical-device, TestFlight, App Store, or real-retailer value.
 

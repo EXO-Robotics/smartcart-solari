@@ -100,7 +100,7 @@ Every amount is an observed synthetic product subtotal, never a checkout quote. 
 - Walmart is historical fixture replay only; live retailer automation remains fail-closed without documented authorization.
 - No account, persistent profile, cart, order, payment, or checkout automation.
 - No Solari credential in native or web artifacts.
-- No raw HTML, screenshot, cookie, localStorage, or signed capability URL in immutable result evidence. A fresh public-demo response may expose a short-lived HTTPS replay link after cleanup; cached responses remove it after expiry and no Browser session ID is stored.
+- No raw HTML, screenshot, cookie, localStorage, or signed capability URL in immutable result evidence. A fresh public-demo response may expose a short-lived HTTPS replay link after cleanup; cached responses never return it and no Browser session ID is stored.
 - Provider work is default-off behind App Attest and operator-controlled quotas/kill switch.
 - Demo products/prices never enter SmartCart's original retailer list.
 - User action remains required before and after research.
