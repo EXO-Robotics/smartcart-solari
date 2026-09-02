@@ -21,13 +21,14 @@ VIDEO_SHA256 = {
 }
 ALLOWED_REMOTE_HOSTS = {"github.com", "docs.getsolari.com"}
 REQUIRED_PHRASES = {
-    "SmartCart learned to see the shelf",
+    "SmartCart already planned the meal",
+    "Solari helps price the basket",
     "Solari Browser",
     "Solari Sandbox",
-    "The frontend is replaceable",
-    "Solari is the capability",
-    "No retailer login",
-    "User-controlled handoff",
+    "What Solari added",
+    "owned demo retailer",
+    "No retailer sign-in",
+    "You decide what to buy",
 }
 FORBIDDEN_SECTION_MARKERS = (
     'class="transformation section"',
@@ -153,11 +154,11 @@ def inspect_case_study(root: Path = ROOT, receipt_path: Path = RECEIPT) -> list[
             errors.append(f"case study: retired post-video section marker returned: {forbidden_marker!r}")
     for replay_marker in (
         "DEBUG RECORDED REPLAY · NOT LIVE",
-        "Solari Browser and Sandbox do not run inside this clip",
+        "Solari does not run inside the video",
         "BEFORE SOLARI · RECORDED APP FLOW · NOT LIVE",
         "AFTER SOLARI · DEBUG RECORDED REPLAY · NOT LIVE",
-        "Retailer pages shown are recorded context, not current price or availability claims",
-        "Credentialed V4 Browser + Sandbox execution over eight requirements",
+        "The retailer screen is recorded context, not a current price or availability claim",
+        "the separate receipt proves the real eight-item Browser and Sandbox run",
     ):
         if replay_marker.casefold() not in dynamic_source.casefold():
             errors.append(f"index.html: missing native/provider separation marker {replay_marker!r}")

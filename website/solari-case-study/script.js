@@ -39,16 +39,16 @@
       duration: "Play 00:40",
       playLabel: "Play the 40 second Before Solari recording",
       badge: "BEFORE SOLARI · RECORDED APP FLOW · NOT LIVE.",
-      caption: "This recorded original SmartCart flow proves recipe review and user-controlled retailer handoff. Retailer pages shown are recorded context, not current price or availability claims."
+      caption: "Recorded SmartCart walkthrough. SmartCart prepares the recipe and shopping list, then opens the retailer. The shopper still has to compare products, packages, and prices. The retailer screen is recorded context, not a current price or availability claim."
     },
     after: {
       src: "assets/smartcart-after-solari.mp4",
       poster: "assets/smartcart-after-solari-poster.jpg",
-      label: "After Solari · Native SmartCart",
+      label: "After Solari · Pricing research",
       duration: "Play 00:25",
       playLabel: "Play the 25 second After Solari recording",
       badge: "AFTER SOLARI · DEBUG RECORDED REPLAY · NOT LIVE.",
-      caption: "This eight-item DEBUG recorded replay proves native research, package evidence, and user-controlled handoff. Solari Browser and Sandbox do not run inside this clip. Credentialed V4 Browser + Sandbox execution over eight requirements is proven separately by the immutable receipt."
+      caption: "Recorded SmartCart walkthrough. The app shows product options, package counts, and an estimated total. Solari does not run inside the video; the separate receipt proves the real eight-item Browser and Sandbox run."
     }
   };
 
@@ -126,27 +126,27 @@
   const frontends = {
     smartcart: {
       name: "SmartCart",
-      intent: "Recipe, pantry, servings, and normalized ingredient requirements.",
-      outcome: "Grounded basket",
-      result: "Selected products, package counts, overage, estimated total, confidence, and provenance."
+      intent: "The recipe, pantry items, serving count, and how much of each ingredient is needed.",
+      outcome: "A shopping plan",
+      result: "Suggested products, package counts, estimated total, and the source behind each price."
     },
     procurement: {
       name: "Procurement",
-      intent: "Approved bill of materials, quantities, supplier rules, and budget constraints.",
-      outcome: "Supplier decision",
-      result: "Comparable offers, landed quantities, policy checks, decision evidence, and source provenance."
+      intent: "The parts list, quantities, approved suppliers, and available budget.",
+      outcome: "A supplier plan",
+      result: "Comparable offers, the right quantities, policy checks, total cost, and links back to each source."
     },
     travel: {
       name: "Travel planner",
-      intent: "Dates, routes, accessibility needs, preferences, and budget constraints.",
-      outcome: "Grounded itinerary",
-      result: "Observed options, constraint-fit evaluation, ambiguity, freshness, and user-controlled handoff."
+      intent: "The travel dates, route, accessibility needs, preferences, and budget.",
+      outcome: "A travel plan",
+      result: "Options that fit the trip, when they were found, what is unclear, and links for the traveler to decide."
     },
     "field-service": {
       name: "Field service",
-      intent: "Service diagnosis, compatible parts, required quantities, and approved sourcing rules.",
-      outcome: "Sourced parts plan",
-      result: "Candidate components, compatibility evidence, package counts, total cost, and supplier handoff."
+      intent: "The service problem, compatible parts, needed quantities, and approved suppliers.",
+      outcome: "A parts plan",
+      result: "Compatible options, the evidence behind each match, the needed quantities, total cost, and supplier links."
     }
   };
 
