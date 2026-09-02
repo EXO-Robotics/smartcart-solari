@@ -27,7 +27,7 @@ REQUIRED_PHRASES = {
     "Solari Sandbox",
     "What Solari added",
     "owned demo retailer",
-    "No retailer sign-in",
+    "Solari never touches your Walmart account",
     "You decide what to buy",
 }
 REQUIRED_LIVE_DEMO_MARKERS = {

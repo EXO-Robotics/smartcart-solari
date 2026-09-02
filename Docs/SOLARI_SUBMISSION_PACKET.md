@@ -30,7 +30,7 @@ This is not a story about building a Solari demo. SmartCart already turns recipe
 - Uses Solari Sandbox to evaluate bounded package combinations across the admitted portion of the trip.
 - Makes SmartCart independently validate evidence membership, coverage, arithmetic, freshness, the cheapest reference, and the allowed premium.
 - Shows the recommendation natively, preserves unsupported or ambiguous lines, and returns to the original user-controlled retailer handoff.
-- Never logs in to a retailer account, reads retailer cookies, changes a cart, places an order, submits payment, or performs checkout.
+- Keeps Solari out of the shopper's retailer account. After handoff, the shopper signs in and shops directly with the retailer; the retailer owns the session, cart, payment, and checkout.
 
 SmartCart remains the product. Solari makes its existing shopping workflow materially more capable.
 
@@ -43,7 +43,7 @@ The strongest evidence of AI-assisted development is the series of product and e
 3. Refused to invent quantities for ambiguous inputs such as “olive oil for frying.”
 4. Required unsupported or dimension-incompatible units to be skipped safely instead of fabricating package math.
 5. Kept Solari, operator, App Attest, and state-store credentials server-side.
-6. Prohibited retailer login, persistent browser profiles, cart control, purchasing, payment, and checkout.
+6. Kept retailer authentication and account activity out of Solari. The shopper signs in and shops directly with the retailer after handoff.
 7. Required timestamped provenance and freshness instead of unsupported “live price” claims.
 8. Challenged an optimizer result that was mathematically valid but not useful to shoppers.
 9. Redirected optimization toward a comprehensible tradeoff: a basket may spend at most $0.75 above the cheapest adequate basket to reduce relative package surplus.
@@ -92,9 +92,9 @@ The case study contains two hash-bound silent recordings: **39.63 seconds before
 
 **Narration:**
 
-> The shopper still decides what to buy. Solari never logs into retailer accounts, changes a cart, or performs checkout.
+> The shopper still decides what to buy. Solari never touches the shopper's retailer account. After handoff, the shopper signs in and shops directly with the retailer.
 
-**On-screen label:** `No login · no cart mutation · no checkout`
+**On-screen label:** `Your retailer account stays between you and the retailer`
 
 ### 58–65 seconds — Technical proof
 
@@ -130,7 +130,7 @@ SmartCart remains the product. Solari makes its existing shopping workflow mater
 
 I integrated Solari into SmartCart, my existing grocery-planning app, to solve a real gap: turning recipe and pantry requirements into evidence-backed package choices before the shopper goes to a retailer.
 
-Solari Browser observes structured product evidence. Solari Sandbox evaluates bounded basket tradeoffs. SmartCart validates the result and keeps the shopper in control—no retailer login, cart mutation, or checkout.
+Solari Browser observes structured product evidence. Solari Sandbox evaluates bounded basket tradeoffs. SmartCart validates the result and keeps the shopper in control. Solari never touches the shopper's Walmart account; after handoff, the shopper signs in and shops directly with Walmart.
 
 In a credentialed eight-item run against an owned synthetic retailer, SmartCart spent $0.63 above the cheapest adequate basket to avoid about 1.5 lb of excess chicken.
 

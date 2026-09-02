@@ -85,14 +85,23 @@ Sandbox compares complete baskets, not isolated products. It finds the cheapest 
 
 Desktop is intentionally absent because it has no necessary job in this workflow.
 
-## Trust boundaries
+## Intentional product boundaries
 
-- Demo Grocer is synthetic; no current commercial-retailer pricing is claimed. Historical Walmart data is fixture replay only.
-- No retailer login, cart change, payment, purchase, or checkout occurs.
-- Browser sessions are fresh and logged out.
-- Credentials stay server-side.
-- If evidence is missing, stale, ambiguous, or mismatched, SmartCart does not invent a result.
-- The shopper controls the final retailer handoff.
+Solari improves the shopping decision before retailer handoff. It does not operate the shopper's retailer account.
+
+- The shopper explicitly starts Solari research.
+- Solari's research browser uses a fresh, logged-out session against an approved source.
+- After SmartCart hands the shopper to Walmart, the shopper signs in and shops directly with Walmart.
+- Walmart owns the shopper's session, cookies, lists, cart, payment, checkout, and order.
+- SmartCart and Solari never request, receive, store, or inspect Walmart credentials or account data.
+- They do not automate Walmart controls, modify the cart, or interpret a visited page as a purchase.
+- Exact product matches may proceed automatically; search fallbacks and lower-confidence matches require shopper review.
+- Substitutions remain limited to approved candidates.
+- Pantry changes require shopper confirmation. A visited product is not treated as something purchased.
+- Demo Grocer observations and prices are qualification evidence only and are never transferred into the Walmart shopping trip.
+- Solari credentials remain server-side.
+- Sandbox receives normalized product evidence, not complete retailer pages or unrestricted prose.
+- No proxying, stealth behavior, CAPTCHA bypass, or account personalization is used.
 
 The public route accepts one owned meal and one allowlisted catalog. Full boundaries are in the [threat model](Docs/SOLARI_THREAT_MODEL.md).
 
