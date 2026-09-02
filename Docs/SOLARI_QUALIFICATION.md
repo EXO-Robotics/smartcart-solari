@@ -107,7 +107,7 @@ Three Apple Development identities are visible, but the signed archive attempt f
 2. no matching iOS App Development provisioning profile exists;
 3. the Share Extension provisioning profile has an application-groups mismatch.
 
-The physical iPhone is offline. Signed archive, real App Attest registration/assertion/research, device UX, TestFlight, App Store, and downloadable app remain **PENDING**. Release fixture replay or a client-side secret must not be used to manufacture a pass.
+A paired physical iPhone is connected and has beta build 4 installed. That installed binary predates the development-lane configuration and still targets the category-2 distribution endpoint. The unsigned `Development-SolariBeta` build passes, but installing it is blocked by the personal team's unsupported Associated Domains/App Attest capabilities and the unresolved profiles above. Signed archive, real App Attest registration/assertion/research, updated device UX, TestFlight, App Store, and downloadable app remain **PENDING**. Release fixture replay or a client-side secret must not be used to manufacture a pass.
 
 ## Real-retailer status
 

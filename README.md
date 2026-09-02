@@ -88,6 +88,8 @@ That provider receipt is server-side operator qualification. It is not signed na
 
 Publication commit **8f749e33808119ee403142929da5b757ed934e35** is deployed to the protected beta alias. Vercel deployment **dpl_AkwuZcEt7N6WdFmR6Tye4BrqasbR** reached READY; `/health` returned 200 and the App Attest challenge route returned 201. The [deployment receipt](evidence/live/smartcart-solari-v4-deployment-8f749e3-20260901.json) intentionally does not call that smoke a signed native or provider execution.
 
+Development-lane commit **ad0ba7f97d2a9775349635640e48e677ec5e85be** is deployed at the same alias through Vercel deployment **dpl_DzZH4Bj52xbsAE2Tu6aBMWSCmKER**. Distribution `/v1` remains App Attest category-2-only; the separately namespaced `/dev/v1` lane is category-3-only and accepts the same exact allowlisted beta identity/build. Health returned 200 and both challenge routes returned 201. The [development-lane receipt](evidence/live/smartcart-solari-development-lane-ad0ba7f-20260901.json) records those boundaries without claiming a signed assertion or provider run.
+
 Historical V3 evidence is preserved because it proves the narrower predecessor actually ran:
 
 - Credentialed Browser+Sandbox run [33533170189](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33533170189) at runtime **772e65bac5cabfba8b5e8b6a9482191a715c616a**.
@@ -96,7 +98,7 @@ Historical V3 evidence is preserved because it proves the narrower predecessor a
 
 Those receipts do not qualify V4's variable subset, larger catalog, mass/volume/count admission, or DP result.
 
-Signed archive remains **PENDING**: three Apple Development identities are visible, but the personal team lacks the needed Associated Domains/App Attest capability for the beta bundle, no matching app profile exists, the Share Extension profile has an application-groups mismatch, and the physical iPhone is offline. There is no TestFlight, App Store, downloadable-app, or signed-native claim.
+Signed archive remains **PENDING**: a paired physical iPhone is now connected and already has beta build 4 installed, but that installed build predates the development-lane configuration and still targets the strict distribution route. The available personal team lacks the needed Associated Domains/App Attest capability for the beta bundle, no matching app profile exists, and the Share Extension profile has an application-groups mismatch. Consequently the new `SmartCart-SolariDevelopment` build could not be signed and installed. There is no successful signed-App-Attest, TestFlight, App Store, or downloadable-app claim.
 
 ## Setup and targeted validation
 
