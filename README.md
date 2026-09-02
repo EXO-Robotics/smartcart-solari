@@ -4,7 +4,7 @@
 
 [![SmartCart x Solari: from recipe to a priced demo basket](website/solari-case-study/assets/social-preview.jpg)](https://exo-robotics.github.io/smartcart-solari/)
 
-**[Research the meal and watch the before/after case study](https://exo-robotics.github.io/smartcart-solari/)** · **[Read the verified Solari run](https://exo-robotics.github.io/smartcart-solari/verified-run.html)** · [Run the small Cookbook example](https://github.com/EXO-Robotics/solari-cookbook/tree/main/examples/smartcart-basket-research-ts) · [Raw receipt](evidence/live/smartcart-solari-v4-qualification-33546912947.json) · [Source](https://github.com/EXO-Robotics/smartcart-solari)
+**[Research the meal and watch the before/after case study](https://exo-robotics.github.io/smartcart-solari/)** · **[Read the verified Solari run](https://exo-robotics.github.io/smartcart-solari/verified-run.html)** · [Run the small Cookbook example](https://github.com/EXO-Robotics/solari-cookbook/tree/main/examples/smartcart-basket-research-ts) · [Public live-run receipt](evidence/live/smartcart-solari-public-demo-20260902.json) · [Source](https://github.com/EXO-Robotics/smartcart-solari)
 
 SmartCart remains the product. The Solari integration has two necessary jobs:
 
@@ -97,6 +97,8 @@ Official provider references: [Solari SDK](https://docs.getsolari.com/sdk), [ses
 V4 is frozen and credential-qualified at runtime **2dd4e6f30be8286a3a8f465c92a56427828a60e2**. [GitHub Actions run 33546912947](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33546912947) executed the real Solari Browser and Sandbox providers against an eight-line mass/volume/count trip: 16 fresh observations, eight decisions, and confirmed cleanup. Sandbox selected the 1.5 lb chicken package instead of the cheaper 3 lb bag: a complete synthetic **$24.20** basket versus the **$23.57** cheapest adequate basket, spending **$0.63** within the user's $0.75 cap while avoiding about **680 g / 1.5 lb of excess chicken**. The [sanitized V4 receipt](evidence/live/smartcart-solari-v4-qualification-33546912947.json) binds the request/result digests and exact runtime commit.
 
 That provider receipt is server-side operator qualification. It is not signed native App Attest, real-retailer, device, TestFlight, App Store, or downloadable-app proof. Those gates remain **PENDING**.
+
+The self-serve public route also completed a real credentialed run on September 2: **17.596 seconds**, **16 Browser observations**, **8 Sandbox decisions**, **0 skipped lines**, confirmed cleanup, and the same **$24.20 versus $23.57** basket. Its [sanitized deployment receipt](evidence/live/smartcart-solari-public-demo-20260902.json) omits the signed replay URL and Browser session ID. Solari does not expose measured per-run cost through this SDK path, so cost telemetry remains explicitly unavailable.
 
 Publication commit **8f749e33808119ee403142929da5b757ed934e35** is deployed to the protected beta alias. Vercel deployment **dpl_AkwuZcEt7N6WdFmR6Tye4BrqasbR** reached READY; `/health` returned 200 and the App Attest challenge route returned 201. The [deployment receipt](evidence/live/smartcart-solari-v4-deployment-8f749e3-20260901.json) intentionally does not call that smoke a signed native or provider execution.
 

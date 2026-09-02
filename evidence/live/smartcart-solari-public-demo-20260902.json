@@ -1,0 +1,81 @@
+{
+  "receiptVersion": "smartcart-solari-public-demo-deployment-v1",
+  "recordedAt": "2026-09-02T13:43:35Z",
+  "repository": "EXO-Robotics/smartcart-solari",
+  "providerExecution": {
+    "sourceTreeCommit": "50653aa5a122f7c271ed709a0a4d720c21daa8c5",
+    "deploymentProvider": "vercel",
+    "deploymentID": "dpl_AM2M9WY9KB9nqcNUkJJqvJY2JMtJ",
+    "immutableURL": "https://smartcart-solari-beta-cpvcrvjw0-blake23.vercel.app",
+    "requestPath": "/public-demo/v1/solari/research",
+    "requestSelector": {
+      "schemaVersion": "smartcart-solari-public-demo-request-v1",
+      "mealID": "chicken-pasta-eight-item-v1"
+    },
+    "httpStatus": 200,
+    "deliveryMode": "live",
+    "generatedAt": "2026-09-02T13:37:16.249Z",
+    "completedAt": "2026-09-02T13:37:16.079Z",
+    "accessBoundary": "public-demo",
+    "runtimeStats": {
+      "wallTimeMs": 17596,
+      "browserObservationCount": 16,
+      "sandboxDecisionCount": 8,
+      "skippedRequirementCount": 0,
+      "costTelemetry": {
+        "status": "unavailable"
+      }
+    },
+    "basket": {
+      "observedSubtotal": 24.2,
+      "cheapestAdequateSubtotal": 23.57,
+      "premiumOverCheapest": 0.63,
+      "currency": "USD"
+    },
+    "resourceCleanup": {
+      "browser": "enforced-before-response",
+      "sandbox": "enforced-before-response"
+    },
+    "browserReplay": {
+      "status": "available-to-fresh-caller",
+      "observedHost": "pinetree-browser-replays.s3.us-west-1.amazonaws.com",
+      "urlRetained": false,
+      "sessionIDRetained": false
+    },
+    "resultWithoutReplaySHA256": "1388fec208c92580372d29deb82021fa4180e89ab7746268b62b57aa0af8fb28"
+  },
+  "promotedDeployment": {
+    "sourceTreeCommit": "b452596ddb6734c463fa1fd359b7c7c88c4a225f",
+    "deploymentProvider": "vercel",
+    "deploymentID": "dpl_5DAHDV4jdbXjnzUg9osmz6bp6sWY",
+    "immutableURL": "https://smartcart-solari-beta-pjf6usldn-blake23.vercel.app",
+    "alias": "https://smartcart-solari-beta.vercel.app",
+    "readyState": "READY",
+    "healthStatus": 200,
+    "allowedOriginPreflightStatus": 204,
+    "disallowedOriginStatus": 403,
+    "cachedResponseCheck": {
+      "httpStatus": 200,
+      "deliveryMode": "cached-verified-run",
+      "fallbackReason": "visitor-daily",
+      "browserReplayPresent": false
+    }
+  },
+  "claimBoundary": {
+    "proves": [
+      "a credentialed Solari Browser and Sandbox run completed through the bounded public-demo route",
+      "the live run researched 16 owned synthetic product pages for eight shopping needs",
+      "the Sandbox returned the verified 24.20 USD basket tradeoff",
+      "Browser and Sandbox cleanup completed before the response",
+      "a short-lived Browser replay was created without retaining its capability URL or session ID",
+      "the promoted deployment removes replay capability URLs from cached responses"
+    ],
+    "doesNotProve": [
+      "current or authorized commercial-retailer pricing",
+      "signed physical-device App Attest",
+      "TestFlight or App Store distribution",
+      "measured Solari cost per run",
+      "independent household usage or product-market fit"
+    ]
+  }
+}
