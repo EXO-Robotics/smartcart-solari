@@ -26,7 +26,6 @@
   const heroVideoPanel = document.querySelector(".hero-video-panel");
   const heroVideo = document.querySelector("[data-hero-video]");
   const heroVideoSource = document.querySelector("[data-hero-video-source]");
-  const heroVideoPending = document.querySelector("[data-video-pending]");
   const heroVideoLabel = document.querySelector("[data-video-label]");
   const heroVideoDuration = document.querySelector("[data-video-duration]");
   const heroVideoPlay = document.querySelector("[data-video-play]");
@@ -34,20 +33,22 @@
   const heroVideoCaption = document.querySelector("[data-video-caption]");
   const heroVideos = {
     before: {
-      src: "",
-      poster: "",
-      label: "Original SmartCart",
-      duration: "VIDEO PENDING",
-      badge: "BEFORE SOLARI · VIDEO PENDING",
-      caption: "The original SmartCart footage slot is ready and will be populated when the before video is supplied."
+      src: "assets/smartcart-before-solari.mp4",
+      poster: "assets/smartcart-before-solari-poster.jpg",
+      label: "Before Solari · Original SmartCart",
+      duration: "Play 00:40",
+      playLabel: "Play the 40 second Before Solari recording",
+      badge: "BEFORE SOLARI · RECORDED APP FLOW · NOT LIVE.",
+      caption: "This recorded original SmartCart flow proves recipe review and user-controlled retailer handoff. Retailer pages shown are recorded context, not current price or availability claims."
     },
     after: {
-      src: "assets/smartcart-solari-native-replay.mp4",
-      poster: "assets/smartcart-solari-native-replay-poster.jpg",
-      label: "Native SmartCart",
-      duration: "Play 01:04",
+      src: "assets/smartcart-after-solari.mp4",
+      poster: "assets/smartcart-after-solari-poster.jpg",
+      label: "After Solari · Native SmartCart",
+      duration: "Play 00:25",
+      playLabel: "Play the 25 second After Solari recording",
       badge: "AFTER SOLARI · DEBUG RECORDED REPLAY · NOT LIVE.",
-      caption: "This predecessor three-item native replay proves the native UX and user-controlled handoff. Solari Browser and Sandbox do not run inside this clip. Credentialed V4 Browser + Sandbox execution over eight requirements is proven separately by the immutable receipt."
+      caption: "This eight-item DEBUG recorded replay proves native research, package evidence, and user-controlled handoff. Solari Browser and Sandbox do not run inside this clip. Credentialed V4 Browser + Sandbox execution over eight requirements is proven separately by the immutable receipt."
     }
   };
 
@@ -68,13 +69,13 @@
     if (heroReel) heroReel.dataset.videoState = mode;
     if (heroVideoLabel) heroVideoLabel.textContent = model.label;
     if (heroVideoDuration) heroVideoDuration.textContent = model.duration;
+    if (heroVideoPlay) heroVideoPlay.setAttribute("aria-label", model.playLabel);
     if (heroVideoBadge) heroVideoBadge.textContent = model.badge;
     if (heroVideoCaption) heroVideoCaption.textContent = model.caption;
 
     const pending = !model.src;
     if (heroVideoPlay) heroVideoPlay.hidden = pending;
     if (heroVideo) heroVideo.hidden = pending;
-    if (heroVideoPending) heroVideoPending.hidden = !pending;
     if (!heroVideo || !heroVideoSource) return;
     if (pending) {
       heroVideoSource.removeAttribute("src");
