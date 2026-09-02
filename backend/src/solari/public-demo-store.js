@@ -22,8 +22,15 @@ export class UpstashSolariPublicDemoStore {
 
   key(...parts) { return [this.prefix, ...parts].join(':'); }
 
-  async runtimeEnabled(runtimeKey) {
-    return await this.redis.get(runtimeKey) === 'enabled';
+  async runtimeEnabled(runtimeKey, { bootstrap = false } = {}) {
+    const result = await this.redis.eval(`
+local current=redis.call('GET',KEYS[1])
+if current then return current end
+if redis.call('EXISTS',KEYS[2]) == 1 then return 'disabled' end
+redis.call('SET',KEYS[2],'initialized')
+if ARGV[1] == 'true' then redis.call('SET',KEYS[1],'enabled'); return 'enabled' end
+return 'disabled'`, [runtimeKey, `${runtimeKey}:bootstrap-complete`], [bootstrap ? 'true' : 'false']);
+    return result === 'enabled';
   }
 
   async admit({ visitorHash, now, perIpDailyLimit, globalDailyLimit, concurrencyLimit, dailyBudgetUnits, runBudgetUnits, leaseTtlSeconds }) {

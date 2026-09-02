@@ -44,6 +44,7 @@ function config(overrides = {}) {
     solariPublicDemoOrigin: origin,
     solariPublicDemoIpHmacSecret: 'test-only-hmac-secret-with-at-least-32-bytes',
     solariPublicDemoRuntimeKey: 'test:runtime',
+    solariPublicDemoRuntimeBootstrapEnabled: false,
     solariPublicDemoPerIpDailyLimit: 1,
     solariPublicDemoGlobalDailyLimit: 25,
     solariPublicDemoConcurrencyLimit: 1,
@@ -206,4 +207,18 @@ test('Upstash public admission is atomic across visitor, global, budget, and lea
   assert.match(call.script, /global-daily/);
   assert.match(call.script, /budget/);
   assert.match(call.script, /ZCARD/);
+});
+
+test('Upstash runtime bootstrap is one-time and cannot silently re-enable after a kill', async () => {
+  const calls = [];
+  const redis = {
+    async eval(script, keys, args) { calls.push({ script, keys, args }); return calls.length === 1 ? 'enabled' : 'disabled'; }
+  };
+  const store = new UpstashSolariPublicDemoStore({ redis, prefix: 'test:public' });
+  assert.equal(await store.runtimeEnabled('test:runtime', { bootstrap: true }), true);
+  assert.equal(await store.runtimeEnabled('test:runtime'), false);
+  assert.deepEqual(calls[0].keys, ['test:runtime', 'test:runtime:bootstrap-complete']);
+  assert.deepEqual(calls[0].args, ['true']);
+  assert.deepEqual(calls[1].args, ['false']);
+  assert.match(calls[0].script, /bootstrap-complete|EXISTS/);
 });

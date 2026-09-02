@@ -120,6 +120,7 @@ export function loadConfig(overrides = {}) {
     solariPublicDemoStorePrefix: keyPrefix('SOLARI_PUBLIC_DEMO_STORE_PREFIX', 'smartcart:solari:public-demo'),
     solariPublicDemoRuntimeKey: process.env.SOLARI_PUBLIC_DEMO_RUNTIME_KEY
       ?? 'smartcart:solari:public-demo:runtime-enabled',
+    solariPublicDemoRuntimeBootstrapEnabled: boolean('SOLARI_PUBLIC_DEMO_RUNTIME_BOOTSTRAP_ENABLED', false),
     solariPublicDemoPerIpDailyLimit: integer('SOLARI_PUBLIC_DEMO_PER_IP_DAILY_LIMIT', 1, { max: 10 }),
     solariPublicDemoGlobalDailyLimit: integer('SOLARI_PUBLIC_DEMO_GLOBAL_DAILY_LIMIT', 25, { max: 10_000 }),
     solariPublicDemoConcurrencyLimit: integer('SOLARI_PUBLIC_DEMO_CONCURRENCY_LIMIT', 1, { max: 5 }),

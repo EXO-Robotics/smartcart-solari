@@ -149,7 +149,9 @@ export function createSolariPublicDemoApi(options = {}) {
         : await readJson(request, config.solariPublicDemoMaxBodyBytes);
       assertPublicDemoRequest(payload);
 
-      if (!await getStore().runtimeEnabled(config.solariPublicDemoRuntimeKey)) {
+      if (!await getStore().runtimeEnabled(config.solariPublicDemoRuntimeKey, {
+        bootstrap: config.solariPublicDemoRuntimeBootstrapEnabled
+      })) {
         const fallback = await cached('runtime-disabled');
         if (fallback) { send(response, 200, fallback, traceID, responseCors); return; }
         throw new SolariResearchError('solari_public_demo_killed', 'Live public demo execution is disabled by the runtime switch.', { status: 503 });
