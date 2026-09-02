@@ -1,0 +1,79 @@
+{
+  "receiptVersion": "smartcart-solari-development-lane-deployment-v1",
+  "recordedAt": "2026-09-02T00:52:05Z",
+  "repository": "EXO-Robotics/smartcart-solari",
+  "sourceTreeCommit": "ad0ba7f97d2a9775349635640e48e677ec5e85be",
+  "deployment": {
+    "provider": "vercel",
+    "method": "authenticated-cli-production-deploy",
+    "id": "dpl_DzZH4Bj52xbsAE2Tu6aBMWSCmKER",
+    "readyState": "READY",
+    "target": "production",
+    "immutableURL": "https://smartcart-solari-beta-dk6eynvss-blake23.vercel.app",
+    "alias": "https://smartcart-solari-beta.vercel.app",
+    "inspectorURL": "https://vercel.com/blake23/smartcart-solari-beta/DzZH4Bj52xbsAE2Tu6aBMWSCmKER"
+  },
+  "lanes": {
+    "distribution": {
+      "basePath": "/v1/solari",
+      "appAttestValidationCategories": [2],
+      "storePrefix": "smartcart:solari:beta"
+    },
+    "development": {
+      "basePath": "/dev/v1/solari",
+      "enabled": true,
+      "appAttestValidationCategories": [3],
+      "storePrefix": "smartcart:solari:dev"
+    }
+  },
+  "sharedAdmission": {
+    "bundleID": "com.blakestudio.smartcart.solari-beta",
+    "allowedBuilds": ["4"],
+    "appAttestEnvironment": "production",
+    "exactRouteBinding": true,
+    "clientBearerFallback": false,
+    "credentialsLocation": "server-only"
+  },
+  "smoke": {
+    "health": {
+      "method": "GET",
+      "path": "/health",
+      "httpStatus": 200
+    },
+    "distributionChallenge": {
+      "method": "POST",
+      "path": "/v1/solari/access/challenges",
+      "httpStatus": 201,
+      "challengeValuesRetained": false
+    },
+    "developmentChallenge": {
+      "method": "POST",
+      "path": "/dev/v1/solari/access/challenges",
+      "httpStatus": 201,
+      "challengeValuesRetained": false
+    }
+  },
+  "deviceStatus": {
+    "pairedPhysicalPhoneConnected": true,
+    "installedBundleID": "com.blakestudio.smartcart.solari-beta",
+    "installedBuild": "4",
+    "installedBuildTargetsDevelopmentLane": false,
+    "newDevelopmentBuildUnsignedBuild": "PASS",
+    "newDevelopmentBuildSignedInstall": "PENDING",
+    "blocker": "The available Personal Team cannot provision the beta bundle with Associated Domains and App Attest; matching app and Share Extension profiles are unavailable."
+  },
+  "claimBoundary": {
+    "proves": [
+      "the development and distribution lanes are deployed at separate routes",
+      "distribution admission remains category-2-only",
+      "development admission is category-3-only and separately namespaced",
+      "the health route and both challenge routes responded"
+    ],
+    "doesNotProve": [
+      "a signed App Attest registration or assertion from an iPhone",
+      "Solari Browser or Sandbox execution through the development lane",
+      "TestFlight, App Store, or downloadable distribution",
+      "authorized real-retailer research"
+    ]
+  }
+}

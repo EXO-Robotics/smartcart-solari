@@ -231,7 +231,23 @@ test('real P-256 assertion verification rejects an exact-body mismatch',()=>{
   const client=assertionClientData({challenge,payloadBytes:payload}),signature=sign('sha256',Buffer.concat([authData,client.hash]),privateKey),assertionObject=cbor.encode({authenticatorData:authData,signature}).toString('base64');
   const keyRecord={publicKeySPKI:publicKey.export({type:'spki',format:'der'}).toString('base64'),environment:'production',validationCategory:2,bundleVersion:'100'};
   assert.equal(verifier.verifyAssertion({assertionObject,challenge,payloadBytes:payload,keyRecord}).counter,1);
+  assert.throws(()=>verifier.verifyAssertion({assertionObject,challenge,payloadBytes:payload,keyRecord:{...keyRecord,validationCategory:3}}),{code:'app_attest_distribution_invalid'});
   assert.throws(()=>verifier.verifyAssertion({assertionObject,challenge,payloadBytes:Buffer.from('{"requestID":"two"}'),keyRecord}),{code:'app_attest_assertion_invalid'});
+});
+
+test('development App Attest lane admits only its explicit category and build',()=>{
+  const teamID='ABCDEFGHIJ',bundleID='com.example.app',challenge=Buffer.alloc(32,9).toString('base64url'),payload=Buffer.from('{"requestID":"dev"}');
+  const researchPath='/dev/v1/solari/research';
+  const verifier=new AppleAppAttestVerifier({teamID,bundleID,allowedBuilds:['4'],allowedValidationCategories:[3],researchPath,receiptVerifier:async()=>({creationTime:new Date().toISOString()})});
+  const{privateKey,publicKey}=generateKeyPairSync('ec',{namedCurve:'prime256v1'}),authData=Buffer.alloc(37);createHash('sha256').update(`${teamID}.${bundleID}`).digest().copy(authData);authData.writeUInt32BE(1,33);
+  const client=assertionClientData({challenge,path:researchPath,payloadBytes:payload}),signature=sign('sha256',Buffer.concat([authData,client.hash]),privateKey),assertionObject=cbor.encode({authenticatorData:authData,signature}).toString('base64');
+  const keyRecord={publicKeySPKI:publicKey.export({type:'spki',format:'der'}).toString('base64'),environment:'production',validationCategory:3,bundleVersion:'4'};
+  assert.equal(verifier.verifyAssertion({assertionObject,challenge,payloadBytes:payload,keyRecord}).counter,1);
+  const distributionVerifier=new AppleAppAttestVerifier({teamID,bundleID,allowedBuilds:['4'],allowedValidationCategories:[3]});
+  assert.throws(()=>distributionVerifier.verifyAssertion({assertionObject,challenge,payloadBytes:payload,keyRecord}),{code:'app_attest_assertion_invalid'});
+  assert.throws(()=>verifier.verifyAssertion({assertionObject,challenge,payloadBytes:payload,keyRecord:{...keyRecord,validationCategory:2}}),{code:'app_attest_distribution_invalid'});
+  assert.throws(()=>verifier.verifyAssertion({assertionObject,challenge,payloadBytes:payload,keyRecord:{...keyRecord,bundleVersion:'5'}}),{code:'app_attest_distribution_invalid'});
+  assert.throws(()=>new AppleAppAttestVerifier({teamID,bundleID,allowedBuilds:['4'],allowedValidationCategories:[2,3]}),{code:'app_attest_not_configured'});
 });
 
 test('strict verifier rejects trailing CBOR and malformed assertion authenticator data',()=>{
@@ -252,6 +268,15 @@ test('Upstash adapter accepts SDK-deserialized GET/GETDEL values and atomically 
   const store=new UpstashSolariBetaStore({redis,prefix:'test'});await store.putAttestedKey('hash',{publicKeySPKI:'value'});
   assert.equal(evalCall.keys.length,2);assert.match(evalCall.script,/SET.*KEYS\[1\].*SET.*KEYS\[2\]/s);
   assert.deepEqual(await store.getAttestedKey('hash'),{publicKeySPKI:'deserialized'});assert.equal(await store.getCounter('hash'),4);assert.deepEqual(await store.consumeChallenge('id'),{challengeID:'deserialized'});
+});
+
+test('beta API applies a separate configured Redis namespace',()=>{
+  const api=createSolariBetaApi({
+    config:{...baseConfig,solariBetaRedisUrl:'https://redis.example',solariBetaRedisToken:'token',solariBetaStorePrefix:'smartcart:solari:dev'},
+    verifier:new FakeVerifier(),
+    researchService:{research:async()=>resultExample}
+  });
+  assert.equal(api.services.getStore().prefix,'smartcart:solari:dev');
 });
 
 test('Apple published validation guide sample remains an explicit negative cross-check',()=>{

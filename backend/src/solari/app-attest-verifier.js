@@ -105,9 +105,9 @@ export function assertionClientData({challenge,method='POST',path='/v1/solari/re
 }
 
 export class AppleAppAttestVerifier {
-  constructor({teamID,bundleID,allowedBuilds,now=Date.now,appAttestRootPEM=APP_ATTEST_ROOT_PEM,receiptRootDER=RECEIPT_ROOT_DER,receiptVerifier=verifyReceipt}={}){
-    this.appID=`${teamID}.${bundleID}`;this.rpIdHash=sha256(Buffer.from(this.appID));this.allowedBuilds=new Set(allowedBuilds??[]);this.now=now;this.appAttestRoot=new X509Certificate(appAttestRootPEM);this.receiptRootDER=receiptRootDER;this.receiptVerifier=receiptVerifier;
-    if(!teamID||!bundleID||this.allowedBuilds.size===0)throw new SolariResearchError('app_attest_not_configured','App Attest identity and build allowlist are not configured.',{status:503});
+  constructor({teamID,bundleID,allowedBuilds,allowedValidationCategories=[2],researchPath='/v1/solari/research',now=Date.now,appAttestRootPEM=APP_ATTEST_ROOT_PEM,receiptRootDER=RECEIPT_ROOT_DER,receiptVerifier=verifyReceipt}={}){
+    this.appID=`${teamID}.${bundleID}`;this.rpIdHash=sha256(Buffer.from(this.appID));this.allowedBuilds=new Set(allowedBuilds??[]);this.allowedValidationCategories=new Set(allowedValidationCategories??[]);this.researchPath=researchPath;this.now=now;this.appAttestRoot=new X509Certificate(appAttestRootPEM);this.receiptRootDER=receiptRootDER;this.receiptVerifier=receiptVerifier;
+    if(!teamID||!bundleID||this.allowedBuilds.size===0||this.allowedValidationCategories.size!==1||[...this.allowedValidationCategories].some((value)=>![2,3,4].includes(value))||!['/v1/solari/research','/dev/v1/solari/research'].includes(this.researchPath))throw new SolariResearchError('app_attest_not_configured','App Attest identity, build, validation-category, and research-path allowlists are not configured.',{status:503});
   }
   async verifyAttestation({keyID,attestationObject,challenge}){
     const keyBytes=strictBase64(keyID,64,'keyID');if(keyBytes.length!==32)fail('app_attest_malformed','keyID must decode to 32 bytes.');
@@ -121,16 +121,16 @@ export class AppleAppAttestVerifier {
     if(!equal(sha256(publicKeyPoint(leaf)),keyBytes))fail('app_attest_key_mismatch','The App Attest key ID does not match its certificate.');
     const auth=parseAuthenticatorData(object.authData,{attestation:true});if(!equal(auth.rpIdHash,this.rpIdHash)||auth.counter!==0||!equal(auth.aaguid,PROD_AAGUID)||!equal(auth.credentialID,keyBytes))fail('app_attest_identity_invalid','The App Attest authenticator identity is invalid.');assertCoseMatchesCertificate(auth.coseKey,leaf);
     const category=validationCategory(extensionValue(auth.extensions,'apple_validation_category_01'));const build=bundleVersion(extensionValue(auth.extensions,'apple_bundle_version_01'));
-    if(category!==2||!this.allowedBuilds.has(build))fail('app_attest_distribution_invalid','Only allowlisted TestFlight builds are accepted.');
+    if(!this.allowedValidationCategories.has(category)||!this.allowedBuilds.has(build))fail('app_attest_distribution_invalid','The App Attest validation category or build is not allowlisted.');
     const receipt=await this.receiptVerifier(object.attStmt.receipt,{appID:this.appID,leaf,clientDataHash,now:this.now,receiptRootDER:this.receiptRootDER});
     return {publicKeySPKI:spkiBase64(leaf),appID:this.appID,environment:'production',validationCategory:category,bundleVersion:build,counter:0,receiptCreatedAt:receipt.creationTime,receiptDigest:receipt.digest};
   }
   verifyAssertion({assertionObject,challenge,payloadBytes,keyRecord}){
     const object=strictCBOR(strictBase64(assertionObject,16384,'assertionObject'),'assertionObject');if(!Buffer.isBuffer(object?.authenticatorData)||!Buffer.isBuffer(object?.signature))fail('app_attest_malformed','Assertion object shape is invalid.');
     const auth=parseAuthenticatorData(object.authenticatorData);if(!equal(auth.rpIdHash,this.rpIdHash))fail('app_attest_identity_invalid','Assertion RP ID does not match.');
-    const client=assertionClientData({challenge,payloadBytes});const signed=Buffer.concat([object.authenticatorData,client.hash]);
+    const client=assertionClientData({challenge,path:this.researchPath,payloadBytes});const signed=Buffer.concat([object.authenticatorData,client.hash]);
     const publicKey=createPublicKey({key:Buffer.from(keyRecord.publicKeySPKI,'base64'),format:'der',type:'spki'});if(!verifySignature('sha256',signed,publicKey,object.signature))fail('app_attest_assertion_invalid','The App Attest assertion signature is invalid.');
-    if(keyRecord.environment!=='production'||keyRecord.validationCategory!==2||!this.allowedBuilds.has(keyRecord.bundleVersion))fail('app_attest_distribution_invalid','The attested key is not an allowlisted TestFlight build.');
+    if(keyRecord.environment!=='production'||!this.allowedValidationCategories.has(keyRecord.validationCategory)||!this.allowedBuilds.has(keyRecord.bundleVersion))fail('app_attest_distribution_invalid','The attested key validation category or build is not allowlisted.');
     return {counter:auth.counter,bodyDigest:client.bodyDigest};
   }
 }

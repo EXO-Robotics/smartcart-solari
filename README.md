@@ -1,14 +1,26 @@
-# SmartCart Solari
+# SmartCart × Solari
 
-**Start with the product transformation:** [open the SmartCart × Solari interactive case study](https://exo-robotics.github.io/smartcart-solari/). It shows the native before/after flow, why Browser and Sandbox have necessary jobs, and how the same Solari execution layer can upgrade frontends beyond grocery planning. The older [evidence replay](https://exo-robotics.github.io/smartcart-solari/website/solari-demo/) remains available as a separate, explicitly labeled artifact.
+> SmartCart already knew what the shopper needed. Solari lets it research and evaluate which observed packages sensibly satisfy the trip—without taking control away from the shopper.
 
-SmartCart Solari is an experimental, isolated fork of [SmartCart](https://github.com/EXO-Robotics/smartcart-ios) asking:
+[![SmartCart learned to see the shelf with Solari](website/solari-case-study/assets/social-preview.jpg)](https://exo-robotics.github.io/smartcart-solari/)
+
+**[Watch the before/after case study](https://exo-robotics.github.io/smartcart-solari/)** · **[Inspect the credentialed Browser + Sandbox receipt](evidence/live/smartcart-solari-v4-qualification-33546912947.json)** · **[Run the native replay](#run-the-native-replay)**
+
+This isolated public fork of [SmartCart](https://github.com/EXO-Robotics/smartcart-ios) answers one bounded product question:
 
 > Can Solari turn SmartCart's retailer handoff into a useful agentic shopping workflow without violating user trust?
 
-The V4 product path starts inside native SmartCart. Any trip with waiting items may offer **Research current options** after recipe extraction, pantry exclusion, shopping-list aggregation, and SmartCart's existing product preparation. SmartCart admits only eligible exact matches from the owned Demo Grocer catalog, researches those lines, and reports **Researched X of Y items**. Every skipped line remains visible with a reason and continues unchanged through the normal SmartCart retailer handoff.
+| Before Solari | After Solari |
+| --- | --- |
+| SmartCart extracts the recipe, applies pantry exclusions, aggregates the list, and opens a retailer. The shopper still has to search and compare packages. | The shopper requests research. Solari Browser observes approved product evidence, Solari Sandbox evaluates complete baskets, SmartCart verifies the result, and the shopper keeps the final handoff. |
 
-This is not arbitrary ingredient coverage. V4 supports 19 owned synthetic candidates in eight seeded groups: chicken, pasta, olive oil, heavy cream, Parmesan, garlic, lemon, and parsley. A request may contain 1–12 eligible requirements, at most three candidates per requirement, and at most 24 observations. Quantities are normalized as mass, volume, or count.
+The frozen V4 qualification researched **8 requirements** from **16 fresh Browser observations**. Sandbox selected a synthetic **$24.20** basket instead of the **$23.57** cheapest adequate basket—spending **$0.63** within a $0.75 cap to avoid about **680 g / 1.5 lb of excess chicken**.
+
+**Evidence boundary:** this proves real Solari Browser and Sandbox execution against SmartCart's owned synthetic Demo Grocer. The native before/after videos are recorded app flows, not provider-execution proof. Authorized commercial-retailer coverage, signed App Attest on a physical device, TestFlight, App Store distribution, and current consumer pricing remain **PENDING**.
+
+The V4 product path starts inside native SmartCart. Any trip with waiting items may offer **Research current options** after recipe extraction, pantry exclusion, shopping-list aggregation, and SmartCart's existing product preparation. SmartCart admits only eligible exact matches, researches those lines, and reports **Researched X of Y items**. Every skipped line remains visible with a reason and continues unchanged through the normal SmartCart retailer handoff.
+
+V4 supports 19 owned synthetic candidates in eight seeded groups: chicken, pasta, olive oil, heavy cream, Parmesan, garlic, lemon, and parsley. A request may contain 1–12 eligible requirements, at most three candidates per requirement, and at most 24 observations. Quantities are normalized as mass, volume, or count.
 
 ## Why Solari is necessary
 
@@ -50,7 +62,7 @@ Recipe / trip
   -> unchanged user-controlled SmartCart retailer handoff
 ~~~
 
-Production SmartCart is untouched. This public submission was forked from upstream SmartCart commit [fe6589b1bd811a7ca8afa9824deba9d3cbde7ab9](https://github.com/EXO-Robotics/smartcart-ios/commit/fe6589b1bd811a7ca8afa9824deba9d3cbde7ab9). Only the separate **SmartCart-SolariBeta** scheme / **Release-SolariBeta** configuration points at the beta path. Normal Release configuration has no Solari endpoint.
+Production SmartCart is untouched. This public submission was forked from upstream SmartCart commit [fe6589b1bd811a7ca8afa9824deba9d3cbde7ab9](https://github.com/EXO-Robotics/smartcart-ios/commit/fe6589b1bd811a7ca8afa9824deba9d3cbde7ab9). Only the separate Solari schemes point at the protected path. **SmartCart-SolariDevelopment** runs local Apple-development builds through the default-off `/dev` lane (App Attest category 3); **SmartCart-SolariBeta** remains the Release/TestFlight lane (category 2). Normal Release configuration has no Solari endpoint. See the [development-lane boundary](Docs/SOLARI_DEVELOPMENT_LANE.md).
 
 The App Attest transport remains **solari-app-attest-research-envelope-v1**; its signed payload contains exact V4 request bytes. That transport version is not the retailer-evidence version.
 
@@ -73,6 +85,7 @@ Observed product subtotals exclude tax, fees, fulfillment, inventory, discounts,
 - Browser sessions are fresh and logged out. Persistent profiles are intentionally unused; if enabled, Playwright storage state would contain cookies and per-origin localStorage and must be treated as account authority.
 - Solari, App Attest/Redis, and operator credentials remain server-side. No provider or operator bearer secret ships to iOS or web.
 - The protected live route is default-off and bound to App Attest, allowlisted app identity/build, one-use challenges, counters, quotas, leases, cancellation, and a runtime kill switch.
+- Local-device testing uses a distinct default-off route and Redis namespace. It accepts category 3 only; the existing TestFlight endpoint remains category 2 only. Neither lane accepts a client bearer or fixture fallback.
 - Raw HTML, screenshots, recordings, cookies, and signed capability URLs are not retained in result evidence.
 - Browser/session/client cleanup and Sandbox teardown run on success and failure paths; cleanup failure suppresses success.
 - The user always controls final handoff.
@@ -87,6 +100,8 @@ That provider receipt is server-side operator qualification. It is not signed na
 
 Publication commit **8f749e33808119ee403142929da5b757ed934e35** is deployed to the protected beta alias. Vercel deployment **dpl_AkwuZcEt7N6WdFmR6Tye4BrqasbR** reached READY; `/health` returned 200 and the App Attest challenge route returned 201. The [deployment receipt](evidence/live/smartcart-solari-v4-deployment-8f749e3-20260901.json) intentionally does not call that smoke a signed native or provider execution.
 
+Development-lane commit **ad0ba7f97d2a9775349635640e48e677ec5e85be** is deployed at the same alias through Vercel deployment **dpl_DzZH4Bj52xbsAE2Tu6aBMWSCmKER**. Distribution `/v1` remains App Attest category-2-only; the separately namespaced `/dev/v1` lane is category-3-only and accepts the same exact allowlisted beta identity/build. Health returned 200 and both challenge routes returned 201. The [development-lane receipt](evidence/live/smartcart-solari-development-lane-ad0ba7f-20260901.json) records those boundaries without claiming a signed assertion or provider run.
+
 Historical V3 evidence is preserved because it proves the narrower predecessor actually ran:
 
 - Credentialed Browser+Sandbox run [33533170189](https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33533170189) at runtime **772e65bac5cabfba8b5e8b6a9482191a715c616a**.
@@ -95,7 +110,7 @@ Historical V3 evidence is preserved because it proves the narrower predecessor a
 
 Those receipts do not qualify V4's variable subset, larger catalog, mass/volume/count admission, or DP result.
 
-Signed archive remains **PENDING**: three Apple Development identities are visible, but the personal team lacks the needed Associated Domains/App Attest capability for the beta bundle, no matching app profile exists, the Share Extension profile has an application-groups mismatch, and the physical iPhone is offline. There is no TestFlight, App Store, downloadable-app, or signed-native claim.
+Signed archive remains **PENDING**: a paired physical iPhone is now connected and already has beta build 4 installed, but that installed build predates the development-lane configuration and still targets the strict distribution route. The available personal team lacks the needed Associated Domains/App Attest capability for the beta bundle, no matching app profile exists, and the Share Extension profile has an application-groups mismatch. Consequently the new `SmartCart-SolariDevelopment` build could not be signed and installed. There is no successful signed-App-Attest, TestFlight, App Store, or downloadable-app claim.
 
 ## Setup and targeted validation
 
@@ -110,6 +125,19 @@ npm --prefix backend test
 python3 website/solari-demo/validate.py
 ~~~
 
+### Run the native replay
+
+The fastest reviewer path requires no Solari credential and makes no live-provider claim:
+
+1. Open `SmartCart.xcodeproj` in Xcode.
+2. Select the `SmartCart` scheme and an iPhone Simulator.
+3. Run the Debug configuration.
+4. On Home, tap **Open Solari Demo Meal**.
+5. Continue through **Recipe Review** and tap **Research current options**.
+6. Inspect the eight-item price check, then choose **Looks good — continue shopping** or **Edit my list**.
+
+The screen is labeled **DEBUG RECORDED REPLAY · NOT LIVE**. Real credentialed Browser + Sandbox execution is proven separately by the immutable V4 receipt linked above.
+
 Exercise focused native contract tests with the SmartCart scheme, then build the beta configuration without implying signing:
 
 ~~~bash
@@ -121,7 +149,9 @@ xcodebuild \
   CODE_SIGNING_ALLOWED=NO build
 ~~~
 
-At qualified V4 source state: focused V3/V4 qualification tests **21/21**, full backend **214/214**, focused native **28/28** on iPhone 17 Pro / iOS 26.5 Simulator, web **7/7**, dependency audit **0 vulnerabilities**, and unsigned **Release-SolariBeta BUILD SUCCEEDED**. The broader native suite retains two pre-existing baseline-failing test methods; V4-focused tests are green. See [qualification](Docs/SOLARI_QUALIFICATION.md) and the [demo runbook](Docs/SOLARI_DEMO_RUNBOOK.md) for claim gates.
+For a real Xcode-installed development-device run, select `SmartCart-SolariDevelopment`. Its Run action points at `/dev`; its Archive action intentionally uses `Release-SolariBeta` so a distribution archive cannot inherit the development endpoint.
+
+At the presentation release gate: Solari-focused backend **87/87**, full backend **217/217**, focused native **29/29** on iPhone 17 Pro / iOS 26.5 Simulator, case-study **3/3**, replay/owned-catalog **7/7**, dependency audit **0 vulnerabilities**, and unsigned **Release-SolariBeta BUILD SUCCEEDED**. The complete native demo route also passed a fresh UI exercise from Home through the eight-of-eight price check and back into SmartCart's original in-app retailer setup. See [qualification](Docs/SOLARI_QUALIFICATION.md) and the [demo runbook](Docs/SOLARI_DEMO_RUNBOOK.md) for claim boundaries.
 
 ## Deployment
 

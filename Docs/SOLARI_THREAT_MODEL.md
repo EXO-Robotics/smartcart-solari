@@ -47,7 +47,7 @@ The transport envelope remains **solari-app-attest-research-envelope-v1** while 
 
 Release-SolariBeta has no fixture or bearer fallback. A 401/403 clears the local accepted-key reference and requires an explicit retry. Provider work is rejected before Browser/Sandbox unless the live beta path, App Attest identity/build, state store, quotas, lease, and kill switch all admit it.
 
-No signed V4 App Attest request has run. Three development identities exist, but archive remains blocked by unsupported personal-team capabilities, a missing matching app profile, a Share Extension application-groups mismatch, and an offline physical phone.
+No signed V4 App Attest request has run. A physical phone is connected, but its installed build predates the development lane and targets the strict distribution route. Installing the new development-lane build remains blocked by unsupported personal-team capabilities, a missing matching app profile, and a Share Extension application-groups mismatch.
 
 ## Data minimization and retention
 

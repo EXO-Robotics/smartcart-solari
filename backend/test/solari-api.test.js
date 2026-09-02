@@ -77,6 +77,34 @@ test('public Solari API wires challenge, attestation, and V2 envelope without th
   assert.equal((await post(server.api,{}, {}, '/v1/solari/access/unknown')).response.status,404);
 });
 
+test('development route is default-off and isolated from the distribution App Attest lane', async () => {
+  const distributionCalls=[];const developmentCalls=[];
+  const makeBeta=(calls)=>({
+    async challenge(payload){calls.push(['challenge',payload]);return{status:201,payload:{schemaVersion:'solari-app-attest-challenge-result-v1'}};},
+    async attestation(payload){calls.push(['attestation',payload]);return{status:201,payload:{schemaVersion:'solari-app-attestation-result-v1'}};},
+    async researchEnvelope(payload){calls.push(['research',payload]);return{status:200,payload:{schemaVersion:'solari-shopping-research-result-v4',executionMode:'live'}};}
+  });
+  const disabled=await listen({developmentBetaApi:makeBeta(developmentCalls)});
+  assert.equal((await post(disabled.api,{}, {}, '/dev/v1/solari/access/challenges')).response.status,404);
+
+  let v1Calls=0;
+  const enabled=await listen({
+    config:{solariRateLimitPerMinute:10,solariMaxBodyBytes:32_768,solariDevelopmentLaneEnabled:true},
+    betaApi:makeBeta(distributionCalls),
+    developmentBetaApi:makeBeta(developmentCalls),
+    service:{research:async()=>{v1Calls+=1;}}
+  });
+  assert.equal((await post(enabled.api,{}, {}, '/v1/solari/access/challenges')).response.status,201);
+  assert.equal((await post(enabled.api,{}, {}, '/dev/v1/solari/access/challenges')).response.status,201);
+  assert.equal((await post(enabled.api,{}, {}, '/dev/v1/solari/access/attestations')).response.status,201);
+  assert.equal((await post(enabled.api,{schemaVersion:'solari-app-attest-research-envelope-v1'}, {}, '/dev/v1/solari/research')).response.status,200);
+  const legacy=await post(enabled.api,await fixture(),{},'/dev/v1/solari/research');
+  assert.equal(legacy.response.status,403);assert.equal(legacy.payload.error.code,'app_attest_envelope_required');
+  assert.deepEqual(distributionCalls.map(([name])=>name),['challenge']);
+  assert.deepEqual(developmentCalls.map(([name])=>name),['challenge','attestation','research']);
+  assert.equal(v1Calls,0);
+});
+
 test('POST /v1/solari/research returns the bounded fixture replay with explicit trust metadata', async () => {
   const server = await listen();
   try {

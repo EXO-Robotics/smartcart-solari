@@ -47,6 +47,7 @@ struct SolariRetailerReviewSheet: View {
     @State private var loadSequence = 0
     @State private var refreshNextLoad = false
     @State private var isProvenanceExpanded = false
+    @State private var presentedProductSource: SolariProductSourceDestination?
 
     init(context: SolariReviewContext) {
         self.context = context
@@ -56,24 +57,31 @@ struct SolariRetailerReviewSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    trustBoundary
+                VStack(alignment: .leading, spacing: 14) {
                     phaseContent
                 }
                 .padding(18)
-                .padding(.bottom, 126)
+                .padding(.bottom, 92)
             }
             .scrollIndicators(.hidden)
             .smartCartWorkflowBackground()
-            .navigationTitle("SmartCart Basket Comparison")
+            .navigationTitle("Price Check")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Edit") { dismiss() }
-                        .accessibilityHint("Returns to Recipe Review without opening a retailer")
+                    Button("Back") { dismiss() }
+                        .accessibilityHint("Returns to Recipe Review")
                 }
             }
             .safeAreaInset(edge: .bottom) { actionBar }
+        }
+        .sheet(item: $presentedProductSource) { destination in
+            RetailerSafariView(
+                url: destination.url,
+                onFinish: { presentedProductSource = nil }
+            )
+            .ignoresSafeArea()
+            .presentationDetents([.large])
         }
         .task(id: loadSequence) {
             let refresh = refreshNextLoad
@@ -82,51 +90,16 @@ struct SolariRetailerReviewSheet: View {
         }
     }
 
-    private var trustBoundary: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label(
-                isRecordedFixture ? "DEBUG RECORDED REPLAY · NOT LIVE" : "OWNED DEMO RETAILER RESEARCH",
-                systemImage: isRecordedFixture ? "record.circle" : "checkmark.shield.fill"
-            )
-                .smartEyebrow()
-
-            Text(isRecordedFixture ? "Recorded catalog evidence — not live" : "SmartCart comparison — not a checkout quote")
-                .font(.system(.title2, design: .rounded, weight: .bold))
-                .foregroundStyle(SmartCartTheme.navy)
-
-            Text(
-                isRecordedFixture
-                    ? "This DEBUG build replays historical synthetic Demo Grocer evidence so the native review can be exercised without device signing. Solari Browser and Sandbox do not run in replay mode."
-                    : "Solari Browser reads only SmartCart’s owned synthetic Demo Grocer pages. Solari Sandbox proposes a low-surplus basket within SmartCart’s $0.75 premium cap."
-            )
-                .font(.subheadline)
-                .foregroundStyle(SmartCartTheme.secondaryInk)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Label(isRecordedFixture
-                ? "Apple App Attest is not used for this local recorded replay. Release-SolariBeta has no replay bypass."
-                : "Apple App Attest gates each request. No retailer login, cookies, account, cart, or checkout data is sent or stored.",
-                systemImage: "lock.shield")
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(SmartCartTheme.green)
-            .fixedSize(horizontal: false, vertical: true)
-        }
-        .smartCartCard()
-        .smartCartShadow()
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("solari-trust-boundary")
-    }
-
     @ViewBuilder
     private var phaseContent: some View {
         switch phase {
         case .loading:
-            VStack(spacing: 14) {
+            VStack(spacing: 12) {
                 ProgressView().tint(SmartCartTheme.green)
-                Text(isRecordedFixture ? "Loading recorded evidence…" : "Researching owned Demo Grocer options…")
+                Text(isRecordedFixture ? "Loading recorded prices…" : "Checking prices…")
                     .font(.headline)
                     .foregroundStyle(SmartCartTheme.navy)
-                Text("SmartCart verifies submitted product identities, source URLs, timestamps, provenance, completeness, and basket math before showing a result.")
+                Text("Finding package sizes and estimating your total.")
                     .font(.subheadline)
                     .foregroundStyle(SmartCartTheme.secondaryInk)
                     .multilineTextAlignment(.center)
@@ -145,31 +118,18 @@ struct SolariRetailerReviewSheet: View {
     }
 
     private func loadedContent(_ research: SolariValidatedResearch) -> some View {
-        VStack(alignment: .leading, spacing: 18) {
-            coverageSummary
-            basketSummary(research.result.basket)
-            comparisonSummary(research.result.comparison)
-            if !activePlan.skippedLines.isEmpty {
-                skippedLinesSummary
-            }
-            if !research.warnings.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Label("Limitations to review", systemImage: "exclamationmark.triangle.fill")
-                        .font(.headline)
-                        .foregroundStyle(SmartCartTheme.coral)
-                    ForEach(research.warnings, id: \.self) { warning in
-                        Text("• \(warning)")
-                            .font(.subheadline)
-                            .foregroundStyle(SmartCartTheme.secondaryInk)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                .smartCartCard()
-                .accessibilityIdentifier("solari-partial-warning")
+        VStack(alignment: .leading, spacing: 14) {
+            if isRecordedFixture {
+                Label("DEBUG RECORDED REPLAY · NOT LIVE", systemImage: "record.circle")
+                    .smartEyebrow()
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .accessibilityIdentifier("solari-recorded-replay-label")
             }
 
+            priceSummary(research.result.basket)
+
             VStack(alignment: .leading, spacing: 12) {
-                Text("Recommended packages")
+                Text("Prices found")
                     .font(.system(.title3, design: .rounded, weight: .bold))
                     .foregroundStyle(SmartCartTheme.navy)
 
@@ -182,115 +142,65 @@ struct SolariRetailerReviewSheet: View {
                 }
             }
 
-            provenanceDisclosure(research.result)
+            detailsDisclosure(research)
         }
     }
 
-    private var coverageSummary: some View {
+    private func priceSummary(_ basket: SolariBasketSummary) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("Researched \(activePlan.request.requirements.count) of \(activePlan.totalWaitingCount) items", systemImage: "checklist")
-                .font(.system(.title3, design: .rounded, weight: .bold))
-                .foregroundStyle(SmartCartTheme.navy)
-            if activePlan.skippedLines.isEmpty {
-                Text("Every waiting item had an exact reviewed quantity and a compatible Demo Grocer catalog match.")
-            } else {
-                Text("The remaining \(activePlan.skippedLines.count) item\(activePlan.skippedLines.count == 1 ? "" : "s") stay unchanged and continue through normal SmartCart.")
-            }
-        }
-        .font(.subheadline)
-        .foregroundStyle(SmartCartTheme.secondaryInk)
-        .fixedSize(horizontal: false, vertical: true)
-        .smartCartCard()
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("solari-coverage-summary")
-    }
-
-    private var skippedLinesSummary: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label("Continuing through normal SmartCart", systemImage: "cart")
+            Text(basket.completeness == .complete ? "Estimated total" : "Prices found")
                 .font(.headline)
-                .foregroundStyle(SmartCartTheme.navy)
-            ForEach(activePlan.skippedLines) { line in
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(line.name)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(SmartCartTheme.navy)
-                    Text(line.reason.localizedDescription)
-                        .font(.caption)
-                        .foregroundStyle(SmartCartTheme.secondaryInk)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .accessibilityElement(children: .combine)
-            }
-        }
-        .smartCartCard()
-        .accessibilityIdentifier("solari-skipped-lines")
-    }
-
-    private func comparisonSummary(_ comparison: SolariBasketComparison) -> some View {
-        let presentation = SolariBasketComparisonPresentation(comparison)
-        return VStack(alignment: .leading, spacing: 8) {
-            Label("Low-waste tradeoff", systemImage: "scale.3d")
-                .font(.headline)
-                .foregroundStyle(SmartCartTheme.navy)
-            Text(presentation.headline)
-                .font(.system(.title3, design: .rounded, weight: .bold))
-                .foregroundStyle(SmartCartTheme.navy)
-                .fixedSize(horizontal: false, vertical: true)
-            Text(presentation.detail)
-                .font(.caption.weight(.semibold))
                 .foregroundStyle(SmartCartTheme.secondaryInk)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .smartCartCard()
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("solari-low-waste-comparison")
-    }
-
-    private func basketSummary(_ basket: SolariBasketSummary) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label(
-                basket.completeness == .complete ? "Evidence-backed comparison" : "Partial comparison",
-                systemImage: basket.completeness == .complete ? "basket.fill" : "basket"
-            )
-            .font(.headline)
-            .foregroundStyle(SmartCartTheme.navy)
 
             if let subtotal = basket.observedSubtotal {
                 Text(currencyText(subtotal))
-                    .font(.system(.largeTitle, design: .rounded, weight: .bold))
+                    .font(.system(size: 42, weight: .bold, design: .rounded))
                     .foregroundStyle(SmartCartTheme.green)
-                    .accessibilityLabel("Observed Demo Grocer basket subtotal \(currencyText(subtotal))")
+                    .accessibilityLabel("Estimated subtotal \(currencyText(subtotal))")
                 if context.plan.servingCount > 0, basket.completeness == .complete {
-                    Text(
-                        "Estimated basket cost per serving: " +
-                        "\(currencyText(subtotal / Decimal(context.plan.servingCount))) · includes package overage"
-                    )
+                    Text("\(currencyText(subtotal / Decimal(context.plan.servingCount))) per serving")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(SmartCartTheme.secondaryInk)
                         .accessibilityIdentifier("solari-cost-per-serving")
                 }
             } else {
-                Text("No observed subtotal")
+                Text("Price unavailable")
                     .font(.title3.bold())
                     .foregroundStyle(SmartCartTheme.secondaryInk)
             }
 
-            Text(isRecordedFixture
-                ? "Historical recorded synthetic prices only — not live or guaranteed. Availability, tax, fees, fulfillment, and your final retailer total remain unknown."
-                : "Timestamped visible prices from the synthetic test catalog only. Availability, tax, fees, fulfillment, and your final retailer total remain unknown.")
-                .font(.caption)
+            Text(coverageText)
+                .font(.caption.weight(.semibold))
                 .foregroundStyle(SmartCartTheme.secondaryInk)
-                .fixedSize(horizontal: false, vertical: true)
         }
         .smartCartCard()
         .smartCartShadow()
-        .accessibilityIdentifier("solari-basket-summary")
+        .accessibilityIdentifier("solari-price-summary")
     }
 
-    private func provenanceDisclosure(_ result: SolariResearchResult) -> some View {
-        DisclosureGroup(isExpanded: $isProvenanceExpanded) {
-            VStack(alignment: .leading, spacing: 8) {
+    private func detailsDisclosure(_ research: SolariValidatedResearch) -> some View {
+        let result = research.result
+        let comparison = SolariBasketComparisonPresentation(result.comparison)
+        return DisclosureGroup(isExpanded: $isProvenanceExpanded) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(isRecordedFixture
+                    ? "Recorded synthetic Demo Grocer prices. They are not live or guaranteed."
+                    : "Timestamped visible prices from SmartCart’s owned Demo Grocer test catalog. They are not a checkout quote.")
+
+                Label(coverageText, systemImage: "checklist")
+                Label(comparison.headline, systemImage: "scale.3d")
+
+                ForEach(research.warnings, id: \.self) { warning in
+                    Label(warning, systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(SmartCartTheme.coral)
+                }
+
+                if !activePlan.skippedLines.isEmpty {
+                    Text("Not priced: \(activePlan.skippedLines.map(\.name).joined(separator: ", ")).")
+                }
+
+                Divider()
+
                 if result.executionMode == .recordedFixture {
                     Label("Solari Browser · not run for recorded replay", systemImage: "safari")
                     Label("Solari Sandbox · not run for recorded replay", systemImage: "shippingbox")
@@ -306,21 +216,30 @@ struct SolariRetailerReviewSheet: View {
             }
             .padding(.top, 10)
         } label: {
-            Label("How was this estimated?", systemImage: "info.circle")
+            Label("Details and sources", systemImage: "info.circle")
                 .font(.headline)
                 .foregroundStyle(SmartCartTheme.navy)
         }
         .font(.caption.weight(.semibold))
         .foregroundStyle(SmartCartTheme.secondaryInk)
         .smartCartCard()
-        .accessibilityIdentifier("solari-provenance")
+        .accessibilityIdentifier("solari-details")
+    }
+
+    private var coverageText: String {
+        let found = activePlan.request.requirements.count
+        let skipped = activePlan.skippedLines.count
+        if skipped == 0 {
+            return "\(found) of \(activePlan.totalWaitingCount) prices found"
+        }
+        return "\(found) price\(found == 1 ? "" : "s") found · \(skipped) item\(skipped == 1 ? "" : "s") unchanged"
     }
 
     private func recommendationRow(
         decision: SolariBasketDecision,
         observation: SolariRetailerObservation
     ) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 10) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(observation.title ?? "Product title unavailable")
@@ -346,49 +265,35 @@ struct SolariRetailerReviewSheet: View {
             if let requirement = context.plan.request.requirements.first(where: {
                 $0.id == decision.requirementID
             }) {
-                Text(
-                    "Needs \(quantityText(requirement.requiredQuantity)) \(requirement.unit.rawValue) · " +
-                    "covers \(quantityText(decision.coveredQuantity)) \(unitText(decision.quantityUnit))"
-                )
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(SmartCartTheme.secondaryInk)
-
-                if decision.surplusQuantity > 0.000_1 {
-                    Text(
-                        "Estimated overage: \(quantityText(decision.surplusQuantity)) " +
-                        "\(unitText(decision.quantityUnit))"
-                    )
+                let required = "\(quantityText(requirement.requiredQuantity)) \(unitText(requirement.unit.evidenceUnit)) needed"
+                let overage = decision.surplusQuantity > 0.000_1
+                    ? " · \(quantityText(decision.surplusQuantity)) \(unitText(decision.quantityUnit)) extra"
+                    : ""
+                Text(required + overage)
                     .font(.caption)
                     .foregroundStyle(SmartCartTheme.secondaryInk)
+            }
+
+            HStack(spacing: 10) {
+                observedTimestamp(observation)
+                if observation.confidence != .high || !observation.ambiguityReasons.isEmpty {
+                    Label("Check match", systemImage: "exclamationmark.triangle")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(SmartCartTheme.coral)
                 }
             }
 
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 8) { confidenceLabel(observation); observedTimestamp(observation) }
-                VStack(alignment: .leading, spacing: 6) { confidenceLabel(observation); observedTimestamp(observation) }
-            }
-
-            ForEach(observation.ambiguityReasons, id: \.self) { ambiguity in
-                Label(ambiguity, systemImage: "questionmark.circle")
-                    .font(.caption)
-                    .foregroundStyle(SmartCartTheme.coral)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if let substitution = decision.substitutionNote,
-               !substitution.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Label(substitution, systemImage: "arrow.triangle.swap")
-                    .font(.caption)
-                    .foregroundStyle(SmartCartTheme.secondaryInk)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Link(destination: observation.sourceURL) {
-                Label("Open Demo Grocer product source", systemImage: "safari")
+            Button {
+                presentedProductSource = SolariProductSourceDestination(
+                    url: observation.sourceURL
+                )
+            } label: {
+                Label("View product", systemImage: "doc.text.magnifyingglass")
                     .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil)
             }
             .buttonStyle(SecondaryButtonStyle())
-            .accessibilityHint("Opens the owned synthetic Demo Grocer product page")
+            .accessibilityIdentifier("solari-view-product-\(decision.requirementID.uuidString.lowercased())")
+            .accessibilityHint("Opens the product page inside SmartCart")
         }
         .padding(16)
         .background(SmartCartTheme.paper)
@@ -396,12 +301,6 @@ struct SolariRetailerReviewSheet: View {
         .overlay { RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(SmartCartTheme.border, lineWidth: 1) }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("solari-recommendation-\(decision.requirementID.uuidString.lowercased())")
-    }
-
-    private func confidenceLabel(_ observation: SolariRetailerObservation) -> some View {
-        Label("\(observation.confidence.label) confidence", systemImage: "checkmark.seal")
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(observation.confidence == .high ? SmartCartTheme.green : SmartCartTheme.coral)
     }
 
     private func observedTimestamp(_ observation: SolariRetailerObservation) -> some View {
@@ -412,15 +311,11 @@ struct SolariRetailerReviewSheet: View {
 
     private func unavailableContent(message: String) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("Option research unavailable", systemImage: "exclamationmark.triangle.fill")
+            Label("Couldn’t check prices", systemImage: "exclamationmark.triangle.fill")
                 .font(.system(.title3, design: .rounded, weight: .bold))
                 .foregroundStyle(SmartCartTheme.coral)
             Text(message)
                 .font(.subheadline)
-                .foregroundStyle(SmartCartTheme.secondaryInk)
-                .fixedSize(horizontal: false, vertical: true)
-            Text("Retry, edit the plan, or continue with SmartCart’s normal user-controlled retailer queue. No account, cart, purchase, or checkout action has occurred.")
-                .font(.caption)
                 .foregroundStyle(SmartCartTheme.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -440,40 +335,22 @@ struct SolariRetailerReviewSheet: View {
                     .accessibilityIdentifier("solari-back")
             case .loaded(let research):
                 VStack(spacing: 10) {
-                    Text(
-                        "Open selected owned Demo Grocer sources from the recommendation rows. These synthetic " +
-                        "products and observations are not \(appModel.retailerConfiguration.displayName) prices " +
-                        "and are never transferred to its queue or cart. Continuing uses only your original " +
-                        "SmartCart matches."
-                    )
-                        .font(.caption)
-                        .foregroundStyle(SmartCartTheme.secondaryInk)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("solari-separate-handoff-note")
-                    Button("Continue with original SmartCart list") {
+                    Button("Looks good — continue shopping") {
                         continueWithOriginalSmartCartList(research)
                     }
                         .buttonStyle(PrimaryButtonStyle())
-                        .accessibilityIdentifier("solari-continue-original-list")
-                        .accessibilityHint("Revalidates and finalizes only the original SmartCart retailer matches; Demo Grocer products and prices are not transferred")
-                    Button("Done — keep SmartCart list unchanged") { dismiss() }
-                        .buttonStyle(SecondaryButtonStyle())
-                        .accessibilityIdentifier("solari-done-unchanged")
-                        .accessibilityHint("Closes the Demo Grocer comparison without changing or finalizing the SmartCart retailer list")
-                    Button("Refresh Demo Grocer evidence") { retry(refresh: true) }
-                        .buttonStyle(SecondaryButtonStyle())
-                        .accessibilityIdentifier("solari-refresh")
-                    Button("Edit shopping list") { dismiss() }
+                        .accessibilityIdentifier("solari-prices-look-good")
+                        .accessibilityHint("Continues with SmartCart’s original retailer matches; no product is purchased or added to a retailer cart")
+                    Button("Edit my list") { dismiss() }
                         .buttonStyle(SecondaryButtonStyle())
                         .accessibilityIdentifier("solari-edit-list")
                 }
             case .failed:
                 VStack(spacing: 10) {
-                    Button("Retry Option Research") { retry(refresh: false) }
+                    Button("Try again") { retry(refresh: false) }
                         .buttonStyle(PrimaryButtonStyle())
                         .accessibilityIdentifier("solari-retry")
-                    Button("Continue with Normal SmartCart") { continueWithNormalSmartCartAfterFailure() }
+                    Button("Back to my list") { dismiss() }
                         .buttonStyle(SecondaryButtonStyle())
                         .accessibilityIdentifier("solari-normal-fallback")
                 }
@@ -561,6 +438,12 @@ struct SolariRetailerReviewSheet: View {
     private var isRecordedFixture: Bool {
         context.plan.request.executionMode == .recordedFixture
     }
+}
+
+private struct SolariProductSourceDestination: Identifiable {
+    let url: URL
+
+    var id: String { url.absoluteString }
 }
 
 private extension SolariRetailerReviewSheet {

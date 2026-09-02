@@ -21,8 +21,8 @@ export function createSolariBetaApi(options={}){
   const config=options.config??{},now=options.now??Date.now,validatorPromise=options.validator?Promise.resolve(options.validator):createContractValidator();
   let store=options.store??null,verifier=options.verifier??null;
   const research=options.researchService??createSolariV4ResearchService({...options,config});
-  function getStore(){requireBetaConfig(config,{injectedStore:Boolean(store)});store??=new UpstashSolariBetaStore({url:config.solariBetaRedisUrl,token:config.solariBetaRedisToken});return store;}
-  function getVerifier(){verifier??=new AppleAppAttestVerifier({teamID:config.solariAppAttestTeamId,bundleID:config.solariAppAttestBundleId,allowedBuilds:config.solariAppAttestAllowedBuilds,now});return verifier;}
+  function getStore(){requireBetaConfig(config,{injectedStore:Boolean(store)});store??=new UpstashSolariBetaStore({url:config.solariBetaRedisUrl,token:config.solariBetaRedisToken,prefix:config.solariBetaStorePrefix});return store;}
+  function getVerifier(){verifier??=new AppleAppAttestVerifier({teamID:config.solariAppAttestTeamId,bundleID:config.solariAppAttestBundleId,allowedBuilds:config.solariAppAttestAllowedBuilds,allowedValidationCategories:config.solariAppAttestAllowedValidationCategories,researchPath:config.solariAppAttestResearchPath,now});return verifier;}
   async function assertRuntimeEnabled(){if(!await getStore().runtimeEnabled(config.solariBetaRuntimeKey))throw new SolariResearchError('solari_beta_killed','Solari beta live execution is disabled by the runtime switch.',{status:503});}
   async function challenge(payload){
     await assertRuntimeEnabled();const validator=await validatorPromise;validator.assert(V2_CHALLENGE_REQUEST_SCHEMA_ID,payload);

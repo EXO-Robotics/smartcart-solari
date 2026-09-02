@@ -21,6 +21,89 @@
     else element.classList.add("is-visible");
   });
 
+  const heroVideoTabs = Array.from(document.querySelectorAll("[data-video-mode]"));
+  const heroReel = document.querySelector("[data-video-state]");
+  const heroVideoPanel = document.querySelector(".hero-video-panel");
+  const heroVideo = document.querySelector("[data-hero-video]");
+  const heroVideoSource = document.querySelector("[data-hero-video-source]");
+  const heroVideoLabel = document.querySelector("[data-video-label]");
+  const heroVideoDuration = document.querySelector("[data-video-duration]");
+  const heroVideoPlay = document.querySelector("[data-video-play]");
+  const heroVideoBadge = document.querySelector("[data-video-badge]");
+  const heroVideoCaption = document.querySelector("[data-video-caption]");
+  const heroVideos = {
+    before: {
+      src: "assets/smartcart-before-solari.mp4",
+      poster: "assets/smartcart-before-solari-poster.jpg",
+      label: "Before Solari · Original SmartCart",
+      duration: "Play 00:40",
+      playLabel: "Play the 40 second Before Solari recording",
+      badge: "BEFORE SOLARI · RECORDED APP FLOW · NOT LIVE.",
+      caption: "This recorded original SmartCart flow proves recipe review and user-controlled retailer handoff. Retailer pages shown are recorded context, not current price or availability claims."
+    },
+    after: {
+      src: "assets/smartcart-after-solari.mp4",
+      poster: "assets/smartcart-after-solari-poster.jpg",
+      label: "After Solari · Native SmartCart",
+      duration: "Play 00:25",
+      playLabel: "Play the 25 second After Solari recording",
+      badge: "AFTER SOLARI · DEBUG RECORDED REPLAY · NOT LIVE.",
+      caption: "This eight-item DEBUG recorded replay proves native research, package evidence, and user-controlled handoff. Solari Browser and Sandbox do not run inside this clip. Credentialed V4 Browser + Sandbox execution over eight requirements is proven separately by the immutable receipt."
+    }
+  };
+
+  const setHeroVideoMode = (mode) => {
+    const model = heroVideos[mode];
+    if (!model) return;
+    heroVideo?.pause();
+    if (heroVideo) {
+      heroVideo.controls = false;
+      heroVideo.currentTime = 0;
+    }
+    heroVideoTabs.forEach((candidate) => {
+      const selected = candidate.dataset.videoMode === mode;
+      candidate.setAttribute("aria-selected", String(selected));
+      candidate.tabIndex = selected ? 0 : -1;
+      if (selected) heroVideoPanel?.setAttribute("aria-labelledby", candidate.id);
+    });
+    if (heroReel) heroReel.dataset.videoState = mode;
+    if (heroVideoLabel) heroVideoLabel.textContent = model.label;
+    if (heroVideoDuration) heroVideoDuration.textContent = model.duration;
+    if (heroVideoPlay) heroVideoPlay.setAttribute("aria-label", model.playLabel);
+    if (heroVideoBadge) heroVideoBadge.textContent = model.badge;
+    if (heroVideoCaption) heroVideoCaption.textContent = model.caption;
+
+    const pending = !model.src;
+    if (heroVideoPlay) heroVideoPlay.hidden = pending;
+    if (heroVideo) heroVideo.hidden = pending;
+    if (!heroVideo || !heroVideoSource) return;
+    if (pending) {
+      heroVideoSource.removeAttribute("src");
+      heroVideo.removeAttribute("poster");
+    } else {
+      heroVideoSource.setAttribute("src", model.src);
+      heroVideo.setAttribute("poster", model.poster);
+    }
+    heroVideo.load();
+  };
+
+  heroVideoPlay?.addEventListener("click", async () => {
+    if (!heroVideo || heroVideo.hidden) return;
+    heroVideo.controls = true;
+    try {
+      await heroVideo.play();
+      heroVideoPlay.hidden = true;
+    } catch {
+      heroVideo.controls = false;
+      heroVideoPlay.hidden = false;
+    }
+  });
+
+  heroVideo?.addEventListener("play", () => {
+    heroVideo.controls = true;
+    if (heroVideoPlay) heroVideoPlay.hidden = true;
+  });
+
   const comparison = document.querySelector("[data-comparison-state]");
   const modeButtons = Array.from(document.querySelectorAll("[data-mode]"));
   const modePanels = Array.from(document.querySelectorAll("[data-process], [data-panel]"));
@@ -40,7 +123,27 @@
       panel.setAttribute("aria-hidden", String(hidden));
       panel.inert = hidden;
     });
+    setHeroVideoMode(mode);
   };
+
+  heroVideoTabs.forEach((button) => {
+    button.addEventListener("click", () => {
+      setComparisonMode(button.dataset.videoMode);
+    });
+    button.addEventListener("keydown", (event) => {
+      const currentIndex = heroVideoTabs.indexOf(button);
+      let nextIndex = currentIndex;
+      if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % heroVideoTabs.length;
+      else if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + heroVideoTabs.length) % heroVideoTabs.length;
+      else if (event.key === "Home") nextIndex = 0;
+      else if (event.key === "End") nextIndex = heroVideoTabs.length - 1;
+      else return;
+      event.preventDefault();
+      const nextButton = heroVideoTabs[nextIndex];
+      setComparisonMode(nextButton?.dataset.videoMode);
+      nextButton?.focus();
+    });
+  });
 
   modeButtons.forEach((button) => {
     button.addEventListener("click", () => {

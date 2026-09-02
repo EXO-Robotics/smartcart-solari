@@ -225,16 +225,16 @@ Current evidence records three valid Apple Development identities. Do **not** in
 - no matching iOS App Development provisioning profile exists;
 - Share Extension provisioning has an application-groups mismatch.
 
-The physical iPhone is offline. Stop: signed archive, physical App Attest, TestFlight, App Store, and downloadable native build are PENDING. Do not remove entitlements, add client bearer/API keys, enable Release fixture replay, or claim a signed pass.
+A paired physical iPhone is connected and has build 4 installed, but that binary predates the development-lane configuration and still targets the category-2 distribution route. The unsigned development build passes; signing and installing it are blocked by the capability/profile failures above. Stop: signed App Attest, TestFlight, App Store, and downloadable native build are PENDING. Do not remove entitlements, add client bearer/API keys, enable Release fixture replay, or claim a signed pass.
 
 To close the gate legitimately:
 
 1. use a team supporting the beta app’s Associated Domains and App Attest capabilities;
 2. create matching main-app and Share Extension profiles with the correct app group;
-3. archive/sign `Release-SolariBeta`;
-4. install an allowlisted build on a physical iPhone through the intended distribution path;
+3. for immediate device qualification, sign and run `SmartCart-SolariDevelopment`; for distribution qualification, archive/sign `Release-SolariBeta`;
+4. install the corresponding allowlisted build on a physical iPhone;
 5. observe initial challenge → Apple attestation → accepted key;
-6. send exact V3 bytes in the v1 envelope and observe challenge → assertion → Browser/Sandbox result;
+6. send exact V4 bytes in the v1 envelope and observe challenge → assertion → Browser/Sandbox result;
 7. verify replay rejection, kill-switch/quota/cancellation UX, and cleanup;
 8. capture only sanitized IDs/outcomes, never App Attest blobs, secrets, or capability URLs;
 9. separately qualify VoiceOver, Dynamic Type, TestFlight, and App Store.

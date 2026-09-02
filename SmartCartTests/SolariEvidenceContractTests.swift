@@ -2,6 +2,53 @@ import XCTest
 @testable import SmartCart
 
 final class SolariEvidenceContractTests: XCTestCase {
+    #if DEBUG
+    func testDevelopmentDemoRecipeCoversEveryV4ResearchRequirement() throws {
+        let recipe = SolariDevelopmentDemoRecipe.make()
+
+        XCTAssertEqual(recipe.ingredients.count, 8)
+        XCTAssertEqual(Set(recipe.ingredients.map(\.name)), [
+            "Chicken breast", "Penne pasta", "Olive oil", "Heavy cream",
+            "Parmesan cheese", "Garlic cloves", "Lemons", "Parsley"
+        ])
+
+        let items = try recipe.ingredients.enumerated().map { index, ingredient in
+            let candidates = DemoWalmartCatalogService.seededProducts(for: ingredient, storeID: "demo")
+            let request = RetailerProductSearchRequest(
+                ingredient: ingredient,
+                requestedQuantity: ingredient.quantity,
+                requestedUnit: ingredient.unit,
+                storeID: "demo",
+                fulfillmentMethod: .delivery
+            )
+            let exact = try XCTUnwrap(
+                RetailerProductMatcher.rank(
+                    candidates,
+                    for: request,
+                    preferences: ShoppingPreferences()
+                ).first?.product
+            )
+            XCTAssertNotNil(
+                SolariResearchRequestBuilder.demoCandidateIDsByMatchedProductID[exact.retailerProductID],
+                "Missing Solari candidate mapping for \(ingredient.name)"
+            )
+            return item(
+                index + 1,
+                ingredient.name,
+                ingredient.quantity,
+                ingredient.unit,
+                exact.retailerProductID
+            )
+        }
+
+        guard case .eligible(let plan) = evaluate(items) else {
+            return XCTFail("The development demo must produce one complete Solari research plan")
+        }
+        XCTAssertEqual(plan.request.requirements.count, 8)
+        XCTAssertTrue(plan.skippedLines.isEmpty)
+    }
+    #endif
+
     private let now = Date(timeIntervalSince1970: 1_788_278_400)
 
     func testBasketComparisonPresentationUsesScoresInsteadOfFalsePercentages() {
@@ -288,8 +335,14 @@ final class SolariEvidenceContractTests: XCTestCase {
         let challenge = "q6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6s"
         let first = SolariAppAttestClient.assertionClientDataHash(challengeBase64URL: challenge, exactResearchBody: Data("{\"a\":1}".utf8))
         let second = SolariAppAttestClient.assertionClientDataHash(challengeBase64URL: challenge, exactResearchBody: Data("{\"a\":1 }".utf8))
+        let development = SolariAppAttestClient.assertionClientDataHash(
+            challengeBase64URL: challenge,
+            exactResearchBody: Data("{\"a\":1}".utf8),
+            researchPath: "/dev/v1/solari/research"
+        )
         XCTAssertEqual(first.count, 32)
         XCTAssertNotEqual(first, second)
+        XCTAssertNotEqual(first, development)
         let keyID = Data(repeating: 0xFB, count: 32).base64EncodedString()
         XCTAssertTrue(SolariAppAttestClient.isValidKeyID(keyID))
         XCTAssertFalse(SolariAppAttestClient.isValidKeyID(String(keyID.dropLast())))

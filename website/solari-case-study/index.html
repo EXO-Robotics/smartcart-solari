@@ -6,14 +6,14 @@
   <meta name="description" content="A product case study showing how Solari Browser and Sandbox upgraded SmartCart's retailer handoff into an evidence-backed shopping decision.">
   <meta name="theme-color" content="#080a08">
   <meta property="og:type" content="website">
-  <meta property="og:title" content="SmartCart × Solari — Solving real production issues with Solari">
-  <meta property="og:description" content="See how Solari Browser and Sandbox turn SmartCart's retailer handoff into a grounded, user-controlled shopping decision.">
+  <meta property="og:title" content="SmartCart learned to see the shelf — with Solari">
+  <meta property="og:description" content="Solari turns SmartCart's prepared list into a grounded basket without taking control from the shopper.">
   <meta property="og:url" content="https://exo-robotics.github.io/smartcart-solari/">
   <meta property="og:image" content="https://exo-robotics.github.io/smartcart-solari/assets/social-preview.jpg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta name="twitter:card" content="summary_large_image">
-  <title>SmartCart × Solari — Solving real production issues with Solari</title>
+  <title>SmartCart learned to see the shelf — with Solari</title>
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="styles.css">
   <script src="script.js" defer></script>
@@ -25,27 +25,36 @@
     <a class="wordmark" href="#top" aria-label="SmartCart and Solari case study home">
       <span>SMARTCART</span><i>×</i><strong>SOLARI</strong>
     </a>
-    <a class="header-cta" href="https://github.com/EXO-Robotics/smartcart-solari">View source <span aria-hidden="true">↗</span></a>
   </header>
 
   <main id="main">
     <section class="hero hero-film" id="top" aria-labelledby="hero-title">
       <div class="hero-noise" aria-hidden="true"></div>
       <div class="hero-film-copy reveal">
-        <p class="kicker"><span></span> SmartCart × Solari · from recipe intent to package reality</p>
-        <h1 id="hero-title">Solving real production issues<br><em>with Solari.</em></h1>
-        <p class="hero-lede"><strong>Solari Browser</strong> observes package evidence. <strong>Solari Sandbox</strong> evaluates the complete basket—turning SmartCart’s prepared shopping list into a grounded recommendation without taking control away from the shopper.</p>
+        <p class="kicker">From recipe to package</p>
+        <h1 id="hero-title">SmartCart learned to see the shelf.<br><em>with Solari.</em></h1>
+        <p class="hero-lede">Solari turns SmartCart’s prepared list into a grounded basket—without taking control from the shopper.</p>
       </div>
 
-      <figure class="hero-reel reveal" id="native-flow">
-        <div class="reel-meta"><span>NATIVE SMARTCART REPLAY</span><b>01:04 · SILENT</b></div>
-        <video controls playsinline preload="metadata" poster="assets/smartcart-solari-native-replay-poster.jpg" aria-describedby="hero-film-caption">
-          <source src="assets/smartcart-solari-native-replay.mp4" type="video/mp4">
-          Your browser does not support the embedded SmartCart replay video.
-        </video>
+      <div class="hero-media-switch reveal" role="tablist" aria-label="Switch between SmartCart before and after Solari videos">
+        <button id="video-before-tab" type="button" role="tab" aria-controls="hero-video-panel" aria-selected="false" tabindex="-1" data-video-mode="before">Before Solari</button>
+        <button id="video-after-tab" type="button" role="tab" aria-controls="hero-video-panel" aria-selected="true" tabindex="0" data-video-mode="after">After Solari</button>
+      </div>
+
+      <figure class="hero-reel reveal" id="native-flow" data-video-state="after">
+        <div class="reel-meta">
+          <span data-video-label>After Solari · Native SmartCart</span>
+          <button class="hero-play" type="button" data-video-play aria-label="Play the 25 second After Solari recording"><i aria-hidden="true">▶</i><span data-video-duration>Play 00:25</span></button>
+        </div>
+        <div class="hero-video-panel" id="hero-video-panel" role="tabpanel" aria-labelledby="video-after-tab" aria-live="polite">
+          <video playsinline preload="metadata" poster="assets/smartcart-after-solari-poster.jpg" aria-describedby="hero-film-caption" data-hero-video>
+            <source src="assets/smartcart-after-solari.mp4" type="video/mp4" data-hero-video-source>
+            Your browser does not support the embedded SmartCart replay video.
+          </video>
+        </div>
         <figcaption id="hero-film-caption">
-          <strong>DEBUG RECORDED REPLAY · NOT LIVE.</strong>
-          <span>This predecessor three-item native replay proves the native UX and user-controlled handoff. Solari Browser and Sandbox do not run inside this clip. Credentialed V4 Browser + Sandbox execution over eight requirements is proven separately by the immutable receipt.</span>
+          <strong data-video-badge>AFTER SOLARI · DEBUG RECORDED REPLAY · NOT LIVE.</strong>
+          <span data-video-caption>This eight-item DEBUG recorded replay proves native research, package evidence, and user-controlled handoff. Solari Browser and Sandbox do not run inside this clip. Credentialed V4 Browser + Sandbox execution over eight requirements is proven separately by the immutable receipt.</span>
         </figcaption>
       </figure>
 
