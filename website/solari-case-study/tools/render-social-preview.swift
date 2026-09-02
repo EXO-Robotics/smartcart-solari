@@ -51,7 +51,6 @@ topWash.draw(in: fullRect, angle: -90)
 
 let amber = NSColor(calibratedRed: 1.0, green: 0.69, blue: 0.08, alpha: 1)
 let ivory = NSColor(calibratedRed: 0.97, green: 0.96, blue: 0.91, alpha: 1)
-let muted = NSColor(calibratedRed: 0.73, green: 0.74, blue: 0.70, alpha: 1)
 
 // A quiet Solari signal line gives the card energy without turning it into a tech diagram.
 amber.withAlphaComponent(0.82).setFill()
@@ -77,30 +76,19 @@ drawText("SMARTCART  ×  SOLARI",
          tracking: 2.2)
 
 drawText("From recipe to",
-         in: NSRect(x: 80, y: 372, width: 680, height: 92),
-         font: NSFont.systemFont(ofSize: 72, weight: .bold),
+         in: NSRect(x: 80, y: 358, width: 700, height: 102),
+         font: NSFont.systemFont(ofSize: 80, weight: .bold),
          color: ivory,
          tracking: -2.2)
 
 drawText("priced basket.",
-         in: NSRect(x: 80, y: 285, width: 680, height: 92),
-         font: NSFont.systemFont(ofSize: 72, weight: .bold),
+         in: NSRect(x: 80, y: 260, width: 700, height: 102),
+         font: NSFont.systemFont(ofSize: 80, weight: .bold),
          color: amber,
          tracking: -2.2)
 
-drawText("SmartCart plans the meal. Solari researches the options\nand finds the package mix that fits.",
-         in: NSRect(x: 84, y: 190, width: 650, height: 76),
-         font: NSFont.systemFont(ofSize: 25, weight: .medium),
-         color: muted)
-
-drawText("BROWSER RESEARCH  •  SANDBOX OPTIMIZATION",
-         in: NSRect(x: 84, y: 86, width: 680, height: 32),
-         font: NSFont.monospacedSystemFont(ofSize: 16, weight: .semibold),
-         color: amber,
-         tracking: 1.0)
-
 // Use the shipping icon exactly as-is. The amber frame visually connects it to Solari.
-let iconFrame = NSRect(x: 805, y: 103, width: 390, height: 390)
+let iconFrame = NSRect(x: 775, y: 82, width: 430, height: 430)
 let haloRect = iconFrame.insetBy(dx: -24, dy: -24)
 let halo = NSGradient(starting: amber.withAlphaComponent(0.28), ending: amber.withAlphaComponent(0.0))!
 halo.draw(in: NSBezierPath(ovalIn: haloRect), relativeCenterPosition: .zero)
