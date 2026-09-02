@@ -137,7 +137,14 @@ export function createApp(options = {}) {
     try {
       const url = new URL(request.url ?? '/', 'http://smartcart.local');
       const method = request.method ?? 'GET';
-      if (['/v1/solari/research', '/v1/solari/access/challenges', '/v1/solari/access/attestations'].includes(url.pathname)) {
+      if ([
+        '/v1/solari/research',
+        '/v1/solari/access/challenges',
+        '/v1/solari/access/attestations',
+        '/dev/v1/solari/research',
+        '/dev/v1/solari/access/challenges',
+        '/dev/v1/solari/access/attestations'
+      ].includes(url.pathname)) {
         await solariApi.handler(request, response);
         return;
       }

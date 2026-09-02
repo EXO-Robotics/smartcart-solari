@@ -1,0 +1,7 @@
+#include "Release-SolariBeta.xcconfig"
+
+// Local Xcode device testing uses a separate Vercel lane. The app identity and
+// production App Attest environment remain unchanged; Apple identifies the
+// development-signed build with validation category 3 at the server boundary.
+SMARTCART_SOLARI_EXPERIMENT_BACKEND_URL = https:/$()/smartcart-solari-beta.vercel.app/dev
+SMARTCART_SOLARI_DEBUG_FIXTURE_REPLAY = NO

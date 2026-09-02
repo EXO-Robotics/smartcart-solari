@@ -87,7 +87,8 @@ actor SolariAppAttestClient: SolariResearchAuthorizing {
         }
         let hash = Self.assertionClientDataHash(
             challengeBase64URL: challenge.base64URL,
-            exactResearchBody: body
+            exactResearchBody: body,
+            researchPath: configuration.researchEndpoint.path
         )
         let assertion = try await service.generateAssertion(keyID, clientDataHash: hash)
         guard !assertion.isEmpty else { throw SolariAppAttestError.invalidResponse }
@@ -103,10 +104,14 @@ actor SolariAppAttestClient: SolariResearchAuthorizing {
         Data(SHA256.hash(data: challenge))
     }
 
-    static func assertionClientDataHash(challengeBase64URL: String, exactResearchBody: Data) -> Data {
+    static func assertionClientDataHash(
+        challengeBase64URL: String,
+        exactResearchBody: Data,
+        researchPath: String = "/v1/solari/research"
+    ) -> Data {
         let bodyDigest = Data(SHA256.hash(data: exactResearchBody))
         let bodyDigestBase64URL = base64URLEncode(bodyDigest)
-        let binding = "smartcart-app-attest-v1\n\(challengeBase64URL)\nPOST\n/v1/solari/research\n\(bodyDigestBase64URL)\n"
+        let binding = "smartcart-app-attest-v1\n\(challengeBase64URL)\nPOST\n\(researchPath)\n\(bodyDigestBase64URL)\n"
         return Data(SHA256.hash(data: Data(binding.utf8)))
     }
 

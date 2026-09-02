@@ -288,8 +288,14 @@ final class SolariEvidenceContractTests: XCTestCase {
         let challenge = "q6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6s"
         let first = SolariAppAttestClient.assertionClientDataHash(challengeBase64URL: challenge, exactResearchBody: Data("{\"a\":1}".utf8))
         let second = SolariAppAttestClient.assertionClientDataHash(challengeBase64URL: challenge, exactResearchBody: Data("{\"a\":1 }".utf8))
+        let development = SolariAppAttestClient.assertionClientDataHash(
+            challengeBase64URL: challenge,
+            exactResearchBody: Data("{\"a\":1}".utf8),
+            researchPath: "/dev/v1/solari/research"
+        )
         XCTAssertEqual(first.count, 32)
         XCTAssertNotEqual(first, second)
+        XCTAssertNotEqual(first, development)
         let keyID = Data(repeating: 0xFB, count: 32).base64EncodedString()
         XCTAssertTrue(SolariAppAttestClient.isValidKeyID(keyID))
         XCTAssertFalse(SolariAppAttestClient.isValidKeyID(String(keyID.dropLast())))

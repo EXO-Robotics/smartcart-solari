@@ -50,7 +50,7 @@ Recipe / trip
   -> unchanged user-controlled SmartCart retailer handoff
 ~~~
 
-Production SmartCart is untouched. This public submission was forked from upstream SmartCart commit [fe6589b1bd811a7ca8afa9824deba9d3cbde7ab9](https://github.com/EXO-Robotics/smartcart-ios/commit/fe6589b1bd811a7ca8afa9824deba9d3cbde7ab9). Only the separate **SmartCart-SolariBeta** scheme / **Release-SolariBeta** configuration points at the beta path. Normal Release configuration has no Solari endpoint.
+Production SmartCart is untouched. This public submission was forked from upstream SmartCart commit [fe6589b1bd811a7ca8afa9824deba9d3cbde7ab9](https://github.com/EXO-Robotics/smartcart-ios/commit/fe6589b1bd811a7ca8afa9824deba9d3cbde7ab9). Only the separate Solari schemes point at the protected path. **SmartCart-SolariDevelopment** runs local Apple-development builds through the default-off `/dev` lane (App Attest category 3); **SmartCart-SolariBeta** remains the Release/TestFlight lane (category 2). Normal Release configuration has no Solari endpoint. See the [development-lane boundary](Docs/SOLARI_DEVELOPMENT_LANE.md).
 
 The App Attest transport remains **solari-app-attest-research-envelope-v1**; its signed payload contains exact V4 request bytes. That transport version is not the retailer-evidence version.
 
@@ -73,6 +73,7 @@ Observed product subtotals exclude tax, fees, fulfillment, inventory, discounts,
 - Browser sessions are fresh and logged out. Persistent profiles are intentionally unused; if enabled, Playwright storage state would contain cookies and per-origin localStorage and must be treated as account authority.
 - Solari, App Attest/Redis, and operator credentials remain server-side. No provider or operator bearer secret ships to iOS or web.
 - The protected live route is default-off and bound to App Attest, allowlisted app identity/build, one-use challenges, counters, quotas, leases, cancellation, and a runtime kill switch.
+- Local-device testing uses a distinct default-off route and Redis namespace. It accepts category 3 only; the existing TestFlight endpoint remains category 2 only. Neither lane accepts a client bearer or fixture fallback.
 - Raw HTML, screenshots, recordings, cookies, and signed capability URLs are not retained in result evidence.
 - Browser/session/client cleanup and Sandbox teardown run on success and failure paths; cleanup failure suppresses success.
 - The user always controls final handoff.
@@ -120,6 +121,8 @@ xcodebuild \
   -sdk iphonesimulator \
   CODE_SIGNING_ALLOWED=NO build
 ~~~
+
+For a real Xcode-installed development-device run, select `SmartCart-SolariDevelopment`. Its Run action points at `/dev`; its Archive action intentionally uses `Release-SolariBeta` so a distribution archive cannot inherit the development endpoint.
 
 At qualified V4 source state: focused V3/V4 qualification tests **21/21**, full backend **214/214**, focused native **28/28** on iPhone 17 Pro / iOS 26.5 Simulator, web **7/7**, dependency audit **0 vulnerabilities**, and unsigned **Release-SolariBeta BUILD SUCCEEDED**. The broader native suite retains two pre-existing baseline-failing test methods; V4-focused tests are green. See [qualification](Docs/SOLARI_QUALIFICATION.md) and the [demo runbook](Docs/SOLARI_DEMO_RUNBOOK.md) for claim gates.
 

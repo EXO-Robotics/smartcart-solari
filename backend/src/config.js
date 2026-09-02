@@ -16,6 +16,31 @@ function boolean(name, fallback = false) {
   throw new Error(`${name} must be exactly true or false`);
 }
 
+function integerList(name, fallback, { allowedValues } = {}) {
+  const value = process.env[name];
+  const parts = value === undefined || value === ''
+    ? fallback.map(String)
+    : value.split(',').map((entry) => entry.trim()).filter(Boolean);
+  const parsed = parts.map((entry) => {
+    if (!/^\d+$/.test(entry)) throw new Error(`${name} must be a comma-separated integer allowlist`);
+    return Number.parseInt(entry, 10);
+  });
+  if (parsed.length === 0 || parsed.some((entry) => (
+    !Number.isSafeInteger(entry) || (allowedValues && !allowedValues.includes(entry))
+  ))) {
+    throw new Error(`${name} contains an unsupported validation category`);
+  }
+  return [...new Set(parsed)];
+}
+
+function keyPrefix(name, fallback) {
+  const value = process.env[name] ?? fallback;
+  if (!/^[A-Za-z0-9:_-]{1,96}$/.test(value)) {
+    throw new Error(`${name} must be a 1-96 character Redis key prefix`);
+  }
+  return value;
+}
+
 export function loadConfig(overrides = {}) {
   const env = overrides.env ?? process.env.NODE_ENV ?? 'development';
   const config = {
@@ -64,13 +89,22 @@ export function loadConfig(overrides = {}) {
     solariRetailerResearchAuthorized: boolean('SOLARI_RETAILER_RESEARCH_AUTHORIZED', false),
     solariWalmartWrittenAuthorizationReference: process.env.SOLARI_WALMART_WRITTEN_AUTHORIZATION_REFERENCE || undefined,
     solariBetaEnabled: boolean('SOLARI_BETA_ENABLED', false),
+    solariDevelopmentLaneEnabled: boolean('SOLARI_DEVELOPMENT_LANE_ENABLED', false),
     solariBetaRedisUrl: process.env.KV_REST_API_URL || undefined,
     solariBetaRedisToken: process.env.KV_REST_API_TOKEN || undefined,
+    solariBetaStorePrefix: keyPrefix('SOLARI_BETA_STORE_PREFIX', 'smartcart:solari:beta'),
+    solariDevelopmentStorePrefix: keyPrefix('SOLARI_DEVELOPMENT_STORE_PREFIX', 'smartcart:solari:dev'),
     solariBetaRuntimeKey: process.env.SOLARI_BETA_RUNTIME_KEY ?? 'smartcart:solari:beta:runtime-enabled',
     solariAppAttestTeamId: process.env.SOLARI_APP_ATTEST_TEAM_ID || undefined,
     solariAppAttestBundleId: process.env.SOLARI_APP_ATTEST_BUNDLE_ID || undefined,
     solariAppAttestAllowedBuilds: (process.env.SOLARI_APP_ATTEST_ALLOWED_BUILDS ?? '')
       .split(',').map((value) => value.trim()).filter(Boolean),
+    solariAppAttestAllowedValidationCategories: integerList(
+      'SOLARI_APP_ATTEST_ALLOWED_VALIDATION_CATEGORIES',
+      [2],
+      { allowedValues: [2, 3, 4] }
+    ),
+    solariAppAttestResearchPath: '/v1/solari/research',
     solariAppAttestChallengeTtlSeconds: integer('SOLARI_APP_ATTEST_CHALLENGE_TTL_SECONDS', 120, { min: 30, max: 300 }),
     solariBetaPerKeyHourlyLimit: integer('SOLARI_BETA_PER_KEY_HOURLY_LIMIT', 3, { max: 100 }),
     solariBetaPerKeyDailyLimit: integer('SOLARI_BETA_PER_KEY_DAILY_LIMIT', 10, { max: 1_000 }),

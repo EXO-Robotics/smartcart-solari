@@ -10,12 +10,18 @@ import { SolariResearchError } from './errors.js';
 import { createSolariResearchService } from './research-service.js';
 
 function routeForRequest(url) {
-  if (url.pathname === '/v1/solari/research') return 'research';
-  if (url.pathname === '/v1/solari/access/challenges') return 'challenge';
-  if (url.pathname === '/v1/solari/access/attestations') return 'attestation';
+  if (url.pathname === '/v1/solari/research') return { operation: 'research', lane: 'distribution' };
+  if (url.pathname === '/v1/solari/access/challenges') return { operation: 'challenge', lane: 'distribution' };
+  if (url.pathname === '/v1/solari/access/attestations') return { operation: 'attestation', lane: 'distribution' };
+  if (url.pathname === '/dev/v1/solari/research') return { operation: 'research', lane: 'development' };
+  if (url.pathname === '/dev/v1/solari/access/challenges') return { operation: 'challenge', lane: 'development' };
+  if (url.pathname === '/dev/v1/solari/access/attestations') return { operation: 'attestation', lane: 'development' };
   if (['/api/solari.js', '/api/solari'].includes(url.pathname)) {
     const route = url.searchParams.get('route');
-    if (['research', 'challenge', 'attestation'].includes(route)) return route;
+    if (['research', 'challenge', 'attestation'].includes(route)) return { operation: route, lane: 'distribution' };
+    if (['dev-research', 'dev-challenge', 'dev-attestation'].includes(route)) {
+      return { operation: route.slice(4), lane: 'development' };
+    }
   }
   return null;
 }
@@ -88,6 +94,23 @@ export function createPublicSolariApi(options = {}) {
     sandboxOptimizer: options.sandboxOptimizer,
     demoHostLookup: options.demoHostLookup
   });
+  const developmentBeta = options.developmentBetaApi ?? createSolariBetaApi({
+    config: {
+      ...config,
+      solariBetaEnabled: config.solariBetaEnabled === true && config.solariDevelopmentLaneEnabled === true,
+      solariBetaStorePrefix: config.solariDevelopmentStorePrefix,
+      solariAppAttestAllowedValidationCategories: [3],
+      solariAppAttestResearchPath: '/dev/v1/solari/research'
+    },
+    validator: options.validator,
+    now: options.now,
+    store: options.developmentBetaStore,
+    verifier: options.developmentAppAttestVerifier,
+    researchService: options.developmentBetaResearchService ?? options.betaResearchService,
+    browserProvider: options.browserProvider,
+    sandboxOptimizer: options.sandboxOptimizer,
+    demoHostLookup: options.demoHostLookup
+  });
 
   async function handler(request, response) {
     const traceID = randomUUID();
@@ -101,7 +124,9 @@ export function createPublicSolariApi(options = {}) {
     try {
       const url = new URL(request.url ?? '/', 'https://smartcart.invalid');
       const route = routeForRequest(url);
-      if (!route || request.method !== 'POST') {
+      if (!route || request.method !== 'POST' || (
+        route.lane === 'development' && config.solariDevelopmentLaneEnabled !== true
+      )) {
         send(response, 404, { error: { code: 'route_not_found', message: 'Route does not exist.', retryable: false } }, traceID);
         return;
       }
@@ -117,24 +142,32 @@ export function createPublicSolariApi(options = {}) {
         });
         return;
       }
-      const bodyLimit = route === 'challenge' ? config.solariMaxBodyBytes : config.solariBetaMaxBodyBytes;
+      const bodyLimit = route.operation === 'challenge' ? config.solariMaxBodyBytes : config.solariBetaMaxBodyBytes;
       const payload = request.body && typeof request.body === 'object'
         ? validatePreparsedJsonBody(request, request.body, bodyLimit)
         : await readJson(request, bodyLimit);
-      if (route === 'challenge') {
-        const result = await beta.challenge(payload);
+      const activeBeta = route.lane === 'development' ? developmentBeta : beta;
+      if (route.operation === 'challenge') {
+        const result = await activeBeta.challenge(payload);
         send(response, result.status, result.payload, traceID, { ...rateHeaders, ...result.headers });
         return;
       }
-      if (route === 'attestation') {
-        const result = await beta.attestation(payload);
+      if (route.operation === 'attestation') {
+        const result = await activeBeta.attestation(payload);
         send(response, result.status, result.payload, traceID, { ...rateHeaders, ...result.headers });
         return;
       }
       if (isV2Envelope(payload)) {
-        const result = await beta.researchEnvelope(payload, { signal: controller.signal });
+        const result = await activeBeta.researchEnvelope(payload, { signal: controller.signal });
         send(response, result.status, result.payload, traceID, { ...rateHeaders, ...result.headers });
         return;
+      }
+      if (route.lane === 'development') {
+        throw new SolariResearchError(
+          'app_attest_envelope_required',
+          'The development lane accepts only an App Attest research envelope.',
+          { status: 403 }
+        );
       }
       validatePreparsedJsonBody(request, payload, config.solariMaxBodyBytes);
       const validator = await validatorPromise;
@@ -180,5 +213,5 @@ export function createPublicSolariApi(options = {}) {
     }
   }
 
-  return { handler, config, services: { research: service, beta, limiter } };
+  return { handler, config, services: { research: service, beta, developmentBeta, limiter } };
 }
