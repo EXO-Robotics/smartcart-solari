@@ -26,13 +26,17 @@ REQUIRED_PHRASES = {
     "Solari Sandbox",
     "The frontend is replaceable",
     "Solari is the capability",
-    "owned, synthetic retailer",
-    "$24.20",
-    "$0.63",
-    "1.5 lb",
     "No retailer login",
     "User-controlled handoff",
 }
+FORBIDDEN_SECTION_MARKERS = (
+    'class="transformation section"',
+    'class="execution section"',
+    'class="proof section"',
+    'data-comparison-state=',
+    'data-process=',
+    'data-panel=',
+)
 FORBIDDEN_CLAIMS = (
     r"\blive retailer prices?\b",
     r"(?<!no )\bguaranteed prices?\b",
@@ -137,9 +141,6 @@ def inspect_case_study(root: Path = ROOT, receipt_path: Path = RECEIPT) -> list[
     if 'aria-label="Case study navigation"' in source:
         errors.append("index.html: retired top-center case-study navigation must stay removed")
     for comparison_marker in (
-        'tabindex="-1" data-mode="before"',
-        'aria-hidden="true" inert data-process="before"',
-        'aria-hidden="true" inert data-panel="before"',
         'aria-selected="true" tabindex="0" data-video-mode="after"',
         'data-hero-video',
         'assets/smartcart-before-solari.mp4',
@@ -147,6 +148,9 @@ def inspect_case_study(root: Path = ROOT, receipt_path: Path = RECEIPT) -> list[
     ):
         if comparison_marker not in dynamic_source:
             errors.append(f"index.html: missing accessible comparison state marker {comparison_marker!r}")
+    for forbidden_marker in FORBIDDEN_SECTION_MARKERS:
+        if forbidden_marker in dynamic_source:
+            errors.append(f"case study: retired post-video section marker returned: {forbidden_marker!r}")
     for replay_marker in (
         "DEBUG RECORDED REPLAY · NOT LIVE",
         "Solari Browser and Sandbox do not run inside this clip",
@@ -193,7 +197,7 @@ def inspect_case_study(root: Path = ROOT, receipt_path: Path = RECEIPT) -> list[
     for key in ("smartcart", "procurement", "travel", '"field-service"'):
         if key not in javascript:
             errors.append(f"script.js: missing replaceable frontend model {key}")
-    for accessibility_key in ("panel.inert = hidden", '"ArrowRight"', '"ArrowLeft"', "setHeroVideoMode", "heroVideo.load()"):
+    for accessibility_key in ('"ArrowRight"', '"ArrowLeft"', "setHeroVideoMode", "heroVideo.load()"):
         if accessibility_key not in javascript:
             errors.append(f"script.js: missing accessible comparison behavior {accessibility_key}")
     if "prefers-reduced-motion" not in javascript or "prefers-reduced-motion" not in styles.read_text(encoding="utf-8"):

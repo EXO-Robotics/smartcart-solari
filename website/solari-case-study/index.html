@@ -62,86 +62,10 @@
         <div><span>VIDEO</span><strong>Native app flow</strong></div>
         <div><span>RECEIPT</span><strong>8-item Browser + Sandbox run</strong></div>
         <div><span>BOUNDARY</span><strong>No retailer login, cart mutation, or checkout</strong></div>
-        <a href="#transformation">See what changed <span aria-hidden="true">↓</span></a>
+        <a href="#platform">See the architecture <span aria-hidden="true">↓</span></a>
       </div>
 
       <div class="hero-foot" aria-hidden="true"><span>01</span><i></i><small>WATCH THE PRODUCT</small></div>
-    </section>
-
-    <section class="transformation section" id="transformation" aria-labelledby="transformation-title">
-      <div class="section-shell">
-        <div class="transformation-heading reveal">
-          <p class="kicker"><span></span> The product process</p>
-          <h2 id="transformation-title">Same SmartCart.<br>A more useful handoff.</h2>
-          <p>Switch between the original workflow and the Solari-enhanced workflow to see exactly where the product changed.</p>
-
-          <div class="mode-switch" role="tablist" aria-label="Compare SmartCart before and after Solari">
-            <button id="mode-before" type="button" role="tab" aria-selected="false" tabindex="-1" data-mode="before">Before Solari</button>
-            <button id="mode-after" type="button" role="tab" aria-selected="true" tabindex="0" data-mode="after">After Solari</button>
-          </div>
-        </div>
-
-        <div class="transformation-story reveal" data-comparison-state="after">
-          <div class="process-copy" aria-live="polite">
-            <div class="process-panel process-before" role="tabpanel" aria-labelledby="mode-before" aria-hidden="true" inert data-process="before">
-              <span class="process-index">ORIGINAL SMARTCART / 04 STEPS</span>
-              <h3>The intelligence stopped at the store.</h3>
-              <ol>
-                <li><b>01</b><span><strong>Understand the recipe</strong><small>Extract ingredients and required quantities.</small></span></li>
-                <li><b>02</b><span><strong>Apply pantry exclusions</strong><small>Remove what the shopper already has.</small></span></li>
-                <li><b>03</b><span><strong>Build the shopping list</strong><small>Aggregate the remaining trip requirements.</small></span></li>
-                <li><b>04</b><span><strong>Open a retailer</strong><small>Leave package search and comparison to the shopper.</small></span></li>
-              </ol>
-              <p class="process-summary">SmartCart knew <em>what</em> was needed, but not which current packages sensibly satisfied the trip.</p>
-            </div>
-
-            <div class="process-panel process-after" role="tabpanel" aria-labelledby="mode-after" aria-hidden="false" data-process="after">
-              <span class="process-index">SOLARI-ENHANCED / 06 STEPS</span>
-              <h3>The handoff becomes a grounded decision.</h3>
-              <ol>
-                <li><b>01</b><span><strong>Keep SmartCart’s intent</strong><small>Recipe, pantry, identity, and quantities remain authoritative.</small></span></li>
-                <li><b>02</b><span><strong>Request research</strong><small>The shopper intentionally starts the optional step.</small></span></li>
-                <li><b>03</b><span><strong>Observe product evidence</strong><small>Browser records identity, package, visible synthetic price, source, and time.</small></span></li>
-                <li><b>04</b><span><strong>Evaluate complete baskets</strong><small>Sandbox compares coverage, cost, and overage under bounded policy.</small></span></li>
-                <li><b>05</b><span><strong>Validate in SmartCart</strong><small>The app checks the evidence before presenting a native recommendation.</small></span></li>
-                <li><b>06</b><span><strong>Hand control back</strong><small>The shopper chooses whether to continue to the retailer.</small></span></li>
-              </ol>
-              <p class="process-summary"><em>$0.63 more</em> can avoid roughly <em>1.5 lb of excess chicken</em> in the separate V4 qualification run.</p>
-            </div>
-          </div>
-
-          <div class="comparison-stage">
-          <div class="comparison-phone" aria-live="polite">
-            <div class="phone-status"><span>9:41</span><i></i><span>●●●</span></div>
-            <div class="comparison-background" aria-hidden="true"></div>
-
-            <div class="comparison-panel panel-before" aria-hidden="true" inert data-panel="before">
-              <div class="native-nav"><button tabindex="-1" aria-hidden="true">‹</button><strong>Shopping List</strong><span></span></div>
-              <div class="native-heading"><small>Chicken pasta · 6 servings</small><h3>8 items ready</h3><p>Your pantry exclusions are applied.</p></div>
-              <div class="native-list">
-                <div><i>01</i><span><strong>Chicken breast</strong><small>1.5 lb</small></span><b>Ready</b></div>
-                <div><i>02</i><span><strong>Penne</strong><small>12 oz</small></span><b>Ready</b></div>
-                <div><i>03</i><span><strong>Parmesan</strong><small>3 oz</small></span><b>Ready</b></div>
-              </div>
-              <div class="native-action">Open retailer</div>
-              <p class="native-note">The user still has to search, compare packages, and decide what satisfies the trip.</p>
-            </div>
-
-            <div class="comparison-panel panel-after" aria-hidden="false" data-panel="after">
-              <div class="native-nav"><button tabindex="-1" aria-hidden="true">‹</button><strong>Shopping Research</strong><span class="solari-chip">SOLARI</span></div>
-              <div class="basket-total"><small>Lower-overage basket</small><strong>$24.20</strong><span>8 of 8 needs researched</span></div>
-              <div class="recommendation-row"><span><strong>Chicken breast</strong><small>1 × 1.5 lb · enough for 1.5 lb</small></span><b>$8.76</b></div>
-              <div class="recommendation-row"><span><strong>Penne</strong><small>1 × 16 oz · enough for 12 oz</small></span><b>$1.24</b></div>
-              <div class="recommendation-row"><span><strong>Parmesan</strong><small>1 × 6 oz · enough for 3 oz</small></span><b>$2.08</b></div>
-              <div class="shopper-tradeoff"><b>+$0.63</b><span>to avoid approximately 1.5 lb of excess chicken</span></div>
-              <div class="native-action enhanced">Continue to retailer</div>
-              <div class="provenance-line"><i></i><span>Controlled source · observed 2026-09-01 19:00 UTC · high confidence</span></div>
-            </div>
-          </div>
-          <p class="illustration-note">Product-flow illustration based on the native implementation and exact V4 qualification receipt.</p>
-          </div>
-        </div>
-      </div>
     </section>
 
     <section class="platform section" id="platform" aria-labelledby="platform-title">
@@ -171,10 +95,10 @@
 
           <div class="architecture-column architecture-solari">
             <span class="architecture-index">02 / SOLARI</span>
-            <strong>Browser</strong>
+            <strong>Solari Browser</strong>
             <p>Turns external web surfaces into timestamped, structured observations.</p>
             <div class="solari-divider"></div>
-            <strong>Sandbox</strong>
+            <strong>Solari Sandbox</strong>
             <p>Runs isolated, bounded evaluation over the complete candidate set.</p>
           </div>
 
@@ -191,61 +115,6 @@
       </div>
     </section>
 
-    <section class="execution section" aria-labelledby="execution-title">
-      <div class="section-shell">
-        <div class="execution-heading reveal">
-          <p class="kicker"><span></span> One platform · two necessary jobs</p>
-          <h2 id="execution-title">Observe reality.<br>Evaluate the decision.</h2>
-        </div>
-
-        <div class="execution-lanes">
-          <article class="execution-lane reveal">
-            <div class="lane-title"><span>01</span><h3>Solari Browser</h3><small>EXTERNAL RESEARCH</small></div>
-            <p>Opens approved product pages and returns product identity, package size, visible synthetic price, source, timestamp, and ambiguity as structured evidence.</p>
-            <div class="terminal" role="group" aria-label="Example structured browser observation">
-              <div><span>source</span><b>controlled retailer / product</b></div>
-              <div><span>package</span><b>1.5 lb</b></div>
-              <div><span>visible price</span><b>$8.76 · synthetic</b></div>
-              <div><span>confidence</span><b>high · no ambiguity</b></div>
-            </div>
-          </article>
-
-          <article class="execution-lane reveal">
-            <div class="lane-title"><span>02</span><h3>Solari Sandbox</h3><small>ISOLATED EVALUATION</small></div>
-            <p>Searches candidate combinations under an explicit premium cap, minimizing aggregate package surplus without moving optimization authority into the phone.</p>
-            <div class="terminal" role="group" aria-label="Example sandbox basket decision">
-              <div><span>algorithm</span><b>relative-surplus-premium-dp-v1</b></div>
-              <div><span>cheapest</span><b>$23.57</b></div>
-              <div><span>selected</span><b>$24.20</b></div>
-              <div><span>policy</span><b>+$0.63 ≤ $0.75 cap</b></div>
-            </div>
-          </article>
-        </div>
-      </div>
-    </section>
-
-    <section class="proof section" id="proof" aria-labelledby="proof-title">
-      <div class="section-shell proof-shell">
-        <div class="proof-heading reveal">
-          <p class="kicker"><span></span> Credentialed execution</p>
-          <h2 id="proof-title">A shopper-useful tradeoff,<br>not a browser screenshot.</h2>
-          <p>The exact V4 qualification ran Solari Browser and Sandbox server-side, then bound the observations and decision to an immutable receipt.</p>
-        </div>
-
-        <div class="proof-numbers reveal" role="group" aria-label="Qualification result summary">
-          <div><strong>8</strong><span>shopping requirements</span></div>
-          <div><strong>16</strong><span>Browser observations</span></div>
-          <div><strong>$24.20</strong><span>selected basket</span></div>
-          <div class="accent-number"><strong>~1.5 lb</strong><span>excess chicken avoided for +$0.63</span></div>
-        </div>
-
-        <div class="proof-footer reveal">
-          <p><strong>Evidence boundary.</strong> This proves real Solari provider execution against SmartCart’s owned, synthetic retailer catalog. It does not claim authorized commercial-retailer coverage, guaranteed pricing, TestFlight distribution, or product-market fit.</p>
-          <a class="button button-light" href="evidence/live/smartcart-solari-v4-qualification-33546912947.json">Inspect the exact receipt <span aria-hidden="true">↗</span></a>
-        </div>
-      </div>
-    </section>
-
     <section class="final-cta" aria-labelledby="cta-title">
       <div class="final-glow" aria-hidden="true"></div>
       <div class="final-copy reveal">
@@ -255,7 +124,7 @@
         <p class="final-boundary">No retailer login · no cart mutation · no autonomous purchase</p>
         <div class="hero-actions">
           <a class="button button-primary" href="https://github.com/EXO-Robotics/smartcart-solari">Explore the implementation</a>
-          <a class="text-link" href="website/solari-demo/">Open the evidence replay <span aria-hidden="true">↗</span></a>
+          <a class="text-link" href="evidence/live/smartcart-solari-v4-qualification-33546912947.json">Inspect the exact receipt <span aria-hidden="true">↗</span></a>
         </div>
       </div>
       <div class="final-mark" aria-hidden="true">S</div>
@@ -265,7 +134,7 @@
   <footer>
     <a class="wordmark" href="#top"><span>SMARTCART</span><i>×</i><strong>SOLARI</strong></a>
     <p>Independent application case study by EXO-Robotics. Solari is a platform by Pinetree Research.</p>
-    <div><a href="https://github.com/EXO-Robotics/smartcart-solari">GitHub</a><a href="https://docs.getsolari.com/">Solari docs</a><a href="#proof">Evidence boundary</a></div>
+    <div><a href="https://github.com/EXO-Robotics/smartcart-solari">GitHub</a><a href="https://docs.getsolari.com/">Solari docs</a><a href="evidence/live/smartcart-solari-v4-qualification-33546912947.json">Evidence receipt</a></div>
   </footer>
 </body>
 </html>

@@ -104,31 +104,9 @@
     if (heroVideoPlay) heroVideoPlay.hidden = true;
   });
 
-  const comparison = document.querySelector("[data-comparison-state]");
-  const modeButtons = Array.from(document.querySelectorAll("[data-mode]"));
-  const modePanels = Array.from(document.querySelectorAll("[data-process], [data-panel]"));
-
-  const setComparisonMode = (mode, shouldFocus = false) => {
-    if (!mode || !comparison) return;
-    comparison.dataset.comparisonState = mode;
-    modeButtons.forEach((candidate) => {
-      const selected = candidate.dataset.mode === mode;
-      candidate.setAttribute("aria-selected", String(selected));
-      candidate.tabIndex = selected ? 0 : -1;
-      if (selected && shouldFocus) candidate.focus();
-    });
-    modePanels.forEach((panel) => {
-      const panelMode = panel.dataset.process || panel.dataset.panel;
-      const hidden = panelMode !== mode;
-      panel.setAttribute("aria-hidden", String(hidden));
-      panel.inert = hidden;
-    });
-    setHeroVideoMode(mode);
-  };
-
   heroVideoTabs.forEach((button) => {
     button.addEventListener("click", () => {
-      setComparisonMode(button.dataset.videoMode);
+      setHeroVideoMode(button.dataset.videoMode);
     });
     button.addEventListener("keydown", (event) => {
       const currentIndex = heroVideoTabs.indexOf(button);
@@ -140,28 +118,10 @@
       else return;
       event.preventDefault();
       const nextButton = heroVideoTabs[nextIndex];
-      setComparisonMode(nextButton?.dataset.videoMode);
+      setHeroVideoMode(nextButton?.dataset.videoMode);
       nextButton?.focus();
     });
   });
-
-  modeButtons.forEach((button) => {
-    button.addEventListener("click", () => {
-      setComparisonMode(button.dataset.mode);
-    });
-    button.addEventListener("keydown", (event) => {
-      const currentIndex = modeButtons.indexOf(button);
-      let nextIndex = currentIndex;
-      if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % modeButtons.length;
-      else if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + modeButtons.length) % modeButtons.length;
-      else if (event.key === "Home") nextIndex = 0;
-      else if (event.key === "End") nextIndex = modeButtons.length - 1;
-      else return;
-      event.preventDefault();
-      setComparisonMode(modeButtons[nextIndex]?.dataset.mode, true);
-    });
-  });
-  setComparisonMode(modeButtons.find((button) => button.getAttribute("aria-selected") === "true")?.dataset.mode);
 
   const frontends = {
     smartcart: {
