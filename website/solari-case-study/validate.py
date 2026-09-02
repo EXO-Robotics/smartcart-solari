@@ -30,6 +30,18 @@ REQUIRED_PHRASES = {
     "No retailer sign-in",
     "You decide what to buy",
 }
+REQUIRED_LIVE_DEMO_MARKERS = {
+    "Research this meal",
+    "Live public proof",
+    "Solari is researching",
+    "smartcart-solari-public-demo-request-v1",
+    "chicken-pasta-eight-item-v1",
+    "smartcart-solari-public-demo-response-v1",
+    "Telemetry unavailable",
+    "Last verified result",
+    "owned synthetic Demo Grocer",
+    "No purchase action occurred",
+}
 REQUIRED_RECEIPT_PHRASES = {
     "What the Solari run",
     "$24.20",
@@ -171,6 +183,9 @@ def inspect_case_study(root: Path = ROOT, receipt_path: Path = RECEIPT) -> list[
     for phrase in REQUIRED_PHRASES:
         if phrase.casefold() not in source.casefold():
             errors.append(f"index.html: missing required product marker {phrase!r}")
+    for marker in REQUIRED_LIVE_DEMO_MARKERS:
+        if marker.casefold() not in dynamic_source.casefold():
+            errors.append(f"case study: missing public live-demo marker {marker!r}")
     for social_marker in ("og:title", "og:description", "og:image", "twitter:card"):
         if social_marker not in source:
             errors.append(f"index.html: missing social preview marker {social_marker}")
@@ -197,6 +212,26 @@ def inspect_case_study(root: Path = ROOT, receipt_path: Path = RECEIPT) -> list[
     ):
         if replay_marker.casefold() not in dynamic_source.casefold():
             errors.append(f"index.html: missing native/provider separation marker {replay_marker!r}")
+    for implementation_marker in (
+        'https://smartcart-solari-beta.vercel.app/public-demo/v1/solari/research',
+        'method: "POST"',
+        "AbortController",
+        "PUBLIC_DEMO_TIMEOUT_MS",
+        "sessionStorage",
+        "credentials: \"omit\"",
+        "textContent",
+        "replaceChildren",
+        "approvedReplayURL",
+        'parsed.protocol === "https:"',
+        'host.endsWith(".getsolari.com")',
+    ):
+        if implementation_marker not in javascript:
+            errors.append(f"script.js: missing bounded live-demo behavior {implementation_marker!r}")
+    for unsafe_dynamic_html in (".innerHTML", "insertAdjacentHTML", "document.write"):
+        if unsafe_dynamic_html in javascript:
+            errors.append(f"script.js: public result rendering must not use {unsafe_dynamic_html}")
+    if "<iframe" in source.casefold():
+        errors.append("index.html: Browser replay must remain a validated outbound link, never an iframe")
     video_tag = re.search(r"<video\b[^>]*>", source, flags=re.IGNORECASE)
     if (
         video_tag is None

@@ -38,7 +38,10 @@ Tests use only `node:test`, saved HTML, injected fetch doubles, and an ephemeral
 The Vercel project rooted at this `backend` directory deploys isolated barcode, Trip Intelligence,
 MCP and bounded-use native handoff functions plus reviewed static Weekly Meals JSON. `vercel.json` exposes
 `GET`/`HEAD /health`, `GET /v1/barcodes/{gtin}`, `POST /v1/intelligence/nutrition/recipes/estimate`,
-`POST /mcp`, `POST /v1/handoffs/claim`, the static `/t` landing page, and files under
+`POST /mcp`, `POST /v1/handoffs/claim`, the App Attest Solari routes, and a separate default-off
+`POST /public-demo/v1/solari/research` case-study route. The public-demo route accepts only one fixed
+owned eight-item meal and requires exact-origin, durable quota/concurrency/budget, and runtime-switch
+admission before provider work. The deployment also serves the static `/t` landing page and files under
 `/weekly-meals`; it returns 404 for every other route and method.
 Vercel also exposes the underlying function aliases `/api/mcp`, `/api/mcp.js`, `/api/handoff`, and
 `/api/handoff.js`. They enter the same bounded handlers, body limits, and process-local admission

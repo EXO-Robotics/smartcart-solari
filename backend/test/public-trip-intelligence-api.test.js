@@ -155,7 +155,7 @@ test('Vercel exposes only the reviewed barcode, intelligence, MCP, handoff, and 
   const config = JSON.parse(await readFile(new URL('../vercel.json', import.meta.url), 'utf8'));
   assert.deepEqual(
     Object.keys(config.functions).sort(),
-    ['api/handoff.js', 'api/index.js', 'api/intelligence.js', 'api/mcp.js', 'api/solari.js']
+    ['api/handoff.js', 'api/index.js', 'api/intelligence.js', 'api/mcp.js', 'api/solari-public-demo.js', 'api/solari.js']
   );
   assert.deepEqual(config.routes, [
     {
@@ -223,6 +223,11 @@ test('Vercel exposes only the reviewed barcode, intelligence, MCP, handoff, and 
       src: '/dev/v1/solari/access/attestations',
       methods: ['POST'],
       dest: '/api/solari.js?route=dev-attestation'
+    },
+    {
+      src: '/public-demo/v1/solari/research',
+      methods: ['POST', 'OPTIONS'],
+      dest: '/api/solari-public-demo.js?route=research'
     },
     {
       src: '/t',

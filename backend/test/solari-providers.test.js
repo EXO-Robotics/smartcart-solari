@@ -133,6 +133,42 @@ test('Browser V3 mode extracts exact catalog-era and synthetic-price markers', a
   assert.equal('rawText' in observation,false);
 });
 
+test('public-demo Browser recording returns only a bounded presigned replay and no session identifier', async () => {
+  const full = demoRequest(await fixtureRequest());
+  const request = { ...full, requirements: [{ ...full.requirements[0], candidates: [full.requirements[0].candidates[0]] }] };
+  let launchOptions;
+  let released = 0;
+  let replayID;
+  let replayAttempts = 0;
+  const page = {
+    async goto() {}, url() { return request.requirements[0].candidates[0].sourceURL; }, async waitForSelector() {},
+    async evaluate() { return { productID: '10414680', title: 'Demo Chicken', packageQuantity: '3', packageUnit: 'lb', priceCents: '947', currency: 'USD' }; },
+    async close() {}
+  };
+  const provider = new SolariBrowserProvider({
+    apiKey: 'server-only-test-key',
+    replayPollIntervalMs: 1,
+    now: () => Date.parse('2026-09-02T14:00:00Z'),
+    solariFactory: () => ({
+      async launch(options) { launchOptions = options; return { id: 'private-session-id', async newPage() { return page; }, async close() { released += 1; } }; },
+      sessions: { async getReplayUrl(id) { replayID = id; replayAttempts += 1; if (replayAttempts < 3) throw new Error('not ready'); return { url: 'https://replay.example/run.ndjson?sig=test', expiresInSeconds: 600 }; } },
+      async close() {}
+    })
+  });
+  const recorded = await provider.observeRecorded(request, { evidenceVersion: 'v4', deadlineAt: Date.now() + 5_000 });
+  assert.equal(launchOptions.recording, true);
+  assert.equal(launchOptions.stealth, false);
+  assert.equal(launchOptions.proxy, 'off');
+  assert.equal(replayID, 'private-session-id');
+  assert.equal(replayAttempts, 3);
+  assert.equal(released, 1);
+  assert.deepEqual(recorded.replay, {
+    url: 'https://replay.example/run.ndjson?sig=test',
+    expiresAt: '2026-09-02T14:10:00.000Z'
+  });
+  assert.equal(JSON.stringify(recorded).includes('private-session-id'), false);
+});
+
 test('Browser and Sandbox fail typed-unavailable when the server key is absent', async () => {
   const request = demoRequest(await fixtureRequest());
   await assert.rejects(() => new SolariBrowserProvider().observe(request), { code: 'solari_unavailable', status: 503 });

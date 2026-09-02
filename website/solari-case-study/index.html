@@ -38,6 +38,13 @@
         <p class="kicker">SmartCart × Solari</p>
         <h1 id="hero-title">SmartCart already planned the meal.<br><em>Solari helps price the basket.</em></h1>
         <p class="hero-lede">SmartCart turns recipes into shopping lists. Solari researches product options and package sizes, then estimates what the meal could cost before the shopper buys.</p>
+        <div class="hero-live-action">
+          <a class="research-button" href="#live-research" data-research-jump>
+            <span>Research this meal</span>
+            <i aria-hidden="true">Run Solari ↘</i>
+          </a>
+          <p>One bounded run against SmartCart's owned Demo Grocer. No sign-in, cart, or checkout.</p>
+        </div>
         <div class="hero-proof-links" aria-label="Project and execution evidence">
           <a href="https://github.com/EXO-Robotics/smartcart-solari">GitHub <span aria-hidden="true">↗</span></a>
           <a href="verified-run.html">Verified Solari run <span aria-hidden="true">↗</span></a>
@@ -45,29 +52,110 @@
         <p class="hero-sandbox-proof"><strong>Sandbox result:</strong> a $24.20 basket instead of the $23.57 cheapest option—spending $0.63 more avoided about 1.5 lb of extra chicken.</p>
       </div>
 
-      <div class="hero-media-switch reveal" role="tablist" aria-label="Switch between SmartCart before and after Solari videos">
-        <button id="video-before-tab" type="button" role="tab" aria-controls="hero-video-panel" aria-selected="false" tabindex="-1" data-video-mode="before">Before Solari</button>
-        <button id="video-after-tab" type="button" role="tab" aria-controls="hero-video-panel" aria-selected="true" tabindex="0" data-video-mode="after">After Solari</button>
+      <div class="hero-foot" aria-hidden="true"><span>01</span><i></i><small>RUN THE RESEARCH</small></div>
+    </section>
+
+    <section class="live-research section" id="live-research" aria-labelledby="live-title" data-live-research data-live-state="idle">
+      <div class="section-shell live-shell">
+        <div class="live-heading reveal">
+          <p class="kicker"><span></span> Live public proof</p>
+          <h2 id="live-title">Watch Solari solve<br><em>the missing step.</em></h2>
+          <p>SmartCart already knows the eight ingredients. Start one live, bounded run to see Solari research the packages and choose a complete basket.</p>
+        </div>
+
+        <div class="live-workspace reveal" aria-live="polite" aria-busy="false" data-live-workspace>
+          <div class="live-status-line">
+            <span data-live-status-label>Ready</span>
+            <time data-live-timer datetime="PT0S">00:00</time>
+          </div>
+
+          <div class="live-state live-idle" data-live-panel="idle">
+            <div class="live-meal">
+              <p>Chicken pasta · 8 shopping needs</p>
+              <ul aria-label="Meal ingredients">
+                <li>Chicken breast</li><li>Olive oil</li><li>Penne</li><li>Heavy cream</li>
+                <li>Parmesan</li><li>Garlic</li><li>Lemons</li><li>Parsley</li>
+              </ul>
+            </div>
+            <button class="research-button research-button-live" type="button" data-research-start>
+              <span>Research this meal</span>
+              <i aria-hidden="true">Browser + Sandbox ↗</i>
+            </button>
+            <p class="live-fine-print">This sends only the fixed demo meal to a rate-limited server. It does not accept retailer accounts, shopping carts, or arbitrary URLs.</p>
+          </div>
+
+          <div class="live-state live-running" data-live-panel="running" hidden>
+            <ol class="live-progress" aria-label="Solari research progress">
+              <li data-live-step="browser"><i aria-hidden="true"></i><span><strong>Solari Browser</strong><small>Opening approved Demo Grocer product pages</small></span></li>
+              <li data-live-step="sandbox"><i aria-hidden="true"></i><span><strong>Solari Sandbox</strong><small>Comparing complete baskets for price and leftovers</small></span></li>
+              <li data-live-step="smartcart"><i aria-hidden="true"></i><span><strong>SmartCart</strong><small>Checking coverage, totals, and provenance</small></span></li>
+            </ol>
+            <button class="live-cancel" type="button" data-research-cancel>Cancel run</button>
+          </div>
+
+          <div class="live-state live-complete" data-live-panel="complete" hidden>
+            <div class="live-decision">
+              <p>Solari selected</p>
+              <strong data-live-total>$24.20</strong>
+              <span data-live-completed>Complete basket</span>
+            </div>
+            <p class="live-tradeoff" data-live-tradeoff>The cheapest basket was $23.57. Spending $0.63 more avoided about 1.5 lb of extra chicken.</p>
+            <ol class="live-basket" data-live-basket aria-label="Selected package basket"></ol>
+            <dl class="live-metrics">
+              <div><dt>Runtime</dt><dd data-live-runtime>—</dd></div>
+              <div><dt>Coverage</dt><dd data-live-coverage>—</dd></div>
+              <div><dt>Cleanup</dt><dd data-live-cleanup>—</dd></div>
+              <div><dt>Run cost</dt><dd data-live-cost>Telemetry unavailable</dd></div>
+            </dl>
+            <div class="live-actions">
+              <a class="button button-primary" target="_blank" rel="noopener noreferrer" data-live-replay hidden>View Solari Browser replay</a>
+              <a class="text-link" href="verified-run.html">Read the evidence receipt <span aria-hidden="true">↗</span></a>
+            </div>
+            <p class="live-fine-print" data-live-source>Observed on SmartCart's owned synthetic Demo Grocer. This is not a commercial-retailer price quote.</p>
+          </div>
+
+          <div class="live-state live-fallback" data-live-panel="fallback" hidden>
+            <p class="live-fallback-label">Live run unavailable</p>
+            <h3>The last verified result is still available.</h3>
+            <p data-live-fallback-message>This browser has already used its live public run, or the bounded service could not complete safely.</p>
+            <div class="fallback-result"><strong>$24.20</strong><span>Verified September 1, 2026 · 8 needs · 16 observations</span></div>
+            <p>The verified basket spent $0.63 more than the cheapest option to avoid about 1.5 lb of extra chicken.</p>
+            <a class="button button-primary" href="verified-run.html">Open the readable verified run</a>
+          </div>
+        </div>
       </div>
+    </section>
 
-      <figure class="hero-reel reveal" id="native-flow" data-video-state="after">
-        <div class="reel-meta">
-          <span data-video-label>After Solari · Pricing research</span>
-          <button class="hero-play" type="button" data-video-play aria-label="Play the 25 second After Solari recording"><i aria-hidden="true">▶</i><span data-video-duration>Play video · 00:25</span></button>
+    <section class="recorded-flows section" id="native-flow" aria-labelledby="recorded-title">
+      <div class="section-shell recorded-shell">
+        <div class="recorded-heading reveal">
+          <p class="kicker"><span></span> Recorded product flow</p>
+          <h2 id="recorded-title">See SmartCart<br><em>before and after.</em></h2>
+          <p>These recordings show the native product experience. They are separate from the live Solari run above.</p>
         </div>
-        <div class="hero-video-panel" id="hero-video-panel" role="tabpanel" aria-labelledby="video-after-tab" aria-live="polite">
-          <video playsinline preload="metadata" poster="assets/smartcart-after-solari-poster.jpg" aria-describedby="hero-film-caption" data-hero-video>
-            <source src="assets/smartcart-after-solari.mp4" type="video/mp4" data-hero-video-source>
-            Your browser does not support the embedded SmartCart replay video.
-          </video>
-        </div>
-        <figcaption id="hero-film-caption">
-          <strong data-video-badge>AFTER SOLARI · DEBUG RECORDED REPLAY · NOT LIVE.</strong>
-          <span data-video-caption>Recorded SmartCart walkthrough. The app shows product options, package counts, and an estimated total. Solari does not run inside the video; the separate receipt proves the real eight-item Browser and Sandbox run.</span>
-        </figcaption>
-      </figure>
 
-      <div class="hero-foot" aria-hidden="true"><span>01</span><i></i><small>WATCH THE PRODUCT</small></div>
+        <div class="hero-media-switch reveal" role="tablist" aria-label="Switch between SmartCart before and after Solari videos">
+          <button id="video-before-tab" type="button" role="tab" aria-controls="hero-video-panel" aria-selected="false" tabindex="-1" data-video-mode="before">Before Solari</button>
+          <button id="video-after-tab" type="button" role="tab" aria-controls="hero-video-panel" aria-selected="true" tabindex="0" data-video-mode="after">After Solari</button>
+        </div>
+
+        <figure class="hero-reel reveal" data-video-state="after">
+          <div class="reel-meta">
+            <span data-video-label>After Solari · Pricing research</span>
+            <button class="hero-play" type="button" data-video-play aria-label="Play the 25 second After Solari recording"><i aria-hidden="true">▶</i><span data-video-duration>Play video · 00:25</span></button>
+          </div>
+          <div class="hero-video-panel" id="hero-video-panel" role="tabpanel" aria-labelledby="video-after-tab" aria-live="polite">
+            <video playsinline preload="metadata" poster="assets/smartcart-after-solari-poster.jpg" aria-describedby="hero-film-caption" data-hero-video>
+              <source src="assets/smartcart-after-solari.mp4" type="video/mp4" data-hero-video-source>
+              Your browser does not support the embedded SmartCart replay video.
+            </video>
+          </div>
+          <figcaption id="hero-film-caption">
+            <strong data-video-badge>AFTER SOLARI · DEBUG RECORDED REPLAY · NOT LIVE.</strong>
+            <span data-video-caption>Recorded SmartCart walkthrough. The app shows product options, package counts, and an estimated total. Solari does not run inside the video; the separate receipt proves the real eight-item Browser and Sandbox run.</span>
+          </figcaption>
+        </figure>
+      </div>
     </section>
 
     <section class="platform section" id="platform" aria-labelledby="platform-title">

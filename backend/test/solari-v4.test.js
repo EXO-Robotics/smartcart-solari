@@ -153,3 +153,47 @@ test('V4 service returns schema-valid Browser evidence and Sandbox-authoritative
   assert.equal(result.optimizer.authority, 'solari-sandbox');
   assert.equal(result.provenance.fixtureReplay, false);
 });
+
+test('V4 public-demo service requires recorded Browser provenance and emits honest runtime stats', async () => {
+  const toCanonical = (value, unit) => unit === 'lb' ? [value * 453.59237, 'gram']
+    : unit === 'oz' ? [value * 28.349523125, 'gram']
+      : unit === 'fl oz' ? [value * 29.5735295625, 'milliliter'] : [value, 'count'];
+  const sandbox = new SolariV4SandboxOptimizer({ apiKey: 'server-only', clientFactory: () => ({ create: async () => ({ commands: { run: async (command, { args }) => { const { stdout, stderr } = await execFileAsync(command, args); return { exitCode: 0, stdout, stderr }; } }, kill: async () => {} }) }) });
+  let recordedCalls = 0;
+  let runtime = 1_000;
+  const service = createSolariV4ResearchService({
+    accessBoundary: 'public-demo',
+    config: { solariApiKey: 'server-only', solariDemoRetailerBaseUrl: baseURL, solariRequestTimeoutMs: 45_000 },
+    now: () => Date.parse('2026-09-02T14:00:00Z'),
+    runtimeClock: () => { const value = runtime; runtime += 10_661; return value; },
+    demoHostLookup: async () => [{ address: '93.184.216.34', family: 4 }],
+    browserProvider: {
+      observe: async () => { throw new Error('unrecorded path must not run'); },
+      observeRecorded: async (bounded) => {
+        recordedCalls += 1;
+        return {
+          observations: bounded.requirements.flatMap((requirementValue) => requirementValue.candidates.map((candidate) => {
+            const catalog = V4_PRODUCT_CATALOG[candidate.retailerProductID];
+            const [packageQuantity, packageUnit] = toCanonical(catalog.packageQuantity, catalog.packageUnit);
+            return observation(requirementValue, candidate.retailerProductID, packageQuantity, packageUnit, catalog.visiblePrice);
+          })),
+          replay: { url: 'https://replay.example/run.ndjson?sig=test', expiresAt: '2026-09-02T14:10:00.000Z' }
+        };
+      }
+    },
+    sandboxOptimizer: sandbox
+  });
+  const publicResult = await service.research(requestExample);
+  assert.equal(recordedCalls, 1);
+  assert.equal(publicResult.provenance.accessBoundary, 'public-demo');
+  assert.equal(publicResult.provenance.browserReplay.status, 'available');
+  assert.equal(publicResult.runtimeStats.wallTimeMs, 10_661);
+  assert.equal(publicResult.runtimeStats.browserObservationCount, 16);
+  assert.equal(publicResult.runtimeStats.sandboxDecisionCount, 8);
+  assert.equal(publicResult.runtimeStats.skippedRequirementCount, 0);
+  assert.deepEqual(publicResult.runtimeStats.costTelemetry, { status: 'unavailable' });
+  const cachedAfterReplayExpiry = structuredClone(publicResult);
+  delete cachedAfterReplayExpiry.provenance.browserReplay;
+  const validator = await createContractValidator();
+  assert.equal(validator.validate('https://schemas.smartcart.app/v4/solari/basket-research-result.schema.json', cachedAfterReplayExpiry).valid, true);
+});

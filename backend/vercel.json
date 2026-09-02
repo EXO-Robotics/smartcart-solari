@@ -18,6 +18,11 @@
       "maxDuration": 60,
       "supportsCancellation": true,
       "includeFiles": "{../contracts/**,node_modules/patchright-core/**}"
+    },
+    "api/solari-public-demo.js": {
+      "maxDuration": 60,
+      "supportsCancellation": true,
+      "includeFiles": "{../contracts/**,node_modules/patchright-core/**}"
     }
   },
   "routes": [
@@ -88,6 +93,11 @@
       "src": "/dev/v1/solari/access/attestations",
       "methods": ["POST"],
       "dest": "/api/solari.js?route=dev-attestation"
+    },
+    {
+      "src": "/public-demo/v1/solari/research",
+      "methods": ["POST", "OPTIONS"],
+      "dest": "/api/solari-public-demo.js?route=research"
     },
     {
       "src": "/t",

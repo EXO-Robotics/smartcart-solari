@@ -24,6 +24,34 @@ class CaseStudyValidationTests(unittest.TestCase):
         self.assertNotIn("evidence/live/smartcart-solari-v4-qualification-33546912947.json", landing)
         self.assertIn("View raw JSON", readable)
 
+    def test_live_public_run_is_fixed_bounded_and_one_per_session(self) -> None:
+        landing = (validate.ROOT / "index.html").read_text(encoding="utf-8")
+        script = (validate.ROOT / "script.js").read_text(encoding="utf-8")
+        self.assertIn("Research this meal", landing)
+        self.assertIn('https://smartcart-solari-beta.vercel.app/public-demo/v1/solari/research', script)
+        self.assertIn('schemaVersion: "smartcart-solari-public-demo-request-v1"', script)
+        self.assertIn('mealID: "chicken-pasta-eight-item-v1"', script)
+        self.assertIn("PUBLIC_DEMO_SESSION_KEY", script)
+        self.assertIn("window.sessionStorage.setItem", script)
+        self.assertIn("AbortController", script)
+        self.assertIn('credentials: "omit"', script)
+
+    def test_provider_result_rendering_is_text_only_and_replay_is_link_only(self) -> None:
+        landing = (validate.ROOT / "index.html").read_text(encoding="utf-8")
+        script = (validate.ROOT / "script.js").read_text(encoding="utf-8")
+        self.assertNotIn("<iframe", landing.casefold())
+        self.assertNotIn(".innerHTML", script)
+        self.assertNotIn("insertAdjacentHTML", script)
+        self.assertIn("textContent", script)
+        self.assertIn("replaceChildren", script)
+        self.assertIn('parsed.protocol === "https:"', script)
+        self.assertIn('host.endsWith(".getsolari.com")', script)
+        self.assertIn('payload.schemaVersion !== "smartcart-solari-public-demo-response-v1"', script)
+        self.assertIn('payload.deliveryMode === "cached-verified-run"', script)
+        self.assertIn('payload.deliveryMode === "live" ? approvedReplayURL', script)
+        self.assertIn("runtimeStats.wallTimeMs", script)
+        self.assertIn("provenance.resourceCleanup", script)
+
     def test_rejects_live_retailer_price_claim(self) -> None:
         source = (validate.ROOT / "index.html").read_text(encoding="utf-8")
         self.assertTrue(any(__import__("re").search(pattern, source + " live retailer prices", flags=__import__("re").IGNORECASE) for pattern in validate.FORBIDDEN_CLAIMS))

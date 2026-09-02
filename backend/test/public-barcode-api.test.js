@@ -143,7 +143,7 @@ test('Vercel barcode entrypoint stays narrow when intelligence and handoff are d
   const config = JSON.parse(await readFile(new URL('../vercel.json', import.meta.url), 'utf8'));
   assert.deepEqual(
     Object.keys(config.functions).sort(),
-    ['api/handoff.js', 'api/index.js', 'api/intelligence.js', 'api/mcp.js', 'api/solari.js']
+    ['api/handoff.js', 'api/index.js', 'api/intelligence.js', 'api/mcp.js', 'api/solari-public-demo.js', 'api/solari.js']
   );
   const entrypoint = await readFile(new URL('../api/index.js', import.meta.url), 'utf8');
   assert.match(entrypoint, /createPublicBarcodeApi/);

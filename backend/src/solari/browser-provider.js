@@ -75,6 +75,58 @@ function ambiguitiesFor(extracted, requirement) {
   return reasons;
 }
 
+function sanitizedReplay(value, now) {
+  const expiresInSeconds = Number(value?.expiresInSeconds);
+  let url;
+  try { url = new URL(value?.url); } catch { url = null; }
+  if (!url || url.protocol !== 'https:' || url.username || url.password
+    || !Number.isSafeInteger(expiresInSeconds) || expiresInSeconds < 1 || expiresInSeconds > 3_600) {
+    throw new SolariResearchError(
+      'solari_browser_replay_unavailable',
+      'Solari Browser completed, but a bounded HTTPS replay URL was not available.',
+      { status: 502 }
+    );
+  }
+  return {
+    url: url.href,
+    expiresAt: new Date(now() + expiresInSeconds * 1_000).toISOString()
+  };
+}
+
+async function recordedReplay(client, sessionID, {
+  deadlineAt,
+  clock,
+  signal,
+  timeoutMs,
+  now,
+  attempts,
+  pollIntervalMs
+}) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (attempt > 0) {
+      await runWithinDeadline(
+        () => new Promise((resolve) => setTimeout(resolve, pollIntervalMs)),
+        { configuredTimeoutMs: pollIntervalMs + 50, deadlineAt, clock, signal }
+      );
+    }
+    try {
+      const value = await runWithinDeadline(
+        () => client.sessions.getReplayUrl(sessionID),
+        { configuredTimeoutMs: timeoutMs, deadlineAt, clock, signal }
+      );
+      return sanitizedReplay(value, now);
+    } catch (error) {
+      if (error?.code === 'solari_request_aborted' || error?.code === 'solari_request_timeout') throw error;
+      if (attempt === attempts - 1) break;
+    }
+  }
+  throw new SolariResearchError(
+    'solari_browser_replay_unavailable',
+    'Solari Browser completed, but its recording was not available within the bounded replay window.',
+    { status: 502, retryable: true }
+  );
+}
+
 async function closeBrowserResources(page, browser, client) {
   const attempts = [
     ...(page ? [['page', () => page.close()]] : []),
@@ -103,17 +155,29 @@ export class SolariBrowserProvider {
     apiKey,
     baseURL,
     timeoutMs = 15_000,
+    replayAttempts = 7,
+    replayPollIntervalMs = 500,
     now = Date.now,
     solariFactory = (options) => new Solari(options)
   } = {}) {
     this.apiKey = apiKey;
     this.baseURL = baseURL;
     this.timeoutMs = timeoutMs;
+    this.replayAttempts = replayAttempts;
+    this.replayPollIntervalMs = replayPollIntervalMs;
     this.now = now;
     this.solariFactory = solariFactory;
   }
 
-  async observe(request, { deadlineAt, clock = Date.now, signal, evidenceVersion = 'v1' } = {}) {
+  async observe(request, options = {}) {
+    return this.#observe(request, options, false);
+  }
+
+  async observeRecorded(request, options = {}) {
+    return this.#observe(request, options, true);
+  }
+
+  async #observe(request, { deadlineAt, clock = Date.now, signal, evidenceVersion = 'v1' } = {}, recording) {
     if (!this.apiKey) {
       throw new SolariResearchError('solari_unavailable', 'Solari is unavailable because the server-side API key is not configured.', { status: 503 });
     }
@@ -125,10 +189,13 @@ export class SolariBrowserProvider {
     let browser;
     let activePage;
     let clientClosedEarly = false;
+    let observations = [];
+    let completed = false;
+    let replay = null;
     try {
       browser = await acquireWithinDeadline(() => client.launch({
         stealth: false,
-        recording: false,
+        recording,
         captcha: false,
         proxy: 'off',
         retries: 0,
@@ -137,7 +204,6 @@ export class SolariBrowserProvider {
         configuredTimeoutMs: this.timeoutMs, deadlineAt, clock, signal,
         onCancel: async () => { await client.close(); clientClosedEarly = true; }
       });
-      const observations = [];
       for (const requirement of request.requirements) {
         for (const candidate of requirement.candidates) {
           const page = await runWithinDeadline(
@@ -239,9 +305,20 @@ export class SolariBrowserProvider {
           }
         }
       }
-      return observations;
+      completed = true;
     } finally {
-      await closeBrowserResources(activePage, browser, clientClosedEarly ? { close: async () => {} } : client);
+      try {
+        await closeBrowserResources(activePage, browser, { close: async () => {} });
+        if (completed && recording) {
+          replay = await recordedReplay(client, browser.id, {
+            deadlineAt, clock, signal, timeoutMs: this.timeoutMs, now: this.now,
+            attempts: this.replayAttempts, pollIntervalMs: this.replayPollIntervalMs
+          });
+        }
+      } finally {
+        await closeBrowserResources(null, null, clientClosedEarly ? { close: async () => {} } : client);
+      }
     }
+    return recording ? { observations, replay } : observations;
   }
 }

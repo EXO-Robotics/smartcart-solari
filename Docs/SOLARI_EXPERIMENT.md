@@ -39,7 +39,7 @@ For each admitted candidate it:
 5. records source, observation time, confidence, ambiguity, and controlled-demo location;
 6. closes the page, session, and client on all paths.
 
-It does not ingest page prose into an LLM prompt or pass raw page text to Sandbox. It uses no retailer account, persistent profile, recording, proxy, stealth, CAPTCHA bypass, or purchase control.
+It does not ingest page prose into an LLM prompt or pass raw page text to Sandbox. It uses no retailer account, persistent profile, proxy, stealth, CAPTCHA bypass, or purchase control. App/TestFlight research is not recorded. The separate rate-limited public case-study lane records only the owned logged-out synthetic catalog so a reviewer can inspect the Browser run.
 
 ## Sandbox's necessary job
 
@@ -100,7 +100,7 @@ Every amount is an observed synthetic product subtotal, never a checkout quote. 
 - Walmart is historical fixture replay only; live retailer automation remains fail-closed without documented authorization.
 - No account, persistent profile, cart, order, payment, or checkout automation.
 - No Solari credential in native or web artifacts.
-- No raw HTML, screenshot, recording, cookie, localStorage, or signed capability URL in result evidence.
+- No raw HTML, screenshot, cookie, localStorage, or signed capability URL in immutable result evidence. A fresh public-demo response may expose a short-lived HTTPS replay link after cleanup; cached responses remove it after expiry and no Browser session ID is stored.
 - Provider work is default-off behind App Attest and operator-controlled quotas/kill switch.
 - Demo products/prices never enter SmartCart's original retailer list.
 - User action remains required before and after research.
