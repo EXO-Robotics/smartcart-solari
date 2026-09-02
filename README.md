@@ -105,13 +105,13 @@ The public route accepts one owned meal and one allowlisted catalog. Full bounda
 | Basket decision | **PASS** — $24.20 selected vs. $23.57 cheapest adequate; +$0.63 avoided about 1.5 lb excess chicken |
 | Self-serve public route | **PASS** — credentialed 17.596-second run, 16 observations, 8 decisions, 0 skipped lines, confirmed cleanup ([receipt](evidence/live/smartcart-solari-public-demo-20260902.json)) |
 | Focused tests | **PASS** — backend 100/100, full backend 230/230, native 29/29, case study 6/6, catalog/replay 7/7 |
-| Native beta build | **PASS** — unsigned `Release-SolariBeta` Simulator build |
-| Signed App Attest device run | **PENDING** |
+| Native app compilation and Simulator flow | **PASS** — `Release-SolariBeta` compiled with signing disabled; the eight-item native flow and 29/29 focused tests ran in iOS Simulator |
+| Apple-signed archive and App Attest device run | **PENDING** — blocked at signing/provisioning, not source compilation |
 | TestFlight / App Store / downloadable app | **PENDING** |
 | Authorized commercial-retailer research | **PENDING** |
 | Independent household usage | **PENDING** |
 
-The provider receipt proves server-side Solari execution. It does not prove a signed iPhone request, commercial-retailer coverage, TestFlight distribution, or product-market fit. Those are separate milestones.
+The native app compiles and runs in Simulator. The provider receipt separately proves server-side Solari execution. What remains pending is Apple signing/provisioning for the capability-enabled target and a real App Attest request from a physical device—not implementation compilation. Commercial-retailer coverage, TestFlight distribution, and product-market fit are also separate milestones.
 
 ## Architecture and detailed evidence
 

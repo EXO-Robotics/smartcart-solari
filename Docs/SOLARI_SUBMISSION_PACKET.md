@@ -168,7 +168,7 @@ The repository and runtime receipt belong in the primary submission. The Pages s
 | Useful basket tradeoff | **PASS** | $24.20 selected versus $23.57 cheapest adequate; $0.63 premium; about 680 g / 1.5 lb excess chicken avoided. |
 | Credential cleanup | **PASS** | Receipt records enforced Browser and Sandbox cleanup before receipt generation. |
 | Protected beta backend deployment | **PASS** | Deployment receipt records READY, `/health` 200, and App Attest challenge 201. These smoke results are not provider execution or a signed native request. |
-| Native implementation and unsigned beta build | **PASS** | Focused native tests passed and unsigned `Release-SolariBeta` built successfully. |
+| Native implementation, compilation, and Simulator flow | **PASS** | Focused native tests passed, unsigned `Release-SolariBeta` compiled successfully, and the eight-item flow ran in iOS Simulator. Apple signing/provisioning is a separate pending gate. |
 | Signed native App Attest request | **PENDING** | Do not infer this from provider qualification or challenge issuance. |
 | Physical-device validation | **PENDING** | Do not call simulator or unsigned build evidence device proof. |
 | TestFlight/App Store/downloadable product | **PENDING** | Use “native beta integration” or “developer/beta testing,” not “available on TestFlight” or “shipped.” |

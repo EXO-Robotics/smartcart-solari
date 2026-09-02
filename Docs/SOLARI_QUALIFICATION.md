@@ -115,13 +115,15 @@ The V3 receipt records actual credentialed provider execution, six fresh **curre
 
 ## Signing and device status
 
-Three Apple Development identities are visible, but the signed archive attempt failed because:
+The native implementation did **not** fail to compile. The unsigned `Release-SolariBeta` and development configurations build successfully for Simulator, 29/29 focused native tests pass, and the eight-item native flow was exercised in iOS Simulator. The backend's App Attest admission, request binding, counter, replay-rejection, app/build admission, and failure paths are also covered by deterministic tests. Those checks do not substitute for an Apple-issued device attestation.
+
+A signed archive was not produced because Xcode could not complete signing and provisioning for the capability-enabled targets under the available team:
 
 1. the personal team does not support Associated Domains and App Attest for the beta bundle;
 2. no matching iOS App Development provisioning profile exists;
 3. the Share Extension provisioning profile has an application-groups mismatch.
 
-A paired physical iPhone is connected and has beta build 4 installed. That installed binary predates the development-lane configuration and still targets the category-2 distribution endpoint. The unsigned `Development-SolariBeta` build passes, but installing it is blocked by the personal team's unsupported Associated Domains/App Attest capabilities and the unresolved profiles above. Signed archive, real App Attest registration/assertion/research, updated device UX, TestFlight, App Store, and downloadable app remain **PENDING**. Release fixture replay or a client-side secret must not be used to manufacture a pass.
+A paired physical iPhone is connected and has beta build 4 installed. That installed binary predates the development-lane configuration and still targets the category-2 distribution endpoint. Installing the new capability-enabled build is blocked at Apple signing/provisioning by the unsupported Personal Team capabilities and unresolved profiles above; it is not blocked by Swift compilation. Signed archive, real App Attest registration/assertion/research, updated device UX, TestFlight, App Store, and downloadable app remain **PENDING**. Release fixture replay or a client-side secret must not be used to manufacture a pass.
 
 ## Real-retailer status
 

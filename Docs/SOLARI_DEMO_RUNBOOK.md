@@ -219,13 +219,15 @@ Inspect identities without exposing certificate material:
 security find-identity -v -p codesigning
 ```
 
-Current evidence records three valid Apple Development identities. Do **not** infer archive readiness. The signed archive attempt failed because:
+Current evidence records three valid Apple Development identities. The app source compiles, the unsigned beta configurations build successfully for Simulator, and the native flow and focused tests run there. Deterministic backend tests exercise the App Attest verifier and protected-request rules, but Simulator tests cannot produce an Apple-issued device attestation. Do **not** infer archive or physical-device readiness.
+
+A signed archive was not produced because signing/provisioning stopped the capability-enabled targets before Xcode could package them:
 
 - personal team Blake Grove does not support Associated Domains and App Attest for `com.blakestudio.smartcart.solari-beta`;
 - no matching iOS App Development provisioning profile exists;
 - Share Extension provisioning has an application-groups mismatch.
 
-A paired physical iPhone is connected and has build 4 installed, but that binary predates the development-lane configuration and still targets the category-2 distribution route. The unsigned development build passes; signing and installing it are blocked by the capability/profile failures above. Stop: signed App Attest, TestFlight, App Store, and downloadable native build are PENDING. Do not remove entitlements, add client bearer/API keys, enable Release fixture replay, or claim a signed pass.
+A paired physical iPhone is connected and has build 4 installed, but that binary predates the development-lane configuration and still targets the category-2 distribution route. The new build is blocked at signing and installation by the capability/profile issues above—not at compilation. Stop: signed App Attest, TestFlight, App Store, and downloadable native build are PENDING. Do not remove entitlements, add client bearer/API keys, enable Release fixture replay, or claim a signed pass.
 
 To close the gate legitimately:
 
