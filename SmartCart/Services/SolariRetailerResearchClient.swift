@@ -2,6 +2,51 @@ import CryptoKit
 import Foundation
 import Observation
 
+#if DEBUG
+enum SolariDevelopmentDemoRecipe {
+    static func make() -> Recipe {
+        Recipe(
+            title: "Solari Low-Waste Pasta",
+            source: .sample,
+            sourceDetail: "Development-only Solari qualification meal",
+            heroSymbol: "sparkles.rectangle.stack.fill",
+            servings: 4,
+            prepMinutes: 15,
+            cookMinutes: 25,
+            ingredients: [
+                ingredient("Chicken breast", quantity: 680, unit: "g", category: .meat),
+                ingredient("Penne pasta", quantity: 340, unit: "g"),
+                ingredient("Olive oil", quantity: 30, unit: "ml"),
+                ingredient("Heavy cream", quantity: 240, unit: "ml", category: .dairy),
+                ingredient("Parmesan cheese", quantity: 85, unit: "g", category: .dairy),
+                ingredient("Garlic cloves", quantity: 2, unit: "count", category: .produce),
+                ingredient("Lemons", quantity: 225, unit: "g", category: .produce),
+                ingredient("Parsley", quantity: 1, unit: "count", category: .produce)
+            ]
+        )
+    }
+
+    private static func ingredient(
+        _ name: String,
+        quantity: Double,
+        unit: String,
+        category: GroceryCategory = .pantry
+    ) -> Ingredient {
+        Ingredient(
+            rawText: "\(quantity.formatted(.number.precision(.fractionLength(0...2)))) \(unit) \(name)",
+            name: name,
+            quantity: quantity,
+            unit: unit,
+            category: category,
+            confidence: .high,
+            includeInList: true,
+            pantryState: .needToBuy,
+            quantityReviewRequired: false
+        )
+    }
+}
+#endif
+
 struct SolariBackendConfiguration: Equatable, Hashable {
     static let backendInfoDictionaryKey = "SmartCartSolariExperimentBackendURL"
     static let demoRetailerInfoDictionaryKey = "SmartCartSolariDemoRetailerBaseURL"

@@ -253,6 +253,50 @@ struct HomeView: View {
                 .overlay(homeBorder)
 
             mealPrepLaunchButton
+
+            #if DEBUG
+            if SolariBackendConfiguration()?.debugFixtureReplayEnabled == true {
+                Divider()
+                    .overlay(homeBorder)
+
+                Button {
+                    _ = appModel.beginRecipe(SolariDevelopmentDemoRecipe.make())
+                } label: {
+                    HStack(spacing: 13) {
+                        Image(systemName: "sparkles.rectangle.stack.fill")
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(SmartCartTheme.amber)
+                            .frame(width: 44, height: 44)
+                            .background(homeIconBackground)
+                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .accessibilityHidden(true)
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Open Solari Demo Meal")
+                                .font(.headline)
+                                .foregroundStyle(homeInk)
+                            Text("8 catalog-backed ingredients · recorded replay")
+                                .font(.caption)
+                                .foregroundStyle(homeSecondaryInk)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        Spacer(minLength: 6)
+
+                        Image(systemName: "chevron.right")
+                            .font(.caption.bold())
+                            .foregroundStyle(homeSecondaryInk)
+                            .accessibilityHidden(true)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 96, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(PressableButtonStyle())
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("home-open-solari-demo-meal")
+                .accessibilityHint("Opens a development-only meal with eight ingredients supported by the recorded Solari replay")
+            }
+            #endif
         }
         .padding(.horizontal, 18)
         .padding(.top, 18)
