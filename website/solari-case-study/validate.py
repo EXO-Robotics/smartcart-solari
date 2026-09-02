@@ -30,6 +30,21 @@ REQUIRED_PHRASES = {
     "No retailer sign-in",
     "You decide what to buy",
 }
+REQUIRED_RECEIPT_PHRASES = {
+    "What the Solari run",
+    "$24.20",
+    "$23.57",
+    "Spend $0.63 more",
+    "1.5 lb of extra chicken",
+    "Solari Browser found the choices",
+    "Solari Sandbox compared whole baskets",
+    "SmartCart checked the result",
+    "owned Demo Grocer",
+    "No retailer account was accessed",
+    "No purchase or checkout was automated",
+    "33546912947",
+    "View raw JSON",
+}
 FORBIDDEN_SECTION_MARKERS = (
     'class="hero-proof-line',
     'class="frontend-selector',
@@ -101,10 +116,12 @@ class LandingParser(HTMLParser):
 def inspect_case_study(root: Path = ROOT, receipt_path: Path = RECEIPT) -> list[str]:
     errors: list[str] = []
     index = root / "index.html"
+    readable_receipt = root / "verified-run.html"
     styles = root / "styles.css"
     script = root / "script.js"
     for path in (
         index,
+        readable_receipt,
         styles,
         script,
         root / "assets" / "smartcart-food-stage.jpg",
@@ -121,6 +138,7 @@ def inspect_case_study(root: Path = ROOT, receipt_path: Path = RECEIPT) -> list[
         return errors
 
     source = index.read_text(encoding="utf-8")
+    receipt_source = readable_receipt.read_text(encoding="utf-8")
     javascript = script.read_text(encoding="utf-8")
     dynamic_source = source + "\n" + javascript
     parser = LandingParser()
@@ -135,6 +153,20 @@ def inspect_case_study(root: Path = ROOT, receipt_path: Path = RECEIPT) -> list[
         errors.append(f"index.html: expected one h1, found {parser.h1_count}")
     if not parser.skip_link:
         errors.append("index.html: accessible skip link is required")
+
+    receipt_parser = LandingParser()
+    receipt_parser.feed(receipt_source)
+    if receipt_parser.lang != "en" or not receipt_parser.viewport:
+        errors.append("verified-run.html: language and viewport metadata are required")
+    if receipt_parser.main_count != 1 or receipt_parser.h1_count != 1 or not receipt_parser.skip_link:
+        errors.append("verified-run.html: expected one main, one h1, and an accessible skip link")
+    for phrase in REQUIRED_RECEIPT_PHRASES:
+        if phrase.casefold() not in receipt_source.casefold():
+            errors.append(f"verified-run.html: missing readable receipt marker {phrase!r}")
+    if "verified-run.html" not in source:
+        errors.append("index.html: primary evidence links must lead to the readable verified run")
+    if source.count("evidence/live/smartcart-solari-v4-qualification-33546912947.json"):
+        errors.append("index.html: raw JSON must be secondary to the readable verified run")
 
     for phrase in REQUIRED_PHRASES:
         if phrase.casefold() not in source.casefold():
@@ -197,6 +229,22 @@ def inspect_case_study(root: Path = ROOT, receipt_path: Path = RECEIPT) -> list[
         target = deploy_mapped.get(parsed.path, (root / parsed.path).resolve())
         if not target.exists():
             errors.append(f"index.html: broken local/deployment reference: {reference}")
+
+    for tag, reference in receipt_parser.references:
+        parsed = urlsplit(reference)
+        if parsed.scheme or parsed.netloc:
+            if tag in {"link", "script", "video", "source"}:
+                errors.append(f"verified-run.html: remote assets are forbidden: {reference}")
+            elif parsed.hostname not in ALLOWED_REMOTE_HOSTS:
+                errors.append(f"verified-run.html: unapproved remote link: {reference}")
+            continue
+        if reference.startswith("#"):
+            if reference[1:] not in receipt_parser.ids:
+                errors.append(f"verified-run.html: missing fragment target: {reference}")
+            continue
+        target = deploy_mapped.get(parsed.path, (root / parsed.path).resolve())
+        if not target.exists():
+            errors.append(f"verified-run.html: broken local/deployment reference: {reference}")
 
     for accessibility_key in ('"ArrowRight"', '"ArrowLeft"', "setHeroVideoMode", "heroVideo.load()"):
         if accessibility_key not in javascript:

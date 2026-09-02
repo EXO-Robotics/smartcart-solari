@@ -40,6 +40,7 @@ jobs:
         run: |
           mkdir -p _site/website _site/contracts/fixtures/v1 _site/evidence
           cp website/solari-case-study/index.html _site/index.html
+          cp website/solari-case-study/verified-run.html _site/verified-run.html
           cp website/solari-case-study/styles.css _site/styles.css
           cp website/solari-case-study/script.js _site/script.js
           cp -R website/solari-case-study/assets _site/assets

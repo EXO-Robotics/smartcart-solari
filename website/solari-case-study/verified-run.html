@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="A plain-English explanation of the verified SmartCart × Solari Browser and Sandbox run.">
+  <meta name="theme-color" content="#080a08">
+  <title>Verified Solari run | SmartCart × Solari</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+  <script src="script.js" defer></script>
+</head>
+<body class="receipt-page">
+  <a class="skip-link" href="#main">Skip to the verified run</a>
+
+  <header class="site-header" data-header>
+    <a class="wordmark" href="index.html" aria-label="Back to the SmartCart and Solari case study">
+      <span>SMARTCART</span><i>×</i><strong>SOLARI</strong>
+    </a>
+    <a class="header-cta" href="index.html"><span>Back to case study</span> ←</a>
+  </header>
+
+  <main id="main" class="receipt-main">
+    <section class="receipt-hero reveal" aria-labelledby="receipt-title">
+      <p class="kicker"><span></span> Credentialed execution · September 1, 2026</p>
+      <h1 id="receipt-title">What the Solari run<br><em>actually proved.</em></h1>
+      <p class="receipt-lede">Solari Browser researched product choices for an eight-item SmartCart list. Solari Sandbox compared complete baskets and made one useful tradeoff:</p>
+
+      <div class="receipt-decision" aria-label="The verified basket decision">
+        <div class="receipt-price">
+          <span>Chosen basket</span>
+          <strong>$24.20</strong>
+        </div>
+        <div class="receipt-versus" aria-hidden="true">instead of</div>
+        <div class="receipt-price receipt-price-muted">
+          <span>Cheapest basket</span>
+          <strong>$23.57</strong>
+        </div>
+        <p><strong>Spend $0.63 more</strong> to avoid buying about <strong>1.5 lb of extra chicken.</strong></p>
+      </div>
+
+      <p class="receipt-context">That is the value of the Sandbox step: it did not blindly choose the lowest total. It found a complete basket that stayed within SmartCart’s $0.75 price limit while reducing unnecessary food.</p>
+    </section>
+
+    <section class="receipt-section reveal" aria-labelledby="plain-language-title">
+      <p class="kicker"><span></span> In plain English</p>
+      <h2 id="plain-language-title">Research, compare,<br><em>check the answer.</em></h2>
+      <ol class="receipt-steps">
+        <li>
+          <b>01</b>
+          <div><strong>Solari Browser found the choices.</strong><p>It opened 16 approved Demo Grocer product pages for eight shopping needs and recorded each product, package size, visible demo price, source, and time.</p></div>
+        </li>
+        <li>
+          <b>02</b>
+          <div><strong>Solari Sandbox compared whole baskets.</strong><p>It checked package coverage, total cost, and leftover quantity together—not one ingredient at a time.</p></div>
+        </li>
+        <li>
+          <b>03</b>
+          <div><strong>SmartCart checked the result.</strong><p>The app verified that every ingredient was covered and that the recommendation stayed inside the allowed price difference.</p></div>
+        </li>
+      </ol>
+    </section>
+
+    <section class="receipt-section receipt-limits reveal" aria-labelledby="limits-title">
+      <div>
+        <p class="kicker"><span></span> Honest boundaries</p>
+        <h2 id="limits-title">Real Solari execution.<br><em>Controlled retailer data.</em></h2>
+      </div>
+      <div class="receipt-limit-copy">
+        <p>This run used SmartCart’s owned Demo Grocer, a synthetic retailer built to test the workflow safely. The prices prove that Browser and Sandbox completed the research and basket decision; they are not current Walmart, Target, or commercial-retailer prices.</p>
+        <ul>
+          <li>No retailer account was accessed.</li>
+          <li>No cart was created or changed.</li>
+          <li>No purchase or checkout was automated.</li>
+          <li>The shopper still chooses what happens next.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="receipt-section receipt-facts reveal" aria-labelledby="facts-title">
+      <div class="receipt-facts-heading">
+        <p class="kicker"><span></span> Verification details</p>
+        <h2 id="facts-title">The technical proof,<br><em>without the wall of JSON.</em></h2>
+      </div>
+      <dl>
+        <div><dt>Shopping needs</dt><dd>8</dd></div>
+        <div><dt>Product observations</dt><dd>16</dd></div>
+        <div><dt>Solari Browser</dt><dd class="receipt-pass">Completed</dd></div>
+        <div><dt>Solari Sandbox</dt><dd class="receipt-pass">Completed</dd></div>
+        <div><dt>SmartCart checks</dt><dd class="receipt-pass">Passed</dd></div>
+        <div><dt>Run time</dt><dd>About 11 seconds</dd></div>
+        <div><dt>GitHub Actions run</dt><dd><a href="https://github.com/EXO-Robotics/smartcart-solari/actions/runs/33546912947">33546912947 ↗</a></dd></div>
+        <div><dt>Runtime commit</dt><dd><a href="https://github.com/EXO-Robotics/smartcart-solari/tree/2dd4e6f30be8286a3a8f465c92a56427828a60e2">2dd4e6f ↗</a></dd></div>
+      </dl>
+    </section>
+
+    <section class="receipt-actions reveal" aria-label="Verified run links">
+      <div>
+        <p class="kicker"><span></span> Want the exact data?</p>
+        <h2>The receipt is still here.</h2>
+        <p>The raw JSON contains the timestamps, hashes, evidence records, basket decision, and trust flags behind this readable summary.</p>
+      </div>
+      <div class="hero-actions">
+        <a class="button button-primary" href="evidence/live/smartcart-solari-v4-qualification-33546912947.json">View raw JSON</a>
+        <a class="text-link" href="index.html">Back to the case study</a>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <a class="wordmark" href="index.html"><span>SMARTCART</span><i>×</i><strong>SOLARI</strong></a>
+    <p>Built by Blake Grove / @AionForge.</p>
+    <div><a href="https://github.com/EXO-Robotics/smartcart-solari">GitHub</a><a href="evidence/live/smartcart-solari-v4-qualification-33546912947.json">Raw receipt</a></div>
+  </footer>
+</body>
+</html>

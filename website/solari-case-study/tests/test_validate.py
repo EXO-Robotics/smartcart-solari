@@ -17,6 +17,13 @@ class CaseStudyValidationTests(unittest.TestCase):
     def test_checked_in_case_study_is_receipt_bound(self) -> None:
         self.assertEqual(validate.inspect_case_study(), [])
 
+    def test_readable_receipt_keeps_raw_evidence_secondary(self) -> None:
+        landing = (validate.ROOT / "index.html").read_text(encoding="utf-8")
+        readable = (validate.ROOT / "verified-run.html").read_text(encoding="utf-8")
+        self.assertIn("verified-run.html", landing)
+        self.assertNotIn("evidence/live/smartcart-solari-v4-qualification-33546912947.json", landing)
+        self.assertIn("View raw JSON", readable)
+
     def test_rejects_live_retailer_price_claim(self) -> None:
         source = (validate.ROOT / "index.html").read_text(encoding="utf-8")
         self.assertTrue(any(__import__("re").search(pattern, source + " live retailer prices", flags=__import__("re").IGNORECASE) for pattern in validate.FORBIDDEN_CLAIMS))
