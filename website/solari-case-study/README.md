@@ -1,22 +1,15 @@
-# SmartCart × Solari case study
+# SmartCart × Solari submission video
 
-This dependency-free static site is the public presentation layer for the SmartCart × Solari submission.
+The Pages root is a compact video showcase. It opens on the 25.10-second After Solari clip, with a 39.63-second Before Solari clip one tab away. Project explanation lives in the root repository README; direct links lead to that README, the immutable V4 provider receipt, and the cookbook example.
 
-It intentionally separates three kinds of evidence:
+The After clip is a DEBUG recorded UX replay using Demo Grocer test data, not live provider execution. The separate eight-item receipt records credentialed Browser + Sandbox execution. The Before clip shows recorded retailer context; location/address and prior cart totals are obscured for publication. Both videos are hash-bound by `validate.py`.
 
-- the root case study explains the product transformation and replaceable-frontend architecture;
-- `assets/smartcart-before-solari.mp4` is the hash-bound 39.63-second original SmartCart retailer-handoff recording;
-- `assets/smartcart-after-solari.mp4` is the hash-bound 25.10-second, eight-item DEBUG recorded replay of the Solari-enhanced native UX;
-- neither case-study video is provider-execution proof or a current retailer price/availability claim;
-- `website/solari-demo/` remains the explicit replay and controlled retailer surface;
-- `evidence/live/smartcart-solari-v4-qualification-33546912947.json` remains the immutable provider-execution receipt.
+The player supports keyboard tabs, native seek/fullscreen controls, reduced motion, a direct-video fallback, and a playable After clip without JavaScript. It never starts automatically or calls the research API. Existing evidence and controlled retailer routes remain available.
 
-Run the local checks from the repository root:
+Local checks:
 
 ```bash
 python3 website/solari-case-study/validate.py
 python3 -m unittest discover -s website/solari-case-study/tests -v
-node --check website/solari-case-study/script.js
+node --check website/solari-case-study/submission.js
 ```
-
-The GitHub Pages workflow publishes the contents of this directory at the repository Pages root without altering the existing replay routes.

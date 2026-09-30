@@ -31,6 +31,7 @@ jobs:
           python3 website/solari-case-study/validate.py
           python3 -m unittest discover -s website/solari-case-study/tests -v
           node --check website/solari-case-study/script.js
+          node --check website/solari-case-study/submission.js
           python3 website/solari-demo/validate.py
           python3 -m unittest discover -s website/solari-demo/tests -v
           node --check website/solari-demo/app.js
@@ -43,6 +44,8 @@ jobs:
           cp website/solari-case-study/verified-run.html _site/verified-run.html
           cp website/solari-case-study/styles.css _site/styles.css
           cp website/solari-case-study/script.js _site/script.js
+          cp website/solari-case-study/submission.css _site/submission.css
+          cp website/solari-case-study/submission.js _site/submission.js
           cp -R website/solari-case-study/assets _site/assets
           cp -R website/solari-demo _site/website/solari-demo
           cp -R contracts/fixtures/v1/solari _site/contracts/fixtures/v1/solari

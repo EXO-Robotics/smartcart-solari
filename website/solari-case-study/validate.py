@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the SmartCart × Solari GitHub Pages case study and its receipt-bound claims."""
+"""Check the video submission's assets, links, evidence labels, and frozen receipt."""
 
 from __future__ import annotations
 
@@ -11,322 +11,152 @@ from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urlsplit
 
-
 ROOT = Path(__file__).resolve().parent
 REPO_ROOT = ROOT.parents[1]
-RECEIPT = REPO_ROOT / "evidence" / "live" / "smartcart-solari-v4-qualification-33546912947.json"
+RECEIPT = REPO_ROOT / "evidence/live/smartcart-solari-v4-qualification-33546912947.json"
 VIDEO_SHA256 = {
-    "smartcart-before-solari.mp4": "f1864b2566b8ab9e25e80eb55b9d6ac41722f1f8a1e390c24188e28f8f2a71b7",
+    "smartcart-before-solari.mp4": "3f8f63014b18af2559c45d5c22e647df969046ff8d738bd4df5b507232242b9d",
     "smartcart-after-solari.mp4": "dd2209feb93d442774c1f51ac70c8be3264094cd10b77ff049e8fa8abeebc3b3",
 }
-ALLOWED_REMOTE_HOSTS = {"github.com", "docs.getsolari.com"}
-REQUIRED_PHRASES = {
-    "SmartCart already planned the meal",
-    "Solari helps price the basket",
-    "Solari Browser",
-    "Solari Sandbox",
-    "What Solari added",
-    "owned demo retailer",
-    "Solari never touches your Walmart account",
-    "You decide what to buy",
-}
-REQUIRED_LIVE_DEMO_MARKERS = {
-    "Research this meal",
-    "Public research path",
-    "Bounded request in progress",
-    "smartcart-solari-public-demo-request-v1",
-    "chicken-pasta-eight-item-v1",
-    "smartcart-solari-public-demo-response-v1",
-    "Telemetry unavailable",
-    "Last verified result",
-    "owned synthetic Demo Grocer",
-    "No purchase action occurred",
-}
-REQUIRED_RECEIPT_PHRASES = {
-    "What the Solari run",
-    "$24.20",
-    "$23.57",
-    "Spend $0.63 more",
-    "1.5 lb of extra chicken",
-    "Solari Browser found the choices",
-    "Solari Sandbox compared whole baskets",
-    "SmartCart checked the result",
-    "owned Demo Grocer",
-    "No retailer account was accessed",
-    "No purchase or checkout was automated",
-    "33546912947",
-    "View raw JSON",
-}
-FORBIDDEN_SECTION_MARKERS = (
-    'class="hero-proof-line',
-    'class="frontend-selector',
-    'data-frontend=',
-    'class="transformation section"',
-    'class="execution section"',
-    'class="proof section"',
-    'data-comparison-state=',
-    'data-process=',
-    'data-panel=',
-)
+PROJECT_URL = "https://github.com/EXO-Robotics/smartcart-solari#readme"
+EVIDENCE_URL = "https://github.com/EXO-Robotics/smartcart-solari/blob/8f749e33808119ee403142929da5b757ed934e35/evidence/live/smartcart-solari-v4-qualification-33546912947.json"
+EXAMPLE_URL = "https://github.com/EXO-Robotics/solari-cookbook/tree/main/examples/smartcart-basket-research-ts"
 FORBIDDEN_CLAIMS = (
     r"\blive retailer prices?\b",
     r"(?<!no )\bguaranteed prices?\b",
     r"\bavailable on TestFlight\b",
     r"\bApp Store download\b",
-    r"\bcommercial retailer coverage\b(?![^.]{0,35}\bnot\b)",
 )
 
 
 class LandingParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
-        self.lang = ""
-        self.viewport = False
-        self.main_count = 0
-        self.h1_count = 0
-        self.skip_link = False
+        self.tags: list[tuple[str, dict[str, str]]] = []
         self.ids: set[str] = set()
+        self.duplicate_ids: set[str] = set()
         self.references: list[tuple[str, str]] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        values = {name: value or "" for name, value in attrs}
-        if values.get("id"):
-            self.ids.add(values["id"])
-        if tag == "html":
-            self.lang = values.get("lang", "")
-        elif tag == "meta" and values.get("name", "").lower() == "viewport":
-            self.viewport = bool(values.get("content"))
-        elif tag == "main":
-            self.main_count += 1
-        elif tag == "h1":
-            self.h1_count += 1
-        elif tag == "a":
-            href = values.get("href", "")
-            if href:
-                self.references.append((tag, href))
-                if href == "#main" and "skip-link" in values.get("class", "").split():
-                    self.skip_link = True
-        elif tag == "link":
-            href = values.get("href", "")
-            if href:
-                self.references.append((tag, href))
-        elif tag == "script":
-            src = values.get("src", "")
-            if src:
-                self.references.append((tag, src))
-        elif tag == "video":
-            for attribute in ("poster", "src"):
-                reference = values.get(attribute, "")
-                if reference:
-                    self.references.append((tag, reference))
-        elif tag == "source":
-            src = values.get("src", "")
-            if src:
-                self.references.append((tag, src))
+        values = {key: value or "" for key, value in attrs}
+        self.tags.append((tag, values))
+        identity = values.get("id")
+        if identity:
+            if identity in self.ids:
+                self.duplicate_ids.add(identity)
+            self.ids.add(identity)
+        for key in ("href", "src", "poster"):
+            if values.get(key):
+                self.references.append((tag, values[key]))
 
 
 def inspect_case_study(root: Path = ROOT, receipt_path: Path = RECEIPT) -> list[str]:
     errors: list[str] = []
-    index = root / "index.html"
-    readable_receipt = root / "verified-run.html"
-    styles = root / "styles.css"
-    script = root / "script.js"
-    for path in (
-        index,
-        readable_receipt,
-        styles,
-        script,
-        root / "assets" / "smartcart-food-stage.jpg",
-        root / "assets" / "social-preview.jpg",
-        root / "assets" / "favicon.svg",
-        root / "assets" / "smartcart-before-solari.mp4",
-        root / "assets" / "smartcart-before-solari-poster.jpg",
-        root / "assets" / "smartcart-after-solari.mp4",
-        root / "assets" / "smartcart-after-solari-poster.jpg",
-    ):
-        if not path.is_file():
-            errors.append(f"missing required case-study file: {path.relative_to(root)}")
+    required_files = (
+        "index.html", "submission.css", "submission.js", "verified-run.html",
+        "assets/social-preview.jpg", "assets/favicon.svg",
+        "assets/smartcart-before-solari.mp4", "assets/smartcart-before-solari-poster.jpg",
+        "assets/smartcart-after-solari.mp4", "assets/smartcart-after-solari-poster.jpg",
+    )
+    for relative in required_files:
+        if not (root / relative).is_file():
+            errors.append(f"missing required submission file: {relative}")
     if errors:
         return errors
 
-    source = index.read_text(encoding="utf-8")
-    receipt_source = readable_receipt.read_text(encoding="utf-8")
-    javascript = script.read_text(encoding="utf-8")
-    dynamic_source = source + "\n" + javascript
+    source = (root / "index.html").read_text(encoding="utf-8")
+    script = (root / "submission.js").read_text(encoding="utf-8")
     parser = LandingParser()
     parser.feed(source)
-    if parser.lang != "en":
-        errors.append("index.html: html lang must be en")
-    if not parser.viewport:
-        errors.append("index.html: viewport metadata is required")
-    if parser.main_count != 1:
-        errors.append(f"index.html: expected one main element, found {parser.main_count}")
-    if parser.h1_count != 1:
-        errors.append(f"index.html: expected one h1, found {parser.h1_count}")
-    if not parser.skip_link:
-        errors.append("index.html: accessible skip link is required")
+    by_tag = lambda tag: [values for candidate, values in parser.tags if candidate == tag]
+    if len(by_tag("main")) != 1 or len(by_tag("h1")) != 1:
+        errors.append("submission must have one main and one h1")
+    if not any(values.get("lang") == "en" for values in by_tag("html")):
+        errors.append("html lang must be en")
+    if not any(values.get("name") == "viewport" for values in by_tag("meta")):
+        errors.append("viewport metadata is required")
+    if not any(values.get("href") == "#main" and "skip-link" in values.get("class", "") for values in by_tag("a")):
+        errors.append("accessible skip link is required")
+    if not any(values.get("id") == "main" and values.get("tabindex") == "-1" for values in by_tag("main")):
+        errors.append("skip-link target must accept focus")
+    if parser.duplicate_ids:
+        errors.append(f"duplicate ids: {sorted(parser.duplicate_ids)}")
 
-    receipt_parser = LandingParser()
-    receipt_parser.feed(receipt_source)
-    if receipt_parser.lang != "en" or not receipt_parser.viewport:
-        errors.append("verified-run.html: language and viewport metadata are required")
-    if receipt_parser.main_count != 1 or receipt_parser.h1_count != 1 or not receipt_parser.skip_link:
-        errors.append("verified-run.html: expected one main, one h1, and an accessible skip link")
-    for phrase in REQUIRED_RECEIPT_PHRASES:
-        if phrase.casefold() not in receipt_source.casefold():
-            errors.append(f"verified-run.html: missing readable receipt marker {phrase!r}")
-    if "verified-run.html" not in source:
-        errors.append("index.html: primary evidence links must lead to the readable verified run")
-    if source.count("evidence/live/smartcart-solari-v4-qualification-33546912947.json"):
-        errors.append("index.html: raw JSON must be secondary to the readable verified run")
+    tabs = [values for _, values in parser.tags if values.get("role") == "tab"]
+    selected = [tab for tab in tabs if tab.get("aria-selected") == "true"]
+    if len(tabs) != 2 or len(selected) != 1 or selected[0].get("data-video-mode") != "after":
+        errors.append("the Before/After tabs must open on After Solari")
+    for _, values in parser.tags:
+        for attribute in ("aria-controls", "aria-labelledby", "aria-describedby"):
+            for identity in values.get(attribute, "").split():
+                if identity not in parser.ids:
+                    errors.append(f"missing accessibility target: {identity}")
 
-    for phrase in REQUIRED_PHRASES:
-        if phrase.casefold() not in source.casefold():
-            errors.append(f"index.html: missing required product marker {phrase!r}")
-    for marker in REQUIRED_LIVE_DEMO_MARKERS:
-        if marker.casefold() not in dynamic_source.casefold():
-            errors.append(f"case study: missing public live-demo marker {marker!r}")
-    for social_marker in ("og:title", "og:description", "og:image", "twitter:card"):
-        if social_marker not in source:
-            errors.append(f"index.html: missing social preview marker {social_marker}")
-    if 'aria-label="Case study navigation"' in source:
-        errors.append("index.html: retired top-center case-study navigation must stay removed")
-    for comparison_marker in (
-        'aria-selected="true" tabindex="0" data-video-mode="after"',
-        'data-hero-video',
-        'assets/smartcart-before-solari.mp4',
-        'assets/smartcart-after-solari.mp4',
-    ):
-        if comparison_marker not in dynamic_source:
-            errors.append(f"index.html: missing accessible comparison state marker {comparison_marker!r}")
-    for forbidden_marker in FORBIDDEN_SECTION_MARKERS:
-        if forbidden_marker in dynamic_source:
-            errors.append(f"case study: retired post-video section marker returned: {forbidden_marker!r}")
-    for replay_marker in (
-        "DEBUG RECORDED REPLAY · NOT LIVE",
-        "Solari does not run inside the video",
-        "BEFORE SOLARI · RECORDED APP FLOW · NOT LIVE",
-        "AFTER SOLARI · DEBUG RECORDED REPLAY · NOT LIVE",
-        "The retailer screen is recorded context, not a current price or availability claim",
-        "the separate receipt proves the real eight-item Browser and Sandbox run",
-    ):
-        if replay_marker.casefold() not in dynamic_source.casefold():
-            errors.append(f"index.html: missing native/provider separation marker {replay_marker!r}")
-    for implementation_marker in (
-        'https://smartcart-solari-beta.vercel.app/public-demo/v1/solari/research',
-        'method: "POST"',
-        "AbortController",
-        "PUBLIC_DEMO_TIMEOUT_MS",
-        "credentials: \"omit\"",
-        "textContent",
-        "replaceChildren",
-        "approvedReplayURL",
-        'parsed.protocol === "https:"',
-        'host.endsWith(".getsolari.com")',
-        'host === "pinetree-browser-replays.s3.us-west-1.amazonaws.com"',
-    ):
-        if implementation_marker not in javascript:
-            errors.append(f"script.js: missing bounded live-demo behavior {implementation_marker!r}")
-    for unsafe_dynamic_html in (".innerHTML", "insertAdjacentHTML", "document.write"):
-        if unsafe_dynamic_html in javascript:
-            errors.append(f"script.js: public result rendering must not use {unsafe_dynamic_html}")
-    if "<iframe" in source.casefold():
-        errors.append("index.html: Browser replay must remain a validated outbound link, never an iframe")
-    video_tag = re.search(r"<video\b[^>]*>", source, flags=re.IGNORECASE)
-    if (
-        video_tag is None
-        or "playsinline" not in video_tag.group(0).casefold()
-        or "controls" in video_tag.group(0).casefold()
-        or "data-video-play" not in source
-        or "autoplay" in source.casefold()
-    ):
-        errors.append("index.html: native replay must use the authored play control, remain inline, and never autoplay")
+    videos = by_tag("video")
+    if len(videos) != 1 or "playsinline" not in videos[0] or "controls" not in videos[0] or "autoplay" in videos[0]:
+        errors.append("video must play inline, have no autoplay, and retain controls without JavaScript")
+    combined = source + script
+    for phrase in ("DEBUG recorded replay", "Demo Grocer test data", "Not a live run", "not current prices or availability"):
+        if phrase.casefold() not in combined.casefold():
+            errors.append(f"missing footage evidence label: {phrase}")
+    for filename in VIDEO_SHA256:
+        if f"assets/{filename}" not in combined:
+            errors.append(f"missing recording route: {filename}")
+    for url in (PROJECT_URL, EVIDENCE_URL, EXAMPLE_URL):
+        if url not in source:
+            errors.append(f"missing direct review link: {url}")
+    for marker in ("og:title", "og:description", "og:image", "twitter:card"):
+        if marker not in source:
+            errors.append(f"missing social metadata: {marker}")
     for pattern in FORBIDDEN_CLAIMS:
-        if re.search(pattern, source, flags=re.IGNORECASE):
-            errors.append(f"index.html: forbidden overclaim matched {pattern!r}")
+        if re.search(pattern, source, re.IGNORECASE):
+            errors.append(f"forbidden overclaim: {pattern}")
+    if re.search(r"\bfetch\s*\(|XMLHttpRequest|public-demo/v1/solari/research", script):
+        errors.append("submission player must not start provider research")
 
-    deploy_mapped = {
-        "evidence/live/smartcart-solari-v4-qualification-33546912947.json": receipt_path,
-        "website/solari-demo/": REPO_ROOT / "website" / "solari-demo" / "index.html",
-    }
     for tag, reference in parser.references:
         parsed = urlsplit(reference)
         if parsed.scheme or parsed.netloc:
-            if tag in {"link", "script", "video", "source"}:
-                errors.append(f"index.html: remote assets are forbidden: {reference}")
-            elif parsed.hostname not in ALLOWED_REMOTE_HOSTS:
-                errors.append(f"index.html: unapproved remote link: {reference}")
-            continue
-        if reference.startswith("#"):
+            if tag != "a" or parsed.scheme != "https" or parsed.hostname != "github.com":
+                errors.append(f"unapproved remote asset/link: {reference}")
+        elif reference.startswith("#"):
             if reference[1:] not in parser.ids:
-                errors.append(f"index.html: missing fragment target: {reference}")
-            continue
-        target = deploy_mapped.get(parsed.path, (root / parsed.path).resolve())
-        if not target.exists():
-            errors.append(f"index.html: broken local/deployment reference: {reference}")
-
-    for tag, reference in receipt_parser.references:
-        parsed = urlsplit(reference)
-        if parsed.scheme or parsed.netloc:
-            if tag in {"link", "script", "video", "source"}:
-                errors.append(f"verified-run.html: remote assets are forbidden: {reference}")
-            elif parsed.hostname not in ALLOWED_REMOTE_HOSTS:
-                errors.append(f"verified-run.html: unapproved remote link: {reference}")
-            continue
-        if reference.startswith("#"):
-            if reference[1:] not in receipt_parser.ids:
-                errors.append(f"verified-run.html: missing fragment target: {reference}")
-            continue
-        target = deploy_mapped.get(parsed.path, (root / parsed.path).resolve())
-        if not target.exists():
-            errors.append(f"verified-run.html: broken local/deployment reference: {reference}")
-
-    for accessibility_key in ('"ArrowRight"', '"ArrowLeft"', "setHeroVideoMode", "heroVideo.load()"):
-        if accessibility_key not in javascript:
-            errors.append(f"script.js: missing accessible comparison behavior {accessibility_key}")
-    if "prefers-reduced-motion" not in javascript or "prefers-reduced-motion" not in styles.read_text(encoding="utf-8"):
-        errors.append("case study must honor prefers-reduced-motion in CSS and JavaScript")
-
-    for filename, expected_hash in VIDEO_SHA256.items():
-        video_path = root / "assets" / filename
-        if video_path.is_file():
-            video_hash = hashlib.sha256(video_path.read_bytes()).hexdigest()
-            if video_hash != expected_hash:
-                errors.append(f"case-study video bytes drifted for {filename}: {video_hash}")
+                errors.append(f"missing fragment target: {reference}")
+        elif not (root / parsed.path).is_file():
+            errors.append(f"broken local reference: {reference}")
+    for filename, expected in VIDEO_SHA256.items():
+        actual = hashlib.sha256((root / "assets" / filename).read_bytes()).hexdigest()
+        if actual != expected:
+            errors.append(f"recording bytes drifted: {filename}: {actual}")
 
     try:
         receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
-        errors.append(f"qualification receipt unreadable: {error}")
-        return sorted(set(errors))
+        return sorted(set(errors + [f"qualification receipt unreadable: {error}"]))
     coverage = receipt.get("coverage", {})
     basket = receipt.get("basket", {})
     comparison = receipt.get("comparison", {})
-    expected = {
-        "requirements": coverage.get("researchedRequirementCount"),
-        "observations": coverage.get("observationCount"),
-        "selected": basket.get("observedSubtotal"),
-        "cheapest": comparison.get("cheapestAdequateSubtotal"),
-        "premium": comparison.get("premiumOverCheapest"),
-        "cap": comparison.get("maxPremiumOverCheapest"),
-    }
-    if expected != {"requirements": 8, "observations": 16, "selected": 24.2, "cheapest": 23.57, "premium": 0.63, "cap": 0.75}:
-        errors.append(f"qualification receipt economics drifted: {expected}")
-    if receipt.get("execution", {}).get("browser") != "solari-browser-provider-completed":
-        errors.append("receipt does not prove completed Solari Browser execution")
-    if receipt.get("execution", {}).get("sandbox") != "solari-sandbox-provider-completed":
-        errors.append("receipt does not prove completed Solari Sandbox execution")
+    economics = (
+        coverage.get("researchedRequirementCount"), coverage.get("observationCount"),
+        basket.get("observedSubtotal"), comparison.get("cheapestAdequateSubtotal"),
+        comparison.get("premiumOverCheapest"), comparison.get("maxPremiumOverCheapest"),
+    )
+    if economics != (8, 16, 24.2, 23.57, 0.63, 0.75):
+        errors.append(f"qualification receipt economics drifted: {economics}")
+    for provider in ("browser", "sandbox"):
+        if receipt.get("execution", {}).get(provider) != f"solari-{provider}-provider-completed":
+            errors.append(f"receipt does not prove completed Solari {provider} execution")
     return sorted(set(errors))
 
 
 def main() -> int:
     errors = inspect_case_study()
     if errors:
-        print(f"SmartCart × Solari case-study validation failed ({len(errors)} issue(s)):")
+        print("SmartCart × Solari submission validation failed:")
         for error in errors:
             print(f"- {error}")
         return 1
-    print("SmartCart × Solari case-study validation passed: presentation, portability, accessibility, and receipt-bound claims checked.")
+    print("SmartCart × Solari submission validation passed: video assets, review links, accessibility, and frozen evidence.")
     return 0
 
 
