@@ -19,16 +19,16 @@
       poster: "assets/smartcart-before-solari-poster.jpg",
       title: "Before Solari native SmartCart recording",
       duration: "0:40",
-      summary: "Recipe, pantry, shopping list — then the shopper searches the retailer.",
-      note: "Recorded app flow · Not live. Retailer screens show recorded context, not current prices or availability."
+      summary: "Shopping list. Manual retailer search.",
+      note: "Recorded flow · Retailer footage, not current prices or availability."
     },
     after: {
       src: "assets/smartcart-after-solari.mp4",
       poster: "assets/smartcart-after-solari-poster.jpg",
       title: "After Solari native SmartCart recording",
       duration: "0:25",
-      summary: "Product research and package recommendations, inside SmartCart.",
-      note: "DEBUG recorded replay · Demo Grocer test data · Not a live run. Provider evidence is linked below."
+      summary: "Research packages. Compare the basket.",
+      note: "DEBUG recorded replay · Demo Grocer test data · Not a live run."
     }
   };
   let mode = "after";
